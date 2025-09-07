@@ -1,0 +1,590 @@
+import express from 'express'
+import Joi from 'joi'
+import { supabaseAdmin } from '../config/supabase.js'
+import { authenticateToken, requirePermission } from '../middleware/auth.js'
+
+const router = express.Router()
+
+// Endpoint para buscar clientes com autocomplete
+router.get('/clientes/buscar', async (req, res) => {
+  try {
+    const { q } = req.query
+    
+    if (!q || q.length < 2) {
+      return res.json({
+        success: true,
+        data: []
+      })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('clientes')
+      .select('id, nome, cnpj, email, telefone, contato')
+      .or(`nome.ilike.%${q}%,cnpj.ilike.%${q}%`)
+      .limit(10)
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao buscar clientes',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: data || []
+    })
+  } catch (error) {
+    console.error('Erro ao buscar clientes:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+// Função auxiliar para buscar ou criar cliente
+const buscarOuCriarCliente = async (clienteData) => {
+  if (!clienteData.nome) return null
+
+  // Validar dados do cliente
+  const { error: validationError, value: validatedData } = clienteDataSchema.validate(clienteData)
+  if (validationError) {
+    console.error('Dados do cliente inválidos:', validationError)
+    return null
+  }
+
+  // Primeiro, tentar buscar cliente existente por CNPJ ou nome
+  let query = supabaseAdmin.from('clientes').select('*')
+  
+  if (validatedData.cnpj) {
+    query = query.eq('cnpj', validatedData.cnpj)
+  } else {
+    query = query.ilike('nome', `%${validatedData.nome}%`)
+  }
+
+  const { data: clientesExistentes, error: buscaError } = await query
+
+  if (buscaError) {
+    console.error('Erro ao buscar cliente:', buscaError)
+    return null
+  }
+
+  // Se encontrou cliente existente, retornar
+  if (clientesExistentes && clientesExistentes.length > 0) {
+    return clientesExistentes[0]
+  }
+
+  // Se não encontrou, criar novo cliente
+  const novoCliente = {
+    nome: validatedData.nome,
+    cnpj: validatedData.cnpj || null,
+    contato: validatedData.contato || null,
+    telefone: validatedData.telefone || null,
+    email: validatedData.email || null,
+    endereco: validatedData.endereco || null,
+    cidade: validatedData.cidade || null,
+    estado: validatedData.estado || null,
+    cep: validatedData.cep || null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+
+  const { data: clienteCriado, error: createError } = await supabaseAdmin
+    .from('clientes')
+    .insert(novoCliente)
+    .select()
+    .single()
+
+  if (createError) {
+    console.error('Erro ao criar cliente:', createError)
+    return null
+  }
+
+  return clienteCriado
+}
+
+// Schema de validação para gruas - baseado no schema real da tabela do Supabase
+const gruaSchema = Joi.object({
+  modelo: Joi.string().min(2).required(),
+  fabricante: Joi.string().min(2).required(),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').required(),
+  capacidade: Joi.string().required(),
+  capacidade_ponta: Joi.string().required(),
+  lanca: Joi.string().required(),
+  altura_trabalho: Joi.string().allow(null).optional(),
+  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção').default('Disponível'),
+  localizacao: Joi.string().allow(null).optional(),
+  horas_operacao: Joi.number().integer().min(0).default(0),
+  valor_locacao: Joi.number().positive().allow(null).optional(),
+  valor_operacao: Joi.number().min(0).default(0),
+  valor_sinaleiro: Joi.number().min(0).default(0),
+  valor_manutencao: Joi.number().min(0).default(0),
+  ultima_manutencao: Joi.date().allow(null).optional(),
+  proxima_manutencao: Joi.date().allow(null).optional(),
+  // Campos de cliente enviados do frontend (usados internamente)
+  cliente_nome: Joi.string().allow(null, '').optional(),
+  cliente_documento: Joi.string().allow(null, '').optional(),
+  cliente_email: Joi.string().email().allow(null, '').optional(),
+  cliente_telefone: Joi.string().allow(null, '').optional()
+})
+
+// Schema para dados de cliente (usado internamente)
+const clienteDataSchema = Joi.object({
+  nome: Joi.string().min(2).required(),
+  cnpj: Joi.string().allow(null, '').optional(),
+  contato: Joi.string().allow(null, '').optional(),
+  telefone: Joi.string().allow(null, '').optional(),
+  email: Joi.string().email().allow(null, '').optional(),
+  endereco: Joi.string().allow(null, '').optional(),
+  cidade: Joi.string().allow(null, '').optional(),
+  estado: Joi.string().allow(null, '').optional(),
+  cep: Joi.string().allow(null, '').optional()
+})
+
+/**
+ * @swagger
+ * /api/gruas:
+ *   get:
+ *     summary: Listar todas as gruas
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Itens por página
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Ativa, Inativa, Manutenção, Vendida]
+ *         description: Filtrar por status
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [Grua Torre, Grua Móvel, Guincho, Outros]
+ *         description: Filtrar por tipo
+ *     responses:
+ *       200:
+ *         description: Lista de gruas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Grua'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ */
+router.get('/', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const offset = (page - 1) * limit
+    const { status, tipo } = req.query
+
+    // Construir query
+    let query = supabaseAdmin
+      .from('gruas')
+      .select('*', { count: 'exact' })
+
+    // Aplicar filtros
+    if (status) {
+      query = query.eq('status', status)
+    }
+    if (tipo) {
+      query = query.eq('tipo', tipo)
+    }
+
+    // Aplicar paginação
+    query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+
+    const { data, error, count } = await query
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao buscar gruas',
+        message: error.message
+      })
+    }
+
+    const totalPages = Math.ceil(count / limit)
+
+    res.json({
+      success: true,
+      data: data || [],
+      pagination: {
+        page,
+        limit,
+        total: count,
+        pages: totalPages
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao listar gruas:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/gruas/{id}:
+ *   get:
+ *     summary: Obter grua por ID
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da grua
+ *     responses:
+ *       200:
+ *         description: Dados da grua
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Grua'
+ *       404:
+ *         description: Grua não encontrada
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('gruas')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          error: 'Grua não encontrada',
+          message: 'A grua com o ID especificado não existe'
+        })
+      }
+      return res.status(500).json({
+        error: 'Erro ao buscar grua',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data
+    })
+  } catch (error) {
+    console.error('Erro ao buscar grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/gruas:
+ *   post:
+ *     summary: Criar nova grua
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/GruaInput'
+ *     responses:
+ *       201:
+ *         description: Grua criada com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       403:
+ *         description: Permissão insuficiente
+ */
+router.post('/', async (req, res) => {
+  try {
+    // Validar dados
+    const { error, value } = gruaSchema.validate(req.body)
+    if (error) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    // Buscar ou criar cliente se dados do cliente foram fornecidos
+    let cliente = null
+    if (value.cliente_nome) {
+      cliente = await buscarOuCriarCliente({
+        nome: value.cliente_nome,
+        cnpj: value.cliente_documento,
+        email: value.cliente_email,
+        telefone: value.cliente_telefone
+      })
+    }
+
+    // Preparar dados da grua (apenas campos que existem na tabela gruas)
+    const gruaData = {
+      modelo: value.modelo,
+      fabricante: value.fabricante,
+      tipo: value.tipo,
+      capacidade: value.capacidade,
+      capacidade_ponta: value.capacidade_ponta,
+      lanca: value.lanca,
+      altura_trabalho: value.altura_trabalho,
+      ano: value.ano,
+      status: value.status,
+      localizacao: value.localizacao,
+      horas_operacao: value.horas_operacao,
+      valor_locacao: value.valor_locacao,
+      valor_operacao: value.valor_operacao,
+      valor_sinaleiro: value.valor_sinaleiro,
+      valor_manutencao: value.valor_manutencao,
+      ultima_manutencao: value.ultima_manutencao,
+      proxima_manutencao: value.proxima_manutencao,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    const { data, error: insertError } = await supabaseAdmin
+      .from('gruas')
+      .insert(gruaData)
+      .select()
+      .single()
+
+    if (insertError) {
+      return res.status(500).json({
+        error: 'Erro ao criar grua',
+        message: insertError.message
+      })
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        ...data,
+        cliente: cliente
+      },
+      message: 'Grua criada com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao criar grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/gruas/{id}:
+ *   put:
+ *     summary: Atualizar grua
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da grua
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/GruaInput'
+ *     responses:
+ *       200:
+ *         description: Grua atualizada com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Grua não encontrada
+ *       403:
+ *         description: Permissão insuficiente
+ */
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Validar dados
+    const { error, value } = gruaSchema.validate(req.body)
+    if (error) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    // Buscar ou criar cliente se dados do cliente foram fornecidos
+    let cliente = null
+    if (value.cliente_nome) {
+      cliente = await buscarOuCriarCliente({
+        nome: value.cliente_nome,
+        cnpj: value.cliente_documento,
+        email: value.cliente_email,
+        telefone: value.cliente_telefone
+      })
+    }
+
+    // Preparar dados da grua (apenas campos que existem na tabela gruas)
+    const updateData = {
+      modelo: value.modelo,
+      fabricante: value.fabricante,
+      tipo: value.tipo,
+      capacidade: value.capacidade,
+      capacidade_ponta: value.capacidade_ponta,
+      lanca: value.lanca,
+      altura_trabalho: value.altura_trabalho,
+      ano: value.ano,
+      status: value.status,
+      localizacao: value.localizacao,
+      horas_operacao: value.horas_operacao,
+      valor_locacao: value.valor_locacao,
+      valor_operacao: value.valor_operacao,
+      valor_sinaleiro: value.valor_sinaleiro,
+      valor_manutencao: value.valor_manutencao,
+      ultima_manutencao: value.ultima_manutencao,
+      proxima_manutencao: value.proxima_manutencao,
+      updated_at: new Date().toISOString()
+    }
+
+    const { data, error: updateError } = await supabaseAdmin
+      .from('gruas')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (updateError) {
+      if (updateError.code === 'PGRST116') {
+        return res.status(404).json({
+          error: 'Grua não encontrada',
+          message: 'A grua com o ID especificado não existe'
+        })
+      }
+      return res.status(500).json({
+        error: 'Erro ao atualizar grua',
+        message: updateError.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...data,
+        cliente: cliente
+      },
+      message: 'Grua atualizada com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao atualizar grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/gruas/{id}:
+ *   delete:
+ *     summary: Excluir grua
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da grua
+ *     responses:
+ *       200:
+ *         description: Grua excluída com sucesso
+ *       404:
+ *         description: Grua não encontrada
+ *       403:
+ *         description: Permissão insuficiente
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { error } = await supabaseAdmin
+      .from('gruas')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao excluir grua',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      message: 'Grua excluída com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao excluir grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+export default router

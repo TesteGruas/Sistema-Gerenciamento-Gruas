@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { AuthService } from "@/app/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,12 +13,29 @@ import { Building2, Lock, User } from "lucide-react"
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [user, setUser] = useState(null)
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Verificar se já está logado
+  useEffect(() => {
+    if (AuthService.isAuthenticated()) {
+      // Se já tem token, redirecionar para dashboard
+      window.location.href = '/dashboard'
+    }
+  }, [])
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Simulação de login - em produção seria integrado com sistema de auth
-    if (email && password) {
-      window.location.href = "/dashboard"
+    setLoading(true)
+    
+    try {
+      await AuthService.login()
+      window.location.href = '/dashboard'
+    } catch (error) {
+      console.error('Erro no login:', error)
+      alert('Erro no login. Verifique suas credenciais.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -67,8 +85,12 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-              Entrar no Sistema
+            <Button 
+              type="submit" 
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={loading}
+            >
+              {loading ? "Entrando..." : "Entrar no Sistema"}
             </Button>
           </form>
           <div className="mt-6 text-center text-xs text-gray-500">

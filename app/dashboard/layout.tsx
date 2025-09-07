@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { AuthService } from "@/app/lib/auth"
 import { Button } from "@/components/ui/button"
 import {
   Building2,
@@ -41,7 +42,7 @@ export default function DashboardLayout({
   const pathname = usePathname()
 
   const handleLogout = () => {
-    window.location.href = "/"
+    AuthService.logout()
   }
 
   return (

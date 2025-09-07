@@ -2,7 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { AuthService } from "@/app/lib/auth"
+import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,6 +37,7 @@ import {
   Users,
   Settings,
   Eye,
+  Trash2,
 } from "lucide-react"
 
 const gruasData = [
@@ -48,7 +51,7 @@ const gruasData = [
     lanca: "48 metros",
     alturaTrabalho: "52 metros",
     ano: "2014",
-    status: "Operacional",
+    status: "Ativa",
     localizacao: "Obra Residencial Quinta das Amoras - São José do Rio Preto",
     cliente: "TARRAF BY QUINTA DAS AMORAS SPE LTDA",
     operador: "João Silva",
@@ -119,7 +122,7 @@ const gruasData = [
     lanca: "60 metros",
     alturaTrabalho: "48 metros",
     ano: "2020",
-    status: "Disponível",
+    status: "Ativa",
     localizacao: "Base Itu/SP",
     cliente: "-",
     operador: "-",
@@ -141,13 +144,48 @@ const gruasData = [
 ]
 
 export default function GruasPage() {
-  const [gruas, setGruas] = useState(gruasData)
+  const { toast } = useToast()
+  const [gruas, setGruas] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isPropostaOpen, setIsPropostaOpen] = useState(false)
   const [isDetalhesOpen, setIsDetalhesOpen] = useState(false)
   const [editingGrua, setEditingGrua] = useState<any>(null)
   const [selectedGrua, setSelectedGrua] = useState<any>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Função para fazer requisições simples (sem autenticação)
+  const apiRequest = async (url: string, options: RequestInit = {}) => {
+    return AuthService.simpleRequest(url, options)
+  }
+
+  // Carregar gruas do backend
+  const loadGruas = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await apiRequest('http://localhost:3001/api/gruas')
+      setGruas(data.data || [])
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar guindastes'
+      setError(errorMessage)
+      console.error('Erro ao carregar gruas:', err)
+      toast({
+        title: "Erro ao carregar dados",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Carregar dados na inicialização
+  useEffect(() => {
+    loadGruas()
+  }, [])
 
   const [formData, setFormData] = useState({
     id: "",
@@ -170,6 +208,13 @@ export default function GruasPage() {
     valorSinaleiro: 0,
     valorManutencao: 0,
   })
+
+  // Estados para gerenciamento de clientes
+  const [clientes, setClientes] = useState<any[]>([])
+  const [clienteSelecionado, setClienteSelecionado] = useState<any>(null)
+  const [buscaCliente, setBuscaCliente] = useState("")
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false)
+  const [criandoCliente, setCriandoCliente] = useState(false)
 
   const [obraData, setObraData] = useState({
     nomeObra: "",
@@ -228,51 +273,141 @@ export default function GruasPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "Operacional":
-        return <Badge className="bg-green-100 text-green-800">Operacional</Badge>
-      case "Manutenção":
-        return <Badge className="bg-red-100 text-red-800">Manutenção</Badge>
       case "Disponível":
-        return <Badge className="bg-blue-100 text-blue-800">Disponível</Badge>
+        return <Badge className="bg-green-100 text-green-800">Disponível</Badge>
+      case "Operacional":
+        return <Badge className="bg-blue-100 text-blue-800">Operacional</Badge>
+      case "Manutenção":
+        return <Badge className="bg-yellow-100 text-yellow-800">Manutenção</Badge>
       default:
         return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (editingGrua) {
-      setGruas(
-        gruas.map((grua) =>
-          grua.id === editingGrua.id
-            ? { 
-                ...grua, 
-                ...formData, 
-                ...obraData,
-                equipe: funcionarios,
-                equipamentosAuxiliares: equipamentos,
-                ultimaManutencao: new Date().toISOString().split("T")[0] 
-              }
-            : grua,
-        ),
-      )
-    } else {
-      const newGrua = {
-        ...formData,
-        ...obraData,
-        id: `GRU${String(gruas.length + 1).padStart(3, "0")}`,
-        ultimaManutencao: new Date().toISOString().split("T")[0],
-        proximaManutencao: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-        contratoAtivo: funcionarios.length > 0 || equipamentos.length > 0,
-        inicioContrato: obraData.dataInicio || "",
-        fimContrato: obraData.dataFim || "",
-        prazoMeses: obraData.prazoMeses || 0,
-        equipe: funcionarios,
-        equipamentosAuxiliares: equipamentos,
-      }
-      setGruas([...gruas, newGrua])
+  const formatCurrency = (value: any) => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return "0,00"
+    }
+    return Number(value).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+  }
+
+  // Função para buscar clientes
+  const buscarClientes = async (query: string) => {
+    if (query.length < 2) {
+      setClientes([])
+      return
     }
 
+    try {
+      const data = await apiRequest(`http://localhost:3001/api/gruas/clientes/buscar?q=${encodeURIComponent(query)}`)
+      setClientes(data.data || [])
+    } catch (error) {
+      console.error('Erro ao buscar clientes:', error)
+      setClientes([])
+    }
+  }
+
+  // Função para selecionar cliente
+  const selecionarCliente = (cliente: any) => {
+    setClienteSelecionado(cliente)
+    setBuscaCliente(cliente.nome)
+    setFormData({ ...formData, cliente: cliente.nome })
+    setMostrarSugestoes(false)
+  }
+
+  // Função para limpar seleção de cliente
+  const limparCliente = () => {
+    setClienteSelecionado(null)
+    setBuscaCliente("")
+    setFormData({ ...formData, cliente: "" })
+    setClientes([])
+    setMostrarSugestoes(false)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      // Preparar dados base - baseado no schema real da tabela gruas do Supabase
+      const baseData: any = {
+        // Campos obrigatórios
+        modelo: formData.modelo,
+        fabricante: formData.fabricante,
+        tipo: formData.tipo,
+        capacidade: formData.capacidade,
+        capacidade_ponta: formData.capacidadePonta || "N/A",
+        lanca: formData.lanca || "N/A",
+        status: formData.status,
+        
+        // Campos com valores padrão conforme schema da tabela
+        altura_trabalho: formData.alturaTrabalho || null,
+        ano: formData.ano ? parseInt(formData.ano) : null,
+        localizacao: formData.localizacao || null,
+        horas_operacao: formData.horasOperacao || 0, // Valor padrão da tabela
+        valor_locacao: formData.valorLocacao || null,
+        valor_operacao: formData.valorOperacao || 0, // Valor padrão para evitar NOT NULL
+        valor_sinaleiro: formData.valorSinaleiro || 0, // Valor padrão para evitar NOT NULL
+        valor_manutencao: formData.valorManutencao || 0, // Valor padrão para evitar NOT NULL
+        
+        // Dados do cliente - usar dados da aba Obra/Cliente se cliente selecionado não tiver
+        cliente_nome: formData.cliente || null,
+        cliente_documento: clienteSelecionado?.cnpj || obraData.cnpjCliente || null,
+        cliente_email: clienteSelecionado?.email || obraData.emailContato || null,
+        cliente_telefone: clienteSelecionado?.telefone || obraData.telefoneContato || null,
+      }
+
+      if (editingGrua) {
+        // Atualizar grua existente - não incluir id no corpo da requisição
+        await apiRequest(`http://localhost:3001/api/gruas/${editingGrua.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(baseData),
+        })
+        
+        toast({
+          title: "Sucesso!",
+          description: "Guindaste atualizado com sucesso.",
+        })
+      } else {
+        // Criar nova grua - não incluir id
+        await apiRequest('http://localhost:3001/api/gruas', {
+          method: 'POST',
+          body: JSON.stringify(baseData),
+        })
+        
+        toast({
+          title: "Sucesso!",
+          description: "Guindaste criado com sucesso.",
+        })
+      }
+
+      // Recarregar lista de guindastes
+      await loadGruas()
+
+      // Limpar formulário e fechar modal
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao salvar guindaste'
+      setError(errorMessage)
+      console.error('Erro ao salvar grua:', err)
+      
+      toast({
+        title: "Erro ao salvar",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Função para resetar formulário
+  const resetForm = () => {
     setFormData({
       id: "",
       modelo: "",
@@ -314,6 +449,29 @@ export default function GruasPage() {
     setEquipamentos([])
     setEditingGrua(null)
     setIsDialogOpen(false)
+    // Limpar dados do cliente
+    setClienteSelecionado(null)
+    setBuscaCliente("")
+    setClientes([])
+    setMostrarSugestoes(false)
+  }
+
+  // Função para deletar grua
+  const handleDelete = async (gruaId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta grua?')) {
+      return
+    }
+
+    try {
+      setError(null)
+      await apiRequest(`http://localhost:3001/api/gruas/${gruaId}`, {
+        method: 'DELETE',
+      })
+      await loadGruas()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao excluir grua')
+      console.error('Erro ao excluir grua:', err)
+    }
   }
 
   const handleEdit = (grua: any) => {
@@ -415,7 +573,7 @@ export default function GruasPage() {
     { title: "Total de Gruas", value: gruas.length, icon: Crane, color: "bg-blue-500" },
     {
       title: "Operacionais",
-      value: gruas.filter((g) => g.status === "Operacional").length,
+      value: gruas.filter((g) => g.status === "Ativa").length,
       icon: CheckCircle,
       color: "bg-green-500",
     },
@@ -427,7 +585,7 @@ export default function GruasPage() {
     },
     {
       title: "Disponíveis",
-      value: gruas.filter((g) => g.status === "Disponível").length,
+      value: gruas.filter((g) => g.status === "Ativa").length,
       icon: Clock,
       color: "bg-yellow-500",
     },
@@ -626,12 +784,82 @@ export default function GruasPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="cliente">Nome do Cliente</Label>
-                      <Input
-                        id="cliente"
-                        value={formData.cliente}
-                        onChange={(e) => setFormData({ ...formData, cliente: e.target.value })}
-                        placeholder="Nome da empresa cliente"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="cliente"
+                          value={buscaCliente}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setBuscaCliente(value)
+                            setFormData({ ...formData, cliente: value })
+                            if (value.length >= 2) {
+                              buscarClientes(value)
+                              setMostrarSugestoes(true)
+                            } else {
+                              setClientes([])
+                              setMostrarSugestoes(false)
+                            }
+                          }}
+                          onFocus={() => {
+                            if (clientes.length > 0) {
+                              setMostrarSugestoes(true)
+                            }
+                          }}
+                          placeholder="Digite para buscar cliente existente ou criar novo"
+                        />
+                        
+                        {/* Botão para limpar seleção */}
+                        {clienteSelecionado && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                            onClick={limparCliente}
+                          >
+                            ×
+                          </Button>
+                        )}
+
+                        {/* Lista de sugestões */}
+                        {mostrarSugestoes && clientes.length > 0 && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {clientes.map((cliente) => (
+                              <div
+                                key={cliente.id}
+                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onClick={() => selecionarCliente(cliente)}
+                              >
+                                <div className="font-medium">{cliente.nome}</div>
+                                {cliente.cnpj && (
+                                  <div className="text-sm text-gray-500">
+                                    {cliente.cnpj}
+                                  </div>
+                                )}
+                                {cliente.email && (
+                                  <div className="text-sm text-gray-500">
+                                    {cliente.email}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Indicador de cliente selecionado */}
+                        {clienteSelecionado && (
+                          <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                            <div className="text-sm text-green-800">
+                              <strong>Cliente selecionado:</strong> {clienteSelecionado.nome}
+                            </div>
+                            {clienteSelecionado.cnpj && (
+                              <div className="text-xs text-green-600">
+                                CNPJ: {clienteSelecionado.cnpj}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="cnpjCliente">CNPJ do Cliente</Label>
@@ -870,9 +1098,9 @@ export default function GruasPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Ativo">Ativo</SelectItem>
+                          <SelectItem value="Disponível">Disponível</SelectItem>
+                          <SelectItem value="Operacional">Operacional</SelectItem>
                           <SelectItem value="Manutenção">Manutenção</SelectItem>
-                          <SelectItem value="Inativo">Inativo</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -915,14 +1143,29 @@ export default function GruasPage() {
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                  {editingGrua ? "Atualizar" : "Cadastrar"}
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={submitting}>
+                  {submitting ? "Salvando..." : editingGrua ? "Atualizar" : "Cadastrar"}
                 </Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <div>
+                <p className="font-medium text-red-800">Erro</p>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -976,7 +1219,23 @@ export default function GruasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredGruas.map((grua) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        Carregando gruas...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredGruas.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                      Nenhuma grua encontrada
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredGruas.map((grua) => (
                   <TableRow key={grua.id}>
                     <TableCell className="font-medium">{grua.id}</TableCell>
                     <TableCell>
@@ -1020,10 +1279,19 @@ export default function GruasPage() {
                         >
                           <FileText className="h-4 w-4" />
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(grua.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -1115,7 +1383,7 @@ export default function GruasPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {selectedGrua.equipamentosAuxiliares.length > 0 ? (
+                    {selectedGrua && selectedGrua.equipamentosAuxiliares && selectedGrua.equipamentosAuxiliares.length > 0 ? (
                       <div className="rounded-md border">
                         <Table>
                           <TableHeader>
@@ -1154,7 +1422,7 @@ export default function GruasPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {selectedGrua.equipe.length > 0 ? (
+                    {selectedGrua && selectedGrua.equipe && selectedGrua.equipe.length > 0 ? (
                       <div className="rounded-md border">
                         <Table>
                           <TableHeader>
@@ -1395,31 +1663,31 @@ export default function GruasPage() {
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                           <span>Locação:</span>
-                          <span>R$ {selectedGrua.valorLocacao.toLocaleString("pt-BR")}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valorLocacao)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Operação:</span>
-                          <span>R$ {selectedGrua.valorOperacao.toLocaleString("pt-BR")}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valorOperacao)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Sinaleiro:</span>
-                          <span>R$ {selectedGrua.valorSinaleiro.toLocaleString("pt-BR")}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valorSinaleiro)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Manutenção:</span>
-                          <span>R$ {selectedGrua.valorManutencao.toLocaleString("pt-BR")}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valorManutencao)}</span>
                         </div>
                         <hr />
                         <div className="flex justify-between font-medium">
                           <span>Total Mensal:</span>
                           <span>
                             R${" "}
-                            {(
-                              selectedGrua.valorLocacao +
-                              selectedGrua.valorOperacao +
-                              selectedGrua.valorSinaleiro +
-                              selectedGrua.valorManutencao
-                            ).toLocaleString("pt-BR")}
+                            {formatCurrency(
+                              (selectedGrua?.valorLocacao || 0) +
+                              (selectedGrua?.valorOperacao || 0) +
+                              (selectedGrua?.valorSinaleiro || 0) +
+                              (selectedGrua?.valorManutencao || 0)
+                            )}
                           </span>
                         </div>
                       </div>
@@ -1427,7 +1695,7 @@ export default function GruasPage() {
                     <div className="space-y-2">
                       <h4 className="font-medium">Valor Total do Contrato:</h4>
                       <div className="text-2xl font-bold text-green-700">
-                        R$ {calcularValorTotal().toLocaleString("pt-BR")}
+                        R$ {formatCurrency(calcularValorTotal())}
                       </div>
                       <p className="text-sm text-gray-600">{propostaData.prazoMeses} meses de locação</p>
                     </div>
