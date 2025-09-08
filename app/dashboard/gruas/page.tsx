@@ -40,109 +40,6 @@ import {
   Trash2,
 } from "lucide-react"
 
-const gruasData = [
-  {
-    id: "GRU001",
-    modelo: "SITI MI2348",
-    fabricante: "SITI",
-    tipo: "Grua Torre Auto Estável",
-    capacidade: "5.000 kg (23m)",
-    capacidadePonta: "2.300 kg",
-    lanca: "48 metros",
-    alturaTrabalho: "52 metros",
-    ano: "2014",
-    status: "Ativa",
-    localizacao: "Obra Residencial Quinta das Amoras - São José do Rio Preto",
-    cliente: "TARRAF BY QUINTA DAS AMORAS SPE LTDA",
-    operador: "João Silva",
-    sinaleiro: "Carlos Santos",
-    ultimaManutencao: "2024-01-15",
-    proximaManutencao: "2024-04-15",
-    horasOperacao: 1250,
-    valorLocacao: 26300.0,
-    valorOperacao: 10800.0,
-    valorSinaleiro: 10800.0,
-    valorManutencao: 3800.0,
-    contratoAtivo: true,
-    inicioContrato: "2024-01-30",
-    fimContrato: "2024-07-30",
-    prazoMeses: 6,
-    equipamentosAuxiliares: [
-      { nome: "Garfo Paleteiro 2500kg", status: "Ativo", responsavel: "João Silva" },
-      { nome: "Balde Concreto 500L", status: "Ativo", responsavel: "Carlos Santos" },
-      { nome: "Caçamba Entulho 1000kg", status: "Ativo", responsavel: "João Silva" },
-      { nome: "Plataforma Descarga", status: "Ativo", responsavel: "Carlos Santos" },
-    ],
-    equipe: [
-      { nome: "João Silva", cargo: "Operador", telefone: "(11) 99999-1111", turno: "Diurno" },
-      { nome: "Carlos Santos", cargo: "Sinaleiro", telefone: "(11) 99999-2222", turno: "Diurno" },
-      { nome: "Pedro Oliveira", cargo: "Técnico Manutenção", telefone: "(11) 99999-3333", turno: "Sob Demanda" },
-      { nome: "Ana Costa", cargo: "Supervisora", telefone: "(11) 99999-4444", turno: "Diurno" },
-    ],
-  },
-  {
-    id: "GRU002",
-    modelo: "Liebherr 132 EC-H8",
-    fabricante: "Liebherr",
-    tipo: "Grua Torre",
-    capacidade: "8.000 kg (20m)",
-    capacidadePonta: "1.800 kg",
-    lanca: "55 metros",
-    alturaTrabalho: "45 metros",
-    ano: "2018",
-    status: "Manutenção",
-    localizacao: "Oficina Central - Itu/SP",
-    cliente: "-",
-    operador: "-",
-    sinaleiro: "-",
-    ultimaManutencao: "2024-01-20",
-    proximaManutencao: "2024-04-20",
-    horasOperacao: 980,
-    valorLocacao: 28500.0,
-    valorOperacao: 11200.0,
-    valorSinaleiro: 11200.0,
-    valorManutencao: 4200.0,
-    contratoAtivo: false,
-    inicioContrato: "",
-    fimContrato: "",
-    prazoMeses: 0,
-    equipamentosAuxiliares: [],
-    equipe: [
-      { nome: "Roberto Lima", cargo: "Técnico Manutenção", telefone: "(11) 99999-5555", turno: "Diurno" },
-      { nome: "Marcos Silva", cargo: "Mecânico", telefone: "(11) 99999-6666", turno: "Diurno" },
-    ],
-  },
-  {
-    id: "GRU003",
-    modelo: "Potain MDT 219",
-    fabricante: "Potain",
-    tipo: "Grua Torre",
-    capacidade: "10.000 kg (18m)",
-    capacidadePonta: "2.100 kg",
-    lanca: "60 metros",
-    alturaTrabalho: "48 metros",
-    ano: "2020",
-    status: "Ativa",
-    localizacao: "Base Itu/SP",
-    cliente: "-",
-    operador: "-",
-    sinaleiro: "-",
-    ultimaManutencao: "2024-01-25",
-    proximaManutencao: "2024-04-25",
-    horasOperacao: 750,
-    valorLocacao: 32000.0,
-    valorOperacao: 12500.0,
-    valorSinaleiro: 12500.0,
-    valorManutencao: 4500.0,
-    contratoAtivo: false,
-    inicioContrato: "",
-    fimContrato: "",
-    prazoMeses: 0,
-    equipamentosAuxiliares: [],
-    equipe: [],
-  },
-]
-
 export default function GruasPage() {
   const { toast } = useToast()
   const [gruas, setGruas] = useState<any[]>([])
@@ -166,8 +63,13 @@ export default function GruasPage() {
     try {
       setLoading(true)
       setError(null)
-      const data = await apiRequest('http://localhost:3001/api/gruas')
-      setGruas(data.data || [])
+      const response = await apiRequest('http://localhost:3001/api/gruas')
+      
+      if (response.success) {
+        setGruas(response.data || [])
+      } else {
+        throw new Error('Erro ao carregar guindastes')
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar guindastes'
       setError(errorMessage)
@@ -187,26 +89,52 @@ export default function GruasPage() {
     loadGruas()
   }, [])
 
+  // Função para carregar detalhes completos da grua
+  const loadGruaDetalhes = async (gruaId: string) => {
+    try {
+      setLoading(true)
+      const response = await apiRequest(`http://localhost:3001/api/gruas/${gruaId}`)
+      
+      if (response.success) {
+        setSelectedGrua(response.data)
+        return response.data
+      } else {
+        throw new Error('Erro ao carregar detalhes da grua')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar detalhes da grua'
+      console.error('Erro ao carregar detalhes da grua:', err)
+      toast({
+        title: "Erro ao carregar detalhes",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const [formData, setFormData] = useState({
     id: "",
     modelo: "",
     fabricante: "",
     tipo: "Grua Torre",
     capacidade: "",
-    capacidadePonta: "",
+    capacidade_ponta: "",
     lanca: "",
-    alturaTrabalho: "",
+    altura_trabalho: "",
     ano: "",
     status: "Disponível",
     localizacao: "",
     cliente: "",
     operador: "",
     sinaleiro: "",
-    horasOperacao: 0,
-    valorLocacao: 0,
-    valorOperacao: 0,
-    valorSinaleiro: 0,
-    valorManutencao: 0,
+    horas_operacao: 0,
+    valor_locacao: 0,
+    valor_operacao: 0,
+    valor_sinaleiro: 0,
+    valor_manutencao: 0,
   })
 
   // Estados para gerenciamento de clientes
@@ -268,7 +196,7 @@ export default function GruasPage() {
       grua.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       grua.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       grua.localizacao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      grua.cliente.toLowerCase().includes(searchTerm.toLowerCase()),
+      (grua.cliente && grua.cliente.toLowerCase().includes(searchTerm.toLowerCase())),
   )
 
   const getStatusBadge = (status: string) => {
@@ -340,19 +268,19 @@ export default function GruasPage() {
         fabricante: formData.fabricante,
         tipo: formData.tipo,
         capacidade: formData.capacidade,
-        capacidade_ponta: formData.capacidadePonta || "N/A",
+        capacidade_ponta: formData.capacidade_ponta || "N/A",
         lanca: formData.lanca || "N/A",
         status: formData.status,
         
         // Campos com valores padrão conforme schema da tabela
-        altura_trabalho: formData.alturaTrabalho || null,
+        altura_trabalho: formData.altura_trabalho || null,
         ano: formData.ano ? parseInt(formData.ano) : null,
         localizacao: formData.localizacao || null,
-        horas_operacao: formData.horasOperacao || 0, // Valor padrão da tabela
-        valor_locacao: formData.valorLocacao || null,
-        valor_operacao: formData.valorOperacao || 0, // Valor padrão para evitar NOT NULL
-        valor_sinaleiro: formData.valorSinaleiro || 0, // Valor padrão para evitar NOT NULL
-        valor_manutencao: formData.valorManutencao || 0, // Valor padrão para evitar NOT NULL
+        horas_operacao: formData.horas_operacao || 0, // Valor padrão da tabela
+        valor_locacao: formData.valor_locacao || null,
+        valor_operacao: formData.valor_operacao || 0, // Valor padrão para evitar NOT NULL
+        valor_sinaleiro: formData.valor_sinaleiro || 0, // Valor padrão para evitar NOT NULL
+        valor_manutencao: formData.valor_manutencao || 0, // Valor padrão para evitar NOT NULL
         
         // Dados do cliente - usar dados da aba Obra/Cliente se cliente selecionado não tiver
         cliente_nome: formData.cliente || null,
@@ -414,20 +342,20 @@ export default function GruasPage() {
       fabricante: "",
       tipo: "Grua Torre",
       capacidade: "",
-      capacidadePonta: "",
+      capacidade_ponta: "",
       lanca: "",
-      alturaTrabalho: "",
+      altura_trabalho: "",
       ano: "",
       status: "Disponível",
       localizacao: "",
       cliente: "",
       operador: "",
       sinaleiro: "",
-      horasOperacao: 0,
-      valorLocacao: 0,
-      valorOperacao: 0,
-      valorSinaleiro: 0,
-      valorManutencao: 0,
+      horas_operacao: 0,
+      valor_locacao: 0,
+      valor_operacao: 0,
+      valor_sinaleiro: 0,
+      valor_manutencao: 0,
     })
     
     setObraData({
@@ -474,47 +402,51 @@ export default function GruasPage() {
     }
   }
 
-  const handleEdit = (grua: any) => {
-    setEditingGrua(grua)
+  const handleEdit = async (grua: any) => {
+    // Carregar detalhes completos da grua
+    const detalhes = await loadGruaDetalhes(grua.id)
+    const gruaCompleta = detalhes || grua
+    
+    setEditingGrua(gruaCompleta)
     setFormData({
-      id: grua.id,
-      modelo: grua.modelo,
-      fabricante: grua.fabricante,
-      tipo: grua.tipo,
-      capacidade: grua.capacidade,
-      capacidadePonta: grua.capacidadePonta,
-      lanca: grua.lanca,
-      alturaTrabalho: grua.alturaTrabalho,
-      ano: grua.ano,
-      status: grua.status,
-      localizacao: grua.localizacao,
-      cliente: grua.cliente || "",
-      operador: grua.operador || "",
-      sinaleiro: grua.sinaleiro || "",
-      horasOperacao: grua.horasOperacao,
-      valorLocacao: grua.valorLocacao,
-      valorOperacao: grua.valorOperacao,
-      valorSinaleiro: grua.valorSinaleiro,
-      valorManutencao: grua.valorManutencao,
+      id: gruaCompleta.id,
+      modelo: gruaCompleta.modelo,
+      fabricante: gruaCompleta.fabricante,
+      tipo: gruaCompleta.tipo,
+      capacidade: gruaCompleta.capacidade,
+      capacidade_ponta: gruaCompleta.capacidade_ponta,
+      lanca: gruaCompleta.lanca,
+      altura_trabalho: gruaCompleta.altura_trabalho,
+      ano: gruaCompleta.ano,
+      status: gruaCompleta.status,
+      localizacao: gruaCompleta.localizacao,
+      cliente: gruaCompleta.cliente || "",
+      operador: gruaCompleta.operador || "",
+      sinaleiro: gruaCompleta.sinaleiro || "",
+      horas_operacao: gruaCompleta.horas_operacao,
+      valor_locacao: gruaCompleta.valor_locacao,
+      valor_operacao: gruaCompleta.valor_operacao,
+      valor_sinaleiro: gruaCompleta.valor_sinaleiro,
+      valor_manutencao: gruaCompleta.valor_manutencao,
     })
     
     setObraData({
-      nomeObra: grua.nomeObra || "",
-      enderecoObra: grua.enderecoObra || "",
-      cidadeObra: grua.cidadeObra || "",
-      cepObra: grua.cepObra || "",
-      tipoObra: grua.tipoObra || "Residencial",
-      contato: grua.contato || "",
-      telefoneContato: grua.telefoneContato || "",
-      emailContato: grua.emailContato || "",
-      cnpjCliente: grua.cnpjCliente || "",
-      prazoMeses: grua.prazoMeses || 6,
-      dataInicio: grua.inicioContrato || "",
-      dataFim: grua.fimContrato || "",
+      nomeObra: gruaCompleta.nome_obra || "",
+      enderecoObra: gruaCompleta.endereco_obra || "",
+      cidadeObra: gruaCompleta.cidade_obra || "",
+      cepObra: gruaCompleta.cep_obra || "",
+      tipoObra: gruaCompleta.tipo_obra || "Residencial",
+      contato: gruaCompleta.contato_obra || "",
+      telefoneContato: gruaCompleta.cliente_telefone || "",
+      emailContato: gruaCompleta.cliente_email || "",
+      cnpjCliente: gruaCompleta.cliente_cnpj || "",
+      prazoMeses: gruaCompleta.prazo_meses || 6,
+      dataInicio: gruaCompleta.inicio_contrato || "",
+      dataFim: gruaCompleta.fim_contrato || "",
     })
     
-    setFuncionarios(grua.equipe || [])
-    setEquipamentos(grua.equipamentosAuxiliares || [])
+    setFuncionarios(gruaCompleta.equipe || [])
+    setEquipamentos(gruaCompleta.equipamentos_auxiliares || [])
     setIsDialogOpen(true)
   }
 
@@ -550,7 +482,7 @@ export default function GruasPage() {
       cidade: "",
       prazoMeses: 6,
       dataInicio: "",
-      alturaFinal: grua.alturaTrabalho,
+      alturaFinal: grua.altura_trabalho,
       tipoBase: "Base Fixa",
       voltagem: "380V",
       potencia: "72 KVA",
@@ -562,10 +494,10 @@ export default function GruasPage() {
   const calcularValorTotal = () => {
     if (!selectedGrua) return 0
     const valorMensal =
-      selectedGrua.valorLocacao +
-      selectedGrua.valorOperacao +
-      selectedGrua.valorSinaleiro +
-      selectedGrua.valorManutencao
+      (selectedGrua.valor_locacao || 0) +
+      (selectedGrua.valor_operacao || 0) +
+      (selectedGrua.valor_sinaleiro || 0) +
+      (selectedGrua.valor_manutencao || 0)
     return valorMensal * propostaData.prazoMeses
   }
 
@@ -573,7 +505,7 @@ export default function GruasPage() {
     { title: "Total de Gruas", value: gruas.length, icon: Crane, color: "bg-blue-500" },
     {
       title: "Operacionais",
-      value: gruas.filter((g) => g.status === "Ativa").length,
+      value: gruas.filter((g) => g.status === "Operacional").length,
       icon: CheckCircle,
       color: "bg-green-500",
     },
@@ -585,7 +517,7 @@ export default function GruasPage() {
     },
     {
       title: "Disponíveis",
-      value: gruas.filter((g) => g.status === "Ativa").length,
+      value: gruas.filter((g) => g.status === "Disponível").length,
       icon: Clock,
       color: "bg-yellow-500",
     },
@@ -717,11 +649,11 @@ export default function GruasPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="capacidadePonta">Capacidade na Ponta</Label>
+                      <Label htmlFor="capacidade_ponta">Capacidade na Ponta</Label>
                       <Input
-                        id="capacidadePonta"
-                        value={formData.capacidadePonta}
-                        onChange={(e) => setFormData({ ...formData, capacidadePonta: e.target.value })}
+                        id="capacidade_ponta"
+                        value={formData.capacidade_ponta}
+                        onChange={(e) => setFormData({ ...formData, capacidade_ponta: e.target.value })}
                         placeholder="Ex: 2.300 kg"
                         required
                       />
@@ -740,11 +672,11 @@ export default function GruasPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="alturaTrabalho">Altura de Trabalho</Label>
+                      <Label htmlFor="altura_trabalho">Altura de Trabalho</Label>
                       <Input
-                        id="alturaTrabalho"
-                        value={formData.alturaTrabalho}
-                        onChange={(e) => setFormData({ ...formData, alturaTrabalho: e.target.value })}
+                        id="altura_trabalho"
+                        value={formData.altura_trabalho}
+                        onChange={(e) => setFormData({ ...formData, altura_trabalho: e.target.value })}
                         placeholder="Ex: 52 metros"
                         required
                       />
@@ -753,26 +685,26 @@ export default function GruasPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="horasOperacao">Horas de Operação</Label>
+                      <Label htmlFor="horas_operacao">Horas de Operação</Label>
                       <Input
-                        id="horasOperacao"
+                        id="horas_operacao"
                         type="number"
-                        value={formData.horasOperacao}
+                        value={formData.horas_operacao}
                         onChange={(e) =>
-                          setFormData({ ...formData, horasOperacao: Number.parseInt(e.target.value) || 0 })
+                          setFormData({ ...formData, horas_operacao: Number.parseInt(e.target.value) || 0 })
                         }
                         placeholder="0"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="valorLocacao">Valor Locação (R$/mês)</Label>
+                      <Label htmlFor="valor_locacao">Valor Locação (R$/mês)</Label>
                       <Input
-                        id="valorLocacao"
+                        id="valor_locacao"
                         type="number"
                         step="0.01"
-                        value={formData.valorLocacao}
+                        value={formData.valor_locacao}
                         onChange={(e) =>
-                          setFormData({ ...formData, valorLocacao: Number.parseFloat(e.target.value) || 0 })
+                          setFormData({ ...formData, valor_locacao: Number.parseFloat(e.target.value) || 0 })
                         }
                         placeholder="26300.00"
                       />
@@ -1258,9 +1190,11 @@ export default function GruasPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setSelectedGrua(grua)
-                            setIsDetalhesOpen(true)
+                          onClick={async () => {
+                            const detalhes = await loadGruaDetalhes(grua.id)
+                            if (detalhes) {
+                              setIsDetalhesOpen(true)
+                            }
                           }}
                         >
                           <Eye className="h-4 w-4" />
@@ -1268,7 +1202,7 @@ export default function GruasPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleEdit(grua)}
+                          onClick={async () => await handleEdit(grua)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -1322,22 +1256,31 @@ export default function GruasPage() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div>
-                        <strong>Modelo:</strong> {selectedGrua.modelo}
+                        <strong>Modelo:</strong> {selectedGrua.modelo || "N/A"}
                       </div>
                       <div>
-                        <strong>Fabricante:</strong> {selectedGrua.fabricante}
+                        <strong>Fabricante:</strong> {selectedGrua.fabricante || "N/A"}
                       </div>
                       <div>
-                        <strong>Capacidade:</strong> {selectedGrua.capacidade}
+                        <strong>Capacidade:</strong> {selectedGrua.capacidade || "N/A"}
                       </div>
                       <div>
-                        <strong>Lança:</strong> {selectedGrua.lanca}
+                        <strong>Lança:</strong> {selectedGrua.lanca || "N/A"}
                       </div>
                       <div>
-                        <strong>Altura:</strong> {selectedGrua.alturaTrabalho}
+                        <strong>Altura:</strong> {selectedGrua.altura_trabalho || selectedGrua.alturaTrabalho || "N/A"}
                       </div>
                       <div>
                         <strong>Status:</strong> {getStatusBadge(selectedGrua.status)}
+                      </div>
+                      <div>
+                        <strong>Horas de Operação:</strong> {selectedGrua.horas_operacao || selectedGrua.horasOperacao || 0}
+                      </div>
+                      <div>
+                        <strong>Última Manutenção:</strong> {selectedGrua.ultima_manutencao || selectedGrua.ultimaManutencao || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Próxima Manutenção:</strong> {selectedGrua.proxima_manutencao || selectedGrua.proximaManutencao || "N/A"}
                       </div>
                     </CardContent>
                   </Card>
@@ -1348,30 +1291,90 @@ export default function GruasPage() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div>
-                        <strong>Cliente:</strong> {selectedGrua.cliente}
+                        <strong>Cliente:</strong> {selectedGrua.cliente || "N/A"}
                       </div>
                       <div>
-                        <strong>Localização:</strong> {selectedGrua.localizacao}
+                        <strong>CNPJ:</strong> {selectedGrua.cliente_cnpj || "N/A"}
                       </div>
                       <div>
-                        <strong>Contrato Ativo:</strong> {selectedGrua.contratoAtivo ? "Sim" : "Não"}
+                        <strong>Nome da Obra:</strong> {selectedGrua.nome_obra || "N/A"}
                       </div>
-                      {selectedGrua.contratoAtivo && (
+                      <div>
+                        <strong>Endereço:</strong> {selectedGrua.endereco_obra || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Cidade:</strong> {selectedGrua.cidade_obra || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Estado:</strong> {selectedGrua.estado_obra || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Localização Atual:</strong> {selectedGrua.localizacao || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Contrato Ativo:</strong> {selectedGrua.contrato_ativo ? "Sim" : "Não"}
+                      </div>
+                      {selectedGrua.contrato_ativo && (
                         <>
                           <div>
-                            <strong>Início:</strong> {selectedGrua.inicioContrato}
+                            <strong>Número do Contrato:</strong> {selectedGrua.numero_contrato || "N/A"}
                           </div>
                           <div>
-                            <strong>Fim:</strong> {selectedGrua.fimContrato}
+                            <strong>Início:</strong> {selectedGrua.inicio_contrato || "N/A"}
                           </div>
                           <div>
-                            <strong>Prazo:</strong> {selectedGrua.prazoMeses} meses
+                            <strong>Fim:</strong> {selectedGrua.fim_contrato || "N/A"}
+                          </div>
+                          <div>
+                            <strong>Prazo:</strong> {selectedGrua.prazo_meses || "N/A"} meses
+                          </div>
+                          <div>
+                            <strong>Valor Total:</strong> R$ {formatCurrency(selectedGrua.valor_total_contrato)}
                           </div>
                         </>
                       )}
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Valores de Locação */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Valores de Locação</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center p-3 bg-blue-50 rounded-lg">
+                        <div className="text-sm text-gray-600">Locação</div>
+                        <div className="text-lg font-bold text-blue-700">
+                          R$ {formatCurrency(selectedGrua.valor_locacao || selectedGrua.valorLocacao)}
+                        </div>
+                        <div className="text-xs text-gray-500">por mês</div>
+                      </div>
+                      <div className="text-center p-3 bg-green-50 rounded-lg">
+                        <div className="text-sm text-gray-600">Operação</div>
+                        <div className="text-lg font-bold text-green-700">
+                          R$ {formatCurrency(selectedGrua.valor_operacao || selectedGrua.valorOperacao)}
+                        </div>
+                        <div className="text-xs text-gray-500">por mês</div>
+                      </div>
+                      <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                        <div className="text-sm text-gray-600">Sinaleiro</div>
+                        <div className="text-lg font-bold text-yellow-700">
+                          R$ {formatCurrency(selectedGrua.valor_sinaleiro || selectedGrua.valorSinaleiro)}
+                        </div>
+                        <div className="text-xs text-gray-500">por mês</div>
+                      </div>
+                      <div className="text-center p-3 bg-red-50 rounded-lg">
+                        <div className="text-sm text-gray-600">Manutenção</div>
+                        <div className="text-lg font-bold text-red-700">
+                          R$ {formatCurrency(selectedGrua.valor_manutencao || selectedGrua.valorManutencao)}
+                        </div>
+                        <div className="text-xs text-gray-500">por mês</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               <TabsContent value="equipamentos" className="space-y-4">
@@ -1488,7 +1491,7 @@ export default function GruasPage() {
                         <strong>Lança:</strong> {selectedGrua.lanca}
                       </p>
                       <p>
-                        <strong>Altura:</strong> {selectedGrua.alturaTrabalho}
+                        <strong>Altura:</strong> {selectedGrua.altura_trabalho}
                       </p>
                       <p>
                         <strong>Capacidade:</strong> {selectedGrua.capacidade}
@@ -1663,19 +1666,19 @@ export default function GruasPage() {
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                           <span>Locação:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorLocacao)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_locacao)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Operação:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorOperacao)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_operacao)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Sinaleiro:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorSinaleiro)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_sinaleiro)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Manutenção:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorManutencao)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_manutencao)}</span>
                         </div>
                         <hr />
                         <div className="flex justify-between font-medium">
@@ -1683,10 +1686,10 @@ export default function GruasPage() {
                           <span>
                             R${" "}
                             {formatCurrency(
-                              (selectedGrua?.valorLocacao || 0) +
-                              (selectedGrua?.valorOperacao || 0) +
-                              (selectedGrua?.valorSinaleiro || 0) +
-                              (selectedGrua?.valorManutencao || 0)
+                              (selectedGrua?.valor_locacao || 0) +
+                              (selectedGrua?.valor_operacao || 0) +
+                              (selectedGrua?.valor_sinaleiro || 0) +
+                              (selectedGrua?.valor_manutencao || 0)
                             )}
                           </span>
                         </div>
@@ -1717,30 +1720,6 @@ export default function GruasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Alertas de Manutenção */}
-      <Card className="border-yellow-200 bg-yellow-50">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600" />
-            <div>
-              <p className="font-medium text-yellow-800">Manutenções Programadas</p>
-              <p className="text-sm text-yellow-700">
-                {
-                  gruas.filter((g) => {
-                    const proximaManutencao = new Date(g.proximaManutencao)
-                    const hoje = new Date()
-                    const diasRestantes = Math.ceil(
-                      (proximaManutencao.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-                    )
-                    return diasRestantes <= 30
-                  }).length
-                }{" "}
-                gruas precisam de manutenção nos próximos 30 dias
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

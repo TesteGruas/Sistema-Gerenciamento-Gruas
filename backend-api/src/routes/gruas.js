@@ -362,14 +362,40 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    const { data, error } = await supabaseAdmin
+    // Buscar grua com dados relacionados
+    const { data: grua, error: gruaError } = await supabaseAdmin
       .from('gruas')
-      .select('*')
+      .select(`
+        *,
+        contratos!grua_id (
+          id,
+          numero_contrato,
+          status,
+          data_inicio,
+          data_fim,
+          prazo_meses,
+          valor_total,
+          obras (
+            id,
+            nome,
+            endereco,
+            cidade,
+            estado,
+            clientes (
+              id,
+              nome,
+              cnpj,
+              email,
+              telefone
+            )
+          )
+        )
+      `)
       .eq('id', id)
       .single()
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+    if (gruaError) {
+      if (gruaError.code === 'PGRST116') {
         return res.status(404).json({
           error: 'Grua não encontrada',
           message: 'A grua com o ID especificado não existe'
@@ -377,13 +403,96 @@ router.get('/:id', async (req, res) => {
       }
       return res.status(500).json({
         error: 'Erro ao buscar grua',
-        message: error.message
+        message: gruaError.message
       })
+    }
+
+    // Buscar histórico de manutenções
+    const { data: manutencoes, error: manutencaoError } = await supabaseAdmin
+      .from('historico_manutencoes')
+      .select('*')
+      .eq('grua_id', id)
+      .order('data_manutencao', { ascending: false })
+      .limit(10)
+
+    // Buscar funcionários alocados (se existir tabela de alocações)
+    const { data: funcionarios, error: funcionarioError } = await supabaseAdmin
+      .from('alocacoes_funcionarios')
+      .select(`
+        *,
+        funcionarios (
+          id,
+          nome,
+          cargo,
+          telefone,
+          turno
+        )
+      `)
+      .eq('contrato_id', grua.contratos?.[0]?.id || null)
+      .eq('status', 'Ativa')
+
+    // Buscar equipamentos auxiliares (se existir tabela de alocações de equipamentos)
+    const { data: equipamentos, error: equipamentoError } = await supabaseAdmin
+      .from('alocacoes_equipamentos')
+      .select(`
+        *,
+        equipamentos_auxiliares (
+          id,
+          nome,
+          tipo,
+          status
+        )
+      `)
+      .eq('contrato_id', grua.contratos?.[0]?.id || null)
+      .eq('status', 'Ativa')
+
+    // Preparar dados de resposta
+    const contratoAtivo = grua.contratos?.find(c => c.status === 'Ativo')
+    const obraAtiva = contratoAtivo?.obras
+    const clienteAtivo = obraAtiva?.clientes
+
+    const responseData = {
+      ...grua,
+      // Dados do cliente atual
+      cliente: clienteAtivo?.nome || null,
+      cliente_cnpj: clienteAtivo?.cnpj || null,
+      cliente_email: clienteAtivo?.email || null,
+      cliente_telefone: clienteAtivo?.telefone || null,
+      
+      // Dados da obra atual
+      nome_obra: obraAtiva?.nome || null,
+      endereco_obra: obraAtiva?.endereco || null,
+      cidade_obra: obraAtiva?.cidade || null,
+      estado_obra: obraAtiva?.estado || null,
+      
+      // Dados do contrato atual
+      contrato_ativo: !!contratoAtivo,
+      numero_contrato: contratoAtivo?.numero_contrato || null,
+      inicio_contrato: contratoAtivo?.data_inicio || null,
+      fim_contrato: contratoAtivo?.data_fim || null,
+      prazo_meses: contratoAtivo?.prazo_meses || null,
+      valor_total_contrato: contratoAtivo?.valor_total || null,
+      
+      // Histórico e alocações
+      historico_manutencoes: manutencoes || [],
+      equipe: funcionarios?.map(f => f.funcionarios) || [],
+      equipamentos_auxiliares: equipamentos?.map(e => e.equipamentos_auxiliares) || [],
+      
+      // Campos para compatibilidade com frontend
+      alturaTrabalho: grua.altura_trabalho,
+      capacidadePonta: grua.capacidade_ponta,
+      valorLocacao: grua.valor_locacao,
+      valorOperacao: grua.valor_operacao,
+      valorSinaleiro: grua.valor_sinaleiro,
+      valorManutencao: grua.valor_manutencao,
+      horasOperacao: grua.horas_operacao,
+      ultimaManutencao: grua.ultima_manutencao,
+      proximaManutencao: grua.proxima_manutencao
     }
 
     res.json({
       success: true,
-      data
+      data: responseData
     })
   } catch (error) {
     console.error('Erro ao buscar grua:', error)
