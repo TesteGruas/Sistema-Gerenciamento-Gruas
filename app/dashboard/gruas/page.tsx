@@ -156,9 +156,136 @@ export default function GruasPage() {
   const [selectedGrua, setSelectedGrua] = useState<any>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Função para fazer requisições simples (sem autenticação)
+  // Função para fazer requisições autenticadas
   const apiRequest = async (url: string, options: RequestInit = {}) => {
-    return AuthService.simpleRequest(url, options)
+    return AuthService.authenticatedRequest(url, options)
+  }
+
+  // Função para criar relacionamentos (funcionários, equipamentos, obras)
+  const criarRelacionamentos = async (gruaId: string) => {
+    try {
+      console.log('🔍 DEBUG: Criando relacionamentos para grua:', gruaId)
+      console.log('🔍 DEBUG: Funcionários:', funcionarios)
+      console.log('🔍 DEBUG: Equipamentos:', equipamentos)
+      console.log('🔍 DEBUG: Obra Data:', obraData)
+      
+      // Se não há dados para criar relacionamentos, não fazer nada
+      if (funcionarios.length === 0 && equipamentos.length === 0 && 
+          (!obraData.nomeObra || !obraData.enderecoObra || !obraData.cidadeObra)) {
+        console.log('🔍 DEBUG: Nenhum relacionamento para criar')
+        return
+      }
+      
+      // 1. Criar/relacionar funcionários se houver
+      if (funcionarios.length > 0) {
+        for (const funcionario of funcionarios) {
+          let funcionarioId = funcionario.id
+          
+          // Se não é um funcionário existente, criar novo
+          if (!funcionario.existente) {
+            const funcionarioData = {
+              nome: funcionario.nome,
+              cargo: funcionario.cargo,
+              telefone: funcionario.telefone || null,
+              email: null, // Pode ser adicionado depois se necessário
+              status: "Ativo"
+            }
+            
+            const funcionarioResponse = await apiRequest('http://localhost:3001/api/funcionarios', {
+              method: 'POST',
+              body: JSON.stringify(funcionarioData),
+            })
+            
+            funcionarioId = funcionarioResponse.data.id
+          }
+          
+          // Criar relacionamento grua-funcionário
+          const relacionamentoData = {
+            grua_id: gruaId,
+            funcionario_id: funcionarioId,
+            data_inicio: new Date().toISOString().split('T')[0],
+            status: "Ativo"
+          }
+          
+          await apiRequest('http://localhost:3001/api/relacionamentos/grua-funcionario', {
+            method: 'POST',
+            body: JSON.stringify(relacionamentoData),
+          })
+        }
+      }
+
+      // 2. Criar equipamentos se houver
+      if (equipamentos.length > 0) {
+        for (const equipamento of equipamentos) {
+          // Primeiro, criar o equipamento
+          const equipamentoData = {
+            nome: equipamento.nome,
+            tipo: equipamento.tipo,
+            capacidade: "Não especificado", // Pode ser adicionado depois
+            status: "Disponível" // API só aceita: Disponível, Operacional, Manutenção
+          }
+          
+          const equipamentoResponse = await apiRequest('http://localhost:3001/api/equipamentos', {
+            method: 'POST',
+            body: JSON.stringify(equipamentoData),
+          })
+          
+          // Criar relacionamento grua-equipamento
+          const relacionamentoData = {
+            grua_id: gruaId,
+            equipamento_id: equipamentoResponse.data.id,
+            data_inicio: new Date().toISOString().split('T')[0],
+            status: "Ativo"
+          }
+          
+          await apiRequest('http://localhost:3001/api/relacionamentos/grua-equipamento', {
+            method: 'POST',
+            body: JSON.stringify(relacionamentoData),
+          })
+        }
+      }
+
+      // 3. Criar obra se houver dados
+      if (obraData.nomeObra && obraData.enderecoObra && obraData.cidadeObra) {
+        // Primeiro, criar a obra
+        const obraDataToSend = {
+          nome: obraData.nomeObra,
+          cliente_id: clienteSelecionado?.id ? parseInt(clienteSelecionado.id) : 1, // Usar cliente padrão se não houver selecionado
+          endereco: obraData.enderecoObra,
+          cidade: obraData.cidadeObra,
+          estado: "SP", // Pode ser adicionado depois
+          tipo: obraData.tipoObra,
+          cep: obraData.cepObra || null,
+          contato_obra: obraData.contato || null,
+          telefone_obra: obraData.telefoneContato || null,
+          email_obra: obraData.emailContato || null,
+          status: "Pausada"
+        }
+        
+        const obraResponse = await apiRequest('http://localhost:3001/api/obras', {
+          method: 'POST',
+          body: JSON.stringify(obraDataToSend),
+        })
+        
+        // Criar relacionamento grua-obra
+        const relacionamentoData = {
+          grua_id: gruaId,
+          obra_id: obraResponse.data.id,
+          data_inicio_locacao: obraData.dataInicio || new Date().toISOString().split('T')[0],
+          status: "Ativa"
+        }
+        
+        await apiRequest('http://localhost:3001/api/relacionamentos/grua-obra', {
+          method: 'POST',
+          body: JSON.stringify(relacionamentoData),
+        })
+      }
+      
+      console.log('✅ Relacionamentos criados com sucesso')
+    } catch (error) {
+      console.error('❌ Erro ao criar relacionamentos:', error)
+      // Não falhar a criação da grua se os relacionamentos falharem
+    }
   }
 
   // Carregar gruas do backend
@@ -207,6 +334,8 @@ export default function GruasPage() {
     valorOperacao: 0,
     valorSinaleiro: 0,
     valorManutencao: 0,
+    ultimaManutencao: "",
+    proximaManutencao: "",
   })
 
   // Estados para gerenciamento de clientes
@@ -232,6 +361,10 @@ export default function GruasPage() {
   })
 
   const [funcionarios, setFuncionarios] = useState<any[]>([])
+  const [funcionariosExistentes, setFuncionariosExistentes] = useState<any[]>([])
+  const [buscaFuncionario, setBuscaFuncionario] = useState("")
+  const [mostrarSugestoesFuncionarios, setMostrarSugestoesFuncionarios] = useState(false)
+  const [criandoNovoFuncionario, setCriandoNovoFuncionario] = useState(false)
   const [equipamentos, setEquipamentos] = useState<any[]>([])
 
   const [novoFuncionario, setNovoFuncionario] = useState({
@@ -243,8 +376,8 @@ export default function GruasPage() {
 
   const [novoEquipamento, setNovoEquipamento] = useState({
     nome: "",
-    tipo: "Garfo",
-    status: "Ativo",
+    tipo: "Garra",
+    status: "Disponível",
     responsavel: "",
   })
 
@@ -267,8 +400,8 @@ export default function GruasPage() {
     (grua) =>
       grua.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       grua.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      grua.localizacao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      grua.cliente.toLowerCase().includes(searchTerm.toLowerCase()),
+      grua.localizacao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (grua.grua_obras && grua.grua_obras.length > 0 && grua.grua_obras[0].obra?.nome?.toLowerCase().includes(searchTerm.toLowerCase())),
   )
 
   const getStatusBadge = (status: string) => {
@@ -279,6 +412,8 @@ export default function GruasPage() {
         return <Badge className="bg-blue-100 text-blue-800">Operacional</Badge>
       case "Manutenção":
         return <Badge className="bg-yellow-100 text-yellow-800">Manutenção</Badge>
+      case "Vendida":
+        return <Badge className="bg-red-100 text-red-800">Vendida</Badge>
       default:
         return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>
     }
@@ -310,6 +445,22 @@ export default function GruasPage() {
     }
   }
 
+  // Função para buscar funcionários existentes
+  const buscarFuncionarios = async (query: string) => {
+    if (query.length < 2) {
+      setFuncionariosExistentes([])
+      return
+    }
+
+    try {
+      const data = await apiRequest(`http://localhost:3001/api/funcionarios/buscar?q=${encodeURIComponent(query)}`)
+      setFuncionariosExistentes(data.data || [])
+    } catch (error) {
+      console.error('Erro ao buscar funcionários:', error)
+      setFuncionariosExistentes([])
+    }
+  }
+
   // Função para selecionar cliente
   const selecionarCliente = (cliente: any) => {
     setClienteSelecionado(cliente)
@@ -327,10 +478,63 @@ export default function GruasPage() {
     setMostrarSugestoes(false)
   }
 
+  // Função para selecionar funcionário existente
+  const selecionarFuncionarioExistente = (funcionario: any) => {
+    // Adicionar funcionário existente à lista
+    setFuncionarios([...funcionarios, {
+      id: funcionario.id,
+      nome: funcionario.nome,
+      cargo: funcionario.cargo,
+      telefone: "", // Será preenchido se disponível
+      turno: "Diurno", // Valor padrão
+      existente: true // Marcar como funcionário existente
+    }])
+    
+    // Limpar busca
+    setBuscaFuncionario("")
+    setFuncionariosExistentes([])
+    setMostrarSugestoesFuncionarios(false)
+  }
+
+  // Função para alternar entre criar novo e selecionar existente
+  const alternarModoFuncionario = () => {
+    setCriandoNovoFuncionario(!criandoNovoFuncionario)
+    setBuscaFuncionario("")
+    setFuncionariosExistentes([])
+    setMostrarSugestoesFuncionarios(false)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
     setError(null)
+
+    // Validação de campos obrigatórios
+    if (!formData.modelo.trim()) {
+      setError("Modelo é obrigatório")
+      setSubmitting(false)
+      return
+    }
+    if (!formData.fabricante.trim()) {
+      setError("Fabricante é obrigatório")
+      setSubmitting(false)
+      return
+    }
+    if (!formData.capacidade.trim()) {
+      setError("Capacidade é obrigatória")
+      setSubmitting(false)
+      return
+    }
+    if (!formData.capacidadePonta.trim()) {
+      setError("Capacidade na ponta é obrigatória")
+      setSubmitting(false)
+      return
+    }
+    if (!formData.lanca.trim()) {
+      setError("Comprimento da lança é obrigatório")
+      setSubmitting(false)
+      return
+    }
 
     try {
       // Preparar dados base - baseado no schema real da tabela gruas do Supabase
@@ -340,8 +544,8 @@ export default function GruasPage() {
         fabricante: formData.fabricante,
         tipo: formData.tipo,
         capacidade: formData.capacidade,
-        capacidade_ponta: formData.capacidadePonta || "N/A",
-        lanca: formData.lanca || "N/A",
+        capacidade_ponta: formData.capacidadePonta || "Não especificado",
+        lanca: formData.lanca || "Não especificado",
         status: formData.status,
         
         // Campos com valores padrão conforme schema da tabela
@@ -353,6 +557,8 @@ export default function GruasPage() {
         valor_operacao: formData.valorOperacao || 0, // Valor padrão para evitar NOT NULL
         valor_sinaleiro: formData.valorSinaleiro || 0, // Valor padrão para evitar NOT NULL
         valor_manutencao: formData.valorManutencao || 0, // Valor padrão para evitar NOT NULL
+        ultima_manutencao: formData.ultimaManutencao || null,
+        proxima_manutencao: formData.proximaManutencao || null,
         
         // Dados do cliente - usar dados da aba Obra/Cliente se cliente selecionado não tiver
         cliente_nome: formData.cliente || null,
@@ -368,16 +574,24 @@ export default function GruasPage() {
           body: JSON.stringify(baseData),
         })
         
+        // Criar/atualizar relacionamentos se houver dados
+        await criarRelacionamentos(editingGrua.id)
+        
         toast({
           title: "Sucesso!",
           description: "Guindaste atualizado com sucesso.",
         })
       } else {
         // Criar nova grua - não incluir id
-        await apiRequest('http://localhost:3001/api/gruas', {
+        const gruaResponse = await apiRequest('http://localhost:3001/api/gruas', {
           method: 'POST',
           body: JSON.stringify(baseData),
         })
+        
+        const novaGruaId = gruaResponse.data.id
+        
+        // Criar relacionamentos se houver dados
+        await criarRelacionamentos(novaGruaId)
         
         toast({
           title: "Sucesso!",
@@ -428,6 +642,8 @@ export default function GruasPage() {
       valorOperacao: 0,
       valorSinaleiro: 0,
       valorManutencao: 0,
+      ultimaManutencao: "",
+      proximaManutencao: "",
     })
     
     setObraData({
@@ -454,6 +670,11 @@ export default function GruasPage() {
     setBuscaCliente("")
     setClientes([])
     setMostrarSugestoes(false)
+    // Limpar dados dos funcionários
+    setFuncionariosExistentes([])
+    setBuscaFuncionario("")
+    setMostrarSugestoesFuncionarios(false)
+    setCriandoNovoFuncionario(false)
   }
 
   // Função para deletar grua
@@ -474,54 +695,200 @@ export default function GruasPage() {
     }
   }
 
-  const handleEdit = (grua: any) => {
+  // Função para carregar dados completos da grua
+  const carregarDadosCompletosGrua = async (gruaId: string) => {
+    try {
+      const data = await apiRequest(`http://localhost:3001/api/gruas/${gruaId}`)
+      return data.data
+    } catch (error) {
+      console.error('Erro ao carregar dados da grua:', error)
+      return null
+    }
+  }
+
+  const handleEdit = async (grua: any) => {
     setEditingGrua(grua)
-    setFormData({
-      id: grua.id,
-      modelo: grua.modelo,
-      fabricante: grua.fabricante,
-      tipo: grua.tipo,
-      capacidade: grua.capacidade,
-      capacidadePonta: grua.capacidadePonta,
-      lanca: grua.lanca,
-      alturaTrabalho: grua.alturaTrabalho,
-      ano: grua.ano,
-      status: grua.status,
-      localizacao: grua.localizacao,
-      cliente: grua.cliente || "",
-      operador: grua.operador || "",
-      sinaleiro: grua.sinaleiro || "",
-      horasOperacao: grua.horasOperacao,
-      valorLocacao: grua.valorLocacao,
-      valorOperacao: grua.valorOperacao,
-      valorSinaleiro: grua.valorSinaleiro,
-      valorManutencao: grua.valorManutencao,
-    })
     
-    setObraData({
-      nomeObra: grua.nomeObra || "",
-      enderecoObra: grua.enderecoObra || "",
-      cidadeObra: grua.cidadeObra || "",
-      cepObra: grua.cepObra || "",
-      tipoObra: grua.tipoObra || "Residencial",
-      contato: grua.contato || "",
-      telefoneContato: grua.telefoneContato || "",
-      emailContato: grua.emailContato || "",
-      cnpjCliente: grua.cnpjCliente || "",
-      prazoMeses: grua.prazoMeses || 6,
-      dataInicio: grua.inicioContrato || "",
-      dataFim: grua.fimContrato || "",
-    })
+    // Carregar dados completos da grua com relacionamentos
+    const dadosCompletos = await carregarDadosCompletosGrua(grua.id)
     
-    setFuncionarios(grua.equipe || [])
-    setEquipamentos(grua.equipamentosAuxiliares || [])
+    if (dadosCompletos) {
+      // Preencher dados básicos da grua
+      setFormData({
+        id: dadosCompletos.id,
+        modelo: dadosCompletos.modelo,
+        fabricante: dadosCompletos.fabricante,
+        tipo: dadosCompletos.tipo,
+        capacidade: dadosCompletos.capacidade,
+        capacidadePonta: dadosCompletos.capacidade_ponta || "",
+        lanca: dadosCompletos.lanca,
+        alturaTrabalho: dadosCompletos.altura_trabalho || "",
+        ano: dadosCompletos.ano || "",
+        status: dadosCompletos.status,
+        localizacao: dadosCompletos.localizacao || "",
+        cliente: dadosCompletos.cliente_nome || "",
+        operador: "",
+        sinaleiro: "",
+        horasOperacao: dadosCompletos.horas_operacao || 0,
+        valorLocacao: dadosCompletos.valor_locacao || 0,
+        valorOperacao: dadosCompletos.valor_operacao || 0,
+        valorSinaleiro: dadosCompletos.valor_sinaleiro || 0,
+        valorManutencao: dadosCompletos.valor_manutencao || 0,
+        ultimaManutencao: dadosCompletos.ultima_manutencao || "",
+        proximaManutencao: dadosCompletos.proxima_manutencao || "",
+      })
+      
+      // Preencher dados da obra se existir
+      if (dadosCompletos.grua_obras && dadosCompletos.grua_obras.length > 0) {
+        const obra = dadosCompletos.grua_obras[0].obra
+        setObraData({
+          nomeObra: obra?.nome || "",
+          enderecoObra: obra?.endereco || "",
+          cidadeObra: obra?.cidade || "",
+          cepObra: obra?.cep || "",
+          tipoObra: obra?.tipo || "Residencial",
+          contato: obra?.contato_obra || "",
+          telefoneContato: obra?.telefone_obra || "",
+          emailContato: obra?.email_obra || "",
+          cnpjCliente: dadosCompletos.cliente_documento || "",
+          prazoMeses: 6,
+          dataInicio: dadosCompletos.grua_obras[0].data_inicio_locacao || "",
+          dataFim: dadosCompletos.grua_obras[0].data_fim_locacao || "",
+        })
+      } else {
+        // Limpar dados da obra se não existir
+        setObraData({
+          nomeObra: "",
+          enderecoObra: "",
+          cidadeObra: "",
+          cepObra: "",
+          tipoObra: "Residencial",
+          contato: "",
+          telefoneContato: "",
+          emailContato: "",
+          cnpjCliente: dadosCompletos.cliente_documento || "",
+          prazoMeses: 6,
+          dataInicio: "",
+          dataFim: "",
+        })
+      }
+      
+      // Preencher funcionários existentes
+      if (dadosCompletos.grua_funcionarios && dadosCompletos.grua_funcionarios.length > 0) {
+        const funcionariosExistentes = dadosCompletos.grua_funcionarios.map((rel: any) => ({
+          id: rel.funcionario.id,
+          nome: rel.funcionario.nome,
+          cargo: rel.funcionario.cargo,
+          telefone: rel.funcionario.telefone || "",
+          turno: "Diurno", // Valor padrão, pode ser expandido depois
+        }))
+        setFuncionarios(funcionariosExistentes)
+      } else {
+        setFuncionarios([])
+      }
+      
+      // Preencher equipamentos existentes
+      if (dadosCompletos.grua_equipamentos && dadosCompletos.grua_equipamentos.length > 0) {
+        const equipamentosExistentes = dadosCompletos.grua_equipamentos.map((rel: any) => ({
+          id: rel.equipamento.id,
+          nome: rel.equipamento.nome,
+          tipo: rel.equipamento.tipo,
+          status: rel.equipamento.status,
+          responsavel: "", // Valor padrão, pode ser expandido depois
+        }))
+        setEquipamentos(equipamentosExistentes)
+      } else {
+        setEquipamentos([])
+      }
+      
+      // Se houver dados de cliente, definir como selecionado
+      // Primeiro, tentar dados diretos da grua
+      if (dadosCompletos.cliente_nome) {
+        setClienteSelecionado({
+          id: dadosCompletos.cliente_id || null,
+          nome: dadosCompletos.cliente_nome,
+          cnpj: dadosCompletos.cliente_documento,
+          email: dadosCompletos.cliente_email,
+          telefone: dadosCompletos.cliente_telefone,
+        })
+        setBuscaCliente(dadosCompletos.cliente_nome)
+      } 
+      // Se não houver dados diretos, tentar através da obra
+      else if (dadosCompletos.grua_obras && dadosCompletos.grua_obras.length > 0 && dadosCompletos.grua_obras[0].obra?.cliente) {
+        const cliente = dadosCompletos.grua_obras[0].obra.cliente
+        setClienteSelecionado({
+          id: cliente.id,
+          nome: cliente.nome,
+          cnpj: cliente.cnpj,
+          email: cliente.email,
+          telefone: cliente.telefone,
+        })
+        setBuscaCliente(cliente.nome)
+      }
+    } else {
+      // Fallback para dados básicos se não conseguir carregar dados completos
+      setFormData({
+        id: grua.id,
+        modelo: grua.modelo,
+        fabricante: grua.fabricante,
+        tipo: grua.tipo,
+        capacidade: grua.capacidade,
+        capacidadePonta: grua.capacidade_ponta || "",
+        lanca: grua.lanca,
+        alturaTrabalho: grua.altura_trabalho || "",
+        ano: grua.ano || "",
+        status: grua.status,
+        localizacao: grua.localizacao || "",
+        cliente: grua.cliente || "",
+        operador: "",
+        sinaleiro: "",
+        horasOperacao: grua.horas_operacao || 0,
+        valorLocacao: grua.valor_locacao || 0,
+        valorOperacao: grua.valor_operacao || 0,
+        valorSinaleiro: grua.valor_sinaleiro || 0,
+        valorManutencao: grua.valor_manutencao || 0,
+        ultimaManutencao: grua.ultima_manutencao || "",
+        proximaManutencao: grua.proxima_manutencao || "",
+      })
+      
+      setObraData({
+        nomeObra: "",
+        enderecoObra: "",
+        cidadeObra: "",
+        cepObra: "",
+        tipoObra: "Residencial",
+        contato: "",
+        telefoneContato: "",
+        emailContato: "",
+        cnpjCliente: "",
+        prazoMeses: 6,
+        dataInicio: "",
+        dataFim: "",
+      })
+      
+      setFuncionarios([])
+      setEquipamentos([])
+    }
+    
     setIsDialogOpen(true)
   }
 
   const adicionarFuncionario = () => {
-    if (novoFuncionario.nome && novoFuncionario.cargo) {
-      setFuncionarios([...funcionarios, { ...novoFuncionario, id: Date.now() }])
-      setNovoFuncionario({ nome: "", cargo: "Operador", telefone: "", turno: "Diurno" })
+    if (criandoNovoFuncionario) {
+      // Modo criar novo funcionário
+      if (novoFuncionario.nome && novoFuncionario.cargo) {
+        setFuncionarios([...funcionarios, { ...novoFuncionario, id: Date.now(), existente: false }])
+        setNovoFuncionario({ nome: "", cargo: "Operador", telefone: "", turno: "Diurno" })
+      }
+    } else {
+      // Modo selecionar existente - apenas mostrar mensagem se não há busca
+      if (!buscaFuncionario || buscaFuncionario.length < 2) {
+        toast({
+          title: "Busca necessária",
+          description: "Digite pelo menos 2 caracteres para buscar funcionários existentes",
+          variant: "destructive",
+        })
+      }
     }
   }
 
@@ -532,7 +899,7 @@ export default function GruasPage() {
   const adicionarEquipamento = () => {
     if (novoEquipamento.nome) {
       setEquipamentos([...equipamentos, { ...novoEquipamento, id: Date.now() }])
-      setNovoEquipamento({ nome: "", tipo: "Garfo", status: "Ativo", responsavel: "" })
+      setNovoEquipamento({ nome: "", tipo: "Garra", status: "Disponível", responsavel: "" })
     }
   }
 
@@ -562,10 +929,10 @@ export default function GruasPage() {
   const calcularValorTotal = () => {
     if (!selectedGrua) return 0
     const valorMensal =
-      selectedGrua.valorLocacao +
-      selectedGrua.valorOperacao +
-      selectedGrua.valorSinaleiro +
-      selectedGrua.valorManutencao
+      (selectedGrua.valor_locacao || 0) +
+      (selectedGrua.valor_operacao || 0) +
+      (selectedGrua.valor_sinaleiro || 0) +
+      (selectedGrua.valor_manutencao || 0)
     return valorMensal * propostaData.prazoMeses
   }
 
@@ -573,7 +940,7 @@ export default function GruasPage() {
     { title: "Total de Gruas", value: gruas.length, icon: Crane, color: "bg-blue-500" },
     {
       title: "Operacionais",
-      value: gruas.filter((g) => g.status === "Ativa").length,
+      value: gruas.filter((g) => g.status === "Operacional").length,
       icon: CheckCircle,
       color: "bg-green-500",
     },
@@ -585,7 +952,7 @@ export default function GruasPage() {
     },
     {
       title: "Disponíveis",
-      value: gruas.filter((g) => g.status === "Ativa").length,
+      value: gruas.filter((g) => g.status === "Disponível").length,
       icon: Clock,
       color: "bg-yellow-500",
     },
@@ -659,8 +1026,9 @@ export default function GruasPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Grua Torre">Grua Torre</SelectItem>
-                          <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                           <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                          <SelectItem value="Guincho">Guincho</SelectItem>
+                          <SelectItem value="Outros">Outros</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -687,6 +1055,7 @@ export default function GruasPage() {
                           <SelectItem value="Disponível">Disponível</SelectItem>
                           <SelectItem value="Operacional">Operacional</SelectItem>
                           <SelectItem value="Manutenção">Manutenção</SelectItem>
+                          <SelectItem value="Vendida">Vendida</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -775,6 +1144,27 @@ export default function GruasPage() {
                           setFormData({ ...formData, valorLocacao: Number.parseFloat(e.target.value) || 0 })
                         }
                         placeholder="26300.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="ultimaManutencao">Última Manutenção</Label>
+                      <Input
+                        id="ultimaManutencao"
+                        type="date"
+                        value={formData.ultimaManutencao}
+                        onChange={(e) => setFormData({ ...formData, ultimaManutencao: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="proximaManutencao">Próxima Manutenção</Label>
+                      <Input
+                        id="proximaManutencao"
+                        type="date"
+                        value={formData.proximaManutencao}
+                        onChange={(e) => setFormData({ ...formData, proximaManutencao: e.target.value })}
                       />
                     </div>
                   </div>
@@ -984,50 +1374,119 @@ export default function GruasPage() {
                 </TabsContent>
 
                 <TabsContent value="funcionarios" className="space-y-4">
+                  {/* Seção de busca e seleção de funcionários */}
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-medium mb-3">Adicionar Funcionário</h4>
-                    <div className="grid grid-cols-4 gap-3">
-                      <Input
-                        placeholder="Nome completo"
-                        value={novoFuncionario.nome}
-                        onChange={(e) => setNovoFuncionario({ ...novoFuncionario, nome: e.target.value })}
-                      />
-                      <Select
-                        value={novoFuncionario.cargo}
-                        onValueChange={(value) => setNovoFuncionario({ ...novoFuncionario, cargo: value })}
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium">Adicionar Funcionário</h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={alternarModoFuncionario}
                       >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Operador">Operador</SelectItem>
-                          <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
-                          <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
-                          <SelectItem value="Supervisor">Supervisor</SelectItem>
-                          <SelectItem value="Mecânico">Mecânico</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        placeholder="Telefone"
-                        value={novoFuncionario.telefone}
-                        onChange={(e) => setNovoFuncionario({ ...novoFuncionario, telefone: e.target.value })}
-                      />
-                      <Select
-                        value={novoFuncionario.turno}
-                        onValueChange={(value) => setNovoFuncionario({ ...novoFuncionario, turno: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Diurno">Diurno</SelectItem>
-                          <SelectItem value="Noturno">Noturno</SelectItem>
-                          <SelectItem value="Sob Demanda">Sob Demanda</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        {criandoNovoFuncionario ? "Selecionar Existente" : "Criar Novo"}
+                      </Button>
                     </div>
-                    <Button type="button" onClick={adicionarFuncionario} className="mt-3" size="sm">
-                      Adicionar Funcionário
+
+                    {criandoNovoFuncionario ? (
+                      /* Formulário para criar novo funcionário */
+                      <div className="grid grid-cols-4 gap-3">
+                        <Input
+                          placeholder="Nome completo"
+                          value={novoFuncionario.nome}
+                          onChange={(e) => setNovoFuncionario({ ...novoFuncionario, nome: e.target.value })}
+                        />
+                        <Select
+                          value={novoFuncionario.cargo}
+                          onValueChange={(value) => setNovoFuncionario({ ...novoFuncionario, cargo: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Operador">Operador</SelectItem>
+                            <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
+                            <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
+                            <SelectItem value="Supervisor">Supervisor</SelectItem>
+                            <SelectItem value="Mecânico">Mecânico</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          placeholder="Telefone"
+                          value={novoFuncionario.telefone}
+                          onChange={(e) => setNovoFuncionario({ ...novoFuncionario, telefone: e.target.value })}
+                        />
+                        <Select
+                          value={novoFuncionario.turno}
+                          onValueChange={(value) => setNovoFuncionario({ ...novoFuncionario, turno: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Diurno">Diurno</SelectItem>
+                            <SelectItem value="Noturno">Noturno</SelectItem>
+                            <SelectItem value="Sob Demanda">Sob Demanda</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      /* Busca de funcionários existentes */
+                      <div className="space-y-3">
+                        <div className="relative">
+                          <Input
+                            placeholder="Buscar funcionário existente..."
+                            value={buscaFuncionario}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setBuscaFuncionario(value)
+                              if (value.length >= 2) {
+                                buscarFuncionarios(value)
+                                setMostrarSugestoesFuncionarios(true)
+                              } else {
+                                setFuncionariosExistentes([])
+                                setMostrarSugestoesFuncionarios(false)
+                              }
+                            }}
+                            onFocus={() => {
+                              if (funcionariosExistentes.length > 0) {
+                                setMostrarSugestoesFuncionarios(true)
+                              }
+                            }}
+                          />
+                          
+                          {/* Lista de sugestões de funcionários */}
+                          {mostrarSugestoesFuncionarios && funcionariosExistentes.length > 0 && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                              {funcionariosExistentes.map((funcionario) => (
+                                <div
+                                  key={funcionario.id}
+                                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                  onClick={() => selecionarFuncionarioExistente(funcionario)}
+                                >
+                                  <div className="font-medium">{funcionario.nome}</div>
+                                  <div className="text-sm text-gray-500">
+                                    {funcionario.cargo} • {funcionario.status}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          Digite pelo menos 2 caracteres para buscar funcionários existentes
+                        </p>
+                      </div>
+                    )}
+
+                    <Button 
+                      type="button" 
+                      onClick={adicionarFuncionario} 
+                      className="mt-3" 
+                      size="sm"
+                      disabled={criandoNovoFuncionario && !novoFuncionario.nome}
+                    >
+                      {criandoNovoFuncionario ? "Adicionar Novo Funcionário" : "Selecionar da Lista"}
                     </Button>
                   </div>
 
@@ -1036,13 +1495,25 @@ export default function GruasPage() {
                     {funcionarios.length === 0 ? (
                       <p className="text-gray-500 text-sm">Nenhum funcionário cadastrado</p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
                         {funcionarios.map((funcionario, index) => (
                           <div key={funcionario.id || index} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div>
-                              <p className="font-medium">{funcionario.nome}</p>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{funcionario.nome}</p>
+                                {funcionario.existente && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Existente
+                                  </Badge>
+                                )}
+                                {!funcionario.existente && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Novo
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-sm text-gray-600">
-                                {funcionario.cargo} • {funcionario.turno} • {funcionario.telefone}
+                                {funcionario.cargo} • {funcionario.turno} • {funcionario.telefone || "Sem telefone"}
                               </p>
                             </div>
                             <Button
@@ -1077,10 +1548,10 @@ export default function GruasPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Garfo">Garfo Paleteiro</SelectItem>
-                          <SelectItem value="Balde">Balde Concreto</SelectItem>
-                          <SelectItem value="Caçamba">Caçamba Entulho</SelectItem>
-                          <SelectItem value="Plataforma">Plataforma Descarga</SelectItem>
+                          <SelectItem value="Garfo Paleteiro">Garfo Paleteiro</SelectItem>
+                          <SelectItem value="Balde Concreto">Balde Concreto</SelectItem>
+                          <SelectItem value="Caçamba Entulho">Caçamba Entulho</SelectItem>
+                          <SelectItem value="Plataforma Descarga">Plataforma Descarga</SelectItem>
                           <SelectItem value="Garra">Garra</SelectItem>
                           <SelectItem value="Outro">Outro</SelectItem>
                         </SelectContent>
@@ -1213,15 +1684,16 @@ export default function GruasPage() {
                   <TableHead>Modelo</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Localização</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Operador</TableHead>
+                  <TableHead>Cliente/Obra</TableHead>
+                  <TableHead>Funcionários</TableHead>
+                  <TableHead>Equipamentos</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <div className="flex items-center justify-center gap-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                         Carregando gruas...
@@ -1230,7 +1702,7 @@ export default function GruasPage() {
                   </TableRow>
                 ) : filteredGruas.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                       Nenhuma grua encontrada
                     </TableCell>
                   </TableRow>
@@ -1248,18 +1720,58 @@ export default function GruasPage() {
                     <TableCell>
                       <div className="flex items-center">
                         <MapPin className="mr-1 h-4 w-4 text-gray-400" />
-                        <span className="text-sm">{grua.localizacao}</span>
+                        <span className="text-sm">{grua.localizacao || "-"}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{grua.cliente || "-"}</TableCell>
-                    <TableCell>{grua.operador || "-"}</TableCell>
+                    <TableCell>
+                      {grua.grua_obras && grua.grua_obras.length > 0 ? (
+                        <div className="text-sm">
+                          <div className="font-medium">{grua.grua_obras[0].obra?.nome}</div>
+                          <div className="text-gray-500">
+                            {grua.grua_obras[0].obra?.contato_obra && (
+                              <span>Contato: {grua.grua_obras[0].obra.contato_obra}</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {grua.grua_funcionarios && grua.grua_funcionarios.length > 0 ? (
+                        <div className="text-sm">
+                          <div className="font-medium">{grua.grua_funcionarios[0].funcionario?.nome}</div>
+                          <div className="text-gray-500">{grua.grua_funcionarios[0].funcionario?.cargo}</div>
+                          {grua.grua_funcionarios.length > 1 && (
+                            <div className="text-xs text-blue-600">+{grua.grua_funcionarios.length - 1} mais</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {grua.grua_equipamentos && grua.grua_equipamentos.length > 0 ? (
+                        <div className="text-sm">
+                          <div className="font-medium">{grua.grua_equipamentos[0].equipamento?.nome}</div>
+                          <div className="text-gray-500">{grua.grua_equipamentos[0].equipamento?.tipo}</div>
+                          {grua.grua_equipamentos.length > 1 && (
+                            <div className="text-xs text-blue-600">+{grua.grua_equipamentos.length - 1} mais</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setSelectedGrua(grua)
+                          onClick={async () => {
+                            // Carregar dados completos da grua para visualização
+                            const dadosCompletos = await carregarDadosCompletosGrua(grua.id)
+                            setSelectedGrua(dadosCompletos || grua)
                             setIsDetalhesOpen(true)
                           }}
                         >
@@ -1328,50 +1840,102 @@ export default function GruasPage() {
                         <strong>Fabricante:</strong> {selectedGrua.fabricante}
                       </div>
                       <div>
+                        <strong>Tipo:</strong> {selectedGrua.tipo}
+                      </div>
+                      <div>
                         <strong>Capacidade:</strong> {selectedGrua.capacidade}
+                      </div>
+                      <div>
+                        <strong>Capacidade na Ponta:</strong> {selectedGrua.capacidade_ponta}
                       </div>
                       <div>
                         <strong>Lança:</strong> {selectedGrua.lanca}
                       </div>
                       <div>
-                        <strong>Altura:</strong> {selectedGrua.alturaTrabalho}
+                        <strong>Altura de Trabalho:</strong> {selectedGrua.altura_trabalho}
+                      </div>
+                      <div>
+                        <strong>Ano:</strong> {selectedGrua.ano}
                       </div>
                       <div>
                         <strong>Status:</strong> {getStatusBadge(selectedGrua.status)}
+                      </div>
+                      <div>
+                        <strong>Localização:</strong> {selectedGrua.localizacao}
+                      </div>
+                      <div>
+                        <strong>Horas de Operação:</strong> {selectedGrua.horas_operacao?.toLocaleString() || 0}
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Dados da Obra</CardTitle>
+                      <CardTitle className="text-lg">Dados Financeiros</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div>
-                        <strong>Cliente:</strong> {selectedGrua.cliente}
+                        <strong>Valor Locação:</strong> R$ {formatCurrency(selectedGrua.valor_locacao)}
                       </div>
                       <div>
-                        <strong>Localização:</strong> {selectedGrua.localizacao}
+                        <strong>Valor Operação:</strong> R$ {formatCurrency(selectedGrua.valor_operacao)}
                       </div>
                       <div>
-                        <strong>Contrato Ativo:</strong> {selectedGrua.contratoAtivo ? "Sim" : "Não"}
+                        <strong>Valor Sinaleiro:</strong> R$ {formatCurrency(selectedGrua.valor_sinaleiro)}
                       </div>
-                      {selectedGrua.contratoAtivo && (
-                        <>
-                          <div>
-                            <strong>Início:</strong> {selectedGrua.inicioContrato}
-                          </div>
-                          <div>
-                            <strong>Fim:</strong> {selectedGrua.fimContrato}
-                          </div>
-                          <div>
-                            <strong>Prazo:</strong> {selectedGrua.prazoMeses} meses
-                          </div>
-                        </>
-                      )}
+                      <div>
+                        <strong>Valor Manutenção:</strong> R$ {formatCurrency(selectedGrua.valor_manutencao)}
+                      </div>
+                      <div>
+                        <strong>Última Manutenção:</strong> {selectedGrua.ultima_manutencao || "Não informado"}
+                      </div>
+                      <div>
+                        <strong>Próxima Manutenção:</strong> {selectedGrua.proxima_manutencao || "Não informado"}
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Informações das Obras */}
+                {selectedGrua.grua_obras && selectedGrua.grua_obras.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Obras Relacionadas</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {selectedGrua.grua_obras.map((relacionamento: any, index: number) => (
+                          <div key={index} className="border rounded-lg p-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <h4 className="font-medium text-lg">{relacionamento.obra?.nome}</h4>
+                                <div className="text-sm text-gray-600 space-y-1">
+                                  <div><strong>Tipo:</strong> {relacionamento.obra?.tipo}</div>
+                                  <div><strong>Status da Obra:</strong> {relacionamento.obra?.status}</div>
+                                  <div><strong>Status da Locação:</strong> {relacionamento.status}</div>
+                                </div>
+                              </div>
+                              <div className="text-sm text-gray-600 space-y-1">
+                                <div><strong>Início da Locação:</strong> {relacionamento.data_inicio_locacao}</div>
+                                <div><strong>Fim da Locação:</strong> {relacionamento.data_fim_locacao || "Em andamento"}</div>
+                                <div><strong>Valor Mensal:</strong> R$ {formatCurrency(relacionamento.valor_locacao_mensal)}</div>
+                                {relacionamento.obra?.contato_obra && (
+                                  <div><strong>Contato:</strong> {relacionamento.obra.contato_obra}</div>
+                                )}
+                                {relacionamento.obra?.telefone_obra && (
+                                  <div><strong>Telefone:</strong> {relacionamento.obra.telefone_obra}</div>
+                                )}
+                                {relacionamento.obra?.email_obra && (
+                                  <div><strong>Email:</strong> {relacionamento.obra.email_obra}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               <TabsContent value="equipamentos" className="space-y-4">
@@ -1383,24 +1947,44 @@ export default function GruasPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {selectedGrua && selectedGrua.equipamentosAuxiliares && selectedGrua.equipamentosAuxiliares.length > 0 ? (
+                    {selectedGrua && selectedGrua.grua_equipamentos && selectedGrua.grua_equipamentos.length > 0 ? (
                       <div className="rounded-md border">
                         <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Equipamento</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Responsável</TableHead>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Capacidade</TableHead>
+                              <TableHead>Status do Equipamento</TableHead>
+                              <TableHead>Status do Relacionamento</TableHead>
+                              <TableHead>Data Início</TableHead>
+                              <TableHead>Data Fim</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {selectedGrua.equipamentosAuxiliares.map((equip: any, index: number) => (
+                            {selectedGrua.grua_equipamentos.map((relacionamento: any, index: number) => (
                               <TableRow key={index}>
-                                <TableCell className="font-medium">{equip.nome}</TableCell>
+                                <TableCell className="font-medium">{relacionamento.equipamento?.nome}</TableCell>
+                                <TableCell>{relacionamento.equipamento?.tipo}</TableCell>
+                                <TableCell>{relacionamento.equipamento?.capacidade}</TableCell>
                                 <TableCell>
-                                  <Badge className="bg-green-100 text-green-800">{equip.status}</Badge>
+                                  <Badge className={
+                                    relacionamento.equipamento?.status === 'Disponível' ? 'bg-green-100 text-green-800' :
+                                    relacionamento.equipamento?.status === 'Operacional' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-yellow-100 text-yellow-800'
+                                  }>
+                                    {relacionamento.equipamento?.status}
+                                  </Badge>
                                 </TableCell>
-                                <TableCell>{equip.responsavel}</TableCell>
+                                <TableCell>
+                                  <Badge className={
+                                    relacionamento.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  }>
+                                    {relacionamento.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{relacionamento.data_inicio}</TableCell>
+                                <TableCell>{relacionamento.data_fim || "Em andamento"}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -1418,11 +2002,11 @@ export default function GruasPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center">
                       <Users className="mr-2 h-5 w-5" />
-                      Funcionários da Obra
+                      Funcionários da Grua
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {selectedGrua && selectedGrua.equipe && selectedGrua.equipe.length > 0 ? (
+                    {selectedGrua && selectedGrua.grua_funcionarios && selectedGrua.grua_funcionarios.length > 0 ? (
                       <div className="rounded-md border">
                         <Table>
                           <TableHeader>
@@ -1430,18 +2014,36 @@ export default function GruasPage() {
                               <TableHead>Nome</TableHead>
                               <TableHead>Cargo</TableHead>
                               <TableHead>Telefone</TableHead>
-                              <TableHead>Turno</TableHead>
+                              <TableHead>Email</TableHead>
+                              <TableHead>Status do Funcionário</TableHead>
+                              <TableHead>Status do Relacionamento</TableHead>
+                              <TableHead>Data Início</TableHead>
+                              <TableHead>Data Fim</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {selectedGrua.equipe.map((funcionario: any, index: number) => (
+                            {selectedGrua.grua_funcionarios.map((relacionamento: any, index: number) => (
                               <TableRow key={index}>
-                                <TableCell className="font-medium">{funcionario.nome}</TableCell>
-                                <TableCell>{funcionario.cargo}</TableCell>
-                                <TableCell>{funcionario.telefone}</TableCell>
+                                <TableCell className="font-medium">{relacionamento.funcionario?.nome}</TableCell>
+                                <TableCell>{relacionamento.funcionario?.cargo}</TableCell>
+                                <TableCell>{relacionamento.funcionario?.telefone || "-"}</TableCell>
+                                <TableCell>{relacionamento.funcionario?.email || "-"}</TableCell>
                                 <TableCell>
-                                  <Badge variant="outline">{funcionario.turno}</Badge>
+                                  <Badge className={
+                                    relacionamento.funcionario?.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  }>
+                                    {relacionamento.funcionario?.status}
+                                  </Badge>
                                 </TableCell>
+                                <TableCell>
+                                  <Badge className={
+                                    relacionamento.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  }>
+                                    {relacionamento.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{relacionamento.data_inicio}</TableCell>
+                                <TableCell>{relacionamento.data_fim || "Em andamento"}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -1488,10 +2090,13 @@ export default function GruasPage() {
                         <strong>Lança:</strong> {selectedGrua.lanca}
                       </p>
                       <p>
-                        <strong>Altura:</strong> {selectedGrua.alturaTrabalho}
+                        <strong>Altura:</strong> {selectedGrua.altura_trabalho}
                       </p>
                       <p>
                         <strong>Capacidade:</strong> {selectedGrua.capacidade}
+                      </p>
+                      <p>
+                        <strong>Capacidade na Ponta:</strong> {selectedGrua.capacidade_ponta}
                       </p>
                     </div>
                   </div>
@@ -1663,19 +2268,19 @@ export default function GruasPage() {
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                           <span>Locação:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorLocacao)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_locacao)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Operação:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorOperacao)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_operacao)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Sinaleiro:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorSinaleiro)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_sinaleiro)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Manutenção:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valorManutencao)}</span>
+                          <span>R$ {formatCurrency(selectedGrua?.valor_manutencao)}</span>
                         </div>
                         <hr />
                         <div className="flex justify-between font-medium">
@@ -1683,10 +2288,10 @@ export default function GruasPage() {
                           <span>
                             R${" "}
                             {formatCurrency(
-                              (selectedGrua?.valorLocacao || 0) +
-                              (selectedGrua?.valorOperacao || 0) +
-                              (selectedGrua?.valorSinaleiro || 0) +
-                              (selectedGrua?.valorManutencao || 0)
+                              (selectedGrua?.valor_locacao || 0) +
+                              (selectedGrua?.valor_operacao || 0) +
+                              (selectedGrua?.valor_sinaleiro || 0) +
+                              (selectedGrua?.valor_manutencao || 0)
                             )}
                           </span>
                         </div>
@@ -1727,7 +2332,8 @@ export default function GruasPage() {
               <p className="text-sm text-yellow-700">
                 {
                   gruas.filter((g) => {
-                    const proximaManutencao = new Date(g.proximaManutencao)
+                    if (!g.proxima_manutencao) return false
+                    const proximaManutencao = new Date(g.proxima_manutencao)
                     const hoje = new Date()
                     const diasRestantes = Math.ceil(
                       (proximaManutencao.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),

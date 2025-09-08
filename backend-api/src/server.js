@@ -36,6 +36,9 @@ import estoqueRoutes from './routes/estoque.js'
 import clientesRoutes from './routes/clientes.js'
 import obrasRoutes from './routes/obras.js'
 import contratosRoutes from './routes/contratos.js'
+import funcionariosRoutes from './routes/funcionarios.js'
+import equipamentosRoutes from './routes/equipamentos.js'
+import relacionamentosRoutes from './routes/relacionamentos.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -122,6 +125,9 @@ app.use('/api/estoque', estoqueRoutes)
 app.use('/api/clientes', clientesRoutes)
 app.use('/api/obras', obrasRoutes)
 app.use('/api/contratos', contratosRoutes)
+app.use('/api/funcionarios', funcionariosRoutes)
+app.use('/api/equipamentos', equipamentosRoutes)
+app.use('/api/relacionamentos', relacionamentosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

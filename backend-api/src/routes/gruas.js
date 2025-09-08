@@ -262,7 +262,7 @@ const clienteDataSchema = Joi.object({
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Grua'
+ *                     $ref: '#/components/schemas/GruaComRelacionamentos'
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -282,10 +282,82 @@ router.get('/', async (req, res) => {
     const offset = (page - 1) * limit
     const { status, tipo } = req.query
 
-    // Construir query
+    // Construir query com relacionamentos
     let query = supabaseAdmin
       .from('gruas')
-      .select('*', { count: 'exact' })
+      .select(`
+        *,
+        grua_funcionarios:grua_funcionario(
+          id,
+          funcionario_id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          funcionario:funcionarios(
+            id,
+            nome,
+            cargo,
+            telefone,
+            email,
+            status
+          ),
+          obra:obras(
+            id,
+            nome,
+            status
+          )
+        ),
+        grua_equipamentos:grua_equipamento(
+          id,
+          equipamento_id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          equipamento:equipamentos_auxiliares(
+            id,
+            nome,
+            tipo,
+            capacidade,
+            status
+          ),
+          obra:obras(
+            id,
+            nome,
+            status
+          )
+        ),
+        grua_obras:grua_obra(
+          id,
+          obra_id,
+          data_inicio_locacao,
+          data_fim_locacao,
+          valor_locacao_mensal,
+          status,
+          observacoes,
+          obra:obras(
+            id,
+            nome,
+            cliente_id,
+            status,
+            tipo,
+            contato_obra,
+            telefone_obra,
+            email_obra,
+            cliente:clientes(
+              id,
+              nome,
+              cnpj,
+              email,
+              telefone,
+              contato
+            )
+          )
+        )
+      `, { count: 'exact' })
 
     // Aplicar filtros
     if (status) {
@@ -354,7 +426,7 @@ router.get('/', async (req, res) => {
  *                 success:
  *                   type: boolean
  *                 data:
- *                   $ref: '#/components/schemas/Grua'
+ *                   $ref: '#/components/schemas/GruaComRelacionamentos'
  *       404:
  *         description: Grua não encontrada
  */
@@ -364,7 +436,79 @@ router.get('/:id', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('gruas')
-      .select('*')
+      .select(`
+        *,
+        grua_funcionarios:grua_funcionario(
+          id,
+          funcionario_id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          funcionario:funcionarios(
+            id,
+            nome,
+            cargo,
+            telefone,
+            email,
+            status
+          ),
+          obra:obras(
+            id,
+            nome,
+            status
+          )
+        ),
+        grua_equipamentos:grua_equipamento(
+          id,
+          equipamento_id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          equipamento:equipamentos_auxiliares(
+            id,
+            nome,
+            tipo,
+            capacidade,
+            status
+          ),
+          obra:obras(
+            id,
+            nome,
+            status
+          )
+        ),
+        grua_obras:grua_obra(
+          id,
+          obra_id,
+          data_inicio_locacao,
+          data_fim_locacao,
+          valor_locacao_mensal,
+          status,
+          observacoes,
+          obra:obras(
+            id,
+            nome,
+            cliente_id,
+            status,
+            tipo,
+            contato_obra,
+            telefone_obra,
+            email_obra,
+            cliente:clientes(
+              id,
+              nome,
+              cnpj,
+              email,
+              telefone,
+              contato
+            )
+          )
+        )
+      `)
       .eq('id', id)
       .single()
 
@@ -826,6 +970,161 @@ router.delete('/:id', async (req, res) => {
  *         cliente_telefone:
  *           type: string
  *           description: Telefone do cliente (opcional)
+ *     
+ *     GruaComRelacionamentos:
+ *       allOf:
+ *         - $ref: '#/components/schemas/Grua'
+ *         - type: object
+ *           properties:
+ *             grua_funcionarios:
+ *               type: array
+ *               description: Funcionários relacionados à grua
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   funcionario_id:
+ *                     type: integer
+ *                   obra_id:
+ *                     type: integer
+ *                   data_inicio:
+ *                     type: string
+ *                     format: date
+ *                   data_fim:
+ *                     type: string
+ *                     format: date
+ *                   status:
+ *                     type: string
+ *                     enum: [Ativo, Inativo]
+ *                   observacoes:
+ *                     type: string
+ *                   funcionario:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       cargo:
+ *                         type: string
+ *                       telefone:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                   obra:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *             grua_equipamentos:
+ *               type: array
+ *               description: Equipamentos relacionados à grua
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   equipamento_id:
+ *                     type: integer
+ *                   obra_id:
+ *                     type: integer
+ *                   data_inicio:
+ *                     type: string
+ *                     format: date
+ *                   data_fim:
+ *                     type: string
+ *                     format: date
+ *                   status:
+ *                     type: string
+ *                     enum: [Ativo, Inativo]
+ *                   observacoes:
+ *                     type: string
+ *                   equipamento:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       tipo:
+ *                         type: string
+ *                       capacidade:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                   obra:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *             grua_obras:
+ *               type: array
+ *               description: Obras relacionadas à grua
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   obra_id:
+ *                     type: integer
+ *                   data_inicio_locacao:
+ *                     type: string
+ *                     format: date
+ *                   data_fim_locacao:
+ *                     type: string
+ *                     format: date
+ *                   valor_locacao_mensal:
+ *                     type: number
+ *                   status:
+ *                     type: string
+ *                     enum: [Ativa, Concluída, Suspensa]
+ *                   observacoes:
+ *                     type: string
+ *                   obra:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       cliente_id:
+ *                         type: integer
+ *                       status:
+ *                         type: string
+ *                       tipo:
+ *                         type: string
+ *                       contato_obra:
+ *                         type: string
+ *                       telefone_obra:
+ *                         type: string
+ *                       email_obra:
+ *                         type: string
+ *                       cliente:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           nome:
+ *                             type: string
+ *                           cnpj:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           telefone:
+ *                             type: string
+ *                           contato:
+ *                             type: string
  */
 
 export default router

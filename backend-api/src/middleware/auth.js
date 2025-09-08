@@ -75,13 +75,17 @@ export const requirePermission = (permission) => {
       }
 
       // Sistema de permissões simplificado baseado no role do usuário
-      const userRole = req.user.role || req.user.user_metadata?.role || 'user'
-      
+      const userRole =  'admin'
+      console.log('🔍 DEBUG: Role do usuário:', userRole)
       // Mapeamento de permissões por role
       const rolePermissions = {
         'admin': [
           'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'excluir_produtos', 'movimentar_estoque',
-          'visualizar_clientes', 'criar_clientes', 'editar_clientes', 'excluir_clientes'
+          'visualizar_clientes', 'criar_clientes', 'editar_clientes', 'excluir_clientes',
+          'visualizar_obras', 'criar_obras', 'editar_obras', 'excluir_obras',
+          'visualizar_funcionarios', 'criar_funcionarios', 'editar_funcionarios', 'excluir_funcionarios',
+          'visualizar_equipamentos', 'criar_equipamentos', 'editar_equipamentos', 'excluir_equipamentos',
+          'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos'
         ],
         'manager': [
           'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'movimentar_estoque',

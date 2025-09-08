@@ -49,6 +49,36 @@ export class AuthService {
     }
   }
 
+  // Fazer requisição autenticada
+  static async authenticatedRequest(url: string, options: RequestInit = {}): Promise<any> {
+    let token = this.getToken()
+    
+    // Se não tem token, tentar fazer login
+    if (!token) {
+      try {
+        token = await this.login()
+      } catch (error) {
+        throw new Error('Erro ao obter token de autenticação')
+      }
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+      },
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'Erro na requisição')
+    }
+
+    return response.json()
+  }
+
   // Fazer requisição simples (sem autenticação para gruas)
   static async simpleRequest(url: string, options: RequestInit = {}): Promise<any> {
     const response = await fetch(url, {

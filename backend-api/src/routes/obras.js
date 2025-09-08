@@ -8,20 +8,18 @@ const router = express.Router()
 // Schema de validação para obras
 const obraSchema = Joi.object({
   nome: Joi.string().min(2).required(),
-  descricao: Joi.string().optional(),
   cliente_id: Joi.number().integer().positive().required(),
   endereco: Joi.string().required(),
   cidade: Joi.string().required(),
   estado: Joi.string().length(2).required(),
+  tipo: Joi.string().required(),
   cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).optional(),
-  data_inicio: Joi.date().required(),
-  data_prevista_fim: Joi.date().optional(),
-  data_fim: Joi.date().optional(),
-  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').default('Planejamento'),
-  valor_total: Joi.number().positive().optional(),
-  observacoes: Joi.string().optional(),
-  responsavel_tecnico: Joi.string().optional(),
-  contato_responsavel: Joi.string().optional()
+  contato_obra: Joi.string().optional(),
+  telefone_obra: Joi.string().optional(),
+  email_obra: Joi.string().email().optional(),
+  status: Joi.string().valid('Pausada').default('Pausada'),
+  created_at: Joi.date().optional(),
+  updated_at: Joi.date().optional()
 })
 
 /**
@@ -75,7 +73,9 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
         clientes (
           id,
           nome,
-          tipo
+          cnpj,
+          email,
+          telefone
         )
       `, { count: 'exact' })
 
@@ -150,8 +150,8 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
         clientes (
           id,
           nome,
-          tipo,
-          documento,
+          cnpj,
+          email,
           telefone
         )
       `)
@@ -241,7 +241,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
     }
 
     // Verificar se cliente existe
-    const { data: cliente, error: clienteError } = await supabase
+    const { data: cliente, error: clienteError } = await supabaseAdmin
       .from('clientes')
       .select('id, nome')
       .eq('id', value.cliente_id)
@@ -260,7 +260,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: insertError } = await supabase
+    const { data, error: insertError } = await supabaseAdmin
       .from('obras')
       .insert(obraData)
       .select()
@@ -344,7 +344,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: updateError } = await supabase
+    const { data, error: updateError } = await supabaseAdmin
       .from('obras')
       .update(updateData)
       .eq('id', id)
@@ -403,7 +403,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), asy
   try {
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('obras')
       .delete()
       .eq('id', id)
