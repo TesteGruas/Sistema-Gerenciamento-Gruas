@@ -5,6 +5,55 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js'
 
 const router = express.Router()
 
+// Aplicar middleware de autenticação em todas as rotas
+router.use(authenticateToken)
+
+/**
+ * @swagger
+ * /api/gruas/clientes/buscar:
+ *   get:
+ *     summary: Buscar clientes com autocomplete
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 2
+ *         description: Termo de busca (nome ou CNPJ)
+ *     responses:
+ *       200:
+ *         description: Lista de clientes encontrados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       cnpj:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       telefone:
+ *                         type: string
+ *                       contato:
+ *                         type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 // Endpoint para buscar clientes com autocomplete
 router.get('/clientes/buscar', async (req, res) => {
   try {
@@ -114,7 +163,28 @@ const gruaSchema = Joi.object({
   lanca: Joi.string().required(),
   altura_trabalho: Joi.string().allow(null).optional(),
   ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
-  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção').default('Disponível'),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida').default('Disponível'),
+  localizacao: Joi.string().allow(null).optional(),
+  horas_operacao: Joi.number().integer().min(0).default(0),
+  valor_locacao: Joi.number().positive().allow(null).optional(),
+  valor_operacao: Joi.number().min(0).default(0),
+  valor_sinaleiro: Joi.number().min(0).default(0),
+  valor_manutencao: Joi.number().min(0).default(0),
+  ultima_manutencao: Joi.date().allow(null).optional(),
+  proxima_manutencao: Joi.date().allow(null).optional()
+})
+
+// Schema para dados de entrada (inclui campos de cliente para processamento)
+const gruaInputSchema = Joi.object({
+  modelo: Joi.string().min(2).required(),
+  fabricante: Joi.string().min(2).required(),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').required(),
+  capacidade: Joi.string().required(),
+  capacidade_ponta: Joi.string().required(),
+  lanca: Joi.string().required(),
+  altura_trabalho: Joi.string().allow(null).optional(),
+  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida').default('Disponível'),
   localizacao: Joi.string().allow(null).optional(),
   horas_operacao: Joi.number().integer().min(0).default(0),
   valor_locacao: Joi.number().positive().allow(null).optional(),
@@ -171,7 +241,7 @@ const clienteDataSchema = Joi.object({
  *         name: status
  *         schema:
  *           type: string
- *           enum: [Ativa, Inativa, Manutenção, Vendida]
+ *           enum: [Disponível, Operacional, Manutenção, Vendida]
  *         description: Filtrar por status
  *       - in: query
  *         name: tipo
@@ -349,7 +419,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     // Validar dados
-    const { error, value } = gruaSchema.validate(req.body)
+    const { error, value } = gruaInputSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -457,7 +527,7 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params
 
     // Validar dados
-    const { error, value } = gruaSchema.validate(req.body)
+    const { error, value } = gruaInputSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -557,6 +627,8 @@ router.put('/:id', async (req, res) => {
  *         description: Grua não encontrada
  *       403:
  *         description: Permissão insuficiente
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.delete('/:id', async (req, res) => {
   try {
@@ -586,5 +658,174 @@ router.delete('/:id', async (req, res) => {
     })
   }
 })
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Grua:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *           description: ID único da grua
+ *         modelo:
+ *           type: string
+ *           description: Modelo da grua
+ *         fabricante:
+ *           type: string
+ *           description: Fabricante da grua
+ *         tipo:
+ *           type: string
+ *           enum: [Grua Torre, Grua Móvel, Guincho, Outros]
+ *           description: Tipo da grua
+ *         capacidade:
+ *           type: string
+ *           description: Capacidade máxima da grua
+ *         capacidade_ponta:
+ *           type: string
+ *           description: Capacidade na ponta da lança
+ *         lanca:
+ *           type: string
+ *           description: Comprimento da lança
+ *         altura_trabalho:
+ *           type: string
+ *           description: Altura máxima de trabalho
+ *         ano:
+ *           type: integer
+ *           description: Ano de fabricação
+ *         status:
+ *           type: string
+ *           enum: [Disponível, Operacional, Manutenção, Vendida]
+ *           description: Status atual da grua
+ *         localizacao:
+ *           type: string
+ *           description: Localização atual da grua
+ *         horas_operacao:
+ *           type: integer
+ *           description: Total de horas de operação
+ *         valor_locacao:
+ *           type: number
+ *           description: Valor de locação por período
+ *         valor_operacao:
+ *           type: number
+ *           description: Valor de operação
+ *         valor_sinaleiro:
+ *           type: number
+ *           description: Valor do sinaleiro
+ *         valor_manutencao:
+ *           type: number
+ *           description: Valor de manutenção
+ *         ultima_manutencao:
+ *           type: string
+ *           format: date
+ *           description: Data da última manutenção
+ *         proxima_manutencao:
+ *           type: string
+ *           format: date
+ *           description: Data da próxima manutenção
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Data de criação
+ *         updated_at:
+ *           type: string
+ *           format: date-time
+ *           description: Data da última atualização
+ *     
+ *     GruaInput:
+ *       type: object
+ *       required:
+ *         - modelo
+ *         - fabricante
+ *         - tipo
+ *         - capacidade
+ *         - capacidade_ponta
+ *         - lanca
+ *       properties:
+ *         modelo:
+ *           type: string
+ *           minLength: 2
+ *           description: Modelo da grua
+ *         fabricante:
+ *           type: string
+ *           minLength: 2
+ *           description: Fabricante da grua
+ *         tipo:
+ *           type: string
+ *           enum: [Grua Torre, Grua Móvel, Guincho, Outros]
+ *           description: Tipo da grua
+ *         capacidade:
+ *           type: string
+ *           description: Capacidade máxima da grua
+ *         capacidade_ponta:
+ *           type: string
+ *           description: Capacidade na ponta da lança
+ *         lanca:
+ *           type: string
+ *           description: Comprimento da lança
+ *         altura_trabalho:
+ *           type: string
+ *           description: Altura máxima de trabalho
+ *         ano:
+ *           type: integer
+ *           minimum: 1900
+ *           maximum: 2025
+ *           description: Ano de fabricação
+ *         status:
+ *           type: string
+ *           enum: [Disponível, Operacional, Manutenção, Vendida]
+ *           default: Disponível
+ *           description: Status atual da grua
+ *         localizacao:
+ *           type: string
+ *           description: Localização atual da grua
+ *         horas_operacao:
+ *           type: integer
+ *           minimum: 0
+ *           default: 0
+ *           description: Total de horas de operação
+ *         valor_locacao:
+ *           type: number
+ *           minimum: 0
+ *           description: Valor de locação por período
+ *         valor_operacao:
+ *           type: number
+ *           minimum: 0
+ *           default: 0
+ *           description: Valor de operação
+ *         valor_sinaleiro:
+ *           type: number
+ *           minimum: 0
+ *           default: 0
+ *           description: Valor do sinaleiro
+ *         valor_manutencao:
+ *           type: number
+ *           minimum: 0
+ *           default: 0
+ *           description: Valor de manutenção
+ *         ultima_manutencao:
+ *           type: string
+ *           format: date
+ *           description: Data da última manutenção
+ *         proxima_manutencao:
+ *           type: string
+ *           format: date
+ *           description: Data da próxima manutenção
+ *         # Campos opcionais para criação de cliente
+ *         cliente_nome:
+ *           type: string
+ *           description: Nome do cliente (opcional)
+ *         cliente_documento:
+ *           type: string
+ *           description: CNPJ/CPF do cliente (opcional)
+ *         cliente_email:
+ *           type: string
+ *           format: email
+ *           description: Email do cliente (opcional)
+ *         cliente_telefone:
+ *           type: string
+ *           description: Telefone do cliente (opcional)
+ */
 
 export default router

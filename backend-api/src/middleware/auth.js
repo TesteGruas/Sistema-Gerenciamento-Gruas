@@ -62,7 +62,7 @@ export const authenticateToken = async (req, res, next) => {
 }
 
 /**
- * Middleware para verificar permissões
+ * Middleware para verificar permissões (versão simplificada)
  */
 export const requirePermission = (permission) => {
   return async (req, res, next) => {
@@ -74,40 +74,35 @@ export const requirePermission = (permission) => {
         })
       }
 
-      // Buscar permissões do usuário
-      const { data: userPermissions, error } = await supabaseAdmin
-        .from('usuario_perfis')
-        .select(`
-          perfis (
-            perfil_permissoes (
-              permissoes (
-                nome
-              )
-            )
-          )
-        `)
-        .eq('usuario_id', req.user.id)
-        .eq('status', 'Ativa')
-
-      if (error) {
-        return res.status(500).json({
-          error: 'Erro ao verificar permissões',
-          code: 'PERMISSION_CHECK_ERROR'
-        })
+      // Sistema de permissões simplificado baseado no role do usuário
+      const userRole = req.user.role || req.user.user_metadata?.role || 'user'
+      
+      // Mapeamento de permissões por role
+      const rolePermissions = {
+        'admin': [
+          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'excluir_produtos', 'movimentar_estoque',
+          'visualizar_clientes', 'criar_clientes', 'editar_clientes', 'excluir_clientes'
+        ],
+        'manager': [
+          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'movimentar_estoque',
+          'visualizar_clientes', 'criar_clientes', 'editar_clientes'
+        ],
+        'user': [
+          'visualizar_estoque', 'visualizar_clientes'
+        ]
       }
 
-      // Verificar se usuário tem a permissão
-      const hasPermission = userPermissions?.some(up => 
-        up.perfis?.perfil_permissoes?.some(pp => 
-          pp.permissoes?.nome === permission
-        )
-      )
+      // Verificar se o usuário tem a permissão baseada no seu role
+      const userPermissions = rolePermissions[userRole] || rolePermissions['user']
+      const hasPermission = userPermissions.includes(permission)
 
       if (!hasPermission) {
         return res.status(403).json({
           error: 'Permissão insuficiente',
           code: 'INSUFFICIENT_PERMISSION',
-          required: permission
+          required: permission,
+          userRole: userRole,
+          availablePermissions: userPermissions
         })
       }
 
@@ -123,7 +118,7 @@ export const requirePermission = (permission) => {
 }
 
 /**
- * Middleware para verificar roles
+ * Middleware para verificar roles (versão simplificada)
  */
 export const requireRole = (role) => {
   return async (req, res, next) => {
@@ -135,32 +130,20 @@ export const requireRole = (role) => {
         })
       }
 
-      // Buscar roles do usuário
-      const { data: userRoles, error } = await supabaseAdmin
-        .from('usuario_perfis')
-        .select(`
-          perfis (
-            nome
-          )
-        `)
-        .eq('usuario_id', req.user.id)
-        .eq('status', 'Ativa')
-
-      if (error) {
-        return res.status(500).json({
-          error: 'Erro ao verificar roles',
-          code: 'ROLE_CHECK_ERROR'
-        })
-      }
-
-      // Verificar se usuário tem o role
-      const hasRole = userRoles?.some(ur => ur.perfis?.nome === role)
+      // Sistema de roles simplificado
+      const userRole = req.user.role || req.user.user_metadata?.role || 'user'
+      
+      // Verificar se usuário tem o role necessário
+      const hasRole = userRole === role || 
+                     (role === 'admin' && userRole === 'admin') ||
+                     (role === 'manager' && (userRole === 'admin' || userRole === 'manager'))
 
       if (!hasRole) {
         return res.status(403).json({
           error: 'Role insuficiente',
           code: 'INSUFFICIENT_ROLE',
-          required: role
+          required: role,
+          userRole: userRole
         })
       }
 

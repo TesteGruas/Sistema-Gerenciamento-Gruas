@@ -8,6 +8,13 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:clientes": "jest src/routes/tests/clientes.test.cjs",
+    "test:clientes:integration": "node src/routes/tests/clientes-integration.test.js",
+    "test:clientes:real": "node src/routes/tests/clientes-integration-real.test.js",
+    "test:clientes:database": "node src/routes/tests/clientes-database.test.js",
+    "test:clientes:db-corrected": "node src/routes/tests/clientes-database-corrected.test.js",
     "docs": "swagger-jsdoc -d swaggerDef.js src/routes/*.js -o docs/swagger.json"
   },
   "keywords": [

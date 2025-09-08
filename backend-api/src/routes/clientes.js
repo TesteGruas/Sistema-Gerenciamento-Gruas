@@ -8,17 +8,15 @@ const router = express.Router()
 // Schema de validação para clientes
 const clienteSchema = Joi.object({
   nome: Joi.string().min(2).required(),
-  tipo: Joi.string().valid('Pessoa Física', 'Pessoa Jurídica').required(),
-  documento: Joi.string().required(), // CPF ou CNPJ
-  email: Joi.string().email().optional(),
-  telefone: Joi.string().optional(),
-  endereco: Joi.string().optional(),
-  cidade: Joi.string().optional(),
-  estado: Joi.string().length(2).optional(),
-  cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).optional(),
-  contato_responsavel: Joi.string().optional(),
-  observacoes: Joi.string().optional(),
-  status: Joi.string().valid('Ativo', 'Inativo', 'Bloqueado').default('Ativo')
+  cnpj: Joi.string().required(), // CNPJ
+  email: Joi.string().email().allow('').optional(),
+  telefone: Joi.string().allow('').optional(),
+  endereco: Joi.string().allow('').optional(),
+  cidade: Joi.string().allow('').optional(),
+  estado: Joi.string().length(2).allow('').optional(),
+  cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).allow('').optional(),
+  contato: Joi.string().allow('').optional(), // Era 'contato_responsavel'
+  observacoes: Joi.string().allow('').optional()
 })
 
 /**
@@ -43,18 +41,6 @@ const clienteSchema = Joi.object({
  *           minimum: 1
  *           maximum: 100
  *           default: 10
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [Ativo, Inativo, Bloqueado]
- *         description: Filtrar por status
- *       - in: query
- *         name: tipo
- *         schema:
- *           type: string
- *           enum: [Pessoa Física, Pessoa Jurídica]
- *         description: Filtrar por tipo
  *     responses:
  *       200:
  *         description: Lista de clientes
@@ -64,18 +50,9 @@ router.get('/', authenticateToken, requirePermission('visualizar_clientes'), asy
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
-    const { status, tipo } = req.query
-
     let query = supabaseAdmin
       .from('clientes')
       .select('*', { count: 'exact' })
-
-    if (status) {
-      query = query.eq('status', status)
-    }
-    if (tipo) {
-      query = query.eq('tipo', tipo)
-    }
 
     query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
 
@@ -182,24 +159,17 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_clientes'), 
  *             type: object
  *             required:
  *               - nome
- *               - tipo
- *               - documento
+ *               - cnpj
  *             properties:
  *               nome:
  *                 type: string
- *               tipo:
- *                 type: string
- *                 enum: [Pessoa Física, Pessoa Jurídica]
- *               documento:
+ *               cnpj:
  *                 type: string
  *               email:
  *                 type: string
  *                 format: email
  *               telefone:
  *                 type: string
- *               status:
- *                 type: string
- *                 enum: [Ativo, Inativo, Bloqueado]
  *     responses:
  *       201:
  *         description: Cliente criado com sucesso
@@ -222,7 +192,7 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: insertError } = await supabase
+    const { data, error: insertError } = await supabaseAdmin
       .from('clientes')
       .insert(clienteData)
       .select()
@@ -304,7 +274,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_clientes'), asyn
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: updateError } = await supabase
+    const { data, error: updateError } = await supabaseAdmin
       .from('clientes')
       .update(updateData)
       .eq('id', id)
@@ -363,7 +333,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_clientes'), 
   try {
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('clientes')
       .delete()
       .eq('id', id)

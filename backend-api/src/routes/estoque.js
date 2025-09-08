@@ -8,26 +8,25 @@ const router = express.Router()
 // Schema de validação para produtos
 const produtoSchema = Joi.object({
   nome: Joi.string().min(2).required(),
-  descricao: Joi.string().optional(),
+  descricao: Joi.string().allow('').optional(),
   categoria_id: Joi.number().integer().positive().required(),
-  codigo_barras: Joi.string().optional(),
-  unidade_medida: Joi.string().valid('UN', 'KG', 'M', 'L', 'M²', 'M³').required(),
-  preco_unitario: Joi.number().positive().required(),
-  estoque_minimo: Joi.number().integer().min(0).default(0),
-  estoque_maximo: Joi.number().integer().min(0).optional(),
-  localizacao: Joi.string().optional(),
-  observacoes: Joi.string().optional(),
-  ativo: Joi.boolean().default(true)
+  codigo_barras: Joi.string().allow('').optional(),
+  unidade_medida: Joi.string().valid('UN', 'KG', 'M', 'L', 'M2', 'M3', 'UNIDADE', 'PECA', 'CAIXA').required(),
+  valor_unitario: Joi.number().positive().required(),
+  estoque_minimo: Joi.number().min(0).default(0),
+  estoque_maximo: Joi.number().min(0).optional(),
+  localizacao: Joi.string().allow('').optional(),
+  status: Joi.string().valid('Ativo', 'Inativo').default('Ativo')
 })
 
 // Schema para movimentações de estoque
 const movimentacaoSchema = Joi.object({
-  produto_id: Joi.number().integer().positive().required(),
+  produto_id: Joi.string().required(),
   tipo: Joi.string().valid('ENTRADA', 'SAIDA', 'AJUSTE').required(),
   quantidade: Joi.number().integer().required(),
   motivo: Joi.string().required(),
-  observacoes: Joi.string().optional(),
-  referencia: Joi.string().optional() // Número da nota, ordem, etc.
+  observacoes: Joi.string().allow('').optional(),
+  referencia: Joi.string().allow('').optional() // Número da nota, ordem, etc.
 })
 
 /**
@@ -58,10 +57,11 @@ const movimentacaoSchema = Joi.object({
  *           type: integer
  *         description: Filtrar por categoria
  *       - in: query
- *         name: ativo
+ *         name: status
  *         schema:
- *           type: boolean
- *         description: Filtrar por status ativo
+ *           type: string
+ *           enum: [Ativo, Inativo]
+ *         description: Filtrar por status do produto
  *     responses:
  *       200:
  *         description: Lista de produtos
@@ -71,7 +71,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_estoque'), asyn
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
-    const { categoria_id, ativo } = req.query
+    const { categoria_id, status } = req.query
 
     let query = supabaseAdmin
       .from('produtos')
@@ -89,8 +89,8 @@ router.get('/', authenticateToken, requirePermission('visualizar_estoque'), asyn
     if (categoria_id) {
       query = query.eq('categoria_id', categoria_id)
     }
-    if (ativo !== undefined) {
-      query = query.eq('ativo', ativo === 'true')
+    if (status) {
+      query = query.eq('status', status)
     }
 
     query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
@@ -209,7 +209,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_estoque'), a
  *               - nome
  *               - categoria_id
  *               - unidade_medida
- *               - preco_unitario
+ *               - valor_unitario
  *             properties:
  *               nome:
  *                 type: string
@@ -219,8 +219,8 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_estoque'), a
  *                 type: integer
  *               unidade_medida:
  *                 type: string
- *                 enum: [UN, KG, M, L, M², M³]
- *               preco_unitario:
+ *                 enum: [UN, KG, M, L, M2, M3, UNIDADE, PECA, CAIXA]
+ *               valor_unitario:
  *                 type: number
  *               estoque_minimo:
  *                 type: integer
@@ -246,7 +246,7 @@ router.post('/', authenticateToken, requirePermission('criar_produtos'), async (
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: insertError } = await supabase
+    const { data, error: insertError } = await supabaseAdmin
       .from('produtos')
       .insert(produtoData)
       .select()
@@ -260,7 +260,7 @@ router.post('/', authenticateToken, requirePermission('criar_produtos'), async (
     }
 
     // Criar registro de estoque inicial
-    const { error: estoqueError } = await supabase
+    const { error: estoqueError } = await supabaseAdmin
       .from('estoque')
       .insert({
         produto_id: data.id,
@@ -310,7 +310,7 @@ router.post('/', authenticateToken, requirePermission('criar_produtos'), async (
  *             properties:
  *               nome:
  *                 type: string
- *               preco_unitario:
+ *               valor_unitario:
  *                 type: number
  *               estoque_minimo:
  *                 type: integer
@@ -337,7 +337,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_produtos'), asyn
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: updateError } = await supabase
+    const { data, error: updateError } = await supabaseAdmin
       .from('produtos')
       .update(updateData)
       .eq('id', id)
@@ -396,7 +396,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_produtos'), 
   try {
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('produtos')
       .delete()
       .eq('id', id)
@@ -471,7 +471,7 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
     const { produto_id, tipo, quantidade, motivo, observacoes, referencia } = value
 
     // Verificar se produto existe
-    const { data: produto, error: produtoError } = await supabase
+    const { data: produto, error: produtoError } = await supabaseAdmin
       .from('produtos')
       .select('id, nome')
       .eq('id', produto_id)
@@ -485,7 +485,7 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
     }
 
     // Obter estoque atual
-    const { data: estoqueAtual, error: estoqueError } = await supabase
+    const { data: estoqueAtual, error: estoqueError } = await supabaseAdmin
       .from('estoque')
       .select('quantidade')
       .eq('produto_id', produto_id)
@@ -515,7 +515,7 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
     }
 
     // Atualizar estoque
-    const { error: updateEstoqueError } = await supabase
+    const { error: updateEstoqueError } = await supabaseAdmin
       .from('estoque')
       .update({ 
         quantidade: novaQuantidade,
@@ -531,7 +531,7 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
     }
 
     // Registrar movimentação
-    const { data: movimentacao, error: movimentacaoError } = await supabase
+    const { data: movimentacao, error: movimentacaoError } = await supabaseAdmin
       .from('movimentacoes_estoque')
       .insert({
         produto_id,
