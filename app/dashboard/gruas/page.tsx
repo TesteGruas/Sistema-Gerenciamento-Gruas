@@ -257,13 +257,13 @@ export default function GruasPage() {
     cliente: "",
     operador: "",
     sinaleiro: "",
-    horasOperacao: 0,
-    valorLocacao: 0,
-    valorOperacao: 0,
-    valorSinaleiro: 0,
-    valorManutencao: 0,
-    ultimaManutencao: "",
-    proximaManutencao: "",
+    horas_operacao: 0,
+    valor_locacao: 0,
+    valor_operacao: 0,
+    valor_sinaleiro: 0,
+    valor_manutencao: 0,
+    ultima_manutencao: "",
+    proxima_manutencao: "",
   })
 
   // Estados para gerenciamento de clientes
@@ -453,7 +453,7 @@ export default function GruasPage() {
       setSubmitting(false)
       return
     }
-    if (!formData.capacidadePonta.trim()) {
+    if (!formData.capacidade_ponta.trim()) {
       setError("Capacidade na ponta é obrigatória")
       setSubmitting(false)
       return
@@ -472,7 +472,7 @@ export default function GruasPage() {
         fabricante: formData.fabricante,
         tipo: formData.tipo,
         capacidade: formData.capacidade,
-        capacidade_ponta: formData.capacidadePonta || "Não especificado",
+        capacidade_ponta: formData.capacidade_ponta || "Não especificado",
         lanca: formData.lanca || "Não especificado",
         status: formData.status,
         
@@ -480,13 +480,13 @@ export default function GruasPage() {
         altura_trabalho: formData.altura_trabalho || null,
         ano: formData.ano ? parseInt(formData.ano) : null,
         localizacao: formData.localizacao || null,
-        horas_operacao: formData.horasOperacao || 0, // Valor padrão da tabela
-        valor_locacao: formData.valorLocacao || null,
-        valor_operacao: formData.valorOperacao || 0, // Valor padrão para evitar NOT NULL
-        valor_sinaleiro: formData.valorSinaleiro || 0, // Valor padrão para evitar NOT NULL
-        valor_manutencao: formData.valorManutencao || 0, // Valor padrão para evitar NOT NULL
-        ultima_manutencao: formData.ultimaManutencao || null,
-        proxima_manutencao: formData.proximaManutencao || null,
+        horas_operacao: formData.horas_operacao || 0, // Valor padrão da tabela
+        valor_locacao: formData.valor_locacao || null,
+        valor_operacao: formData.valor_operacao || 0, // Valor padrão para evitar NOT NULL
+        valor_sinaleiro: formData.valor_sinaleiro || 0, // Valor padrão para evitar NOT NULL
+        valor_manutencao: formData.valor_manutencao || 0, // Valor padrão para evitar NOT NULL
+        ultima_manutencao: formData.ultima_manutencao || null,
+        proxima_manutencao: formData.proxima_manutencao || null,
         
         // Dados do cliente - usar dados da aba Obra/Cliente se cliente selecionado não tiver
         cliente_nome: formData.cliente || null,
@@ -565,13 +565,13 @@ export default function GruasPage() {
       cliente: "",
       operador: "",
       sinaleiro: "",
-      horasOperacao: 0,
-      valorLocacao: 0,
-      valorOperacao: 0,
-      valorSinaleiro: 0,
-      valorManutencao: 0,
-      ultimaManutencao: "",
-      proximaManutencao: "",
+      horas_operacao: 0,
+      valor_locacao: 0,
+      valor_operacao: 0,
+      valor_sinaleiro: 0,
+      valor_manutencao: 0,
+      ultima_manutencao: "",
+      proxima_manutencao: "",
     })
     
     setObraData({
@@ -648,22 +648,22 @@ export default function GruasPage() {
         fabricante: dadosCompletos.fabricante,
         tipo: dadosCompletos.tipo,
         capacidade: dadosCompletos.capacidade,
-        capacidadePonta: dadosCompletos.capacidade_ponta || "",
+        capacidade_ponta: dadosCompletos.capacidade_ponta || "",
         lanca: dadosCompletos.lanca,
-        alturaTrabalho: dadosCompletos.altura_trabalho || "",
+        altura_trabalho: dadosCompletos.altura_trabalho || "",
         ano: dadosCompletos.ano || "",
         status: dadosCompletos.status,
         localizacao: dadosCompletos.localizacao || "",
         cliente: dadosCompletos.cliente_nome || "",
         operador: "",
         sinaleiro: "",
-        horasOperacao: dadosCompletos.horas_operacao || 0,
-        valorLocacao: dadosCompletos.valor_locacao || 0,
-        valorOperacao: dadosCompletos.valor_operacao || 0,
-        valorSinaleiro: dadosCompletos.valor_sinaleiro || 0,
-        valorManutencao: dadosCompletos.valor_manutencao || 0,
-        ultimaManutencao: dadosCompletos.ultima_manutencao || "",
-        proximaManutencao: dadosCompletos.proxima_manutencao || "",
+        horas_operacao: dadosCompletos.horas_operacao || 0,
+        valor_locacao: dadosCompletos.valor_locacao || 0,
+        valor_operacao: dadosCompletos.valor_operacao || 0,
+        valor_sinaleiro: dadosCompletos.valor_sinaleiro || 0,
+        valor_manutencao: dadosCompletos.valor_manutencao || 0,
+        ultima_manutencao: dadosCompletos.ultima_manutencao || "",
+        proxima_manutencao: dadosCompletos.proxima_manutencao || "",
       })
       
       // Preencher dados da obra se existir
@@ -761,22 +761,22 @@ export default function GruasPage() {
         fabricante: grua.fabricante,
         tipo: grua.tipo,
         capacidade: grua.capacidade,
-        capacidadePonta: grua.capacidade_ponta || "",
+        capacidade_ponta: grua.capacidade_ponta || "",
         lanca: grua.lanca,
-        alturaTrabalho: grua.altura_trabalho || "",
+        altura_trabalho: grua.altura_trabalho || "",
         ano: grua.ano || "",
         status: grua.status,
         localizacao: grua.localizacao || "",
         cliente: grua.cliente || "",
         operador: "",
         sinaleiro: "",
-        horasOperacao: grua.horas_operacao || 0,
-        valorLocacao: grua.valor_locacao || 0,
-        valorOperacao: grua.valor_operacao || 0,
-        valorSinaleiro: grua.valor_sinaleiro || 0,
-        valorManutencao: grua.valor_manutencao || 0,
-        ultimaManutencao: grua.ultima_manutencao || "",
-        proximaManutencao: grua.proxima_manutencao || "",
+        horas_operacao: grua.horas_operacao || 0,
+        valor_locacao: grua.valor_locacao || 0,
+        valor_operacao: grua.valor_operacao || 0,
+        valor_sinaleiro: grua.valor_sinaleiro || 0,
+        valor_manutencao: grua.valor_manutencao || 0,
+        ultima_manutencao: grua.ultima_manutencao || "",
+        proxima_manutencao: grua.proxima_manutencao || "",
       })
       
       setObraData({
@@ -1088,8 +1088,8 @@ export default function GruasPage() {
                       <Input
                         id="ultimaManutencao"
                         type="date"
-                        value={formData.ultimaManutencao}
-                        onChange={(e) => setFormData({ ...formData, ultimaManutencao: e.target.value })}
+                        value={formData.ultima_manutencao}
+                        onChange={(e) => setFormData({ ...formData, ultima_manutencao: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1097,8 +1097,8 @@ export default function GruasPage() {
                       <Input
                         id="proximaManutencao"
                         type="date"
-                        value={formData.proximaManutencao}
-                        onChange={(e) => setFormData({ ...formData, proximaManutencao: e.target.value })}
+                        value={formData.proxima_manutencao}
+                        onChange={(e) => setFormData({ ...formData, proxima_manutencao: e.target.value })}
                       />
                     </div>
                   </div>
