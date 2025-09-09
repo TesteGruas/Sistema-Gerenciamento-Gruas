@@ -5,6 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { AuthService } from "@/app/lib/auth"
 import { useToast } from "@/hooks/use-toast"
+import { buildApiUrl, API_ENDPOINTS } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -103,7 +104,7 @@ export default function GruasPage() {
               status: "Ativo"
             }
             
-            const funcionarioResponse = await apiRequest('http://localhost:3001/api/funcionarios', {
+            const funcionarioResponse = await apiRequest(buildApiUrl(API_ENDPOINTS.FUNCIONARIOS), {
               method: 'POST',
               body: JSON.stringify(funcionarioData),
             })
@@ -119,7 +120,7 @@ export default function GruasPage() {
             status: "Ativo"
           }
           
-          await apiRequest('http://localhost:3001/api/relacionamentos/grua-funcionario', {
+          await apiRequest(buildApiUrl(`${API_ENDPOINTS.RELACIONAMENTOS}/grua-funcionario`), {
             method: 'POST',
             body: JSON.stringify(relacionamentoData),
           })
@@ -137,7 +138,7 @@ export default function GruasPage() {
             status: "Disponível" // API só aceita: Disponível, Operacional, Manutenção
           }
           
-          const equipamentoResponse = await apiRequest('http://localhost:3001/api/equipamentos', {
+          const equipamentoResponse = await apiRequest(buildApiUrl(API_ENDPOINTS.EQUIPAMENTOS), {
             method: 'POST',
             body: JSON.stringify(equipamentoData),
           })
@@ -150,7 +151,7 @@ export default function GruasPage() {
             status: "Ativo"
           }
           
-          await apiRequest('http://localhost:3001/api/relacionamentos/grua-equipamento', {
+          await apiRequest(buildApiUrl(`${API_ENDPOINTS.RELACIONAMENTOS}/grua-equipamento`), {
             method: 'POST',
             body: JSON.stringify(relacionamentoData),
           })
@@ -174,7 +175,7 @@ export default function GruasPage() {
           status: "Pausada"
         }
         
-        const obraResponse = await apiRequest('http://localhost:3001/api/obras', {
+        const obraResponse = await apiRequest(buildApiUrl(API_ENDPOINTS.OBRAS), {
           method: 'POST',
           body: JSON.stringify(obraDataToSend),
         })
@@ -187,7 +188,7 @@ export default function GruasPage() {
           status: "Ativa"
         }
         
-        await apiRequest('http://localhost:3001/api/relacionamentos/grua-obra', {
+        await apiRequest(buildApiUrl(`${API_ENDPOINTS.RELACIONAMENTOS}/grua-obra`), {
           method: 'POST',
           body: JSON.stringify(relacionamentoData),
         })
@@ -201,14 +202,29 @@ export default function GruasPage() {
   }
 
   // Carregar gruas do backend
-  const loadGruas = async () => {
+  const loadGruas = async (page = pagination.page, limit = pagination.limit, status = filtros.status, tipo = filtros.tipo) => {
     try {
       setLoading(true)
       setError(null)
-      const response = await apiRequest('http://localhost:3001/api/gruas')
+      
+      // Construir query string com parâmetros
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString()
+      })
+      
+      if (status) params.append('status', status)
+      if (tipo) params.append('tipo', tipo)
+      
+      const response = await apiRequest(`${buildApiUrl(API_ENDPOINTS.GRUAS)}?${params.toString()}`)
       
       if (response.success) {
         setGruas(response.data || [])
+        
+        // Atualizar paginação se disponível
+        if (response.pagination) {
+          setPagination(response.pagination)
+        }
       } else {
         throw new Error('Erro ao carregar guindastes')
       }
@@ -235,7 +251,7 @@ export default function GruasPage() {
   const loadGruaDetalhes = async (gruaId: string) => {
     try {
       setLoading(true)
-      const response = await apiRequest(`http://localhost:3001/api/gruas/${gruaId}`)
+      const response = await apiRequest(buildApiUrl(`${API_ENDPOINTS.GRUAS}/${gruaId}`))
       
       if (response.success) {
         setSelectedGrua(response.data)
@@ -276,9 +292,7 @@ export default function GruasPage() {
     valor_locacao: 0,
     valor_operacao: 0,
     valor_sinaleiro: 0,
-    valor_manutencao: 0,
-    ultima_manutencao: "",
-    proxima_manutencao: "",
+    preco_real: 0,
   })
 
   // Estados para gerenciamento de clientes
@@ -344,6 +358,19 @@ export default function GruasPage() {
   const [uploading, setUploading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null)
 
+  // Estados para paginação e filtros
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0
+  })
+  const [filtros, setFiltros] = useState({
+    status: "",
+    tipo: ""
+  })
+
+  // Filtro local apenas para busca por texto (searchTerm)
   const filteredGruas = gruas.filter(
     (grua) =>
       grua.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -385,7 +412,7 @@ export default function GruasPage() {
     }
 
     try {
-      const data = await apiRequest(`http://localhost:3001/api/gruas/clientes/buscar?q=${encodeURIComponent(query)}`)
+      const data = await apiRequest(buildApiUrl(`${API_ENDPOINTS.GRUAS}/clientes/buscar?q=${encodeURIComponent(query)}`))
       setClientes(data.data || [])
     } catch (error) {
       console.error('Erro ao buscar clientes:', error)
@@ -401,7 +428,7 @@ export default function GruasPage() {
     }
 
     try {
-      const data = await apiRequest(`http://localhost:3001/api/funcionarios/buscar?q=${encodeURIComponent(query)}`)
+      const data = await apiRequest(buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}/buscar?q=${encodeURIComponent(query)}`))
       setFuncionariosExistentes(data.data || [])
     } catch (error) {
       console.error('Erro ao buscar funcionários:', error)
@@ -504,9 +531,6 @@ export default function GruasPage() {
         valor_locacao: formData.valor_locacao || null,
         valor_operacao: formData.valor_operacao || 0, // Valor padrão para evitar NOT NULL
         valor_sinaleiro: formData.valor_sinaleiro || 0, // Valor padrão para evitar NOT NULL
-        valor_manutencao: formData.valor_manutencao || 0, // Valor padrão para evitar NOT NULL
-        ultima_manutencao: formData.ultima_manutencao || null,
-        proxima_manutencao: formData.proxima_manutencao || null,
         
         // Dados do cliente - usar dados da aba Obra/Cliente se cliente selecionado não tiver
         cliente_nome: formData.cliente || null,
@@ -517,7 +541,7 @@ export default function GruasPage() {
 
       if (editingGrua) {
         // Atualizar grua existente - não incluir id no corpo da requisição
-        await apiRequest(`http://localhost:3001/api/gruas/${editingGrua.id}`, {
+        await apiRequest(buildApiUrl(`${API_ENDPOINTS.GRUAS}/${editingGrua.id}`), {
           method: 'PUT',
           body: JSON.stringify(baseData),
         })
@@ -531,7 +555,7 @@ export default function GruasPage() {
         })
       } else {
         // Criar nova grua - não incluir id
-        const gruaResponse = await apiRequest('http://localhost:3001/api/gruas', {
+        const gruaResponse = await apiRequest(buildApiUrl(API_ENDPOINTS.GRUAS), {
           method: 'POST',
           body: JSON.stringify(baseData),
         })
@@ -548,7 +572,7 @@ export default function GruasPage() {
       }
 
       // Recarregar lista de guindastes
-      await loadGruas()
+      await loadGruas(pagination.page, pagination.limit, filtros.status, filtros.tipo)
 
       // Limpar formulário e fechar modal
       resetForm()
@@ -589,9 +613,7 @@ export default function GruasPage() {
       valor_locacao: 0,
       valor_operacao: 0,
       valor_sinaleiro: 0,
-      valor_manutencao: 0,
-      ultima_manutencao: "",
-      proxima_manutencao: "",
+      preco_real: 0,
     })
     
     setObraData({
@@ -633,10 +655,10 @@ export default function GruasPage() {
 
     try {
       setError(null)
-      await apiRequest(`http://localhost:3001/api/gruas/${gruaId}`, {
+      await apiRequest(buildApiUrl(`${API_ENDPOINTS.GRUAS}/${gruaId}`), {
         method: 'DELETE',
       })
-      await loadGruas()
+      await loadGruas(pagination.page, pagination.limit, filtros.status, filtros.tipo)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao excluir grua')
       console.error('Erro ao excluir grua:', err)
@@ -646,7 +668,7 @@ export default function GruasPage() {
   // Função para carregar dados completos da grua
   const carregarDadosCompletosGrua = async (gruaId: string) => {
     try {
-      const data = await apiRequest(`http://localhost:3001/api/gruas/${gruaId}`)
+      const data = await apiRequest(buildApiUrl(`${API_ENDPOINTS.GRUAS}/${gruaId}`))
       return data.data
     } catch (error) {
       console.error('Erro ao carregar dados da grua:', error)
@@ -681,9 +703,7 @@ export default function GruasPage() {
         valor_locacao: dadosCompletos.valor_locacao || 0,
         valor_operacao: dadosCompletos.valor_operacao || 0,
         valor_sinaleiro: dadosCompletos.valor_sinaleiro || 0,
-        valor_manutencao: dadosCompletos.valor_manutencao || 0,
-        ultima_manutencao: dadosCompletos.ultima_manutencao || "",
-        proxima_manutencao: dadosCompletos.proxima_manutencao || "",
+        preco_real: dadosCompletos.preco_real || 0,
       })
       
       // Preencher dados da obra se existir
@@ -794,9 +814,7 @@ export default function GruasPage() {
         valor_locacao: grua.valor_locacao || 0,
         valor_operacao: grua.valor_operacao || 0,
         valor_sinaleiro: grua.valor_sinaleiro || 0,
-        valor_manutencao: grua.valor_manutencao || 0,
-        ultima_manutencao: grua.ultima_manutencao || "",
-        proxima_manutencao: grua.proxima_manutencao || "",
+        preco_real: grua.preco_real || 0,
       })
       
       setObraData({
@@ -880,11 +898,9 @@ export default function GruasPage() {
       (selectedGrua.valor_locacao || 0) +
       (selectedGrua.valor_operacao || 0) +
       (selectedGrua.valor_sinaleiro || 0) +
-      (selectedGrua.valor_manutencao || 0) +
       (selectedGrua.valor_locacao || 0) +
       (selectedGrua.valor_operacao || 0) +
-      (selectedGrua.valor_sinaleiro || 0) +
-      (selectedGrua.valor_manutencao || 0)
+      (selectedGrua.valor_sinaleiro || 0)
     return valorMensal * propostaData.prazoMeses
   }
 
@@ -1021,6 +1037,35 @@ export default function GruasPage() {
     }
   }
 
+  // Funções para paginação e filtros
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
+    loadGruas(newPage, pagination.limit, filtros.status, filtros.tipo)
+  }
+
+  const handleLimitChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }))
+    loadGruas(1, newLimit, filtros.status, filtros.tipo)
+  }
+
+  const handleStatusFilter = (status: string) => {
+    setFiltros(prev => ({ ...prev, status }))
+    setPagination(prev => ({ ...prev, page: 1 }))
+    loadGruas(1, pagination.limit, status, filtros.tipo)
+  }
+
+  const handleTipoFilter = (tipo: string) => {
+    setFiltros(prev => ({ ...prev, tipo }))
+    setPagination(prev => ({ ...prev, page: 1 }))
+    loadGruas(1, pagination.limit, filtros.status, tipo)
+  }
+
+  const clearFilters = () => {
+    setFiltros({ status: "", tipo: "" })
+    setPagination(prev => ({ ...prev, page: 1 }))
+    loadGruas(1, pagination.limit, "", "")
+  }
+
   // Funções de exportação
   const exportToCSV = () => {
     try {
@@ -1040,7 +1085,6 @@ export default function GruasPage() {
         'Valor Locação': grua.valor_locacao,
         'Valor Operação': grua.valor_operacao,
         'Valor Sinaleiro': grua.valor_sinaleiro,
-        'Valor Manutenção': grua.valor_manutencao,
         'Última Manutenção': grua.ultima_manutencao,
         'Próxima Manutenção': grua.proxima_manutencao,
         'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome : '-',
@@ -1107,7 +1151,6 @@ export default function GruasPage() {
         'Valor Locação': grua.valor_locacao,
         'Valor Operação': grua.valor_operacao,
         'Valor Sinaleiro': grua.valor_sinaleiro,
-        'Valor Manutenção': grua.valor_manutencao,
         'Última Manutenção': grua.ultima_manutencao,
         'Próxima Manutenção': grua.proxima_manutencao,
         'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome : '-',
@@ -1300,9 +1343,7 @@ export default function GruasPage() {
         'Valor Locação': selectedGrua.valor_locacao,
         'Valor Operação': selectedGrua.valor_operacao,
         'Valor Sinaleiro': selectedGrua.valor_sinaleiro,
-        'Valor Manutenção': selectedGrua.valor_manutencao,
-        'Última Manutenção': selectedGrua.ultima_manutencao,
-        'Próxima Manutenção': selectedGrua.proxima_manutencao,
+        'Preço Real da Grua': selectedGrua.preco_real,
         'Cliente': selectedGrua.grua_obras && selectedGrua.grua_obras.length > 0 ? selectedGrua.grua_obras[0].obra?.nome : '-',
         'Funcionários': selectedGrua.grua_funcionarios && selectedGrua.grua_funcionarios.length > 0 ? 
           selectedGrua.grua_funcionarios.map((f: any) => f.funcionario?.nome).join(', ') : '-',
@@ -1423,12 +1464,10 @@ export default function GruasPage() {
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
       const financeiros = [
+        `Preço Real da Grua: ${selectedGrua.preco_real ? `R$ ${formatCurrency(selectedGrua.preco_real)}` : '-'}`,
         `Valor Locação: ${selectedGrua.valor_locacao ? `R$ ${formatCurrency(selectedGrua.valor_locacao)}` : '-'}`,
         `Valor Operação: ${selectedGrua.valor_operacao ? `R$ ${formatCurrency(selectedGrua.valor_operacao)}` : '-'}`,
         `Valor Sinaleiro: ${selectedGrua.valor_sinaleiro ? `R$ ${formatCurrency(selectedGrua.valor_sinaleiro)}` : '-'}`,
-        `Valor Manutenção: ${selectedGrua.valor_manutencao ? `R$ ${formatCurrency(selectedGrua.valor_manutencao)}` : '-'}`,
-        `Última Manutenção: ${selectedGrua.ultima_manutencao || '-'}`,
-        `Próxima Manutenção: ${selectedGrua.proxima_manutencao || '-'}`
       ]
 
       financeiros.forEach(fin => {
@@ -1687,6 +1726,20 @@ export default function GruasPage() {
                       required
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="preco_real">Preço Real da Grua (R$)</Label>
+                    <Input
+                      id="preco_real"
+                      type="number"
+                      step="0.01"
+                      value={formData.preco_real}
+                      onChange={(e) =>
+                        setFormData({ ...formData, preco_real: Number.parseFloat(e.target.value) || 0 })
+                      }
+                      placeholder="Ex: 150000.00"
+                    />
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="tecnico" className="space-y-4">
@@ -1764,26 +1817,6 @@ export default function GruasPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="ultimaManutencao">Última Manutenção</Label>
-                      <Input
-                        id="ultimaManutencao"
-                        type="date"
-                        value={formData.ultima_manutencao}
-                        onChange={(e) => setFormData({ ...formData, ultima_manutencao: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="proximaManutencao">Próxima Manutenção</Label>
-                      <Input
-                        id="proximaManutencao"
-                        type="date"
-                        value={formData.proxima_manutencao}
-                        onChange={(e) => setFormData({ ...formData, proxima_manutencao: e.target.value })}
-                      />
-                    </div>
-                  </div>
                 </TabsContent>
 
                 <TabsContent value="obra" className="space-y-4">
@@ -2281,6 +2314,63 @@ export default function GruasPage() {
           <CardDescription>Visualize e gerencie todas as gruas da frota</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Filtros */}
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="status-filter">Status:</Label>
+              <Select value={filtros.status || "all"} onValueChange={(value) => handleStatusFilter(value === "all" ? "" : value)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="Disponível">Disponível</SelectItem>
+                  <SelectItem value="Operacional">Operacional</SelectItem>
+                  <SelectItem value="Manutenção">Manutenção</SelectItem>
+                  <SelectItem value="Vendida">Vendida</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="tipo-filter">Tipo:</Label>
+              <Select value={filtros.tipo || "all"} onValueChange={(value) => handleTipoFilter(value === "all" ? "" : value)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Todos os tipos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                  <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                  <SelectItem value="Guincho">Guincho</SelectItem>
+                  <SelectItem value="Outros">Outros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="limit-filter">Por página:</Label>
+              <Select value={pagination.limit.toString()} onValueChange={(value) => handleLimitChange(Number(value))}>
+                <SelectTrigger className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {(filtros.status || filtros.tipo) && (
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Limpar Filtros
+              </Button>
+            )}
+          </div>
+
+          {/* Busca por texto */}
           <div className="flex items-center space-x-2 mb-4">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -2426,14 +2516,70 @@ export default function GruasPage() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Controles de Paginação */}
+          {pagination.pages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-500">
+                Mostrando {((pagination.page - 1) * pagination.limit) + 1} a {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total} gruas
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1}
+                >
+                  Anterior
+                </Button>
+                
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
+                    let pageNum;
+                    if (pagination.pages <= 5) {
+                      pageNum = i + 1;
+                    } else if (pagination.page <= 3) {
+                      pageNum = i + 1;
+                    } else if (pagination.page >= pagination.pages - 2) {
+                      pageNum = pagination.pages - 4 + i;
+                    } else {
+                      pageNum = pagination.page - 2 + i;
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={pagination.page === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={pagination.page === pagination.pages}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Modal de Detalhes */}
       <Dialog open={isDetalhesOpen} onOpenChange={setIsDetalhesOpen}>
         <DialogContent className="w-[1200px] max-w-[1200px] max-h-[80vh] overflow-y-auto dialog-content">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
+          <DialogHeader className="relative">
+            <div className="flex items-center justify-between pr-8">
               <div>
                 <DialogTitle>Detalhes da Grua - {selectedGrua?.id}</DialogTitle>
                 <DialogDescription>Equipamentos e funcionários atrelados à grua</DialogDescription>
@@ -2507,6 +2653,9 @@ export default function GruasPage() {
                         <strong>Localização:</strong> {selectedGrua.localizacao}
                       </div>
                       <div>
+                        <strong>Preço Real da Grua:</strong> {selectedGrua.preco_real ? `R$ ${formatCurrency(selectedGrua.preco_real)}` : 'Não informado'}
+                      </div>
+                      <div>
                         <strong>Horas de Operação:</strong> {selectedGrua.horas_operacao?.toLocaleString() || 0}
                       </div>
                     </CardContent>
@@ -2525,15 +2674,6 @@ export default function GruasPage() {
                       </div>
                       <div>
                         <strong>Valor Sinaleiro:</strong> R$ {formatCurrency(selectedGrua.valor_sinaleiro)}
-                      </div>
-                      <div>
-                        <strong>Valor Manutenção:</strong> R$ {formatCurrency(selectedGrua.valor_manutencao)}
-                      </div>
-                      <div>
-                        <strong>Última Manutenção:</strong> {selectedGrua.ultima_manutencao || "Não informado"}
-                      </div>
-                      <div>
-                        <strong>Próxima Manutenção:</strong> {selectedGrua.proxima_manutencao || "Não informado"}
                       </div>
                     </CardContent>
                   </Card>
@@ -3044,11 +3184,6 @@ export default function GruasPage() {
                           <span>R$ {formatCurrency(selectedGrua?.valor_sinaleiro)}</span>
                           <span>R$ {formatCurrency(selectedGrua?.valor_sinaleiro)}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Manutenção:</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valor_manutencao)}</span>
-                          <span>R$ {formatCurrency(selectedGrua?.valor_manutencao)}</span>
-                        </div>
                         <hr />
                         <div className="flex justify-between font-medium">
                           <span>Total Mensal:</span>
@@ -3058,11 +3193,9 @@ export default function GruasPage() {
                               (selectedGrua?.valor_locacao || 0) +
                               (selectedGrua?.valor_operacao || 0) +
                               (selectedGrua?.valor_sinaleiro || 0) +
-                              (selectedGrua?.valor_manutencao || 0) +
                               (selectedGrua?.valor_locacao || 0) +
                               (selectedGrua?.valor_operacao || 0) +
-                              (selectedGrua?.valor_sinaleiro || 0) +
-                              (selectedGrua?.valor_manutencao || 0)
+                              (selectedGrua?.valor_sinaleiro || 0)
                             )}
                           </span>
                         </div>
@@ -3093,31 +3226,6 @@ export default function GruasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Alertas de Manutenção */}
-      <Card className="border-yellow-200 bg-yellow-50">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600" />
-            <div>
-              <p className="font-medium text-yellow-800">Manutenções Programadas</p>
-              <p className="text-sm text-yellow-700">
-                {
-                  gruas.filter((g) => {
-                    if (!g.proxima_manutencao) return false
-                    const proximaManutencao = new Date(g.proxima_manutencao)
-                    const hoje = new Date()
-                    const diasRestantes = Math.ceil(
-                      (proximaManutencao.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-                    )
-                    return diasRestantes <= 30
-                  }).length
-                }{" "}
-                gruas precisam de manutenção nos próximos 30 dias
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
