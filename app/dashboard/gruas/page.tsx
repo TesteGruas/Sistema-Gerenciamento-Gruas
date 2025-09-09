@@ -351,6 +351,25 @@ export default function GruasPage() {
     voltagem: "380V",
     potencia: "72 KVA",
     observacoes: "",
+    // Novos campos da API
+    fabricante: "",
+    modelo: "",
+    tipo: "",
+    capacidade: "",
+    capacidadePonta: "",
+    lanca: "",
+    ano: "",
+    status: "",
+    localizacao: "",
+    horasOperacao: 0,
+    valorLocacao: 0,
+    valorOperacao: 0,
+    valorSinaleiro: 0,
+    funcionarios: [],
+    equipamentos: [],
+    contatoObra: "",
+    telefoneObra: "",
+    emailObra: "",
   })
 
   // Estados para gerenciamento de arquivos
@@ -873,23 +892,128 @@ export default function GruasPage() {
     setEquipamentos(equipamentos.filter(e => e.id !== id))
   }
 
-  const gerarProposta = (grua: any) => {
-    setSelectedGrua(grua)
-    setPropostaData({
-      cliente: "",
-      cnpj: "",
-      obra: "",
-      endereco: "",
-      cidade: "",
-      prazoMeses: 6,
-      dataInicio: "",
-      alturaFinal: grua.altura_trabalho,
-      tipoBase: "Base Fixa",
-      voltagem: "380V",
-      potencia: "72 KVA",
-      observacoes: "",
-    })
-    setIsPropostaOpen(true)
+  const gerarProposta = async (grua: any) => {
+    try {
+      // Carregar dados completos da grua
+      const dadosCompletos = await carregarDadosCompletosGrua(grua.id)
+      
+      if (dadosCompletos) {
+        setSelectedGrua(dadosCompletos)
+        
+        // Preencher campos da proposta com dados completos da grua
+        setPropostaData({
+          cliente: dadosCompletos.grua_obras?.[0]?.obra?.cliente?.nome || "",
+          cnpj: dadosCompletos.grua_obras?.[0]?.obra?.cliente?.cnpj || "",
+          obra: dadosCompletos.grua_obras?.[0]?.obra?.nome || "",
+          endereco: dadosCompletos.grua_obras?.[0]?.obra?.endereco || dadosCompletos.localizacao || "",
+          cidade: dadosCompletos.grua_obras?.[0]?.obra?.cidade || "",
+          prazoMeses: dadosCompletos.grua_obras?.[0]?.prazo_meses || 6,
+          dataInicio: dadosCompletos.grua_obras?.[0]?.data_inicio_locacao || new Date().toISOString().split('T')[0],
+          alturaFinal: dadosCompletos.altura_trabalho || dadosCompletos.alturaTrabalho || "",
+          tipoBase: "Base Fixa",
+          voltagem: dadosCompletos.voltagem || "380V",
+          potencia: dadosCompletos.potencia || "72 KVA",
+          observacoes: dadosCompletos.observacoes || "",
+          // Dados da grua
+          fabricante: dadosCompletos.fabricante || "",
+          modelo: dadosCompletos.modelo || "",
+          tipo: dadosCompletos.tipo || "",
+          capacidade: dadosCompletos.capacidade || "",
+          capacidadePonta: dadosCompletos.capacidade_ponta || dadosCompletos.capacidadePonta || "",
+          lanca: dadosCompletos.lanca || "",
+          ano: dadosCompletos.ano?.toString() || "",
+          status: dadosCompletos.status || "",
+          localizacao: dadosCompletos.localizacao || "",
+          horasOperacao: dadosCompletos.horas_operacao || dadosCompletos.horasOperacao || 0,
+          valorLocacao: dadosCompletos.valor_locacao || dadosCompletos.valorLocacao || 0,
+          valorOperacao: dadosCompletos.valor_operacao || dadosCompletos.valorOperacao || 0,
+          valorSinaleiro: dadosCompletos.valor_sinaleiro || dadosCompletos.valorSinaleiro || 0,
+          // Funcionários e equipamentos
+          funcionarios: dadosCompletos.grua_funcionarios || [],
+          equipamentos: dadosCompletos.grua_equipamentos || [],
+          // Dados de contato da obra
+          contatoObra: dadosCompletos.grua_obras?.[0]?.obra?.contato_obra || "",
+          telefoneObra: dadosCompletos.grua_obras?.[0]?.obra?.telefone_obra || "",
+          emailObra: dadosCompletos.grua_obras?.[0]?.obra?.email_obra || "",
+        })
+      } else {
+        // Fallback para dados básicos se não conseguir carregar dados completos
+        setSelectedGrua(grua)
+        setPropostaData({
+          cliente: "",
+          cnpj: "",
+          obra: "",
+          endereco: grua.localizacao || "",
+          cidade: "",
+          prazoMeses: 6,
+          dataInicio: new Date().toISOString().split('T')[0],
+          alturaFinal: grua.altura_trabalho || "",
+          tipoBase: "Base Fixa",
+          voltagem: "380V",
+          potencia: "72 KVA",
+          observacoes: "",
+          // Dados da grua
+          fabricante: grua.fabricante || "",
+          modelo: grua.modelo || "",
+          tipo: grua.tipo || "",
+          capacidade: grua.capacidade || "",
+          capacidadePonta: grua.capacidade_ponta || "",
+          lanca: grua.lanca || "",
+          ano: grua.ano?.toString() || "",
+          status: grua.status || "",
+          localizacao: grua.localizacao || "",
+          horasOperacao: grua.horas_operacao || 0,
+          valorLocacao: grua.valor_locacao || 0,
+          valorOperacao: grua.valor_operacao || 0,
+          valorSinaleiro: grua.valor_sinaleiro || 0,
+          funcionarios: [],
+          equipamentos: [],
+          contatoObra: "",
+          telefoneObra: "",
+          emailObra: "",
+        })
+      }
+      
+      setIsPropostaOpen(true)
+    } catch (error) {
+      console.error('Erro ao carregar dados da grua para proposta:', error)
+      // Fallback para dados básicos em caso de erro
+      setSelectedGrua(grua)
+      setPropostaData({
+        cliente: "",
+        cnpj: "",
+        obra: "",
+        endereco: grua.localizacao || "",
+        cidade: "",
+        prazoMeses: 6,
+        dataInicio: new Date().toISOString().split('T')[0],
+        alturaFinal: grua.altura_trabalho || "",
+        tipoBase: "Base Fixa",
+        voltagem: "380V",
+        potencia: "72 KVA",
+        observacoes: "",
+        // Dados da grua
+        fabricante: grua.fabricante || "",
+        modelo: grua.modelo || "",
+        tipo: grua.tipo || "",
+        capacidade: grua.capacidade || "",
+        capacidadePonta: grua.capacidade_ponta || "",
+        lanca: grua.lanca || "",
+        ano: grua.ano?.toString() || "",
+        status: grua.status || "",
+        localizacao: grua.localizacao || "",
+        horasOperacao: grua.horas_operacao || 0,
+        valorLocacao: grua.valor_locacao || 0,
+        valorOperacao: grua.valor_operacao || 0,
+        valorSinaleiro: grua.valor_sinaleiro || 0,
+        funcionarios: [],
+        equipamentos: [],
+        contatoObra: "",
+        telefoneObra: "",
+        emailObra: "",
+      })
+      setIsPropostaOpen(true)
+    }
   }
 
   const calcularValorTotal = () => {
@@ -897,11 +1021,214 @@ export default function GruasPage() {
     const valorMensal =
       (selectedGrua.valor_locacao || 0) +
       (selectedGrua.valor_operacao || 0) +
-      (selectedGrua.valor_sinaleiro || 0) +
-      (selectedGrua.valor_locacao || 0) +
-      (selectedGrua.valor_operacao || 0) +
       (selectedGrua.valor_sinaleiro || 0)
     return valorMensal * propostaData.prazoMeses
+  }
+
+  // Função para exportar proposta comercial para PDF
+  const exportarPropostaPDF = async () => {
+    try {
+      const { jsPDF } = await import('jspdf')
+      const { autoTable } = await import('jspdf-autotable')
+      
+      const doc = new jsPDF()
+      
+      // Cabeçalho
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text('PROPOSTA COMERCIAL', 105, 20, { align: 'center' })
+      
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Grua: ${propostaData.modelo} - ${propostaData.fabricante}`, 105, 30, { align: 'center' })
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 105, 35, { align: 'center' })
+      
+      let yPosition = 50
+      
+      // Dados do Cliente
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('DADOS DO CLIENTE', 20, yPosition)
+      yPosition += 10
+      
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Cliente: ${propostaData.cliente}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`CNPJ: ${propostaData.cnpj}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Obra: ${propostaData.obra}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Endereço: ${propostaData.endereco}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Cidade: ${propostaData.cidade}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Contato: ${propostaData.contatoObra}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Telefone: ${propostaData.telefoneObra}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Email: ${propostaData.emailObra}`, 20, yPosition)
+      yPosition += 15
+      
+      // Dados da Grua
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('ESPECIFICAÇÕES DA GRUA', 20, yPosition)
+      yPosition += 10
+      
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Modelo: ${propostaData.modelo}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Fabricante: ${propostaData.fabricante}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Tipo: ${propostaData.tipo}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Capacidade: ${propostaData.capacidade}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Capacidade na Ponta: ${propostaData.capacidadePonta}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Lança: ${propostaData.lanca}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Altura de Trabalho: ${propostaData.alturaFinal}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Ano: ${propostaData.ano}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Status: ${propostaData.status}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Localização: ${propostaData.localizacao}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Horas de Operação: ${propostaData.horasOperacao}`, 20, yPosition)
+      yPosition += 15
+      
+      // Dados da Locação
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('DADOS DA LOCAÇÃO', 20, yPosition)
+      yPosition += 10
+      
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Data de Início: ${propostaData.dataInicio}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Prazo: ${propostaData.prazoMeses} meses`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Tipo de Base: ${propostaData.tipoBase}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Voltagem: ${propostaData.voltagem}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Potência: ${propostaData.potencia}`, 20, yPosition)
+      yPosition += 15
+      
+      // Valores
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('VALORES', 20, yPosition)
+      yPosition += 10
+      
+      const valorMensal = propostaData.valorLocacao + propostaData.valorOperacao + propostaData.valorSinaleiro
+      const valorTotal = valorMensal * propostaData.prazoMeses
+      
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Valor Locação: R$ ${propostaData.valorLocacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Valor Operação: R$ ${propostaData.valorOperacao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Valor Sinaleiro: R$ ${propostaData.valorSinaleiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 20, yPosition)
+      yPosition += 5
+      doc.text(`Valor Mensal Total: R$ ${valorMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 20, yPosition)
+      yPosition += 5
+      
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`VALOR TOTAL DO CONTRATO: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 20, yPosition)
+      yPosition += 15
+      
+      // Funcionários
+      if (propostaData.funcionarios && propostaData.funcionarios.length > 0) {
+        doc.setFontSize(14)
+        doc.setFont('helvetica', 'bold')
+        doc.text('FUNCIONÁRIOS', 20, yPosition)
+        yPosition += 10
+        
+        const funcionariosData = propostaData.funcionarios.map((rel: any) => [
+          rel.funcionario?.nome || '',
+          rel.funcionario?.cargo || '',
+          rel.funcionario?.telefone || '',
+          rel.status || ''
+        ])
+        
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['Nome', 'Cargo', 'Telefone', 'Status']],
+          body: funcionariosData,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [66, 139, 202] }
+        })
+        
+        yPosition = (doc as any).lastAutoTable.finalY + 10
+      }
+      
+      // Equipamentos
+      if (propostaData.equipamentos && propostaData.equipamentos.length > 0) {
+        doc.setFontSize(14)
+        doc.setFont('helvetica', 'bold')
+        doc.text('EQUIPAMENTOS', 20, yPosition)
+        yPosition += 10
+        
+        const equipamentosData = propostaData.equipamentos.map((rel: any) => [
+          rel.equipamento?.nome || '',
+          rel.equipamento?.tipo || '',
+          rel.equipamento?.capacidade || '',
+          rel.status || ''
+        ])
+        
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['Nome', 'Tipo', 'Capacidade', 'Status']],
+          body: equipamentosData,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [66, 139, 202] }
+        })
+      }
+      
+      // Observações
+      if (propostaData.observacoes) {
+        yPosition = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 20 : yPosition + 20
+        doc.setFontSize(14)
+        doc.setFont('helvetica', 'bold')
+        doc.text('OBSERVAÇÕES', 20, yPosition)
+        yPosition += 10
+        
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        const splitObservacoes = doc.splitTextToSize(propostaData.observacoes, 170)
+        doc.text(splitObservacoes, 20, yPosition)
+      }
+      
+      // Rodapé
+      const pageHeight = doc.internal.pageSize.height
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Proposta gerada automaticamente pelo Sistema de Gerenciamento de Gruas', 105, pageHeight - 20, { align: 'center' })
+      doc.text(`Data de geração: ${new Date().toLocaleString('pt-BR')}`, 105, pageHeight - 15, { align: 'center' })
+      
+      // Salvar PDF
+      doc.save(`proposta-comercial-${propostaData.modelo}-${new Date().toISOString().split('T')[0]}.pdf`)
+      
+      toast({
+        title: "Sucesso!",
+        description: "Proposta comercial exportada para PDF com sucesso.",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar proposta PDF:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar proposta para PDF.",
+        variant: "destructive",
+      })
+    }
   }
 
   // Funções para gerenciamento de arquivos
@@ -3217,7 +3544,7 @@ export default function GruasPage() {
               <Button type="button" variant="outline" onClick={() => setIsPropostaOpen(false)}>
                 Cancelar
               </Button>
-              <Button className="bg-green-600 hover:bg-green-700">
+              <Button className="bg-green-600 hover:bg-green-700" onClick={exportarPropostaPDF}>
                 <FileText className="w-4 h-4 mr-2" />
                 Gerar Proposta PDF
               </Button>
