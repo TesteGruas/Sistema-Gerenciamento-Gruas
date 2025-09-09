@@ -23,6 +23,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   ConeIcon as Crane,
   Plus,
   Search,
@@ -38,6 +44,15 @@ import {
   Settings,
   Eye,
   Trash2,
+  Upload,
+  Download,
+  File,
+  Image,
+  FileImage,
+  Download as ExportIcon,
+  FileSpreadsheet,
+  FileDown,
+  ChevronDown,
 } from "lucide-react"
 
 export default function GruasPage() {
@@ -323,6 +338,11 @@ export default function GruasPage() {
     potencia: "72 KVA",
     observacoes: "",
   })
+
+  // Estados para gerenciamento de arquivos
+  const [arquivos, setArquivos] = useState<any[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null)
 
   const filteredGruas = gruas.filter(
     (grua) =>
@@ -860,7 +880,7 @@ export default function GruasPage() {
       (selectedGrua.valor_locacao || 0) +
       (selectedGrua.valor_operacao || 0) +
       (selectedGrua.valor_sinaleiro || 0) +
-      (selectedGrua.valor_manutencao || 0)
+      (selectedGrua.valor_manutencao || 0) +
       (selectedGrua.valor_locacao || 0) +
       (selectedGrua.valor_operacao || 0) +
       (selectedGrua.valor_sinaleiro || 0) +
@@ -868,11 +888,650 @@ export default function GruasPage() {
     return valorMensal * propostaData.prazoMeses
   }
 
+  // Funções para gerenciamento de arquivos
+  const carregarArquivos = async (gruaId: string) => {
+    try {
+      // Simular carregamento de arquivos (em uma implementação real, faria uma requisição para o backend)
+      const arquivosSimulados = [
+        {
+          id: 1,
+          nome: "Manual_Operacao_Grua.pdf",
+          tipo: "application/pdf",
+          tamanho: 2048576,
+          dataUpload: "2024-01-15",
+          descricao: "Manual de operação da grua"
+        },
+        {
+          id: 2,
+          nome: "Certificado_Inspecao.jpg",
+          tipo: "image/jpeg",
+          tamanho: 1024000,
+          dataUpload: "2024-01-10",
+          descricao: "Certificado de inspeção anual"
+        },
+        {
+          id: 3,
+          nome: "Relatorio_Manutencao.xlsx",
+          tipo: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          tamanho: 512000,
+          dataUpload: "2024-01-05",
+          descricao: "Relatório de manutenção preventiva"
+        }
+      ]
+      setArquivos(arquivosSimulados)
+    } catch (error) {
+      console.error('Erro ao carregar arquivos:', error)
+      toast({
+        title: "Erro ao carregar arquivos",
+        description: "Não foi possível carregar os arquivos da grua",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files && files.length > 0) {
+      setSelectedFiles(files)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!selectedFiles || selectedFiles.length === 0) {
+      toast({
+        title: "Nenhum arquivo selecionado",
+        description: "Selecione pelo menos um arquivo para fazer upload",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setUploading(true)
+    try {
+      // Simular upload (em uma implementação real, faria upload para o backend)
+      const novosArquivos = Array.from(selectedFiles).map((file, index) => ({
+        id: Date.now() + index,
+        nome: file.name,
+        tipo: file.type,
+        tamanho: file.size,
+        dataUpload: new Date().toISOString().split('T')[0],
+        descricao: `Arquivo enviado em ${new Date().toLocaleDateString('pt-BR')}`
+      }))
+
+      setArquivos([...arquivos, ...novosArquivos])
+      setSelectedFiles(null)
+      
+      // Limpar o input de arquivo
+      const fileInput = document.getElementById('file-upload') as HTMLInputElement
+      if (fileInput) {
+        fileInput.value = ''
+      }
+
+      toast({
+        title: "Upload realizado com sucesso",
+        description: `${selectedFiles.length} arquivo(s) enviado(s) com sucesso`,
+      })
+    } catch (error) {
+      console.error('Erro no upload:', error)
+      toast({
+        title: "Erro no upload",
+        description: "Não foi possível fazer upload dos arquivos",
+        variant: "destructive",
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDownload = (arquivo: any) => {
+    // Simular download (em uma implementação real, faria download do backend)
+    toast({
+      title: "Download iniciado",
+      description: `Baixando ${arquivo.nome}`,
+    })
+  }
+
+  const handleDeleteFile = (arquivoId: number) => {
+    if (!confirm('Tem certeza que deseja excluir este arquivo?')) {
+      return
+    }
+
+    setArquivos(arquivos.filter(arquivo => arquivo.id !== arquivoId))
+    toast({
+      title: "Arquivo excluído",
+      description: "Arquivo removido com sucesso",
+    })
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const getFileIcon = (tipo: string) => {
+    if (tipo.startsWith('image/')) {
+      return <Image className="h-4 w-4 text-blue-500" />
+    } else if (tipo === 'application/pdf') {
+      return <FileText className="h-4 w-4 text-red-500" />
+    } else {
+      return <File className="h-4 w-4 text-gray-500" />
+    }
+  }
+
+  // Funções de exportação
+  const exportToCSV = () => {
+    try {
+      const dadosParaExportar = filteredGruas.map(grua => ({
+        'ID': grua.id,
+        'Modelo': grua.modelo,
+        'Fabricante': grua.fabricante,
+        'Tipo': grua.tipo,
+        'Capacidade': grua.capacidade,
+        'Capacidade na Ponta': grua.capacidade_ponta,
+        'Lança': grua.lanca,
+        'Altura de Trabalho': grua.altura_trabalho,
+        'Ano': grua.ano,
+        'Status': grua.status,
+        'Localização': grua.localizacao,
+        'Horas de Operação': grua.horas_operacao,
+        'Valor Locação': grua.valor_locacao,
+        'Valor Operação': grua.valor_operacao,
+        'Valor Sinaleiro': grua.valor_sinaleiro,
+        'Valor Manutenção': grua.valor_manutencao,
+        'Última Manutenção': grua.ultima_manutencao,
+        'Próxima Manutenção': grua.proxima_manutencao,
+        'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome : '-',
+        'Funcionários': grua.grua_funcionarios && grua.grua_funcionarios.length > 0 ? 
+          grua.grua_funcionarios.map((f: any) => f.funcionario?.nome).join(', ') : '-',
+        'Equipamentos': grua.grua_equipamentos && grua.grua_equipamentos.length > 0 ? 
+          grua.grua_equipamentos.map((e: any) => e.equipamento?.nome).join(', ') : '-'
+      }))
+
+      const headers = Object.keys(dadosParaExportar[0] || {})
+      const csvContent = [
+        headers.join(','),
+        ...dadosParaExportar.map(row => 
+          headers.map(header => {
+            const value = row[header as keyof typeof row]
+            // Escapar aspas e vírgulas
+            return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
+              ? `"${value.replace(/"/g, '""')}"` 
+              : value
+          }).join(',')
+        )
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `gruas_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast({
+        title: "Exportação realizada",
+        description: "Arquivo CSV baixado com sucesso",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar CSV:', error)
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível exportar o arquivo CSV",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const exportToExcel = () => {
+    try {
+      // Simular exportação para Excel (em uma implementação real, usaria uma biblioteca como xlsx)
+      const dadosParaExportar = filteredGruas.map(grua => ({
+        'ID': grua.id,
+        'Modelo': grua.modelo,
+        'Fabricante': grua.fabricante,
+        'Tipo': grua.tipo,
+        'Capacidade': grua.capacidade,
+        'Capacidade na Ponta': grua.capacidade_ponta,
+        'Lança': grua.lanca,
+        'Altura de Trabalho': grua.altura_trabalho,
+        'Ano': grua.ano,
+        'Status': grua.status,
+        'Localização': grua.localizacao,
+        'Horas de Operação': grua.horas_operacao,
+        'Valor Locação': grua.valor_locacao,
+        'Valor Operação': grua.valor_operacao,
+        'Valor Sinaleiro': grua.valor_sinaleiro,
+        'Valor Manutenção': grua.valor_manutencao,
+        'Última Manutenção': grua.ultima_manutencao,
+        'Próxima Manutenção': grua.proxima_manutencao,
+        'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome : '-',
+        'Funcionários': grua.grua_funcionarios && grua.grua_funcionarios.length > 0 ? 
+          grua.grua_funcionarios.map((f: any) => f.funcionario?.nome).join(', ') : '-',
+        'Equipamentos': grua.grua_equipamentos && grua.grua_equipamentos.length > 0 ? 
+          grua.grua_equipamentos.map((e: any) => e.equipamento?.nome).join(', ') : '-'
+      }))
+
+      // Por enquanto, exportar como CSV com extensão .xlsx
+      const headers = Object.keys(dadosParaExportar[0] || {})
+      const csvContent = [
+        headers.join(','),
+        ...dadosParaExportar.map(row => 
+          headers.map(header => {
+            const value = row[header as keyof typeof row]
+            return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
+              ? `"${value.replace(/"/g, '""')}"` 
+              : value
+          }).join(',')
+        )
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `gruas_${new Date().toISOString().split('T')[0]}.xlsx`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast({
+        title: "Exportação realizada",
+        description: "Arquivo Excel baixado com sucesso",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar Excel:', error)
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível exportar o arquivo Excel",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const exportToPDF = async () => {
+    try {
+      // Importar jsPDF dinamicamente
+      const { default: jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+
+      // Criar novo documento PDF
+      const doc = new jsPDF('l', 'mm', 'a4') // Orientação landscape para mais espaço
+
+      // Adicionar cabeçalho
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Relatório de Gruas', 14, 22)
+
+      // Adicionar data de geração
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 30)
+
+      // Preparar dados para a tabela
+      const dadosParaExportar = filteredGruas.map(grua => [
+        grua.id,
+        grua.modelo || '-',
+        grua.fabricante || '-',
+        grua.tipo || '-',
+        grua.status || '-',
+        grua.localizacao || '-',
+        grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome || '-' : '-',
+        grua.capacidade || '-',
+        grua.lanca || '-',
+        grua.altura_trabalho || '-',
+        grua.ano || '-',
+        grua.horas_operacao ? grua.horas_operacao.toLocaleString() : '-',
+        grua.valor_locacao ? `R$ ${formatCurrency(grua.valor_locacao)}` : '-'
+      ])
+
+      // Cabeçalhos da tabela
+      const headers = [
+        'ID',
+        'Modelo',
+        'Fabricante',
+        'Tipo',
+        'Status',
+        'Localização',
+        'Cliente/Obra',
+        'Capacidade',
+        'Lança',
+        'Altura',
+        'Ano',
+        'Horas Op.',
+        'Valor Locação'
+      ]
+
+      // Adicionar tabela
+      autoTable(doc, {
+        head: [headers],
+        body: dadosParaExportar,
+        startY: 40,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold',
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        columnStyles: {
+          0: { cellWidth: 15 }, // ID
+          1: { cellWidth: 25 }, // Modelo
+          2: { cellWidth: 20 }, // Fabricante
+          3: { cellWidth: 20 }, // Tipo
+          4: { cellWidth: 20 }, // Status
+          5: { cellWidth: 30 }, // Localização
+          6: { cellWidth: 35 }, // Cliente/Obra
+          7: { cellWidth: 20 }, // Capacidade
+          8: { cellWidth: 15 }, // Lança
+          9: { cellWidth: 15 }, // Altura
+          10: { cellWidth: 10 }, // Ano
+          11: { cellWidth: 15 }, // Horas
+          12: { cellWidth: 20 }, // Valor
+        },
+        margin: { left: 14, right: 14 },
+        didDrawPage: (data) => {
+          // Adicionar número da página
+          const pageCount = doc.getNumberOfPages()
+          doc.setFontSize(8)
+          doc.text(`Página ${data.pageNumber} de ${pageCount}`, 14, doc.internal.pageSize.height - 10)
+        }
+      })
+
+      // Adicionar rodapé com estatísticas
+      const finalY = (doc as any).lastAutoTable.finalY || 40
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Resumo:', 14, finalY + 15)
+      
+      doc.setFont('helvetica', 'normal')
+      doc.text(`• Total de Gruas: ${filteredGruas.length}`, 14, finalY + 25)
+      doc.text(`• Operacionais: ${filteredGruas.filter(g => g.status === 'Operacional').length}`, 14, finalY + 35)
+      doc.text(`• Em Manutenção: ${filteredGruas.filter(g => g.status === 'Manutenção').length}`, 14, finalY + 45)
+      doc.text(`• Disponíveis: ${filteredGruas.filter(g => g.status === 'Disponível').length}`, 14, finalY + 55)
+
+      // Salvar o PDF
+      const fileName = `relatorio_gruas_${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(fileName)
+
+      toast({
+        title: "Exportação realizada",
+        description: "Relatório PDF gerado com sucesso",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error)
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível gerar o arquivo PDF",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Funções de exportação para grua específica
+  const exportGruaToCSV = () => {
+    if (!selectedGrua) return
+
+    try {
+      const dadosParaExportar = {
+        'ID': selectedGrua.id,
+        'Modelo': selectedGrua.modelo,
+        'Fabricante': selectedGrua.fabricante,
+        'Tipo': selectedGrua.tipo,
+        'Capacidade': selectedGrua.capacidade,
+        'Capacidade na Ponta': selectedGrua.capacidade_ponta,
+        'Lança': selectedGrua.lanca,
+        'Altura de Trabalho': selectedGrua.altura_trabalho,
+        'Ano': selectedGrua.ano,
+        'Status': selectedGrua.status,
+        'Localização': selectedGrua.localizacao,
+        'Horas de Operação': selectedGrua.horas_operacao,
+        'Valor Locação': selectedGrua.valor_locacao,
+        'Valor Operação': selectedGrua.valor_operacao,
+        'Valor Sinaleiro': selectedGrua.valor_sinaleiro,
+        'Valor Manutenção': selectedGrua.valor_manutencao,
+        'Última Manutenção': selectedGrua.ultima_manutencao,
+        'Próxima Manutenção': selectedGrua.proxima_manutencao,
+        'Cliente': selectedGrua.grua_obras && selectedGrua.grua_obras.length > 0 ? selectedGrua.grua_obras[0].obra?.nome : '-',
+        'Funcionários': selectedGrua.grua_funcionarios && selectedGrua.grua_funcionarios.length > 0 ? 
+          selectedGrua.grua_funcionarios.map((f: any) => f.funcionario?.nome).join(', ') : '-',
+        'Equipamentos': selectedGrua.grua_equipamentos && selectedGrua.grua_equipamentos.length > 0 ? 
+          selectedGrua.grua_equipamentos.map((e: any) => e.equipamento?.nome).join(', ') : '-'
+      }
+
+      const headers = Object.keys(dadosParaExportar)
+      const csvContent = [
+        headers.join(','),
+        headers.map(header => {
+          const value = dadosParaExportar[header as keyof typeof dadosParaExportar]
+          return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
+            ? `"${value.replace(/"/g, '""')}"` 
+            : value
+        }).join(',')
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `grua_${selectedGrua.id}_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast({
+        title: "Exportação realizada",
+        description: `Dados da grua ${selectedGrua.id} exportados com sucesso`,
+      })
+    } catch (error) {
+      console.error('Erro ao exportar grua CSV:', error)
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível exportar os dados da grua",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const exportGruaToPDF = async () => {
+    if (!selectedGrua) return
+
+    try {
+      // Importar jsPDF dinamicamente
+      const { default: jsPDF } = await import('jspdf')
+
+      // Criar novo documento PDF
+      const doc = new jsPDF('p', 'mm', 'a4')
+
+      // Adicionar cabeçalho
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Relatório da Grua ${selectedGrua.id}`, 14, 22)
+
+      // Adicionar data de geração
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 30)
+
+      let yPosition = 50
+
+      // Dados Básicos
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Dados Básicos', 14, yPosition)
+      yPosition += 10
+
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      const dadosBasicos = [
+        `Modelo: ${selectedGrua.modelo || '-'}`,
+        `Fabricante: ${selectedGrua.fabricante || '-'}`,
+        `Tipo: ${selectedGrua.tipo || '-'}`,
+        `Ano: ${selectedGrua.ano || '-'}`,
+        `Status: ${selectedGrua.status || '-'}`,
+        `Localização: ${selectedGrua.localizacao || '-'}`
+      ]
+
+      dadosBasicos.forEach(dado => {
+        doc.text(dado, 14, yPosition)
+        yPosition += 6
+      })
+
+      yPosition += 10
+
+      // Especificações Técnicas
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Especificações Técnicas', 14, yPosition)
+      yPosition += 10
+
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      const especificacoes = [
+        `Capacidade: ${selectedGrua.capacidade || '-'}`,
+        `Capacidade na Ponta: ${selectedGrua.capacidade_ponta || '-'}`,
+        `Lança: ${selectedGrua.lanca || '-'}`,
+        `Altura de Trabalho: ${selectedGrua.altura_trabalho || '-'}`,
+        `Horas de Operação: ${selectedGrua.horas_operacao ? selectedGrua.horas_operacao.toLocaleString() : '-'}`
+      ]
+
+      especificacoes.forEach(espec => {
+        doc.text(espec, 14, yPosition)
+        yPosition += 6
+      })
+
+      yPosition += 10
+
+      // Dados Financeiros
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Dados Financeiros', 14, yPosition)
+      yPosition += 10
+
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      const financeiros = [
+        `Valor Locação: ${selectedGrua.valor_locacao ? `R$ ${formatCurrency(selectedGrua.valor_locacao)}` : '-'}`,
+        `Valor Operação: ${selectedGrua.valor_operacao ? `R$ ${formatCurrency(selectedGrua.valor_operacao)}` : '-'}`,
+        `Valor Sinaleiro: ${selectedGrua.valor_sinaleiro ? `R$ ${formatCurrency(selectedGrua.valor_sinaleiro)}` : '-'}`,
+        `Valor Manutenção: ${selectedGrua.valor_manutencao ? `R$ ${formatCurrency(selectedGrua.valor_manutencao)}` : '-'}`,
+        `Última Manutenção: ${selectedGrua.ultima_manutencao || '-'}`,
+        `Próxima Manutenção: ${selectedGrua.proxima_manutencao || '-'}`
+      ]
+
+      financeiros.forEach(fin => {
+        doc.text(fin, 14, yPosition)
+        yPosition += 6
+      })
+
+      // Verificar se precisa de nova página
+      if (yPosition > 250) {
+        doc.addPage()
+        yPosition = 20
+      }
+
+      // Obras Relacionadas
+      if (selectedGrua.grua_obras && selectedGrua.grua_obras.length > 0) {
+        yPosition += 10
+        doc.setFontSize(14)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Obras Relacionadas', 14, yPosition)
+        yPosition += 10
+
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        selectedGrua.grua_obras.forEach((obra: any, index: number) => {
+          doc.text(`Obra ${index + 1}: ${obra.obra?.nome || '-'}`, 14, yPosition)
+          yPosition += 6
+          doc.text(`Status: ${obra.status || '-'}`, 14, yPosition)
+          yPosition += 6
+          doc.text(`Início: ${obra.data_inicio_locacao || '-'}`, 14, yPosition)
+          yPosition += 6
+          if (yPosition > 250) {
+            doc.addPage()
+            yPosition = 20
+          }
+        })
+      }
+
+      // Funcionários
+      if (selectedGrua.grua_funcionarios && selectedGrua.grua_funcionarios.length > 0) {
+        yPosition += 10
+        doc.setFontSize(14)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Funcionários', 14, yPosition)
+        yPosition += 10
+
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        selectedGrua.grua_funcionarios.forEach((func: any, index: number) => {
+          doc.text(`Funcionário ${index + 1}: ${func.funcionario?.nome || '-'}`, 14, yPosition)
+          yPosition += 6
+          doc.text(`Cargo: ${func.funcionario?.cargo || '-'}`, 14, yPosition)
+          yPosition += 6
+          if (yPosition > 250) {
+            doc.addPage()
+            yPosition = 20
+          }
+        })
+      }
+
+      // Equipamentos
+      if (selectedGrua.grua_equipamentos && selectedGrua.grua_equipamentos.length > 0) {
+        yPosition += 10
+        doc.setFontSize(14)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Equipamentos', 14, yPosition)
+        yPosition += 10
+
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        selectedGrua.grua_equipamentos.forEach((equip: any, index: number) => {
+          doc.text(`Equipamento ${index + 1}: ${equip.equipamento?.nome || '-'}`, 14, yPosition)
+          yPosition += 6
+          doc.text(`Tipo: ${equip.equipamento?.tipo || '-'}`, 14, yPosition)
+          yPosition += 6
+          if (yPosition > 250) {
+            doc.addPage()
+            yPosition = 20
+          }
+        })
+      }
+
+      // Salvar o PDF
+      const fileName = `grua_${selectedGrua.id}_${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(fileName)
+
+      toast({
+        title: "Exportação realizada",
+        description: `Relatório da grua ${selectedGrua.id} gerado com sucesso`,
+      })
+    } catch (error) {
+      console.error('Erro ao exportar grua PDF:', error)
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível gerar o relatório da grua",
+        variant: "destructive",
+      })
+    }
+  }
+
   const stats = [
     { title: "Total de Gruas", value: gruas.length, icon: Crane, color: "bg-blue-500" },
     {
       title: "Operacionais",
-      value: gruas.filter((g) => g.status === "Operacional").length,
       value: gruas.filter((g) => g.status === "Operacional").length,
       icon: CheckCircle,
       color: "bg-green-500",
@@ -885,7 +1544,6 @@ export default function GruasPage() {
     },
     {
       title: "Disponíveis",
-      value: gruas.filter((g) => g.status === "Disponível").length,
       value: gruas.filter((g) => g.status === "Disponível").length,
       icon: Clock,
       color: "bg-yellow-500",
@@ -900,14 +1558,38 @@ export default function GruasPage() {
           <h1 className="text-3xl font-bold text-gray-900">Controle de Gruas</h1>
           <p className="text-gray-600">Gerenciamento completo da frota de gruas torre</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Grua
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center space-x-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <ExportIcon className="mr-2 h-4 w-4" />
+                Exportar
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportToCSV}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Exportar como CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportToExcel}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Exportar como Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportToPDF}>
+                <FileText className="mr-2 h-4 w-4" />
+                Exportar como PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Grua
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingGrua ? "Editar Grua" : "Cadastrar Nova Grua"}</DialogTitle>
               <DialogDescription>
@@ -1555,6 +2237,7 @@ export default function GruasPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Error Message */}
@@ -1706,6 +2389,8 @@ export default function GruasPage() {
                             // Carregar dados completos da grua para visualização
                             const dadosCompletos = await carregarDadosCompletosGrua(grua.id)
                             setSelectedGrua(dadosCompletos || grua)
+                            // Carregar arquivos da grua
+                            await carregarArquivos(grua.id)
                             setIsDetalhesOpen(true)
                           }}
                         >
@@ -1746,18 +2431,42 @@ export default function GruasPage() {
 
       {/* Modal de Detalhes */}
       <Dialog open={isDetalhesOpen} onOpenChange={setIsDetalhesOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-[1200px] max-w-[1200px] max-h-[80vh] overflow-y-auto dialog-content">
           <DialogHeader>
-            <DialogTitle>Detalhes da Obra - {selectedGrua?.id}</DialogTitle>
-            <DialogDescription>Equipamentos e funcionários atrelados à obra</DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Detalhes da Grua - {selectedGrua?.id}</DialogTitle>
+                <DialogDescription>Equipamentos e funcionários atrelados à grua</DialogDescription>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <ExportIcon className="mr-2 h-4 w-4" />
+                    Exportar
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportGruaToCSV}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Exportar como CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportGruaToPDF}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Exportar como PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </DialogHeader>
 
           {selectedGrua && (
             <Tabs defaultValue="geral" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="geral">Informações Gerais</TabsTrigger>
                 <TabsTrigger value="equipamentos">Equipamentos</TabsTrigger>
                 <TabsTrigger value="equipe">Equipe</TabsTrigger>
+                <TabsTrigger value="arquivos">Arquivos</TabsTrigger>
               </TabsList>
 
               <TabsContent value="geral" className="space-y-4">
@@ -1986,6 +2695,125 @@ export default function GruasPage() {
                     ) : (
                       <p className="text-gray-500 text-center py-4">Nenhum funcionário atrelado</p>
                     )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="arquivos" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <FileImage className="mr-2 h-5 w-5" />
+                      Arquivos da Grua
+                    </CardTitle>
+                    <CardDescription>
+                      Gerencie documentos, manuais, certificados e outros arquivos relacionados à grua
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Seção de Upload */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                      <div className="text-center">
+                        <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                        <div className="mt-4">
+                          <Label htmlFor="file-upload" className="cursor-pointer">
+                            <span className="mt-2 block text-sm font-medium text-gray-900">
+                              Clique para selecionar arquivos ou arraste e solte aqui
+                            </span>
+                            <span className="mt-1 block text-xs text-gray-500">
+                              PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF (máx. 10MB por arquivo)
+                            </span>
+                          </Label>
+                          <input
+                            id="file-upload"
+                            name="file-upload"
+                            type="file"
+                            className="sr-only"
+                            multiple
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
+                            onChange={handleFileSelect}
+                          />
+                        </div>
+                        {selectedFiles && selectedFiles.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-sm text-gray-600">
+                              {selectedFiles.length} arquivo(s) selecionado(s):
+                            </p>
+                            <ul className="mt-2 text-xs text-gray-500">
+                              {Array.from(selectedFiles).map((file, index) => (
+                                <li key={index}>• {file.name} ({formatFileSize(file.size)})</li>
+                              ))}
+                            </ul>
+                            <Button
+                              onClick={handleUpload}
+                              disabled={uploading}
+                              className="mt-3"
+                              size="sm"
+                            >
+                              {uploading ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  Enviando...
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  Enviar Arquivos
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lista de Arquivos */}
+                    <div className="space-y-2">
+                      <h4 className="font-medium">Arquivos Existentes ({arquivos.length})</h4>
+                      {arquivos.length === 0 ? (
+                        <p className="text-gray-500 text-center py-4">Nenhum arquivo encontrado</p>
+                      ) : (
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {arquivos.map((arquivo) => (
+                            <div key={arquivo.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                              <div className="flex items-center space-x-3 flex-1">
+                                {getFileIcon(arquivo.tipo)}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {arquivo.nome}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {formatFileSize(arquivo.tamanho)} • {arquivo.dataUpload}
+                                  </p>
+                                  {arquivo.descricao && (
+                                    <p className="text-xs text-gray-400 truncate">
+                                      {arquivo.descricao}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownload(arquivo)}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDeleteFile(arquivo.id)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -2230,7 +3058,7 @@ export default function GruasPage() {
                               (selectedGrua?.valor_locacao || 0) +
                               (selectedGrua?.valor_operacao || 0) +
                               (selectedGrua?.valor_sinaleiro || 0) +
-                              (selectedGrua?.valor_manutencao || 0)
+                              (selectedGrua?.valor_manutencao || 0) +
                               (selectedGrua?.valor_locacao || 0) +
                               (selectedGrua?.valor_operacao || 0) +
                               (selectedGrua?.valor_sinaleiro || 0) +

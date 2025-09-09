@@ -5,9 +5,9 @@ import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: 'Sistema IRBANA',
+  description: 'Sistema de Gestão Empresarial',
+  generator: 'IRBANA',
 }
 
 export default function RootLayout({

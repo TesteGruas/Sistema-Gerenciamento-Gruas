@@ -121,3 +121,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+.dialog-content {
+  width: 1200px!important;
+  max-width: 1200px!important;
+}
