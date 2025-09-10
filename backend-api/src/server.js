@@ -39,6 +39,8 @@ import contratosRoutes from './routes/contratos.js'
 import funcionariosRoutes from './routes/funcionarios.js'
 import equipamentosRoutes from './routes/equipamentos.js'
 import relacionamentosRoutes from './routes/relacionamentos.js'
+import arquivosRoutes from './routes/arquivos.js'
+import arquivosTestRoutes from './routes/arquivos-test.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -128,6 +130,8 @@ app.use('/api/contratos', contratosRoutes)
 app.use('/api/funcionarios', funcionariosRoutes)
 app.use('/api/equipamentos', equipamentosRoutes)
 app.use('/api/relacionamentos', relacionamentosRoutes)
+app.use('/api/arquivos', arquivosRoutes)
+app.use('/api/arquivos-test', arquivosTestRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

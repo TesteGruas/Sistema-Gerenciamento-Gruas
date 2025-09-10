@@ -37,7 +37,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 })
 
 // Cliente com service role key para operações administrativas (CRUD)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false

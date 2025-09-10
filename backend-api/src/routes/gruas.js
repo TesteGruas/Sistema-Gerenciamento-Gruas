@@ -1,6 +1,6 @@
 import express from 'express'
 import Joi from 'joi'
-import { supabaseAdmin } from '../config/supabase.js'
+import { supabase, supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -66,7 +66,7 @@ router.get('/clientes/buscar', async (req, res) => {
       })
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from('clientes')
       .select('id, nome, cnpj, email, telefone, contato')
       .or(`nome.ilike.%${q}%,cnpj.ilike.%${q}%`)
@@ -139,7 +139,7 @@ const buscarOuCriarCliente = async (clienteData) => {
     updated_at: new Date().toISOString()
   }
 
-  const { data: clienteCriado, error: createError } = await supabaseAdmin
+  const { data: clienteCriado, error: createError } = await supabase
     .from('clientes')
     .insert(novoCliente)
     .select()
@@ -283,7 +283,7 @@ router.get('/', async (req, res) => {
     const { status, tipo } = req.query
 
     // Construir query com relacionamentos
-    let query = supabaseAdmin
+    let query = supabase
       .from('gruas')
       .select(`
         *,
@@ -435,7 +435,7 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params
 
     // Buscar grua com dados relacionados
-    const { data: grua, error: gruaError } = await supabaseAdmin
+    const { data: grua, error: gruaError } = await supabase
       .from('gruas')
       .select(`
         *,
@@ -527,7 +527,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Buscar histórico de manutenções
-    const { data: manutencoes, error: manutencaoError } = await supabaseAdmin
+    const { data: manutencoes, error: manutencaoError } = await supabase
       .from('historico_manutencoes')
       .select('*')
       .eq('grua_id', id)
@@ -535,7 +535,7 @@ router.get('/:id', async (req, res) => {
       .limit(10)
 
     // Buscar funcionários alocados (se existir tabela de alocações)
-    const { data: funcionarios, error: funcionarioError } = await supabaseAdmin
+    const { data: funcionarios, error: funcionarioError } = await supabase
       .from('alocacoes_funcionarios')
       .select(`
         *,
@@ -551,7 +551,7 @@ router.get('/:id', async (req, res) => {
       .eq('status', 'Ativa')
 
     // Buscar equipamentos auxiliares (se existir tabela de alocações de equipamentos)
-    const { data: equipamentos, error: equipamentoError } = await supabaseAdmin
+    const { data: equipamentos, error: equipamentoError } = await supabase
       .from('alocacoes_equipamentos')
       .select(`
         *,
@@ -689,7 +689,7 @@ router.post('/', async (req, res) => {
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: insertError } = await supabaseAdmin
+    const { data, error: insertError } = await supabase
       .from('gruas')
       .insert(gruaData)
       .select()
@@ -796,7 +796,7 @@ router.put('/:id', async (req, res) => {
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: updateError } = await supabaseAdmin
+    const { data, error: updateError } = await supabase
       .from('gruas')
       .update(updateData)
       .eq('id', id)
@@ -862,7 +862,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('gruas')
       .delete()
       .eq('id', id)

@@ -1234,7 +1234,39 @@ export default function GruasPage() {
   // Funções para gerenciamento de arquivos
   const carregarArquivos = async (gruaId: string) => {
     try {
-      // Simular carregamento de arquivos (em uma implementação real, faria uma requisição para o backend)
+      console.log('🔍 DEBUG: Carregando arquivos para grua:', gruaId)
+      
+      // Tentar carregar arquivos da API (rota específica para gruas)
+      const response = await fetch(`http://localhost:3001/api/arquivos/grua/${gruaId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.data) {
+          // Mapear os dados da API para o formato esperado pelo frontend
+          const arquivosMapeados = result.data.map((arquivo: any) => ({
+            id: arquivo.id,
+            nome: arquivo.nome_original,
+            caminho: arquivo.caminho, // Incluir o caminho completo do arquivo
+            tipo: arquivo.tipo_mime,
+            tamanho: arquivo.tamanho,
+            dataUpload: arquivo.created_at ? arquivo.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+            descricao: arquivo.descricao || `Arquivo enviado em ${new Date().toLocaleDateString('pt-BR')}`,
+            url: null, // URL será gerada dinamicamente quando necessário
+            categoria: arquivo.categoria || 'geral'
+          }))
+          
+          setArquivos(arquivosMapeados)
+          console.log('🔍 DEBUG: Arquivos carregados da API:', arquivosMapeados.length)
+          return
+        }
+      }
+      
+      // Se não conseguir carregar da API, usar arquivos simulados como fallback
+      console.log('🔍 DEBUG: Usando arquivos simulados como fallback')
       const arquivosSimulados = [
         {
           id: 1,
@@ -1264,10 +1296,23 @@ export default function GruasPage() {
       setArquivos(arquivosSimulados)
     } catch (error) {
       console.error('Erro ao carregar arquivos:', error)
+      // Em caso de erro, usar arquivos simulados
+      const arquivosSimulados = [
+        {
+          id: 1,
+          nome: "Manual_Operacao_Grua.pdf",
+          tipo: "application/pdf",
+          tamanho: 2048576,
+          dataUpload: "2024-01-15",
+          descricao: "Manual de operação da grua"
+        }
+      ]
+      setArquivos(arquivosSimulados)
+      
       toast({
-        title: "Erro ao carregar arquivos",
-        description: "Não foi possível carregar os arquivos da grua",
-        variant: "destructive",
+        title: "Aviso",
+        description: "Não foi possível carregar os arquivos da API. Usando dados de exemplo.",
+        variant: "default",
       })
     }
   }
@@ -1289,18 +1334,58 @@ export default function GruasPage() {
       return
     }
 
+    if (!selectedGrua?.id) {
+      toast({
+        title: "Erro",
+        description: "ID da grua não encontrado",
+        variant: "destructive",
+      })
+      return
+    }
+
     setUploading(true)
     try {
-      // Simular upload (em uma implementação real, faria upload para o backend)
-      const novosArquivos = Array.from(selectedFiles).map((file, index) => ({
-        id: Date.now() + index,
-        nome: file.name,
-        tipo: file.type,
-        tamanho: file.size,
-        dataUpload: new Date().toISOString().split('T')[0],
-        descricao: `Arquivo enviado em ${new Date().toLocaleDateString('pt-BR')}`
-      }))
+      console.log('🔍 DEBUG: Iniciando upload de arquivos')
+      console.log('🔍 DEBUG: Grua ID:', selectedGrua.id)
+      console.log('🔍 DEBUG: Arquivos selecionados:', selectedFiles.length)
 
+      const uploadPromises = Array.from(selectedFiles).map(async (file) => {
+        console.log('🔍 DEBUG: Enviando arquivo:', file.name)
+        
+        const formData = new FormData()
+        formData.append('arquivo', file)
+        formData.append('categoria', 'geral')
+        formData.append('descricao', `Arquivo da grua ${selectedGrua.id}`)
+
+        // Usar a rota principal para gruas (com autenticação)
+        const response = await fetch(`http://localhost:3001/api/arquivos/upload/grua/${selectedGrua.id}`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`Erro no upload: ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        console.log('🔍 DEBUG: Resultado do upload:', result)
+
+        return {
+          id: result.data?.id || Date.now() + Math.random(),
+          nome: result.data?.nome_original || file.name,
+          tipo: result.data?.tipo_mime || file.type,
+          tamanho: result.data?.tamanho || file.size,
+          dataUpload: new Date().toISOString().split('T')[0],
+          descricao: `Arquivo enviado em ${new Date().toLocaleDateString('pt-BR')}`,
+          url: result.data?.url || null,
+          categoria: result.data?.categoria || 'geral'
+        }
+      })
+
+      const novosArquivos = await Promise.all(uploadPromises)
       setArquivos([...arquivos, ...novosArquivos])
       setSelectedFiles(null)
       
@@ -1312,13 +1397,14 @@ export default function GruasPage() {
 
       toast({
         title: "Upload realizado com sucesso",
-        description: `${selectedFiles.length} arquivo(s) enviado(s) com sucesso`,
+        description: `${novosArquivos.length} arquivo(s) enviado(s) com sucesso`,
       })
     } catch (error) {
       console.error('Erro no upload:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
       toast({
         title: "Erro no upload",
-        description: "Não foi possível fazer upload dos arquivos",
+        description: `Não foi possível fazer upload dos arquivos: ${errorMessage}`,
         variant: "destructive",
       })
     } finally {
@@ -1326,24 +1412,98 @@ export default function GruasPage() {
     }
   }
 
-  const handleDownload = (arquivo: any) => {
-    // Simular download (em uma implementação real, faria download do backend)
-    toast({
-      title: "Download iniciado",
-      description: `Baixando ${arquivo.nome}`,
-    })
+  const handleDownload = async (arquivo: any) => {
+    try {
+      console.log('🔍 DEBUG: Iniciando download do arquivo:', arquivo.nome)
+      
+      // Gerar URL com token de assinatura usando a API
+      const response = await fetch(`http://localhost:3001/api/arquivos/${arquivo.id}/download`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.url) {
+          window.open(result.url, '_blank')
+          toast({
+            title: "Download iniciado",
+            description: `Baixando ${arquivo.nome}`,
+          })
+          return
+        }
+      }
+      
+      // Fallback: usar URL pública direta (pode não funcionar se bucket não for público)
+      console.log('🔍 DEBUG: Tentando URL pública direta')
+      console.log('🔍 DEBUG: Caminho do arquivo:', arquivo.caminho)
+      console.log('🔍 DEBUG: Nome do arquivo:', arquivo.nome)
+      
+      // Usar o caminho completo se disponível, senão construir o caminho
+      const caminhoArquivo = arquivo.caminho || `gruas/${selectedGrua?.id}/${arquivo.nome}`
+      const urlPublica = `https://mghdktkoejobsmdbvssl.supabase.co/storage/v1/object/public/arquivos-obras/${caminhoArquivo}`
+      console.log('🔍 DEBUG: URL pública construída:', urlPublica)
+      window.open(urlPublica, '_blank')
+      toast({
+        title: "Download iniciado",
+        description: `Baixando ${arquivo.nome}`,
+      })
+    } catch (error) {
+      console.error('Erro ao fazer download:', error)
+      toast({
+        title: "Erro no download",
+        description: `Não foi possível baixar ${arquivo.nome}`,
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleDeleteFile = (arquivoId: number) => {
+  const handleDeleteFile = async (arquivoId: number) => {
     if (!confirm('Tem certeza que deseja excluir este arquivo?')) {
       return
     }
 
-    setArquivos(arquivos.filter(arquivo => arquivo.id !== arquivoId))
-    toast({
-      title: "Arquivo excluído",
-      description: "Arquivo removido com sucesso",
-    })
+    try {
+      console.log('🔍 DEBUG: Deletando arquivo ID:', arquivoId)
+      
+      // Tentar deletar da API
+      const response = await fetch(`http://localhost:3001/api/arquivos/${arquivoId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setArquivos(arquivos.filter(arquivo => arquivo.id !== arquivoId))
+          toast({
+            title: "Arquivo excluído",
+            description: "Arquivo removido com sucesso",
+          })
+          return
+        }
+      }
+      
+      // Se não conseguir deletar da API, remover apenas do estado local
+      console.log('🔍 DEBUG: Removendo arquivo apenas do estado local')
+      setArquivos(arquivos.filter(arquivo => arquivo.id !== arquivoId))
+      toast({
+        title: "Arquivo excluído",
+        description: "Arquivo removido da lista (não foi possível deletar do servidor)",
+      })
+    } catch (error) {
+      console.error('Erro ao deletar arquivo:', error)
+      // Em caso de erro, remover apenas do estado local
+      setArquivos(arquivos.filter(arquivo => arquivo.id !== arquivoId))
+      toast({
+        title: "Arquivo excluído",
+        description: "Arquivo removido da lista (erro ao deletar do servidor)",
+        variant: "default",
+      })
+    }
   }
 
   const formatFileSize = (bytes: number) => {
@@ -1354,7 +1514,11 @@ export default function GruasPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const getFileIcon = (tipo: string) => {
+  const getFileIcon = (tipo: string | undefined | null) => {
+    if (!tipo) {
+      return <File className="h-4 w-4 text-gray-500" />
+    }
+    
     if (tipo.startsWith('image/')) {
       return <Image className="h-4 w-4 text-blue-500" />
     } else if (tipo === 'application/pdf') {
