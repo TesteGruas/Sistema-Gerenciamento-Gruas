@@ -290,9 +290,9 @@ export default function GruasPage() {
     sinaleiro: "",
     horas_operacao: 0,
     valor_locacao: 0,
+    valor_real: 0,
     valor_operacao: 0,
     valor_sinaleiro: 0,
-    preco_real: 0,
   })
 
   // Estados para gerenciamento de clientes
@@ -548,6 +548,7 @@ export default function GruasPage() {
         localizacao: formData.localizacao || null,
         horas_operacao: formData.horas_operacao || 0, // Valor padrão da tabela
         valor_locacao: formData.valor_locacao || null,
+        valor_real: formData.valor_real || 0, // Valor padrão para evitar NOT NULL
         valor_operacao: formData.valor_operacao || 0, // Valor padrão para evitar NOT NULL
         valor_sinaleiro: formData.valor_sinaleiro || 0, // Valor padrão para evitar NOT NULL
         
@@ -630,9 +631,9 @@ export default function GruasPage() {
       sinaleiro: "",
       horas_operacao: 0,
       valor_locacao: 0,
+      valor_real: 0,
       valor_operacao: 0,
       valor_sinaleiro: 0,
-      preco_real: 0,
     })
     
     setObraData({
@@ -720,9 +721,9 @@ export default function GruasPage() {
         sinaleiro: "",
         horas_operacao: dadosCompletos.horas_operacao || 0,
         valor_locacao: dadosCompletos.valor_locacao || 0,
+        valor_real: dadosCompletos.valor_real || 0,
         valor_operacao: dadosCompletos.valor_operacao || 0,
         valor_sinaleiro: dadosCompletos.valor_sinaleiro || 0,
-        preco_real: dadosCompletos.preco_real || 0,
       })
       
       // Preencher dados da obra se existir
@@ -831,9 +832,9 @@ export default function GruasPage() {
         sinaleiro: "",
         horas_operacao: grua.horas_operacao || 0,
         valor_locacao: grua.valor_locacao || 0,
+        valor_real: grua.valor_real || 0,
         valor_operacao: grua.valor_operacao || 0,
         valor_sinaleiro: grua.valor_sinaleiro || 0,
-        preco_real: grua.preco_real || 0,
       })
       
       setObraData({
@@ -1557,10 +1558,56 @@ export default function GruasPage() {
     loadGruas(1, pagination.limit, "", "")
   }
 
-  // Funções de exportação
-  const exportToCSV = () => {
+  // Função para carregar todos os dados para exportação (sem paginação)
+  const loadAllGruasForExport = async () => {
     try {
-      const dadosParaExportar = filteredGruas.map(grua => ({
+      setLoading(true)
+      
+      // Construir query string com filtros atuais
+      const params = new URLSearchParams()
+      if (filtros.status) params.append('status', filtros.status)
+      if (filtros.tipo) params.append('tipo', filtros.tipo)
+      
+      const queryString = params.toString()
+      const url = `${buildApiUrl(API_ENDPOINTS.GRUAS)}/export${queryString ? `?${queryString}` : ''}`
+      
+      const response = await apiRequest(url)
+      
+      if (response.success) {
+        return response.data || []
+      } else {
+        throw new Error('Erro ao carregar dados para exportação')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar dados para exportação'
+      console.error('Erro ao carregar dados para exportação:', err)
+      toast({
+        title: "Erro na exportação",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      return []
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Funções de exportação
+  const exportToCSV = async () => {
+    try {
+      // Carregar todos os dados do servidor
+      const todasGruas = await loadAllGruasForExport()
+      
+      if (todasGruas.length === 0) {
+        toast({
+          title: "Nenhum dado encontrado",
+          description: "Não há dados para exportar",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const dadosParaExportar = todasGruas.map((grua: any) => ({
         'ID': grua.id,
         'Modelo': grua.modelo,
         'Fabricante': grua.fabricante,
@@ -1574,11 +1621,13 @@ export default function GruasPage() {
         'Localização': grua.localizacao,
         'Horas de Operação': grua.horas_operacao,
         'Valor Locação': grua.valor_locacao,
+        'Valor Real': grua.valor_real,
         'Valor Operação': grua.valor_operacao,
         'Valor Sinaleiro': grua.valor_sinaleiro,
         'Última Manutenção': grua.ultima_manutencao,
         'Próxima Manutenção': grua.proxima_manutencao,
-        'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome : '-',
+        'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.cliente?.nome || '-' : '-',
+        'Obra': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome || '-' : '-',
         'Funcionários': grua.grua_funcionarios && grua.grua_funcionarios.length > 0 ? 
           grua.grua_funcionarios.map((f: any) => f.funcionario?.nome).join(', ') : '-',
         'Equipamentos': grua.grua_equipamentos && grua.grua_equipamentos.length > 0 ? 
@@ -1588,7 +1637,7 @@ export default function GruasPage() {
       const headers = Object.keys(dadosParaExportar[0] || {})
       const csvContent = [
         headers.join(','),
-        ...dadosParaExportar.map(row => 
+        ...dadosParaExportar.map((row: any) => 
           headers.map(header => {
             const value = row[header as keyof typeof row]
             // Escapar aspas e vírgulas
@@ -1611,7 +1660,7 @@ export default function GruasPage() {
 
       toast({
         title: "Exportação realizada",
-        description: "Arquivo CSV baixado com sucesso",
+        description: `Arquivo CSV baixado com sucesso (${todasGruas.length} registros)`,
       })
     } catch (error) {
       console.error('Erro ao exportar CSV:', error)
@@ -1623,10 +1672,21 @@ export default function GruasPage() {
     }
   }
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     try {
-      // Simular exportação para Excel (em uma implementação real, usaria uma biblioteca como xlsx)
-      const dadosParaExportar = filteredGruas.map(grua => ({
+      // Carregar todos os dados do servidor
+      const todasGruas = await loadAllGruasForExport()
+      
+      if (todasGruas.length === 0) {
+        toast({
+          title: "Nenhum dado encontrado",
+          description: "Não há dados para exportar",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const dadosParaExportar = todasGruas.map((grua: any) => ({
         'ID': grua.id,
         'Modelo': grua.modelo,
         'Fabricante': grua.fabricante,
@@ -1640,11 +1700,13 @@ export default function GruasPage() {
         'Localização': grua.localizacao,
         'Horas de Operação': grua.horas_operacao,
         'Valor Locação': grua.valor_locacao,
+        'Valor Real': grua.valor_real,
         'Valor Operação': grua.valor_operacao,
         'Valor Sinaleiro': grua.valor_sinaleiro,
         'Última Manutenção': grua.ultima_manutencao,
         'Próxima Manutenção': grua.proxima_manutencao,
-        'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome : '-',
+        'Cliente': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.cliente?.nome || '-' : '-',
+        'Obra': grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome || '-' : '-',
         'Funcionários': grua.grua_funcionarios && grua.grua_funcionarios.length > 0 ? 
           grua.grua_funcionarios.map((f: any) => f.funcionario?.nome).join(', ') : '-',
         'Equipamentos': grua.grua_equipamentos && grua.grua_equipamentos.length > 0 ? 
@@ -1655,7 +1717,7 @@ export default function GruasPage() {
       const headers = Object.keys(dadosParaExportar[0] || {})
       const csvContent = [
         headers.join(','),
-        ...dadosParaExportar.map(row => 
+        ...dadosParaExportar.map((row: any) => 
           headers.map(header => {
             const value = row[header as keyof typeof row]
             return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
@@ -1677,7 +1739,7 @@ export default function GruasPage() {
 
       toast({
         title: "Exportação realizada",
-        description: "Arquivo Excel baixado com sucesso",
+        description: `Arquivo Excel baixado com sucesso (${todasGruas.length} registros)`,
       })
     } catch (error) {
       console.error('Erro ao exportar Excel:', error)
@@ -1691,6 +1753,18 @@ export default function GruasPage() {
 
   const exportToPDF = async () => {
     try {
+      // Carregar todos os dados do servidor
+      const todasGruas = await loadAllGruasForExport()
+      
+      if (todasGruas.length === 0) {
+        toast({
+          title: "Nenhum dado encontrado",
+          description: "Não há dados para exportar",
+          variant: "destructive",
+        })
+        return
+      }
+
       // Importar jsPDF dinamicamente
       const { default: jsPDF } = await import('jspdf')
       const autoTable = (await import('jspdf-autotable')).default
@@ -1703,20 +1777,21 @@ export default function GruasPage() {
       doc.setFont('helvetica', 'bold')
       doc.text('Relatório de Gruas', 14, 22)
 
-      // Adicionar data de geração
+      // Adicionar data de geração e total de registros
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
       doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 30)
+      doc.text(`Total de registros: ${todasGruas.length}`, 14, 35)
 
       // Preparar dados para a tabela
-      const dadosParaExportar = filteredGruas.map(grua => [
+      const dadosParaExportar = todasGruas.map((grua: any) => [
         grua.id,
         grua.modelo || '-',
         grua.fabricante || '-',
         grua.tipo || '-',
         grua.status || '-',
         grua.localizacao || '-',
-        grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.nome || '-' : '-',
+        grua.grua_obras && grua.grua_obras.length > 0 ? grua.grua_obras[0].obra?.cliente?.nome || '-' : '-',
         grua.capacidade || '-',
         grua.lanca || '-',
         grua.altura_trabalho || '-',
@@ -1733,7 +1808,7 @@ export default function GruasPage() {
         'Tipo',
         'Status',
         'Localização',
-        'Cliente/Obra',
+        'Cliente',
         'Capacidade',
         'Lança',
         'Altura',
@@ -1746,7 +1821,7 @@ export default function GruasPage() {
       autoTable(doc, {
         head: [headers],
         body: dadosParaExportar,
-        startY: 40,
+        startY: 45,
         styles: {
           fontSize: 8,
           cellPadding: 2,
@@ -1834,7 +1909,7 @@ export default function GruasPage() {
         'Valor Locação': selectedGrua.valor_locacao,
         'Valor Operação': selectedGrua.valor_operacao,
         'Valor Sinaleiro': selectedGrua.valor_sinaleiro,
-        'Preço Real da Grua': selectedGrua.preco_real,
+        'Valor Real da Grua': selectedGrua.valor_real,
         'Cliente': selectedGrua.grua_obras && selectedGrua.grua_obras.length > 0 ? selectedGrua.grua_obras[0].obra?.nome : '-',
         'Funcionários': selectedGrua.grua_funcionarios && selectedGrua.grua_funcionarios.length > 0 ? 
           selectedGrua.grua_funcionarios.map((f: any) => f.funcionario?.nome).join(', ') : '-',
@@ -1955,7 +2030,7 @@ export default function GruasPage() {
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
       const financeiros = [
-        `Preço Real da Grua: ${selectedGrua.preco_real ? `R$ ${formatCurrency(selectedGrua.preco_real)}` : '-'}`,
+        `Valor Real da Grua: ${selectedGrua.valor_real ? `R$ ${formatCurrency(selectedGrua.valor_real)}` : '-'}`,
         `Valor Locação: ${selectedGrua.valor_locacao ? `R$ ${formatCurrency(selectedGrua.valor_locacao)}` : '-'}`,
         `Valor Operação: ${selectedGrua.valor_operacao ? `R$ ${formatCurrency(selectedGrua.valor_operacao)}` : '-'}`,
         `Valor Sinaleiro: ${selectedGrua.valor_sinaleiro ? `R$ ${formatCurrency(selectedGrua.valor_sinaleiro)}` : '-'}`,
@@ -2219,14 +2294,14 @@ export default function GruasPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="preco_real">Preço Real da Grua (R$)</Label>
+                    <Label htmlFor="valor_real">Valor Real da Grua (R$)</Label>
                     <Input
-                      id="preco_real"
+                      id="valor_real"
                       type="number"
                       step="0.01"
-                      value={formData.preco_real}
+                      value={formData.valor_real}
                       onChange={(e) =>
-                        setFormData({ ...formData, preco_real: Number.parseFloat(e.target.value) || 0 })
+                        setFormData({ ...formData, valor_real: Number.parseFloat(e.target.value) || 0 })
                       }
                       placeholder="Ex: 150000.00"
                     />
@@ -3144,7 +3219,7 @@ export default function GruasPage() {
                         <strong>Localização:</strong> {selectedGrua.localizacao}
                       </div>
                       <div>
-                        <strong>Preço Real da Grua:</strong> {selectedGrua.preco_real ? `R$ ${formatCurrency(selectedGrua.preco_real)}` : 'Não informado'}
+                        <strong>Valor Real da Grua:</strong> {selectedGrua.valor_real ? `R$ ${formatCurrency(selectedGrua.valor_real)}` : 'Não informado'}
                       </div>
                       <div>
                         <strong>Horas de Operação:</strong> {selectedGrua.horas_operacao?.toLocaleString() || 0}

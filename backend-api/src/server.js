@@ -81,10 +81,84 @@ const specs = swaggerJsdoc(swaggerOptions)
 
 // Middlewares de segurança
 app.use(helmet())
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}))
+
+// Configuração CORS mais permissiva para desenvolvimento
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Permitir requisições sem origin (ex: mobile apps, Postman)
+    if (!origin) return callback(null, true)
+    
+    // Lista de origens permitidas
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      // Permitir IPs da rede local (192.168.x.x)
+      /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3000$/,
+      /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3001$/,
+      process.env.FRONTEND_URL
+    ].filter(Boolean)
+    
+    // Verificar se a origin está na lista de permitidas (incluindo regex)
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (typeof allowedOrigin === 'string') {
+        return allowedOrigin === origin
+      } else if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin)
+      }
+      return false
+    })
+    
+    if (isAllowed) {
+      callback(null, true)
+    } else {
+      console.log('CORS: Origin não permitida:', origin)
+      callback(new Error('Não permitido pelo CORS'))
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
+}
+
+app.use(cors(corsOptions))
+
+// Middleware para lidar com requisições OPTIONS (preflight)
+app.options('*', (req, res) => {
+  const origin = req.headers.origin
+  
+  // Verificar se a origin é permitida
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3000$/,
+    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3001$/
+  ]
+  
+  const isAllowed = !origin || allowedOrigins.some(allowedOrigin => {
+    if (typeof allowedOrigin === 'string') {
+      return allowedOrigin === origin
+    } else if (allowedOrigin instanceof RegExp) {
+      return allowedOrigin.test(origin)
+    }
+    return false
+  })
+  
+  if (isAllowed) {
+    res.header('Access-Control-Allow-Origin', origin || '*')
+  } else {
+    res.header('Access-Control-Allow-Origin', '*')
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin')
+  res.header('Access-Control-Allow-Credentials', 'true')
+  res.sendStatus(200)
+})
 
 // Rate limiting
 const limiter = rateLimit({

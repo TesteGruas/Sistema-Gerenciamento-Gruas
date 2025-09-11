@@ -167,6 +167,7 @@ const gruaSchema = Joi.object({
   localizacao: Joi.string().allow(null).optional(),
   horas_operacao: Joi.number().integer().min(0).default(0),
   valor_locacao: Joi.number().positive().allow(null).optional(),
+  valor_real: Joi.number().min(0).default(0),
   valor_operacao: Joi.number().min(0).default(0),
   valor_sinaleiro: Joi.number().min(0).default(0),
   valor_manutencao: Joi.number().min(0).default(0),
@@ -188,6 +189,7 @@ const gruaInputSchema = Joi.object({
   localizacao: Joi.string().allow(null).optional(),
   horas_operacao: Joi.number().integer().min(0).default(0),
   valor_locacao: Joi.number().positive().allow(null).optional(),
+  valor_real: Joi.number().min(0).default(0),
   valor_operacao: Joi.number().min(0).default(0),
   valor_sinaleiro: Joi.number().min(0).default(0),
   valor_manutencao: Joi.number().min(0).default(0),
@@ -393,6 +395,160 @@ router.get('/', async (req, res) => {
     })
   } catch (error) {
     console.error('Erro ao listar gruas:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/gruas/export:
+ *   get:
+ *     summary: Exportar todas as gruas (sem paginação)
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Disponível, Operacional, Manutenção, Vendida]
+ *         description: Filtrar por status
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [Grua Torre, Grua Móvel, Guincho, Outros]
+ *         description: Filtrar por tipo
+ *     responses:
+ *       200:
+ *         description: Lista completa de gruas com relacionamentos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/GruaComRelacionamentos'
+ *                 total:
+ *                   type: integer
+ *                   description: Total de registros retornados
+ */
+router.get('/export', async (req, res) => {
+  try {
+    const { status, tipo } = req.query
+
+    // Construir query com relacionamentos (sem paginação)
+    let query = supabase
+      .from('gruas')
+      .select(`
+        *,
+        grua_funcionarios:grua_funcionario(
+          id,
+          funcionario_id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          funcionario:funcionarios(
+            id,
+            nome,
+            cargo,
+            telefone,
+            email,
+            status
+          ),
+          obra:obras(
+            id,
+            nome,
+            status
+          )
+        ),
+        grua_equipamentos:grua_equipamento(
+          id,
+          equipamento_id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          equipamento:equipamentos_auxiliares(
+            id,
+            nome,
+            tipo,
+            capacidade,
+            status
+          ),
+          obra:obras(
+            id,
+            nome,
+            status
+          )
+        ),
+        grua_obras:grua_obra(
+          id,
+          obra_id,
+          data_inicio_locacao,
+          data_fim_locacao,
+          valor_locacao_mensal,
+          status,
+          observacoes,
+          obra:obras(
+            id,
+            nome,
+            cliente_id,
+            status,
+            tipo,
+            contato_obra,
+            telefone_obra,
+            email_obra,
+            cliente:clientes(
+              id,
+              nome,
+              cnpj,
+              email,
+              telefone,
+              contato
+            )
+          )
+        )
+      `, { count: 'exact' })
+
+    // Aplicar filtros
+    if (status) {
+      query = query.eq('status', status)
+    }
+    if (tipo) {
+      query = query.eq('tipo', tipo)
+    }
+
+    // Ordenar por data de criação (mais recentes primeiro)
+    query = query.order('created_at', { ascending: false })
+
+    const { data, error, count } = await query
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao exportar gruas',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: data || [],
+      total: count || 0
+    })
+  } catch (error) {
+    console.error('Erro ao exportar gruas:', error)
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message
@@ -680,6 +836,7 @@ router.post('/', async (req, res) => {
       localizacao: value.localizacao,
       horas_operacao: value.horas_operacao,
       valor_locacao: value.valor_locacao,
+      valor_real: value.valor_real,
       valor_operacao: value.valor_operacao,
       valor_sinaleiro: value.valor_sinaleiro,
       valor_manutencao: value.valor_manutencao,
@@ -788,6 +945,7 @@ router.put('/:id', async (req, res) => {
       localizacao: value.localizacao,
       horas_operacao: value.horas_operacao,
       valor_locacao: value.valor_locacao,
+      valor_real: value.valor_real,
       valor_operacao: value.valor_operacao,
       valor_sinaleiro: value.valor_sinaleiro,
       valor_manutencao: value.valor_manutencao,
@@ -935,6 +1093,9 @@ router.delete('/:id', async (req, res) => {
  *         valor_locacao:
  *           type: number
  *           description: Valor de locação por período
+ *         valor_real:
+ *           type: number
+ *           description: Valor real/comercial da grua
  *         valor_operacao:
  *           type: number
  *           description: Valor de operação
@@ -1017,6 +1178,11 @@ router.delete('/:id', async (req, res) => {
  *           type: number
  *           minimum: 0
  *           description: Valor de locação por período
+ *         valor_real:
+ *           type: number
+ *           minimum: 0
+ *           default: 0
+ *           description: Valor real/comercial da grua
  *         valor_operacao:
  *           type: number
  *           minimum: 0

@@ -5,6 +5,41 @@ import { authenticateToken } from '../middleware/auth.js'
 
 const router = express.Router()
 
+// Middleware para adicionar headers CORS específicos
+router.use((req, res, next) => {
+  const origin = req.headers.origin
+  
+  // Verificar se a origin é permitida
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3000$/,
+    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3001$/
+  ]
+  
+  const isAllowed = !origin || allowedOrigins.some(allowedOrigin => {
+    if (typeof allowedOrigin === 'string') {
+      return allowedOrigin === origin
+    } else if (allowedOrigin instanceof RegExp) {
+      return allowedOrigin.test(origin)
+    }
+    return false
+  })
+  
+  if (isAllowed) {
+    res.header('Access-Control-Allow-Origin', origin || '*')
+  } else {
+    res.header('Access-Control-Allow-Origin', '*')
+  }
+  
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin')
+  res.header('Access-Control-Allow-Credentials', 'true')
+  next()
+})
+
 // Schemas de validação
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),
