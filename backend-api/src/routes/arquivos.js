@@ -67,20 +67,36 @@ router.post('/upload/grua/:gruaId', authenticateToken, upload.single('arquivo'),
       })
     }
 
+    console.log('gruaId', gruaId)
+
     // Verificar se a grua existe e obter o obra_id da relação grua_obra
+    // Buscar o registro mais recente e ativo
     const { data: gruaObra, error: gruaError } = await supabaseAdmin
       .from('grua_obra')
       .select(`
         grua_id,
         obra_id,
         status,
-        gruas!inner(id, modelo, fabricante)
+        data_inicio_locacao
       `)
       .eq('grua_id', gruaId)
       .eq('status', 'Ativa')
+      .order('data_inicio_locacao', { ascending: false })
+      .limit(1)
       .single()
 
-    if (gruaError || !gruaObra) {
+    console.log('gruaObra query result:', { gruaObra, gruaError })
+
+    if (gruaError) {
+      console.error('Erro na consulta grua_obra:', gruaError)
+      return res.status(404).json({
+        success: false,
+        message: 'Grua não encontrada ou não está ativa em nenhuma obra',
+        error: gruaError.message
+      })
+    }
+
+    if (!gruaObra) {
       return res.status(404).json({
         success: false,
         message: 'Grua não encontrada ou não está ativa em nenhuma obra'
@@ -391,21 +407,34 @@ router.post('/upload-multiple/:obraId', authenticateToken, upload.array('arquivo
 router.get('/grua/:gruaId', authenticateToken, async (req, res) => {
   try {
     const { gruaId } = req.params
-
     // Verificar se a grua existe e obter o obra_id da relação grua_obra
+    // Buscar o registro mais recente e ativo
     const { data: gruaObra, error: gruaError } = await supabaseAdmin
       .from('grua_obra')
       .select(`
         grua_id,
         obra_id,
         status,
-        gruas!inner(id, modelo, fabricante)
+        data_inicio_locacao
       `)
       .eq('grua_id', gruaId)
       .eq('status', 'Ativa')
+      .order('data_inicio_locacao', { ascending: false })
+      .limit(1)
       .single()
 
-    if (gruaError || !gruaObra) {
+    console.log('gruaObra query result (list):', { gruaObra, gruaError })
+
+    if (gruaError) {
+      console.error('Erro na consulta grua_obra (list):', gruaError)
+      return res.status(404).json({
+        success: false,
+        message: 'Grua não encontrada ou não está ativa em nenhuma obra',
+        error: gruaError.message
+      })
+    }
+
+    if (!gruaObra) {
       return res.status(404).json({
         success: false,
         message: 'Grua não encontrada ou não está ativa em nenhuma obra'
