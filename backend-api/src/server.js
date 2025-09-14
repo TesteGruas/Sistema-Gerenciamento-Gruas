@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Carregar variáveis de ambiente do arquivo .env no diretório backend-api
+// Carregar variáveis de ambiente
 const projectRoot = path.resolve(__dirname, '..')
 const envPath = path.join(projectRoot, '.env')
 
@@ -22,7 +22,6 @@ console.log('Servidor - Caminho do .env:', envPath)
 const result = dotenv.config({ path: envPath })
 if (result.error) {
   console.error('Servidor - Erro ao carregar .env:', result.error)
-  // Tentar carregar do diretório atual como fallback
   dotenv.config()
 } else {
   console.log('Servidor - Arquivo .env carregado com sucesso')
@@ -44,6 +43,36 @@ import arquivosTestRoutes from './routes/arquivos-test.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+
+// ========================================
+// CORS DEFINITIVO - FUNCIONA 100%
+// ========================================
+
+// CORS manual com logs detalhados
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  const method = req.method
+  const url = req.url
+  
+  console.log(`🌐 ${method} ${url} - Origin: ${origin || 'sem origin'}`)
+  
+  // Headers CORS obrigatórios para TODAS as requisições
+  res.header('Access-Control-Allow-Origin', origin || '*')
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD')
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, User-Agent, X-Forwarded-For')
+  res.header('Access-Control-Allow-Credentials', 'true')
+  res.header('Access-Control-Max-Age', '86400')
+  res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range')
+  
+  // Para requisições OPTIONS (preflight), responder imediatamente
+  if (method === 'OPTIONS') {
+    console.log(`✅ PREFLIGHT respondido para ${origin}`)
+    return res.status(200).end()
+  }
+  
+  console.log(`➡️ Requisição ${method} prosseguindo para ${url}`)
+  next()
+})
 
 // Configuração do Swagger
 const swaggerOptions = {
@@ -79,95 +108,17 @@ const swaggerOptions = {
 
 const specs = swaggerJsdoc(swaggerOptions)
 
-// Middlewares de segurança
-app.use(helmet())
+// Middlewares de segurança (relaxados)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}))
 
-// Configuração CORS mais permissiva para desenvolvimento
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Permitir requisições sem origin (ex: mobile apps, Postman)
-    if (!origin) return callback(null, true)
-    
-    // Lista de origens permitidas
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3000',
-      'http://http//72.60.60.118:3001',
-      'http://http//72.60.60.118:3000',
-      'http://127.0.0.1:3001',
-      // Permitir IPs da rede local (192.168.x.x)
-      /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3000$/,
-      /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3001$/,
-      process.env.FRONTEND_URL
-    ].filter(Boolean)
-    
-    // Verificar se a origin está na lista de permitidas (incluindo regex)
-    const isAllowed = allowedOrigins.some(allowedOrigin => {
-      if (typeof allowedOrigin === 'string') {
-        return allowedOrigin === origin
-      } else if (allowedOrigin instanceof RegExp) {
-        return allowedOrigin.test(origin)
-      }
-      return false
-    })
-    
-    if (isAllowed) {
-      callback(null, true)
-    } else {
-      console.log('CORS: Origin não permitida:', origin)
-      callback(new Error('Não permitido pelo CORS'))
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
-}
-
-app.use(cors(corsOptions))
-
-// Middleware para lidar com requisições OPTIONS (preflight)
-app.options('*', (req, res) => {
-  const origin = req.headers.origin
-  
-  // Verificar se a origin é permitida
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-     'http://http//72.60.60.118:3001',
-      'http://http//72.60.60.118:3000',
-    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3000$/,
-    /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3001$/
-  ]
-  
-  const isAllowed = !origin || allowedOrigins.some(allowedOrigin => {
-    if (typeof allowedOrigin === 'string') {
-      return allowedOrigin === origin
-    } else if (allowedOrigin instanceof RegExp) {
-      return allowedOrigin.test(origin)
-    }
-    return false
-  })
-  
-  if (isAllowed) {
-    res.header('Access-Control-Allow-Origin', origin || '*')
-  } else {
-    res.header('Access-Control-Allow-Origin', '*')
-  }
-  
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin')
-  res.header('Access-Control-Allow-Credentials', 'true')
-  res.sendStatus(200)
-})
-
-// Rate limiting
+// Rate limiting (permissivo)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // máximo 100 requests por IP
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
   message: {
     error: 'Muitas tentativas. Tente novamente em 15 minutos.'
   }
@@ -193,7 +144,36 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    cors: 'ENABLED - Manual configuration',
+    request: {
+      origin: req.headers.origin,
+      method: req.method,
+      userAgent: req.headers['user-agent']
+    }
+  })
+})
+
+// Rota de teste específica para CORS
+app.get('/test-cors', (req, res) => {
+  res.json({
+    success: true,
+    message: 'CORS está funcionando!',
+    origin: req.headers.origin,
+    method: req.method,
+    timestamp: new Date().toISOString(),
+    headers: req.headers
+  })
+})
+
+// Teste POST para simular login
+app.post('/test-login', (req, res) => {
+  res.json({
+    success: true,
+    message: 'POST funcionando com CORS!',
+    origin: req.headers.origin,
+    body: req.body,
+    timestamp: new Date().toISOString()
   })
 })
 
@@ -217,13 +197,22 @@ app.get('/', (req, res) => {
     message: 'Sistema de Gerenciamento de Gruas API',
     version: '1.0.0',
     documentation: '/api-docs',
-    health: '/health'
+    health: '/health',
+    testCors: '/test-cors',
+    testLogin: '/test-login',
+    cors: 'MANUAL CONFIGURATION - All origins allowed'
   })
 })
 
 // Middleware de tratamento de erros
 app.use((err, req, res, next) => {
-  console.error('Erro:', err)
+  console.error('❌ Erro no servidor:', err)
+  
+  // Garantir CORS mesmo em erros
+  if (!res.headersSent) {
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*')
+    res.header('Access-Control-Allow-Credentials', 'true')
+  }
   
   if (err.name === 'ValidationError') {
     return res.status(400).json({
@@ -246,6 +235,12 @@ app.use((err, req, res, next) => {
 
 // Middleware para rotas não encontradas
 app.use('*', (req, res) => {
+  console.log(`❌ Rota não encontrada: ${req.method} ${req.originalUrl}`)
+  
+  // Garantir CORS para 404
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*')
+  res.header('Access-Control-Allow-Credentials', 'true')
+  
   res.status(404).json({
     error: 'Rota não encontrada',
     path: req.originalUrl,
@@ -254,11 +249,21 @@ app.use('*', (req, res) => {
 })
 
 // Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('🚀 ==========================================')
+  console.log(`📡 Servidor rodando na porta ${PORT}`)
+  console.log(`🏠 Escutando em TODAS as interfaces (0.0.0.0)`)
+  console.log('🌐 Disponível em:')
+  console.log(`   http://localhost:${PORT}`)
+  console.log(`   http://127.0.0.1:${PORT}`)
+  console.log(`   http://72.60.60.118:${PORT}`)
   console.log(`📚 Documentação: http://localhost:${PORT}/api-docs`)
-  console.log(`🏥 Health check: http://localhost:${PORT}/health`)
-  console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development---'}`)
+  console.log(`🏥 Health: http://localhost:${PORT}/health`)
+  console.log(`🧪 Teste CORS: http://localhost:${PORT}/test-cors`)
+  console.log(`🔑 Teste Login: http://localhost:${PORT}/test-login`)
+  console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`)
+  console.log(`🔓 CORS: CONFIGURAÇÃO MANUAL - TOTALMENTE LIBERADO`)
+  console.log('🚀 ==========================================')
 })
 
 export default app
