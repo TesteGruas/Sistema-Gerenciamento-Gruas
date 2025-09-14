@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+
+const NEXT_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+
 export default function ExemploBackendPage() {
   const [user, setUser] = useState<any>(null)
   const [gruas, setGruas] = useState<any[]>([])
@@ -30,7 +33,7 @@ export default function ExemploBackendPage() {
     try {
       const token = getToken()
       if (token) {
-        await fetch('http://localhost:3001/api/auth/logout', {
+        await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -49,7 +52,7 @@ export default function ExemploBackendPage() {
   useEffect(() => {
     const token = getToken()
     if (token) {
-      fetch('http://localhost:3001/api/auth/me', {
+      fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -76,7 +79,7 @@ export default function ExemploBackendPage() {
   const loadGruas = async () => {
     try {
       const token = getToken()
-      const response = await fetch('http://localhost:3001/api/gruas', {
+      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/gruas`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -94,7 +97,7 @@ export default function ExemploBackendPage() {
   const loadProdutos = async () => {
     try {
       const token = getToken()
-      const response = await fetch('http://localhost:3001/api/estoque', {
+      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/estoque`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -120,7 +123,8 @@ export default function ExemploBackendPage() {
     setLoadingGruas(true)
     try {
       const token = getToken()
-      const response = await fetch('http://localhost:3001/api/gruas', {
+      console.log("🔍 DEBUG: Criando nova grua:",NEXT_PUBLIC_API_BASE_URL )
+      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/gruas`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

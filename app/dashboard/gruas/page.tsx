@@ -56,6 +56,8 @@ import {
   ChevronDown,
 } from "lucide-react"
 
+
+const NEXT_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000'
 export default function GruasPage() {
   const { toast } = useToast()
   const [gruas, setGruas] = useState<any[]>([])
@@ -1238,7 +1240,7 @@ export default function GruasPage() {
       console.log('🔍 DEBUG: Carregando arquivos para grua:', gruaId)
       
       // Tentar carregar arquivos da API (rota específica para gruas)
-      const response = await fetch(`http://localhost:3001/api/arquivos/grua/${gruaId}`, {
+      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/arquivos/grua/${gruaId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
@@ -1323,7 +1325,7 @@ export default function GruasPage() {
         formData.append('descricao', `Arquivo da grua ${selectedGrua.id}`)
 
         // Usar a rota principal para gruas (com autenticação)
-        const response = await fetch(`http://localhost:3001/api/arquivos/upload/grua/${selectedGrua.id}`, {
+        const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/arquivos/upload/grua/${selectedGrua.id}`, {
           method: 'POST',
           body: formData,
           headers: {
@@ -1455,7 +1457,7 @@ export default function GruasPage() {
       console.log('🔍 DEBUG: Iniciando download do arquivo:', arquivo.nome)
       
       // Gerar URL com token de assinatura usando a API
-      const response = await fetch(`http://localhost:3001/api/arquivos/${arquivo.id}/download`, {
+      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/arquivos/${arquivo.id}/download`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
@@ -1506,7 +1508,7 @@ export default function GruasPage() {
       console.log('🔍 DEBUG: Deletando arquivo ID:', arquivoId)
       
       // Tentar deletar da API
-      const response = await fetch(`http://localhost:3001/api/arquivos/${arquivoId}`, {
+      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/arquivos/${arquivoId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
