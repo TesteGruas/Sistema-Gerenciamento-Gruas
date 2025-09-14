@@ -1266,54 +1266,18 @@ export default function GruasPage() {
         }
       }
       
-      // Se não conseguir carregar da API, usar arquivos simulados como fallback
-      console.log('🔍 DEBUG: Usando arquivos simulados como fallback')
-      const arquivosSimulados = [
-        {
-          id: 1,
-          nome: "Manual_Operacao_Grua.pdf",
-          tipo: "application/pdf",
-          tamanho: 2048576,
-          dataUpload: "2024-01-15",
-          descricao: "Manual de operação da grua"
-        },
-        {
-          id: 2,
-          nome: "Certificado_Inspecao.jpg",
-          tipo: "image/jpeg",
-          tamanho: 1024000,
-          dataUpload: "2024-01-10",
-          descricao: "Certificado de inspeção anual"
-        },
-        {
-          id: 3,
-          nome: "Relatorio_Manutencao.xlsx",
-          tipo: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          tamanho: 512000,
-          dataUpload: "2024-01-05",
-          descricao: "Relatório de manutenção preventiva"
-        }
-      ]
-      setArquivos(arquivosSimulados)
+      // Se não conseguir carregar da API, definir array vazio
+      console.log('🔍 DEBUG: Nenhum arquivo encontrado na API')
+      setArquivos([])
     } catch (error) {
       console.error('Erro ao carregar arquivos:', error)
-      // Em caso de erro, usar arquivos simulados
-      const arquivosSimulados = [
-        {
-          id: 1,
-          nome: "Manual_Operacao_Grua.pdf",
-          tipo: "application/pdf",
-          tamanho: 2048576,
-          dataUpload: "2024-01-15",
-          descricao: "Manual de operação da grua"
-        }
-      ]
-      setArquivos(arquivosSimulados)
+      // Em caso de erro, definir array vazio
+      setArquivos([])
       
       toast({
-        title: "Aviso",
-        description: "Não foi possível carregar os arquivos da API. Usando dados de exemplo.",
-        variant: "default",
+        title: "Erro",
+        description: "Não foi possível carregar os arquivos da API.",
+        variant: "destructive",
       })
     }
   }
@@ -1400,6 +1364,79 @@ export default function GruasPage() {
         title: "Upload realizado com sucesso",
         description: `${novosArquivos.length} arquivo(s) enviado(s) com sucesso`,
       })
+
+      console.log('🔄 DEBUG: Iniciando processo de refresh após upload')
+      console.log('🔄 DEBUG: selectedGrua:', selectedGrua)
+      console.log('🔄 DEBUG: selectedGrua.id:', selectedGrua?.id)
+      
+      // Salvar o ID da grua antes de fazer o refresh
+      const gruaIdParaReabrir = selectedGrua?.id
+      console.log('🔄 DEBUG: ID da grua salvo para reabertura:', gruaIdParaReabrir)
+      
+      if (!gruaIdParaReabrir) {
+        console.error('🔄 DEBUG: ERRO - ID da grua não encontrado!')
+        toast({
+          title: "Erro",
+          description: "ID da grua não encontrado para reabertura",
+          variant: "destructive",
+        })
+        return
+      }
+      
+      // Mostrar toast de atualização
+      toast({
+        title: "Atualizando dados",
+        description: "Recarregando informações da grua e arquivos...",
+      })
+      
+      // Fazer apenas um GET geral dos dados da grua (incluindo arquivos)
+      console.log('🔄 DEBUG: Fazendo GET geral dos dados da grua:', gruaIdParaReabrir)
+      
+      try {
+        // Fazer um GET completo dos dados da grua que inclui todos os relacionamentos
+        // A função loadGruaDetalhes já gerencia o loading internamente
+        const dadosCompletos = await loadGruaDetalhes(gruaIdParaReabrir)
+        console.log('🔄 DEBUG: Dados completos recebidos:', dadosCompletos)
+        
+        if (dadosCompletos) {
+          console.log('🔄 DEBUG: Dados da grua atualizados no estado')
+          
+          // Recarregar arquivos da grua separadamente (já que loadGruaDetalhes não inclui arquivos)
+          console.log('🔄 DEBUG: Recarregando arquivos da grua:', gruaIdParaReabrir)
+          await carregarArquivos(gruaIdParaReabrir)
+          console.log('🔍 DEBUG: Arquivos recarregados com sucesso')
+        }
+        
+        // Pequeno delay para garantir que tudo foi carregado
+        console.log('🔄 DEBUG: Aguardando 200ms antes de reabrir modal')
+        await new Promise(resolve => setTimeout(resolve, 200))
+        
+        // Reabrir o modal
+        console.log('🔄 DEBUG: Reabrindo modal de detalhes')
+        setIsDetalhesOpen(true)
+        console.log('🔄 DEBUG: Modal reaberto com sucesso!')
+        
+        // Mostrar toast de confirmação
+        toast({
+          title: "Dados atualizados",
+          description: "A grua foi atualizada com os arquivos mais recentes",
+        })
+      } catch (error) {
+        console.error('🔄 DEBUG: Erro ao recarregar dados:', error)
+        console.error('🔄 DEBUG: Stack trace:', error instanceof Error ? error.stack : 'N/A')
+        
+        // Mostrar toast de erro
+        toast({
+          title: "Erro ao atualizar",
+          description: "Houve um problema ao recarregar os dados da grua",
+          variant: "destructive",
+        })
+        
+        // Mesmo com erro, tentar reabrir o modal
+        console.log('🔄 DEBUG: Tentando reabrir modal mesmo com erro')
+        setIsDetalhesOpen(true)
+      }
+      
     } catch (error) {
       console.error('Erro no upload:', error)
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
