@@ -1240,7 +1240,7 @@ export default function GruasPage() {
       console.log('🔍 DEBUG: Carregando arquivos para grua:', gruaId)
       
       // Tentar carregar arquivos da API (rota específica para gruas)
-      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/arquivos/grua/${gruaId}`, {
+      const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/arquivos/grua/${gruaId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
