@@ -247,7 +247,33 @@ export default function GruasPage() {
   // Carregar dados na inicialização
   useEffect(() => {
     loadGruas()
+    loadEquipamentosExistentes()
+    loadFuncionariosExistentes()
   }, [])
+
+  // Função para carregar equipamentos existentes
+  const loadEquipamentosExistentes = async () => {
+    try {
+      const response = await apiRequest(buildApiUrl(API_ENDPOINTS.EQUIPAMENTOS))
+      if (response.success) {
+        setEquipamentosExistentes(response.data)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar equipamentos:', error)
+    }
+  }
+
+  // Função para carregar funcionários existentes
+  const loadFuncionariosExistentes = async () => {
+    try {
+      const response = await apiRequest(buildApiUrl(API_ENDPOINTS.FUNCIONARIOS))
+      if (response.success) {
+        setFuncionariosExistentes(response.data)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar funcionários:', error)
+    }
+  }
 
   // Função para carregar detalhes completos da grua
   const loadGruaDetalhes = async (gruaId: string) => {
@@ -325,6 +351,10 @@ export default function GruasPage() {
   const [mostrarSugestoesFuncionarios, setMostrarSugestoesFuncionarios] = useState(false)
   const [criandoNovoFuncionario, setCriandoNovoFuncionario] = useState(false)
   const [equipamentos, setEquipamentos] = useState<any[]>([])
+  const [equipamentosExistentes, setEquipamentosExistentes] = useState<any[]>([])
+  const [buscaEquipamento, setBuscaEquipamento] = useState("")
+  const [mostrarSugestoesEquipamentos, setMostrarSugestoesEquipamentos] = useState(false)
+  const [criandoNovoEquipamento, setCriandoNovoEquipamento] = useState(false)
 
   const [novoFuncionario, setNovoFuncionario] = useState({
     nome: "",
@@ -476,20 +506,7 @@ export default function GruasPage() {
 
   // Função para selecionar funcionário existente
   const selecionarFuncionarioExistente = (funcionario: any) => {
-    // Adicionar funcionário existente à lista
-    setFuncionarios([...funcionarios, {
-      id: funcionario.id,
-      nome: funcionario.nome,
-      cargo: funcionario.cargo,
-      telefone: "", // Será preenchido se disponível
-      turno: "Diurno", // Valor padrão
-      existente: true // Marcar como funcionário existente
-    }])
-    
-    // Limpar busca
-    setBuscaFuncionario("")
-    setFuncionariosExistentes([])
-    setMostrarSugestoesFuncionarios(false)
+    adicionarFuncionarioExistente(funcionario)
   }
 
   // Função para alternar entre criar novo e selecionar existente
@@ -893,6 +910,212 @@ export default function GruasPage() {
 
   const removerEquipamento = (id: number) => {
     setEquipamentos(equipamentos.filter(e => e.id !== id))
+  }
+
+  // Função para adicionar equipamento existente
+  const adicionarEquipamentoExistente = (equipamento: any) => {
+    if (!equipamentos.find(e => e.id === equipamento.id)) {
+      setEquipamentos([...equipamentos, {
+        id: equipamento.id,
+        nome: equipamento.nome,
+        tipo: equipamento.tipo,
+        status: equipamento.status,
+        responsavel: "",
+      }])
+    }
+    setBuscaEquipamento("")
+    setMostrarSugestoesEquipamentos(false)
+  }
+
+  // Função para adicionar equipamento existente à grua selecionada
+  const adicionarEquipamentoExistenteAGrua = async (equipamento: any) => {
+    try {
+      if (!selectedGrua) return
+
+      // Criar relacionamento no backend
+      const relacionamentoData = {
+        grua_id: selectedGrua.id,
+        equipamento_id: equipamento.id,
+        data_inicio: new Date().toISOString().split('T')[0],
+        status: "Ativo"
+      }
+      
+      await apiRequest(buildApiUrl(`${API_ENDPOINTS.RELACIONAMENTOS}/grua-equipamento`), {
+        method: 'POST',
+        body: JSON.stringify(relacionamentoData),
+      })
+
+      // Atualizar a grua selecionada
+      const dadosCompletos = await carregarDadosCompletosGrua(selectedGrua.id)
+      if (dadosCompletos) {
+        setSelectedGrua(dadosCompletos)
+      }
+
+      setBuscaEquipamento("")
+      setMostrarSugestoesEquipamentos(false)
+      
+      toast({
+        title: "Equipamento adicionado",
+        description: `${equipamento.nome} foi adicionado à grua com sucesso`,
+      })
+    } catch (error) {
+      console.error('Erro ao adicionar equipamento:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar equipamento à grua",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Função para adicionar funcionário existente
+  const adicionarFuncionarioExistente = (funcionario: any) => {
+    if (!funcionarios.find(f => f.id === funcionario.id)) {
+      setFuncionarios([...funcionarios, {
+        id: funcionario.id,
+        nome: funcionario.nome,
+        cargo: funcionario.cargo,
+        telefone: funcionario.telefone || "",
+        turno: "Diurno",
+      }])
+    }
+    setBuscaFuncionario("")
+    setMostrarSugestoesFuncionarios(false)
+  }
+
+  // Função para adicionar funcionário existente à grua selecionada
+  const adicionarFuncionarioExistenteAGrua = async (funcionario: any) => {
+    try {
+      if (!selectedGrua) return
+
+      // Criar relacionamento no backend
+      const relacionamentoData = {
+        grua_id: selectedGrua.id,
+        funcionario_id: funcionario.id,
+        data_inicio: new Date().toISOString().split('T')[0],
+        status: "Ativo"
+      }
+      
+      await apiRequest(buildApiUrl(`${API_ENDPOINTS.RELACIONAMENTOS}/grua-funcionario`), {
+        method: 'POST',
+        body: JSON.stringify(relacionamentoData),
+      })
+
+      // Atualizar a grua selecionada
+      const dadosCompletos = await carregarDadosCompletosGrua(selectedGrua.id)
+      if (dadosCompletos) {
+        setSelectedGrua(dadosCompletos)
+      }
+
+      setBuscaFuncionario("")
+      setMostrarSugestoesFuncionarios(false)
+      
+      toast({
+        title: "Funcionário adicionado",
+        description: `${funcionario.nome} foi adicionado à grua com sucesso`,
+      })
+    } catch (error) {
+      console.error('Erro ao adicionar funcionário:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar funcionário à grua",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Função para remover equipamento da grua
+  const removerEquipamentoDaGrua = async (equipamentoId: number) => {
+    try {
+      // Aqui você pode implementar a lógica para remover o relacionamento no backend
+      // Por enquanto, apenas remove do estado local
+      setEquipamentos(equipamentos.filter(e => e.id !== equipamentoId))
+      
+      toast({
+        title: "Equipamento removido",
+        description: "Equipamento removido da grua com sucesso",
+      })
+    } catch (error) {
+      console.error('Erro ao remover equipamento:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao remover equipamento da grua",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Função para remover equipamento da grua selecionada
+  const removerEquipamentoDaGruaSelecionada = async (equipamentoId: number) => {
+    try {
+      if (!selectedGrua) return
+
+      // Aqui você pode implementar a lógica para remover o relacionamento no backend
+      // Por enquanto, apenas atualiza a grua selecionada
+      const dadosCompletos = await carregarDadosCompletosGrua(selectedGrua.id)
+      if (dadosCompletos) {
+        setSelectedGrua(dadosCompletos)
+      }
+      
+      toast({
+        title: "Equipamento removido",
+        description: "Equipamento removido da grua com sucesso",
+      })
+    } catch (error) {
+      console.error('Erro ao remover equipamento:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao remover equipamento da grua",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Função para remover funcionário da grua
+  const removerFuncionarioDaGrua = async (funcionarioId: number) => {
+    try {
+      // Aqui você pode implementar a lógica para remover o relacionamento no backend
+      // Por enquanto, apenas remove do estado local
+      setFuncionarios(funcionarios.filter(f => f.id !== funcionarioId))
+      
+      toast({
+        title: "Funcionário removido",
+        description: "Funcionário removido da grua com sucesso",
+      })
+    } catch (error) {
+      console.error('Erro ao remover funcionário:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao remover funcionário da grua",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Função para remover funcionário da grua selecionada
+  const removerFuncionarioDaGruaSelecionada = async (funcionarioId: number) => {
+    try {
+      if (!selectedGrua) return
+
+      // Aqui você pode implementar a lógica para remover o relacionamento no backend
+      // Por enquanto, apenas atualiza a grua selecionada
+      const dadosCompletos = await carregarDadosCompletosGrua(selectedGrua.id)
+      if (dadosCompletos) {
+        setSelectedGrua(dadosCompletos)
+      }
+      
+      toast({
+        title: "Funcionário removido",
+        description: "Funcionário removido da grua com sucesso",
+      })
+    } catch (error) {
+      console.error('Erro ao remover funcionário:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao remover funcionário da grua",
+        variant: "destructive",
+      })
+    }
   }
 
   const gerarProposta = async (grua: any) => {
@@ -2770,14 +2993,24 @@ export default function GruasPage() {
                                 {funcionario.cargo} • {funcionario.turno} • {funcionario.telefone || "Sem telefone"}
                               </p>
                             </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => removerFuncionario(funcionario.id || index)}
-                            >
-                              Remover
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removerFuncionario(funcionario.id || index)}
+                              >
+                                Remover
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => removerFuncionarioDaGrua(funcionario.id || index)}
+                              >
+                                Remover da Grua
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2786,8 +3019,56 @@ export default function GruasPage() {
                 </TabsContent>
 
                 <TabsContent value="equipamentos" className="space-y-4">
+                  {/* Adicionar Equipamento Existente */}
                   <div className="border rounded-lg p-4">
-                    <h4 className="font-medium mb-3">Adicionar Equipamento</h4>
+                    <h4 className="font-medium mb-3">Adicionar Equipamento Existente</h4>
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <Input
+                          placeholder="Buscar equipamento existente..."
+                          value={buscaEquipamento}
+                          onChange={(e) => {
+                            setBuscaEquipamento(e.target.value)
+                            setMostrarSugestoesEquipamentos(e.target.value.length > 0)
+                          }}
+                          onFocus={() => setMostrarSugestoesEquipamentos(buscaEquipamento.length > 0)}
+                        />
+                        {mostrarSugestoesEquipamentos && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {equipamentosExistentes
+                              .filter(equip => 
+                                equip.nome.toLowerCase().includes(buscaEquipamento.toLowerCase()) &&
+                                !equipamentos.find(e => e.id === equip.id)
+                              )
+                              .map((equipamento) => (
+                                <div
+                                  key={equipamento.id}
+                                  className="p-2 hover:bg-gray-100 cursor-pointer border-b"
+                                  onClick={() => adicionarEquipamentoExistenteAGrua(equipamento)}
+                                >
+                                  <div className="font-medium">{equipamento.nome}</div>
+                                  <div className="text-sm text-gray-600">
+                                    {equipamento.tipo} • {equipamento.status}
+                                  </div>
+                                </div>
+                              ))}
+                            {equipamentosExistentes.filter(equip => 
+                              equip.nome.toLowerCase().includes(buscaEquipamento.toLowerCase()) &&
+                              !equipamentos.find(e => e.id === equip.id)
+                            ).length === 0 && (
+                              <div className="p-2 text-gray-500 text-sm">
+                                Nenhum equipamento encontrado
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Adicionar Novo Equipamento */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-medium mb-3">Adicionar Novo Equipamento</h4>
                     <div className="grid grid-cols-4 gap-3">
                       <Input
                         placeholder="Nome do equipamento"
@@ -2830,7 +3111,7 @@ export default function GruasPage() {
                       </Select>
                     </div>
                     <Button type="button" onClick={adicionarEquipamento} className="mt-3" size="sm">
-                      Adicionar Equipamento
+                      Adicionar Novo Equipamento
                     </Button>
                   </div>
 
@@ -2848,14 +3129,24 @@ export default function GruasPage() {
                                 {equipamento.tipo} • {equipamento.status} • Responsável: {equipamento.responsavel}
                               </p>
                             </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => removerEquipamento(equipamento.id || index)}
-                            >
-                              Remover
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removerEquipamento(equipamento.id || index)}
+                              >
+                                Remover
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => removerEquipamentoDaGrua(equipamento.id || index)}
+                              >
+                                Remover da Grua
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -3327,11 +3618,66 @@ export default function GruasPage() {
               </TabsContent>
 
               <TabsContent value="equipamentos" className="space-y-4">
+                {/* Adicionar Equipamento Existente */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center">
                       <Settings className="mr-2 h-5 w-5" />
-                      Equipamentos Auxiliares
+                      Adicionar Equipamento
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <Input
+                          placeholder="Buscar equipamento existente..."
+                          value={buscaEquipamento}
+                          onChange={(e) => {
+                            setBuscaEquipamento(e.target.value)
+                            setMostrarSugestoesEquipamentos(e.target.value.length > 0)
+                          }}
+                          onFocus={() => setMostrarSugestoesEquipamentos(buscaEquipamento.length > 0)}
+                        />
+                        {mostrarSugestoesEquipamentos && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {equipamentosExistentes
+                              .filter(equip => 
+                                equip.nome.toLowerCase().includes(buscaEquipamento.toLowerCase()) &&
+                                !selectedGrua?.grua_equipamentos?.find((rel: any) => rel.equipamento?.id === equip.id)
+                              )
+                              .map((equipamento) => (
+                                <div
+                                  key={equipamento.id}
+                                  className="p-2 hover:bg-gray-100 cursor-pointer border-b"
+                                  onClick={() => adicionarEquipamentoExistenteAGrua(equipamento)}
+                                >
+                                  <div className="font-medium">{equipamento.nome}</div>
+                                  <div className="text-sm text-gray-600">
+                                    {equipamento.tipo} • {equipamento.status}
+                                  </div>
+                                </div>
+                              ))}
+                            {equipamentosExistentes.filter(equip => 
+                              equip.nome.toLowerCase().includes(buscaEquipamento.toLowerCase()) &&
+                              !selectedGrua?.grua_equipamentos?.find((rel: any) => rel.equipamento?.id === equip.id)
+                            ).length === 0 && (
+                              <div className="p-2 text-gray-500 text-sm">
+                                Nenhum equipamento encontrado
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Lista de Equipamentos */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Settings className="mr-2 h-5 w-5" />
+                      Equipamentos Auxiliares ({selectedGrua?.grua_equipamentos?.length || 0})
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -3347,6 +3693,7 @@ export default function GruasPage() {
                               <TableHead>Status do Relacionamento</TableHead>
                               <TableHead>Data Início</TableHead>
                               <TableHead>Data Fim</TableHead>
+                              <TableHead>Ações</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -3373,6 +3720,15 @@ export default function GruasPage() {
                                 </TableCell>
                                 <TableCell>{relacionamento.data_inicio}</TableCell>
                                 <TableCell>{relacionamento.data_fim || "Em andamento"}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removerEquipamentoDaGruaSelecionada(relacionamento.equipamento?.id)}
+                                  >
+                                    Remover
+                                  </Button>
+                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -3386,11 +3742,66 @@ export default function GruasPage() {
               </TabsContent>
 
               <TabsContent value="equipe" className="space-y-4">
+                {/* Adicionar Funcionário Existente */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center">
                       <Users className="mr-2 h-5 w-5" />
-                      Funcionários da Grua
+                      Adicionar Funcionário
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <Input
+                          placeholder="Buscar funcionário existente..."
+                          value={buscaFuncionario}
+                          onChange={(e) => {
+                            setBuscaFuncionario(e.target.value)
+                            setMostrarSugestoesFuncionarios(e.target.value.length > 0)
+                          }}
+                          onFocus={() => setMostrarSugestoesFuncionarios(buscaFuncionario.length > 0)}
+                        />
+                        {mostrarSugestoesFuncionarios && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            {funcionariosExistentes
+                              .filter(func => 
+                                func.nome.toLowerCase().includes(buscaFuncionario.toLowerCase()) &&
+                                !selectedGrua?.grua_funcionarios?.find((rel: any) => rel.funcionario?.id === func.id)
+                              )
+                              .map((funcionario) => (
+                                <div
+                                  key={funcionario.id}
+                                  className="p-2 hover:bg-gray-100 cursor-pointer border-b"
+                                  onClick={() => adicionarFuncionarioExistenteAGrua(funcionario)}
+                                >
+                                  <div className="font-medium">{funcionario.nome}</div>
+                                  <div className="text-sm text-gray-600">
+                                    {funcionario.cargo} • {funcionario.status}
+                                  </div>
+                                </div>
+                              ))}
+                            {funcionariosExistentes.filter(func => 
+                              func.nome.toLowerCase().includes(buscaFuncionario.toLowerCase()) &&
+                              !selectedGrua?.grua_funcionarios?.find((rel: any) => rel.funcionario?.id === func.id)
+                            ).length === 0 && (
+                              <div className="p-2 text-gray-500 text-sm">
+                                Nenhum funcionário encontrado
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Lista de Funcionários */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Users className="mr-2 h-5 w-5" />
+                      Funcionários da Grua ({selectedGrua?.grua_funcionarios?.length || 0})
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -3407,6 +3818,7 @@ export default function GruasPage() {
                               <TableHead>Status do Relacionamento</TableHead>
                               <TableHead>Data Início</TableHead>
                               <TableHead>Data Fim</TableHead>
+                              <TableHead>Ações</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -3432,6 +3844,15 @@ export default function GruasPage() {
                                 </TableCell>
                                 <TableCell>{relacionamento.data_inicio}</TableCell>
                                 <TableCell>{relacionamento.data_fim || "Em andamento"}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removerFuncionarioDaGruaSelecionada(relacionamento.funcionario?.id)}
+                                  >
+                                    Remover
+                                  </Button>
+                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>

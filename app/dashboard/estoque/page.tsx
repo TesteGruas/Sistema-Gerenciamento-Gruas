@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3 } from "lucide-react"
+import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle } from "lucide-react"
 
 // Dados simulados do estoque
 const estoqueData = [
@@ -86,6 +86,22 @@ const estoqueData = [
   },
 ]
 
+// Dados simulados de obras
+const obrasData = [
+  { id: "OBR001", nome: "Residencial Jardim das Flores", cliente: "Construtora ABC", endereco: "Rua das Flores, 123" },
+  { id: "OBR002", nome: "Shopping Center Norte", cliente: "Empresa XYZ", endereco: "Av. Principal, 456" },
+  { id: "OBR003", nome: "Condomínio Vista Mar", cliente: "Construtora DEF", endereco: "Rua do Mar, 789" },
+  { id: "OBR004", nome: "Torre Comercial", cliente: "Empresa GHI", endereco: "Av. Comercial, 321" },
+]
+
+// Dados simulados de gruas
+const gruasData = [
+  { id: "GRU001", modelo: "Potain MDT 178", status: "Operacional", localizacao: "Obra Jardim das Flores" },
+  { id: "GRU002", modelo: "Liebherr 132 EC-H", status: "Operacional", localizacao: "Shopping Center Norte" },
+  { id: "GRU003", modelo: "Terex CTT 181-8", status: "Manutenção", localizacao: "Condomínio Vista Mar" },
+  { id: "GRU004", modelo: "Favelle Favco M440D", status: "Disponível", localizacao: "Depósito Central" },
+]
+
 // Dados de movimentações
 const movimentacoesData = [
   {
@@ -96,6 +112,8 @@ const movimentacoesData = [
     data: "2024-01-20",
     responsavel: "João Silva",
     observacao: "Compra para obra Centro-SP",
+    obra: "Residencial Jardim das Flores",
+    grua: "Potain MDT 178",
   },
   {
     id: "MOV002",
@@ -105,6 +123,8 @@ const movimentacoesData = [
     data: "2024-01-18",
     responsavel: "Maria Santos",
     observacao: "Uso na grua GRU003",
+    obra: "Condomínio Vista Mar",
+    grua: "Terex CTT 181-8",
   },
   {
     id: "MOV003",
@@ -114,6 +134,8 @@ const movimentacoesData = [
     data: "2024-01-15",
     responsavel: "Carlos Oliveira",
     observacao: "Manutenção preventiva",
+    obra: "Shopping Center Norte",
+    grua: "Liebherr 132 EC-H",
   },
 ]
 
@@ -144,6 +166,8 @@ export default function EstoquePage() {
     quantidade: 0,
     responsavel: "",
     observacao: "",
+    obra: "",
+    grua: "",
   })
 
   const filteredEstoque = estoque.filter(
@@ -219,6 +243,8 @@ export default function EstoquePage() {
       quantidade: 0,
       responsavel: "",
       observacao: "",
+      obra: "",
+      grua: "",
     })
     setIsMovDialogOpen(false)
   }
@@ -236,6 +262,56 @@ export default function EstoquePage() {
       localizacao: item.localizacao,
     })
     setIsDialogOpen(true)
+  }
+
+  const exportToExcel = () => {
+    // Criar dados para exportação
+    const dadosParaExportar = estoque.map((item) => [
+      item.id,
+      item.nome,
+      item.categoria,
+      item.quantidade,
+      item.unidade,
+      item.estoqueMinimo,
+      `R$ ${item.valorUnitario.toFixed(2)}`,
+      item.fornecedor,
+      item.localizacao,
+      item.ultimaMovimentacao,
+      item.quantidade <= item.estoqueMinimo ? "Estoque Baixo" : 
+      item.quantidade <= item.estoqueMinimo * 1.5 ? "Atenção" : "Normal"
+    ])
+
+    // Cabeçalhos da planilha
+    const headers = [
+      "ID",
+      "Produto",
+      "Categoria", 
+      "Quantidade",
+      "Unidade",
+      "Estoque Mínimo",
+      "Valor Unitário",
+      "Fornecedor",
+      "Localização",
+      "Última Movimentação",
+      "Status"
+    ]
+
+    // Criar CSV
+    const csvContent = [
+      headers.join(","),
+      ...dadosParaExportar.map(row => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n")
+
+    // Download do arquivo
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `estoque_${new Date().toISOString().split("T")[0]}.csv`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const stats = [
@@ -340,6 +416,45 @@ export default function EstoquePage() {
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="obra">Obra</Label>
+                    <Select
+                      value={movFormData.obra}
+                      onValueChange={(value) => setMovFormData({ ...movFormData, obra: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma obra" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {obrasData.map((obra) => (
+                          <SelectItem key={obra.id} value={obra.nome}>
+                            {obra.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="grua">Grua</Label>
+                    <Select
+                      value={movFormData.grua}
+                      onValueChange={(value) => setMovFormData({ ...movFormData, grua: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma grua" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {gruasData.map((grua) => (
+                          <SelectItem key={grua.id} value={grua.modelo}>
+                            {grua.modelo} - {grua.status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="observacao">Observação</Label>
                   <Textarea
@@ -361,6 +476,15 @@ export default function EstoquePage() {
               </form>
             </DialogContent>
           </Dialog>
+
+          <Button 
+            variant="outline" 
+            className="border-green-600 text-green-600 hover:bg-green-50 bg-transparent"
+            onClick={exportToExcel}
+          >
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Exportar Excel
+          </Button>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -589,6 +713,8 @@ export default function EstoquePage() {
                       <TableHead>Produto</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Quantidade</TableHead>
+                      <TableHead>Obra</TableHead>
+                      <TableHead>Grua</TableHead>
                       <TableHead>Responsável</TableHead>
                       <TableHead>Observação</TableHead>
                     </TableRow>
@@ -613,6 +739,8 @@ export default function EstoquePage() {
                           </Badge>
                         </TableCell>
                         <TableCell>{mov.quantidade}</TableCell>
+                        <TableCell>{mov.obra || "-"}</TableCell>
+                        <TableCell>{mov.grua || "-"}</TableCell>
                         <TableCell>{mov.responsavel}</TableCell>
                         <TableCell>{mov.observacao}</TableCell>
                       </TableRow>
@@ -625,22 +753,73 @@ export default function EstoquePage() {
         </TabsContent>
       </Tabs>
 
-      {/* Alertas de Estoque Baixo */}
-      {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length > 0 && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              <div>
-                <p className="font-medium text-red-800">Atenção: Itens com estoque baixo</p>
-                <p className="text-sm text-red-700">
-                  {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length} itens precisam de reposição
-                </p>
+      {/* Painel de Alertas Melhorado */}
+      <Card className="border-orange-200 bg-orange-50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-orange-800">
+            <AlertTriangle className="w-5 h-5" />
+            Alertas de Estoque
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Estoque Crítico */}
+            {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length > 0 && (
+              <div className="p-4 bg-red-100 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                  <div>
+                    <p className="font-semibold text-red-800">🚨 Estoque Crítico</p>
+                    <p className="text-sm text-red-700">
+                      {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length} itens estão abaixo do estoque mínimo
+                    </p>
+                    <div className="mt-2 space-y-1">
+                      {estoque
+                        .filter((item) => item.quantidade <= item.estoqueMinimo)
+                        .map((item) => (
+                          <div key={item.id} className="text-xs text-red-600">
+                            • {item.nome}: {item.quantidade} {item.unidade} (mín: {item.estoqueMinimo})
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            )}
+
+            {/* Estoque em Atenção */}
+            {estoque.filter((item) => item.quantidade > item.estoqueMinimo && item.quantidade <= item.estoqueMinimo * 1.5).length > 0 && (
+              <div className="p-4 bg-yellow-100 border border-yellow-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                  <div>
+                    <p className="font-semibold text-yellow-800">⚠️ Estoque em Atenção</p>
+                    <p className="text-sm text-yellow-700">
+                      {estoque.filter((item) => item.quantidade > item.estoqueMinimo && item.quantidade <= item.estoqueMinimo * 1.5).length} itens próximos do estoque mínimo
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Status Geral */}
+            {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length === 0 && 
+             estoque.filter((item) => item.quantidade > item.estoqueMinimo && item.quantidade <= item.estoqueMinimo * 1.5).length === 0 && (
+              <div className="p-4 bg-green-100 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <div>
+                    <p className="font-semibold text-green-800">✅ Estoque Normal</p>
+                    <p className="text-sm text-green-700">
+                      Todos os itens estão com estoque adequado
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

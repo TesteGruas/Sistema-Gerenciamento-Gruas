@@ -40,6 +40,12 @@ const funcionariosData = [
     escolaridade: "Ensino Médio Completo",
     estadoCivil: "Casado",
     dependentes: 2,
+    turno: "Diurno",
+    dataInicioFerias: null,
+    dataFimFerias: null,
+    motivoAfastamento: "",
+    obraAtual: "Residencial Jardim das Flores",
+    gruaAtual: "Potain MDT 178",
   },
   {
     id: "FUNC002",
@@ -52,11 +58,17 @@ const funcionariosData = [
     departamento: "Operações",
     dataAdmissao: "2023-03-20",
     salario: 4500.0,
-    status: "Ativo",
+    status: "Férias",
     supervisor: "Pedro Lima",
     escolaridade: "Ensino Médio Completo",
     estadoCivil: "Solteira",
     dependentes: 0,
+    turno: "Noturno",
+    dataInicioFerias: "2024-01-15",
+    dataFimFerias: "2024-01-30",
+    motivoAfastamento: "",
+    obraAtual: "",
+    gruaAtual: "",
   },
   {
     id: "FUNC003",
@@ -69,11 +81,17 @@ const funcionariosData = [
     departamento: "Manutenção",
     dataAdmissao: "2022-08-10",
     salario: 3800.0,
-    status: "Ativo",
+    status: "Afastado",
     supervisor: "Pedro Lima",
     escolaridade: "Técnico em Mecânica",
     estadoCivil: "Casado",
     dependentes: 1,
+    turno: "Diurno",
+    dataInicioFerias: null,
+    dataFimFerias: null,
+    motivoAfastamento: "Licença Médica",
+    obraAtual: "",
+    gruaAtual: "",
   },
   {
     id: "FUNC004",
@@ -91,6 +109,12 @@ const funcionariosData = [
     escolaridade: "Superior Completo",
     estadoCivil: "Solteira",
     dependentes: 0,
+    turno: "Integral",
+    dataInicioFerias: null,
+    dataFimFerias: null,
+    motivoAfastamento: "",
+    obraAtual: "Shopping Center Norte",
+    gruaAtual: "Liebherr 132 EC-H",
   },
   {
     id: "FUNC005",
@@ -108,6 +132,12 @@ const funcionariosData = [
     escolaridade: "Superior Completo",
     estadoCivil: "Casado",
     dependentes: 3,
+    turno: "Integral",
+    dataInicioFerias: null,
+    dataFimFerias: null,
+    motivoAfastamento: "",
+    obraAtual: "Condomínio Vista Mar",
+    gruaAtual: "Terex CTT 181-8",
   },
 ]
 
@@ -142,9 +172,74 @@ const avaliacoesData = [
   },
 ]
 
+// Dados simulados de controle de jornada
+const jornadaData = [
+  {
+    id: "JOR001",
+    funcionario: "João Silva",
+    data: "2024-01-22",
+    entrada: "07:00",
+    saidaAlmoco: "12:00",
+    voltaAlmoco: "13:00",
+    saida: "17:00",
+    horasTrabalhadas: 8,
+    horasExtras: 0,
+    horasNoturnas: 0,
+    status: "Completo",
+    obra: "Residencial Jardim das Flores",
+    observacoes: "Jornada normal",
+  },
+  {
+    id: "JOR002",
+    funcionario: "Maria Santos",
+    data: "2024-01-22",
+    entrada: "13:00",
+    saidaAlmoco: "18:00",
+    voltaAlmoco: "19:00",
+    saida: "22:00",
+    horasTrabalhadas: 8,
+    horasExtras: 0,
+    horasNoturnas: 3,
+    status: "Completo",
+    obra: "Shopping Center Norte",
+    observacoes: "Turno noturno",
+  },
+  {
+    id: "JOR003",
+    funcionario: "Ana Costa",
+    data: "2024-01-22",
+    entrada: "08:00",
+    saidaAlmoco: "12:00",
+    voltaAlmoco: "13:00",
+    saida: "20:00",
+    horasTrabalhadas: 10,
+    horasExtras: 2,
+    horasNoturnas: 0,
+    status: "Completo",
+    obra: "Shopping Center Norte",
+    observacoes: "Horas extras aprovadas",
+  },
+  {
+    id: "JOR004",
+    funcionario: "Pedro Lima",
+    data: "2024-01-22",
+    entrada: "07:30",
+    saidaAlmoco: "12:00",
+    voltaAlmoco: "13:00",
+    saida: "17:30",
+    horasTrabalhadas: 8,
+    horasExtras: 0,
+    horasNoturnas: 0,
+    status: "Atraso",
+    obra: "Condomínio Vista Mar",
+    observacoes: "Atraso de 30 minutos",
+  },
+]
+
 export default function RHPage() {
   const [funcionarios, setFuncionarios] = useState(funcionariosData)
   const [avaliacoes, setAvaliacoes] = useState(avaliacoesData)
+  const [jornadas, setJornadas] = useState(jornadaData)
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isAvaliacaoOpen, setIsAvaliacaoOpen] = useState(false)
@@ -164,6 +259,13 @@ export default function RHPage() {
     escolaridade: "",
     estadoCivil: "",
     dependentes: 0,
+    status: "Ativo",
+    turno: "Diurno",
+    dataInicioFerias: "",
+    dataFimFerias: "",
+    motivoAfastamento: "",
+    obraAtual: "",
+    gruaAtual: "",
   })
 
   // Formulário para avaliação
@@ -236,6 +338,13 @@ export default function RHPage() {
       escolaridade: "",
       estadoCivil: "",
       dependentes: 0,
+      status: "Ativo",
+      turno: "Diurno",
+      dataInicioFerias: "",
+      dataFimFerias: "",
+      motivoAfastamento: "",
+      obraAtual: "",
+      gruaAtual: "",
     })
     setEditingFuncionario(null)
     setIsDialogOpen(false)
@@ -275,8 +384,74 @@ export default function RHPage() {
       escolaridade: funcionario.escolaridade,
       estadoCivil: funcionario.estadoCivil,
       dependentes: funcionario.dependentes,
+      status: funcionario.status,
+      turno: funcionario.turno,
+      dataInicioFerias: funcionario.dataInicioFerias || "",
+      dataFimFerias: funcionario.dataFimFerias || "",
+      motivoAfastamento: funcionario.motivoAfastamento || "",
+      obraAtual: funcionario.obraAtual || "",
+      gruaAtual: funcionario.gruaAtual || "",
     })
     setIsDialogOpen(true)
+  }
+
+  // Funções para cálculo de jornada
+  const calcularHorasTrabalhadas = (entrada: string, saida: string, saidaAlmoco: string, voltaAlmoco: string) => {
+    const entradaTime = new Date(`2000-01-01T${entrada}:00`)
+    const saidaTime = new Date(`2000-01-01T${saida}:00`)
+    const saidaAlmocoTime = new Date(`2000-01-01T${saidaAlmoco}:00`)
+    const voltaAlmocoTime = new Date(`2000-01-01T${voltaAlmoco}:00`)
+    
+    const manha = (saidaAlmocoTime.getTime() - entradaTime.getTime()) / (1000 * 60 * 60)
+    const tarde = (saidaTime.getTime() - voltaAlmocoTime.getTime()) / (1000 * 60 * 60)
+    
+    return manha + tarde
+  }
+
+  const calcularHorasExtras = (horasTrabalhadas: number, jornadaPadrao: number = 8) => {
+    return Math.max(0, horasTrabalhadas - jornadaPadrao)
+  }
+
+  const calcularHorasNoturnas = (entrada: string, saida: string) => {
+    const entradaTime = new Date(`2000-01-01T${entrada}:00`)
+    const saidaTime = new Date(`2000-01-01T${saida}:00`)
+    
+    // Considera horário noturno das 22h às 6h
+    const inicioNoturno = new Date(`2000-01-01T22:00:00`)
+    const fimNoturno = new Date(`2000-01-01T06:00:00`)
+    
+    let horasNoturnas = 0
+    
+    // Se trabalhou até depois das 22h
+    if (saidaTime.getTime() > inicioNoturno.getTime()) {
+      const fimTrabalho = saidaTime.getTime() > new Date(`2000-01-02T06:00:00`).getTime() 
+        ? new Date(`2000-01-02T06:00:00`).getTime() 
+        : saidaTime.getTime()
+      horasNoturnas += (fimTrabalho - inicioNoturno.getTime()) / (1000 * 60 * 60)
+    }
+    
+    // Se começou antes das 6h
+    if (entradaTime.getTime() < fimNoturno.getTime()) {
+      const inicioTrabalho = entradaTime.getTime() > new Date(`2000-01-01T22:00:00`).getTime()
+        ? entradaTime.getTime()
+        : new Date(`2000-01-01T22:00:00`).getTime()
+      horasNoturnas += (fimNoturno.getTime() - inicioTrabalho) / (1000 * 60 * 60)
+    }
+    
+    return Math.max(0, horasNoturnas)
+  }
+
+  const getStatusJornada = (status: string) => {
+    switch (status) {
+      case "Completo":
+        return <Badge className="bg-green-100 text-green-800">Completo</Badge>
+      case "Atraso":
+        return <Badge className="bg-yellow-100 text-yellow-800">Atraso</Badge>
+      case "Falta":
+        return <Badge className="bg-red-100 text-red-800">Falta</Badge>
+      default:
+        return <Badge variant="secondary">{status}</Badge>
+    }
   }
 
   const stats = [
@@ -563,6 +738,98 @@ export default function RHPage() {
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(value) => setFormData({ ...formData, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Ativo">Ativo</SelectItem>
+                        <SelectItem value="Férias">Férias</SelectItem>
+                        <SelectItem value="Afastado">Afastado</SelectItem>
+                        <SelectItem value="Inativo">Inativo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="turno">Turno</Label>
+                    <Select
+                      value={formData.turno}
+                      onValueChange={(value) => setFormData({ ...formData, turno: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Diurno">Diurno</SelectItem>
+                        <SelectItem value="Noturno">Noturno</SelectItem>
+                        <SelectItem value="Integral">Integral</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {formData.status === "Férias" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="dataInicioFerias">Início das Férias</Label>
+                      <Input
+                        id="dataInicioFerias"
+                        type="date"
+                        value={formData.dataInicioFerias}
+                        onChange={(e) => setFormData({ ...formData, dataInicioFerias: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="dataFimFerias">Fim das Férias</Label>
+                      <Input
+                        id="dataFimFerias"
+                        type="date"
+                        value={formData.dataFimFerias}
+                        onChange={(e) => setFormData({ ...formData, dataFimFerias: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {formData.status === "Afastado" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="motivoAfastamento">Motivo do Afastamento</Label>
+                    <Input
+                      id="motivoAfastamento"
+                      value={formData.motivoAfastamento}
+                      onChange={(e) => setFormData({ ...formData, motivoAfastamento: e.target.value })}
+                      placeholder="Ex: Licença Médica, Licença Maternidade, etc."
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="obraAtual">Obra Atual</Label>
+                    <Input
+                      id="obraAtual"
+                      value={formData.obraAtual}
+                      onChange={(e) => setFormData({ ...formData, obraAtual: e.target.value })}
+                      placeholder="Nome da obra onde está alocado"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gruaAtual">Grua Atual</Label>
+                    <Input
+                      id="gruaAtual"
+                      value={formData.gruaAtual}
+                      onChange={(e) => setFormData({ ...formData, gruaAtual: e.target.value })}
+                      placeholder="Modelo da grua que opera"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-3 pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
@@ -599,6 +866,7 @@ export default function RHPage() {
       <Tabs defaultValue="funcionarios" className="space-y-6">
         <TabsList>
           <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
+          <TabsTrigger value="jornada">Controle de Jornada</TabsTrigger>
           <TabsTrigger value="avaliacoes">Avaliações</TabsTrigger>
           <TabsTrigger value="organograma">Organograma</TabsTrigger>
         </TabsList>
@@ -629,6 +897,9 @@ export default function RHPage() {
                       <TableHead>Funcionário</TableHead>
                       <TableHead>Cargo</TableHead>
                       <TableHead>Departamento</TableHead>
+                      <TableHead>Turno</TableHead>
+                      <TableHead>Obra Atual</TableHead>
+                      <TableHead>Grua Atual</TableHead>
                       <TableHead>Admissão</TableHead>
                       <TableHead>Salário</TableHead>
                       <TableHead>Status</TableHead>
@@ -647,6 +918,17 @@ export default function RHPage() {
                         </TableCell>
                         <TableCell>{funcionario.cargo}</TableCell>
                         <TableCell>{funcionario.departamento}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {funcionario.turno || "N/A"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {funcionario.obraAtual || "-"}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {funcionario.gruaAtual || "-"}
+                        </TableCell>
                         <TableCell>{new Date(funcionario.dataAdmissao).toLocaleDateString("pt-BR")}</TableCell>
                         <TableCell>R$ {funcionario.salario.toLocaleString()}</TableCell>
                         <TableCell>{getStatusBadge(funcionario.status)}</TableCell>
@@ -667,6 +949,75 @@ export default function RHPage() {
                             <Edit className="w-4 h-4" />
                           </Button>
                         </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="jornada">
+          <Card>
+            <CardHeader>
+              <CardTitle>Controle de Jornada</CardTitle>
+              <CardDescription>Controle de horas trabalhadas, extras e noturnas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Funcionário</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Entrada</TableHead>
+                      <TableHead>Saída Almoço</TableHead>
+                      <TableHead>Volta Almoço</TableHead>
+                      <TableHead>Saída</TableHead>
+                      <TableHead>Horas Trabalhadas</TableHead>
+                      <TableHead>Horas Extras</TableHead>
+                      <TableHead>Horas Noturnas</TableHead>
+                      <TableHead>Obra</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Observações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {jornadas.map((jornada) => (
+                      <TableRow key={jornada.id}>
+                        <TableCell className="font-medium">{jornada.funcionario}</TableCell>
+                        <TableCell>{new Date(jornada.data).toLocaleDateString("pt-BR")}</TableCell>
+                        <TableCell>{jornada.entrada}</TableCell>
+                        <TableCell>{jornada.saidaAlmoco}</TableCell>
+                        <TableCell>{jornada.voltaAlmoco}</TableCell>
+                        <TableCell>{jornada.saida}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {jornada.horasTrabalhadas}h
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {jornada.horasExtras > 0 ? (
+                            <Badge className="bg-orange-100 text-orange-800">
+                              +{jornada.horasExtras}h
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {jornada.horasNoturnas > 0 ? (
+                            <Badge className="bg-purple-100 text-purple-800">
+                              {jornada.horasNoturnas}h
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">{jornada.obra}</TableCell>
+                        <TableCell>{getStatusJornada(jornada.status)}</TableCell>
+                        <TableCell className="max-w-xs truncate">{jornada.observacoes}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
