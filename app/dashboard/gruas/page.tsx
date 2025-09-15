@@ -1325,7 +1325,7 @@ export default function GruasPage() {
         formData.append('descricao', `Arquivo da grua ${selectedGrua.id}`)
 
         // Usar a rota principal para gruas (com autenticação)
-        const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/api/arquivos/upload/grua/${selectedGrua.id}`, {
+        const response = await fetch(`${NEXT_PUBLIC_API_BASE_URL}/arquivos/upload/grua/${selectedGrua.id}`, {
           method: 'POST',
           body: formData,
           headers: {

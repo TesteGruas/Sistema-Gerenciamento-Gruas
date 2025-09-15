@@ -117,7 +117,7 @@ export function SimpleFileUpload({
     try {
       // Usar a URL completa do backend
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const url = `${apiUrl}/api/arquivos/upload/${obraId}`
+      const url = `${apiUrl}/arquivos/upload/${obraId}`
       const token = localStorage.getItem('token')
       
       console.log('🔍 DEBUG: Fazendo upload para:', url)
