@@ -32,6 +32,7 @@ import authRoutes from './routes/auth.js'
 import usersRoutes from './routes/users.js'
 import gruasRoutes from './routes/gruas.js'
 import estoqueRoutes from './routes/estoque.js'
+import categoriasRoutes from './routes/categorias.js'
 import clientesRoutes from './routes/clientes.js'
 import obrasRoutes from './routes/obras.js'
 import contratosRoutes from './routes/contratos.js'
@@ -182,6 +183,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/gruas', gruasRoutes)
 app.use('/api/estoque', estoqueRoutes)
+app.use('/api/categorias', categoriasRoutes)
 app.use('/api/clientes', clientesRoutes)
 app.use('/api/obras', obrasRoutes)
 app.use('/api/contratos', contratosRoutes)

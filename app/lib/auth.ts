@@ -2,7 +2,7 @@
 
 // Utilitários de autenticação
 export class AuthService {
-  private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000'
+  private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
   private static readonly LOGIN_CREDENTIALS = {
     email: 'admin@admin.com',
     password: 'teste@123'
@@ -60,6 +60,7 @@ export class AuthService {
       try {
         token = await this.login()
       } catch (error) {
+        console.error('Erro no login:', error)
         throw new Error('Erro ao obter token de autenticação')
       }
     }
