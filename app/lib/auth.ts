@@ -2,7 +2,7 @@
 
 // Utilitários de autenticação
 export class AuthService {
-  private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
   private static readonly LOGIN_CREDENTIALS = {
     email: 'admin@admin.com',
     password: 'teste@123'
@@ -29,7 +29,7 @@ export class AuthService {
   // Fazer login e obter token
   static async login(): Promise<string> {
     try {
-      const response = await fetch(`${this.API_BASE_URL}/auth/login`, {
+      const response = await fetch(`${this.API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
