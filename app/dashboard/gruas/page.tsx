@@ -57,7 +57,7 @@ import {
 } from "lucide-react"
 
 
-const NEXT_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000'
+const NEXT_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api'
 export default function GruasPage() {
   const { toast } = useToast()
   const [gruas, setGruas] = useState<any[]>([])
@@ -174,8 +174,15 @@ export default function GruasPage() {
           contato_obra: obraData.contato || null,
           telefone_obra: obraData.telefoneContato || null,
           email_obra: obraData.emailContato || null,
-          status: "Pausada"
+          status: "Pausada",
+          // Incluir dados do cliente para criação automática se necessário
+          cliente_nome: clienteSelecionado?.nome || obraData.nomeObra,
+          cliente_cnpj: clienteSelecionado?.cnpj || obraData.cnpjCliente || "00000000000000",
+          cliente_email: clienteSelecionado?.email || obraData.emailContato || null,
+          cliente_telefone: clienteSelecionado?.telefone || obraData.telefoneContato || null
         }
+        
+        console.log('🔍 DEBUG - Dados da obra a ser enviada:', obraDataToSend)
         
         const obraResponse = await apiRequest(buildApiUrl(API_ENDPOINTS.OBRAS), {
           method: 'POST',

@@ -34,19 +34,26 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     // Buscar dados completos do usuário no banco (opcional)
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from('usuarios')
-      .select('*')
-      .eq('email', user.email)
-      .single()
-
-    // Se não encontrar na tabela usuarios, usar dados do Supabase Auth
-    const userInfo = userData || {
+    let userInfo = {
       id: user.id,
       email: user.email,
       nome: user.user_metadata?.nome || 'Usuário',
       status: 'Ativo',
-      role: user.user_metadata?.role || 'user'
+      role: user.user_metadata?.role || 'admin'
+    }
+
+    try {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('*')
+        .eq('email', user.email)
+        .single()
+
+      if (userData && !userError) {
+        userInfo = userData
+      }
+    } catch (dbError) {
+      console.log('Usuário não encontrado na tabela usuarios, usando dados do Supabase Auth')
     }
 
     // Adicionar usuário ao request

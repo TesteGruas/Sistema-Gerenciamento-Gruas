@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,73 +20,11 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle } from "lucide-react"
+import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2 } from "lucide-react"
+import { estoqueAPI, type Produto, type Categoria, type Movimentacao } from "@/lib/api-estoque"
+import { useToast } from "@/hooks/use-toast"
 
-// Dados simulados do estoque
-const estoqueData = [
-  {
-    id: "EST001",
-    nome: "Cabo de Aço 12mm",
-    categoria: "Cabos e Cordas",
-    quantidade: 150,
-    unidade: "metros",
-    estoqueMinimo: 50,
-    valorUnitario: 25.5,
-    fornecedor: "Aços Especiais Ltda",
-    localizacao: "Galpão A - Prateleira 1",
-    ultimaMovimentacao: "2024-01-20",
-  },
-  {
-    id: "EST002",
-    nome: "Gancho Industrial 5T",
-    categoria: "Acessórios",
-    quantidade: 8,
-    unidade: "unidades",
-    estoqueMinimo: 5,
-    valorUnitario: 450.0,
-    fornecedor: "Equipamentos Industriais SA",
-    localizacao: "Galpão B - Setor 2",
-    ultimaMovimentacao: "2024-01-18",
-  },
-  {
-    id: "EST003",
-    nome: "Óleo Hidráulico ISO 68",
-    categoria: "Lubrificantes",
-    quantidade: 25,
-    unidade: "litros",
-    estoqueMinimo: 30,
-    valorUnitario: 18.75,
-    fornecedor: "Lubrificantes Premium",
-    localizacao: "Galpão C - Área Química",
-    ultimaMovimentacao: "2024-01-15",
-  },
-  {
-    id: "EST004",
-    nome: "Filtro Hidráulico HF6177",
-    categoria: "Filtros",
-    quantidade: 12,
-    unidade: "unidades",
-    estoqueMinimo: 8,
-    valorUnitario: 85.0,
-    fornecedor: "Filtros Industriais",
-    localizacao: "Galpão A - Prateleira 3",
-    ultimaMovimentacao: "2024-01-22",
-  },
-  {
-    id: "EST005",
-    nome: "Parafuso M16x80",
-    categoria: "Fixadores",
-    quantidade: 2,
-    unidade: "unidades",
-    estoqueMinimo: 20,
-    valorUnitario: 3.25,
-    fornecedor: "Parafusos e Porcas SA",
-    localizacao: "Galpão A - Gaveta 15",
-    ultimaMovimentacao: "2024-01-19",
-  },
-]
-
-// Dados simulados de obras
+// Dados simulados de obras e gruas (mantidos por enquanto)
 const obrasData = [
   { id: "OBR001", nome: "Residencial Jardim das Flores", cliente: "Construtora ABC", endereco: "Rua das Flores, 123" },
   { id: "OBR002", nome: "Shopping Center Norte", cliente: "Empresa XYZ", endereco: "Av. Principal, 456" },
@@ -94,7 +32,6 @@ const obrasData = [
   { id: "OBR004", nome: "Torre Comercial", cliente: "Empresa GHI", endereco: "Av. Comercial, 321" },
 ]
 
-// Dados simulados de gruas
 const gruasData = [
   { id: "GRU001", modelo: "Potain MDT 178", status: "Operacional", localizacao: "Obra Jardim das Flores" },
   { id: "GRU002", modelo: "Liebherr 132 EC-H", status: "Operacional", localizacao: "Shopping Center Norte" },
@@ -102,195 +39,248 @@ const gruasData = [
   { id: "GRU004", modelo: "Favelle Favco M440D", status: "Disponível", localizacao: "Depósito Central" },
 ]
 
-// Dados de movimentações
-const movimentacoesData = [
-  {
-    id: "MOV001",
-    produto: "Cabo de Aço 12mm",
-    tipo: "Entrada",
-    quantidade: 100,
-    data: "2024-01-20",
-    responsavel: "João Silva",
-    observacao: "Compra para obra Centro-SP",
-    obra: "Residencial Jardim das Flores",
-    grua: "Potain MDT 178",
-  },
-  {
-    id: "MOV002",
-    produto: "Gancho Industrial 5T",
-    tipo: "Saída",
-    quantidade: 2,
-    data: "2024-01-18",
-    responsavel: "Maria Santos",
-    observacao: "Uso na grua GRU003",
-    obra: "Condomínio Vista Mar",
-    grua: "Terex CTT 181-8",
-  },
-  {
-    id: "MOV003",
-    produto: "Óleo Hidráulico ISO 68",
-    tipo: "Saída",
-    quantidade: 15,
-    data: "2024-01-15",
-    responsavel: "Carlos Oliveira",
-    observacao: "Manutenção preventiva",
-    obra: "Shopping Center Norte",
-    grua: "Liebherr 132 EC-H",
-  },
-]
-
 export default function EstoquePage() {
-  const [estoque, setEstoque] = useState(estoqueData)
-  const [movimentacoes, setMovimentacoes] = useState(movimentacoesData)
+  const { toast } = useToast()
+  
+  // Estados principais
+  const [estoque, setEstoque] = useState<Produto[]>([])
+  const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isMovDialogOpen, setIsMovDialogOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<any>(null)
+  const [editingItem, setEditingItem] = useState<Produto | null>(null)
 
   // Formulário para novo item
   const [formData, setFormData] = useState({
     nome: "",
-    categoria: "",
-    quantidade: 0,
-    unidade: "",
-    estoqueMinimo: 0,
-    valorUnitario: 0,
-    fornecedor: "",
+    descricao: "",
+    categoria_id: 0,
+    codigo_barras: "",
+    unidade_medida: "",
+    valor_unitario: 0,
+    estoque_minimo: 0,
+    estoque_maximo: 0,
     localizacao: "",
+    status: "Ativo" as "Ativo" | "Inativo",
   })
 
   // Formulário para movimentação
   const [movFormData, setMovFormData] = useState({
-    produto: "",
-    tipo: "Entrada",
+    produto_id: "",
+    tipo: "Entrada" as "Entrada" | "Saída" | "Ajuste",
     quantidade: 0,
-    responsavel: "",
-    observacao: "",
-    obra: "",
-    grua: "",
+    motivo: "",
+    observacoes: "",
   })
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true)
+      const [produtosResponse, categoriasResponse, movimentacoesResponse] = await Promise.all([
+        estoqueAPI.listarProdutos({ limit: 100 }),
+        estoqueAPI.listarCategorias(),
+        estoqueAPI.listarMovimentacoes({ limit: 100 })
+      ])
+      
+      setEstoque(produtosResponse.data)
+      setCategorias(categoriasResponse.data)
+      setMovimentacoes(movimentacoesResponse.data)
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados do estoque",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredEstoque = estoque.filter(
     (item) =>
       item.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.categoria.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.fornecedor.toLowerCase().includes(searchTerm.toLowerCase()),
+      (item.categorias?.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.codigo_barras || '').toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const getStatusBadge = (item: any) => {
-    if (item.quantidade <= item.estoqueMinimo) {
+  // Função auxiliar para buscar dados de estoque de um produto
+  const getEstoqueData = (produtoId: string) => {
+    const produto = estoque.find((e: any) => e.id === produtoId)
+    return produto?.estoque as any || null
+  }
+
+  const getStatusBadge = (item: Produto) => {
+    // Buscar dados de estoque para este produto
+    const estoqueData = getEstoqueData(item.id)
+    const estoqueAtual = estoqueData?.quantidade_disponivel || 0
+    const estoqueMinimo = item.estoque_minimo || 0
+    
+    if (estoqueAtual <= estoqueMinimo) {
       return <Badge className="bg-red-100 text-red-800">Estoque Baixo</Badge>
     }
-    if (item.quantidade <= item.estoqueMinimo * 1.5) {
+    if (estoqueAtual <= estoqueMinimo * 1.5) {
       return <Badge className="bg-yellow-100 text-yellow-800">Atenção</Badge>
     }
     return <Badge className="bg-green-100 text-green-800">Normal</Badge>
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (editingItem) {
-      setEstoque(estoque.map((item) => (item.id === editingItem.id ? { ...item, ...formData } : item)))
-    } else {
-      const newItem = {
-        ...formData,
-        id: `EST${String(estoque.length + 1).padStart(3, "0")}`,
-        ultimaMovimentacao: new Date().toISOString().split("T")[0],
+    try {
+      if (editingItem) {
+        await estoqueAPI.atualizarProduto(editingItem.id, formData)
+        toast({
+          title: "Sucesso",
+          description: "Produto atualizado com sucesso",
+        })
+      } else {
+        await estoqueAPI.criarProduto(formData)
+        toast({
+          title: "Sucesso",
+          description: "Produto criado com sucesso",
+        })
       }
-      setEstoque([...estoque, newItem])
+      
+      await carregarDados()
+      resetForm()
+      setIsDialogOpen(false)
+    } catch (error) {
+      console.error('Erro ao salvar produto:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao salvar produto",
+        variant: "destructive",
+      })
     }
+  }
 
+  const resetForm = () => {
     setFormData({
       nome: "",
-      categoria: "",
-      quantidade: 0,
-      unidade: "",
-      estoqueMinimo: 0,
-      valorUnitario: 0,
-      fornecedor: "",
+      descricao: "",
+      categoria_id: 0,
+      codigo_barras: "",
+      unidade_medida: "",
+      valor_unitario: 0,
+      estoque_minimo: 0,
+      estoque_maximo: 0,
       localizacao: "",
+      status: "Ativo",
     })
     setEditingItem(null)
-    setIsDialogOpen(false)
   }
 
-  const handleMovimentacao = (e: React.FormEvent) => {
+  const handleMovimentacao = async (e: React.FormEvent) => {
     e.preventDefault()
-    const newMov = {
-      ...movFormData,
-      id: `MOV${String(movimentacoes.length + 1).padStart(3, "0")}`,
-      data: new Date().toISOString().split("T")[0],
+    try {
+      await estoqueAPI.movimentarEstoque(movFormData)
+      toast({
+        title: "Sucesso",
+        description: "Movimentação registrada com sucesso",
+      })
+      
+      await carregarDados()
+      setMovFormData({
+        produto_id: "",
+        tipo: "Entrada",
+        quantidade: 0,
+        motivo: "",
+        observacoes: "",
+      })
+      setIsMovDialogOpen(false)
+    } catch (error) {
+      console.error('Erro ao registrar movimentação:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao registrar movimentação",
+        variant: "destructive",
+      })
     }
-    setMovimentacoes([newMov, ...movimentacoes])
-
-    // Atualizar estoque
-    setEstoque(
-      estoque.map((item) => {
-        if (item.nome === movFormData.produto) {
-          const novaQuantidade =
-            movFormData.tipo === "Entrada"
-              ? item.quantidade + movFormData.quantidade
-              : item.quantidade - movFormData.quantidade
-          return { ...item, quantidade: Math.max(0, novaQuantidade) }
-        }
-        return item
-      }),
-    )
-
-    setMovFormData({
-      produto: "",
-      tipo: "Entrada",
-      quantidade: 0,
-      responsavel: "",
-      observacao: "",
-      obra: "",
-      grua: "",
-    })
-    setIsMovDialogOpen(false)
   }
 
-  const handleEdit = (item: any) => {
+  const handleDelete = async (produto: Produto) => {
+    if (!confirm(`Tem certeza que deseja excluir o produto "${produto.nome}"?`)) {
+      return
+    }
+
+    try {
+      await estoqueAPI.excluirProduto(produto.id)
+      toast({
+        title: "Sucesso",
+        description: "Produto excluído com sucesso",
+      })
+      await carregarDados()
+    } catch (error) {
+      console.error('Erro ao excluir produto:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao excluir produto",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleEdit = (item: Produto) => {
     setEditingItem(item)
     setFormData({
       nome: item.nome,
-      categoria: item.categoria,
-      quantidade: item.quantidade,
-      unidade: item.unidade,
-      estoqueMinimo: item.estoqueMinimo,
-      valorUnitario: item.valorUnitario,
-      fornecedor: item.fornecedor,
-      localizacao: item.localizacao,
+      descricao: item.descricao || "",
+      categoria_id: item.categoria_id,
+      codigo_barras: item.codigo_barras || "",
+      unidade_medida: item.unidade_medida,
+      valor_unitario: item.valor_unitario,
+      estoque_minimo: item.estoque_minimo,
+      estoque_maximo: item.estoque_maximo || 0,
+      localizacao: item.localizacao || "",
+      status: item.status,
     })
     setIsDialogOpen(true)
   }
 
   const exportToExcel = () => {
     // Criar dados para exportação
-    const dadosParaExportar = estoque.map((item) => [
-      item.id,
-      item.nome,
-      item.categoria,
-      item.quantidade,
-      item.unidade,
-      item.estoqueMinimo,
-      `R$ ${item.valorUnitario.toFixed(2)}`,
-      item.fornecedor,
-      item.localizacao,
-      item.ultimaMovimentacao,
-      item.quantidade <= item.estoqueMinimo ? "Estoque Baixo" : 
-      item.quantidade <= item.estoqueMinimo * 1.5 ? "Atenção" : "Normal"
-    ])
+    const dadosParaExportar = estoque.map((item) => {
+      const estoqueData = getEstoqueData(item.id)
+      const estoqueAtual = estoqueData?.quantidade_disponivel || 0
+      const estoqueMinimo = item.estoque_minimo || 0
+      const valorTotal = estoqueData?.valor_total || 0
+      
+      return [
+        item.id,
+        item.nome,
+        item.categorias?.nome || "",
+        estoqueAtual,
+        item.unidade_medida,
+        estoqueMinimo,
+        `R$ ${item.valor_unitario.toFixed(2)}`,
+        `R$ ${valorTotal.toFixed(2)}`,
+        item.codigo_barras || "",
+        item.localizacao || "",
+        getEstoqueData(item.id)?.ultima_movimentacao ? new Date(getEstoqueData(item.id)!.ultima_movimentacao).toLocaleDateString("pt-BR") : "",
+        estoqueAtual <= estoqueMinimo ? "Estoque Baixo" : 
+        estoqueAtual <= estoqueMinimo * 1.5 ? "Atenção" : "Normal"
+      ]
+    })
 
     // Cabeçalhos da planilha
     const headers = [
       "ID",
       "Produto",
       "Categoria", 
-      "Quantidade",
+      "Quantidade Disponível",
       "Unidade",
       "Estoque Mínimo",
       "Valor Unitário",
-      "Fornecedor",
+      "Valor Total",
+      "Código de Barras",
       "Localização",
       "Última Movimentação",
       "Status"
@@ -318,23 +308,43 @@ export default function EstoquePage() {
     { title: "Total de Itens", value: estoque.length, icon: Package, color: "bg-blue-500" },
     {
       title: "Estoque Baixo",
-      value: estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length,
+      value: estoque.filter((item) => {
+        const estoqueData = getEstoqueData(item.id)
+        const estoqueAtual = estoqueData?.quantidade_disponivel || 0
+        const estoqueMinimo = item.estoque_minimo || 0
+        return estoqueAtual <= estoqueMinimo
+      }).length,
       icon: AlertTriangle,
       color: "bg-red-500",
     },
     {
       title: "Valor Total",
-      value: `R$ ${estoque.reduce((acc, item) => acc + item.quantidade * item.valorUnitario, 0).toLocaleString()}`,
+      value: `R$ ${estoque.reduce((acc, item) => {
+        const estoqueData = getEstoqueData(item.id)
+        const valorTotal = estoqueData?.valor_total || 0
+        return acc + valorTotal
+      }, 0).toLocaleString()}`,
       icon: BarChart3,
       color: "bg-green-500",
     },
     {
       title: "Categorias",
-      value: new Set(estoque.map((item) => item.categoria)).size,
+      value: new Set(estoque.map((item) => item.categorias?.nome).filter(Boolean)).size,
       icon: Archive,
       color: "bg-purple-500",
     },
   ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span>Carregando estoque...</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -360,16 +370,16 @@ export default function EstoquePage() {
                 <div className="space-y-2">
                   <Label htmlFor="produto">Produto</Label>
                   <Select
-                    value={movFormData.produto}
-                    onValueChange={(value) => setMovFormData({ ...movFormData, produto: value })}
+                    value={movFormData.produto_id}
+                    onValueChange={(value) => setMovFormData({ ...movFormData, produto_id: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um produto" />
                     </SelectTrigger>
                     <SelectContent>
                       {estoque.map((item) => (
-                        <SelectItem key={item.id} value={item.nome}>
-                          {item.nome}
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.nome} - {item.categorias?.nome}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -381,7 +391,7 @@ export default function EstoquePage() {
                     <Label htmlFor="tipo">Tipo</Label>
                     <Select
                       value={movFormData.tipo}
-                      onValueChange={(value) => setMovFormData({ ...movFormData, tipo: value })}
+                      onValueChange={(value) => setMovFormData({ ...movFormData, tipo: value as "Entrada" | "Saída" | "Ajuste" })}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -389,6 +399,7 @@ export default function EstoquePage() {
                       <SelectContent>
                         <SelectItem value="Entrada">Entrada</SelectItem>
                         <SelectItem value="Saída">Saída</SelectItem>
+                        <SelectItem value="Ajuste">Ajuste</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -407,61 +418,24 @@ export default function EstoquePage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="responsavel">Responsável</Label>
+                  <Label htmlFor="motivo">Motivo</Label>
                   <Input
-                    id="responsavel"
-                    value={movFormData.responsavel}
-                    onChange={(e) => setMovFormData({ ...movFormData, responsavel: e.target.value })}
+                    id="motivo"
+                    value={movFormData.motivo}
+                    onChange={(e) => setMovFormData({ ...movFormData, motivo: e.target.value })}
+                    placeholder="Ex: Compra, Venda, Ajuste de inventário"
                     required
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="obra">Obra</Label>
-                    <Select
-                      value={movFormData.obra}
-                      onValueChange={(value) => setMovFormData({ ...movFormData, obra: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma obra" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {obrasData.map((obra) => (
-                          <SelectItem key={obra.id} value={obra.nome}>
-                            {obra.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="grua">Grua</Label>
-                    <Select
-                      value={movFormData.grua}
-                      onValueChange={(value) => setMovFormData({ ...movFormData, grua: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma grua" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {gruasData.map((grua) => (
-                          <SelectItem key={grua.id} value={grua.modelo}>
-                            {grua.modelo} - {grua.status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="observacao">Observação</Label>
+                  <Label htmlFor="observacoes">Observações</Label>
                   <Textarea
-                    id="observacao"
-                    value={movFormData.observacao}
-                    onChange={(e) => setMovFormData({ ...movFormData, observacao: e.target.value })}
-                    placeholder="Motivo da movimentação..."
+                    id="observacoes"
+                    value={movFormData.observacoes}
+                    onChange={(e) => setMovFormData({ ...movFormData, observacoes: e.target.value })}
+                    placeholder="Observações adicionais..."
                   />
                 </div>
 
@@ -512,72 +486,119 @@ export default function EstoquePage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="categoria">Categoria</Label>
+                    <Label htmlFor="categoria_id">Categoria</Label>
+                    <Select
+                      value={formData.categoria_id.toString()}
+                      onValueChange={(value) => setFormData({ ...formData, categoria_id: Number.parseInt(value) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma categoria" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((categoria) => (
+                          <SelectItem key={categoria.id} value={categoria.id.toString()}>
+                            {categoria.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="descricao">Descrição</Label>
+                  <Textarea
+                    id="descricao"
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                    placeholder="Descrição detalhada do produto..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="codigo_barras">Código de Barras</Label>
                     <Input
-                      id="categoria"
-                      value={formData.categoria}
-                      onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-                      required
+                      id="codigo_barras"
+                      value={formData.codigo_barras}
+                      onChange={(e) => setFormData({ ...formData, codigo_barras: e.target.value })}
+                      placeholder="Código de barras do produto"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unidade_medida">Unidade de Medida</Label>
+                    <Select
+                      value={formData.unidade_medida}
+                      onValueChange={(value) => setFormData({ ...formData, unidade_medida: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a unidade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UN">Unidade</SelectItem>
+                        <SelectItem value="KG">Quilograma</SelectItem>
+                        <SelectItem value="M">Metro</SelectItem>
+                        <SelectItem value="L">Litro</SelectItem>
+                        <SelectItem value="M2">Metro Quadrado</SelectItem>
+                        <SelectItem value="M3">Metro Cúbico</SelectItem>
+                        <SelectItem value="UNIDADE">Unidade</SelectItem>
+                        <SelectItem value="PECA">Peça</SelectItem>
+                        <SelectItem value="CAIXA">Caixa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(value) => setFormData({ ...formData, status: value as "Ativo" | "Inativo" })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Ativo">Ativo</SelectItem>
+                        <SelectItem value="Inativo">Inativo</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="quantidade">Quantidade</Label>
+                    <Label htmlFor="valor_unitario">Valor Unitário (R$)</Label>
                     <Input
-                      id="quantidade"
-                      type="number"
-                      value={formData.quantidade}
-                      onChange={(e) => setFormData({ ...formData, quantidade: Number.parseInt(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unidade">Unidade</Label>
-                    <Input
-                      id="unidade"
-                      value={formData.unidade}
-                      onChange={(e) => setFormData({ ...formData, unidade: e.target.value })}
-                      placeholder="Ex: unidades, metros, litros"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="estoqueMinimo">Estoque Mínimo</Label>
-                    <Input
-                      id="estoqueMinimo"
-                      type="number"
-                      value={formData.estoqueMinimo}
-                      onChange={(e) =>
-                        setFormData({ ...formData, estoqueMinimo: Number.parseInt(e.target.value) || 0 })
-                      }
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="valorUnitario">Valor Unitário (R$)</Label>
-                    <Input
-                      id="valorUnitario"
+                      id="valor_unitario"
                       type="number"
                       step="0.01"
-                      value={formData.valorUnitario}
+                      value={formData.valor_unitario}
                       onChange={(e) =>
-                        setFormData({ ...formData, valorUnitario: Number.parseFloat(e.target.value) || 0 })
+                        setFormData({ ...formData, valor_unitario: Number.parseFloat(e.target.value) || 0 })
                       }
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="fornecedor">Fornecedor</Label>
+                    <Label htmlFor="estoque_minimo">Estoque Mínimo</Label>
                     <Input
-                      id="fornecedor"
-                      value={formData.fornecedor}
-                      onChange={(e) => setFormData({ ...formData, fornecedor: e.target.value })}
+                      id="estoque_minimo"
+                      type="number"
+                      value={formData.estoque_minimo}
+                      onChange={(e) =>
+                        setFormData({ ...formData, estoque_minimo: Number.parseInt(e.target.value) || 0 })
+                      }
                       required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="estoque_maximo">Estoque Máximo</Label>
+                    <Input
+                      id="estoque_maximo"
+                      type="number"
+                      value={formData.estoque_maximo}
+                      onChange={(e) =>
+                        setFormData({ ...formData, estoque_maximo: Number.parseInt(e.target.value) || 0 })
+                      }
                     />
                   </div>
                 </div>
@@ -589,7 +610,6 @@ export default function EstoquePage() {
                     value={formData.localizacao}
                     onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
                     placeholder="Ex: Galpão A - Prateleira 1"
-                    required
                   />
                 </div>
 
@@ -657,40 +677,69 @@ export default function EstoquePage() {
                     <TableRow>
                       <TableHead>Item</TableHead>
                       <TableHead>Categoria</TableHead>
-                      <TableHead>Quantidade</TableHead>
+                      <TableHead>Quantidade Disponível</TableHead>
+                      <TableHead>Quantidade Reservada</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Valor Unit.</TableHead>
                       <TableHead>Valor Total</TableHead>
-                      <TableHead>Fornecedor</TableHead>
                       <TableHead>Localização</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEstoque.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{item.nome}</p>
-                            <p className="text-sm text-gray-500">{item.id}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>{item.categoria}</TableCell>
-                        <TableCell>
-                          {item.quantidade} {item.unidade}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(item)}</TableCell>
-                        <TableCell>R$ {item.valorUnitario.toFixed(2)}</TableCell>
-                        <TableCell>R$ {(item.quantidade * item.valorUnitario).toFixed(2)}</TableCell>
-                        <TableCell>{item.fornecedor}</TableCell>
-                        <TableCell>{item.localizacao}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredEstoque.map((item) => {
+                      // Buscar dados de estoque para este produto
+                      const estoqueData = getEstoqueData(item.id)
+                      const quantidadeDisponivel = estoqueData?.quantidade_disponivel || 0
+                      const quantidadeReservada = estoqueData?.quantidade_reservada || 0
+                      const valorTotal = estoqueData?.valor_total || 0
+                      
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{item.nome}</p>
+                              <p className="text-sm text-gray-500">{item.id}</p>
+                              {item.codigo_barras && (
+                                <p className="text-xs text-gray-400">Código: {item.codigo_barras}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{item.categorias?.nome || "Sem categoria"}</TableCell>
+                          <TableCell>
+                            <div className="text-center">
+                              <p className="font-medium">{quantidadeDisponivel}</p>
+                              <p className="text-xs text-gray-500">{item.unidade_medida}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-center">
+                              <p className="font-medium text-orange-600">{quantidadeReservada}</p>
+                              <p className="text-xs text-gray-500">{item.unidade_medida}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(item)}</TableCell>
+                          <TableCell>R$ {item.valor_unitario.toFixed(2)}</TableCell>
+                          <TableCell>R$ {valorTotal.toFixed(2)}</TableCell>
+                          <TableCell>{item.localizacao || "-"}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => handleDelete(item)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -713,38 +762,73 @@ export default function EstoquePage() {
                       <TableHead>Produto</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Quantidade</TableHead>
-                      <TableHead>Obra</TableHead>
-                      <TableHead>Grua</TableHead>
+                      <TableHead>Valor Unit.</TableHead>
+                      <TableHead>Valor Total</TableHead>
+                      <TableHead>Motivo</TableHead>
                       <TableHead>Responsável</TableHead>
-                      <TableHead>Observação</TableHead>
+                      <TableHead>Observações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {movimentacoes.map((mov) => (
-                      <TableRow key={mov.id}>
-                        <TableCell>{new Date(mov.data).toLocaleDateString("pt-BR")}</TableCell>
-                        <TableCell>{mov.produto}</TableCell>
-                        <TableCell>
-                          <Badge
-                            className={
-                              mov.tipo === "Entrada" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                            }
-                          >
-                            {mov.tipo === "Entrada" ? (
-                              <TrendingUp className="w-3 h-3 mr-1" />
-                            ) : (
-                              <TrendingDown className="w-3 h-3 mr-1" />
-                            )}
-                            {mov.tipo}
-                          </Badge>
+                    {movimentacoes.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                          Nenhuma movimentação encontrada
                         </TableCell>
-                        <TableCell>{mov.quantidade}</TableCell>
-                        <TableCell>{mov.obra || "-"}</TableCell>
-                        <TableCell>{mov.grua || "-"}</TableCell>
-                        <TableCell>{mov.responsavel}</TableCell>
-                        <TableCell>{mov.observacao}</TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      movimentacoes.map((mov) => (
+                        <TableRow key={mov.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{new Date(mov.data_movimentacao).toLocaleDateString("pt-BR")}</p>
+                              <p className="text-xs text-gray-500">{new Date(mov.data_movimentacao).toLocaleTimeString("pt-BR")}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{(mov as any).produtos?.nome || mov.produto_id}</p>
+                              <p className="text-xs text-gray-500">{(mov as any).produtos?.unidade_medida || ""}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                mov.tipo === "Entrada" ? "bg-green-100 text-green-800" : 
+                                mov.tipo === "Saída" ? "bg-red-100 text-red-800" : 
+                                "bg-blue-100 text-blue-800"
+                              }
+                            >
+                              {mov.tipo === "Entrada" ? (
+                                <TrendingUp className="w-3 h-3 mr-1" />
+                              ) : mov.tipo === "Saída" ? (
+                                <TrendingDown className="w-3 h-3 mr-1" />
+                              ) : (
+                                <Edit className="w-3 h-3 mr-1" />
+                              )}
+                              {mov.tipo}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-center">
+                              <p className="font-medium">{mov.quantidade}</p>
+                              <p className="text-xs text-gray-500">{(mov as any).produtos?.unidade_medida || ""}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>R$ {mov.valor_unitario.toFixed(2)}</TableCell>
+                          <TableCell>R$ {mov.valor_total.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-600">{mov.motivo}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-600">ID: {mov.responsavel_id}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-gray-600">{mov.observacoes || "-"}</span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -764,23 +848,39 @@ export default function EstoquePage() {
         <CardContent>
           <div className="space-y-4">
             {/* Estoque Crítico */}
-            {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length > 0 && (
+            {estoque.filter((item) => {
+              const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+              const estoqueMinimo = item.estoque_minimo || 0
+              return estoqueAtual <= estoqueMinimo
+            }).length > 0 && (
               <div className="p-4 bg-red-100 border border-red-200 rounded-lg">
                 <div className="flex items-center gap-3">
                   <AlertTriangle className="w-5 h-5 text-red-600" />
                   <div>
                     <p className="font-semibold text-red-800">🚨 Estoque Crítico</p>
                     <p className="text-sm text-red-700">
-                      {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length} itens estão abaixo do estoque mínimo
+                      {estoque.filter((item) => {
+                        const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+                        const estoqueMinimo = item.estoque_minimo || 0
+                        return estoqueAtual <= estoqueMinimo
+                      }).length} itens estão abaixo do estoque mínimo
                     </p>
                     <div className="mt-2 space-y-1">
                       {estoque
-                        .filter((item) => item.quantidade <= item.estoqueMinimo)
-                        .map((item) => (
-                          <div key={item.id} className="text-xs text-red-600">
-                            • {item.nome}: {item.quantidade} {item.unidade} (mín: {item.estoqueMinimo})
-                          </div>
-                        ))}
+                        .filter((item) => {
+                          const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+                          const estoqueMinimo = item.estoque_minimo || 0
+                          return estoqueAtual <= estoqueMinimo
+                        })
+                        .map((item) => {
+                          const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+                          const estoqueMinimo = item.estoque_minimo || 0
+                          return (
+                            <div key={item.id} className="text-xs text-red-600">
+                              • {item.nome}: {estoqueAtual} {item.unidade_medida} (mín: {estoqueMinimo})
+                            </div>
+                          )
+                        })}
                     </div>
                   </div>
                 </div>
@@ -788,14 +888,22 @@ export default function EstoquePage() {
             )}
 
             {/* Estoque em Atenção */}
-            {estoque.filter((item) => item.quantidade > item.estoqueMinimo && item.quantidade <= item.estoqueMinimo * 1.5).length > 0 && (
+            {estoque.filter((item) => {
+              const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+              const estoqueMinimo = item.estoque_minimo || 0
+              return estoqueAtual > estoqueMinimo && estoqueAtual <= estoqueMinimo * 1.5
+            }).length > 0 && (
               <div className="p-4 bg-yellow-100 border border-yellow-200 rounded-lg">
                 <div className="flex items-center gap-3">
                   <AlertTriangle className="w-5 h-5 text-yellow-600" />
                   <div>
                     <p className="font-semibold text-yellow-800">⚠️ Estoque em Atenção</p>
                     <p className="text-sm text-yellow-700">
-                      {estoque.filter((item) => item.quantidade > item.estoqueMinimo && item.quantidade <= item.estoqueMinimo * 1.5).length} itens próximos do estoque mínimo
+                      {estoque.filter((item) => {
+                        const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+                        const estoqueMinimo = item.estoque_minimo || 0
+                        return estoqueAtual > estoqueMinimo && estoqueAtual <= estoqueMinimo * 1.5
+                      }).length} itens próximos do estoque mínimo
                     </p>
                   </div>
                 </div>
@@ -803,8 +911,16 @@ export default function EstoquePage() {
             )}
 
             {/* Status Geral */}
-            {estoque.filter((item) => item.quantidade <= item.estoqueMinimo).length === 0 && 
-             estoque.filter((item) => item.quantidade > item.estoqueMinimo && item.quantidade <= item.estoqueMinimo * 1.5).length === 0 && (
+            {estoque.filter((item) => {
+              const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+              const estoqueMinimo = item.estoque_minimo || 0
+              return estoqueAtual <= estoqueMinimo
+            }).length === 0 && 
+             estoque.filter((item) => {
+               const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
+               const estoqueMinimo = item.estoque_minimo || 0
+               return estoqueAtual > estoqueMinimo && estoqueAtual <= estoqueMinimo * 1.5
+             }).length === 0 && (
               <div className="p-4 bg-green-100 border border-green-200 rounded-lg">
                 <div className="flex items-center gap-3">
                   <CheckCircle className="w-5 h-5 text-green-600" />
