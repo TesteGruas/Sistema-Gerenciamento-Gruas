@@ -99,6 +99,18 @@ export default function DashboardLayout({
             <LogOut className="w-4 h-4 mr-3" />
             Sair do Sistema
           </Button>
+          
+          {/* Controle de versão */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="text-center">
+              <div className="text-xs text-gray-500 font-medium">
+                Sistema de Gerenciamento de Gruas
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                Versão: 1.1.0
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

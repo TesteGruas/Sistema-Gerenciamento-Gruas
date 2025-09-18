@@ -551,10 +551,6 @@ export default function GruasPage() {
 
     try {
       // Preparar dados base - baseado no schema real da tabela gruas do Supabase
-      console.log('🔍 DEBUG: Cliente selecionado:', clienteSelecionado)
-      console.log('🔍 DEBUG: Obra data:', obraData)
-      console.log('🔍 DEBUG: Form data cliente:', formData.cliente)
-      
       const baseData: any = {
         // Campos obrigatórios
         modelo: formData.modelo,
@@ -581,8 +577,6 @@ export default function GruasPage() {
         cliente_email: clienteSelecionado?.email || obraData.emailContato || null,
         cliente_telefone: clienteSelecionado?.telefone || obraData.telefoneContato || null,
       }
-
-      console.log('🔍 DEBUG: Dados finais da grua:', baseData)
 
       if (editingGrua) {
         // Atualizar grua existente - não incluir id no corpo da requisição
