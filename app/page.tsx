@@ -29,7 +29,29 @@ export default function LoginPage() {
     setLoading(true)
     
     try {
-      await AuthService.login()
+      // Fazer login com as credenciais do formulário
+      const response = await fetch('http://localhost:3001/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro no login')
+      }
+
+      const data = await response.json()
+      const token = data.data.access_token
+      
+      // Salvar token no localStorage
+      localStorage.setItem('access_token', token)
+      
+      // Redirecionar para dashboard
       window.location.href = '/dashboard'
     } catch (error) {
       console.error('Erro no login:', error)
