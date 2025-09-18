@@ -497,6 +497,14 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
     const quantidadeDisponivel = novaQuantidade - estoqueAtual.quantidade_reservada
     const valorTotal = novaQuantidade * produto.valor_unitario
 
+    // Log para debug - ENDPOINT /movimentar
+    console.log('🔍 DEBUG /movimentar - Antes de atualizar estoque:')
+    console.log('  - Produto ID:', produto_id)
+    console.log('  - Quantidade atual:', estoqueAtual.quantidade_atual)
+    console.log('  - Nova quantidade calculada:', novaQuantidade)
+    console.log('  - Quantidade da movimentação:', quantidade)
+    console.log('  - Tipo da movimentação:', tipo)
+
     // Atualizar estoque
     const { error: updateEstoqueError } = await supabaseAdmin
       .from('estoque')
@@ -510,11 +518,14 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
       .eq('produto_id', produto_id)
 
     if (updateEstoqueError) {
+      console.error('❌ Erro ao atualizar estoque:', updateEstoqueError)
       return res.status(500).json({
         error: 'Erro ao atualizar estoque',
         message: updateEstoqueError.message
       })
     }
+
+    console.log('✅ Estoque atualizado com sucesso')
 
     // Preparar dados para inserção
     const movimentacaoData = {
@@ -531,7 +542,7 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
       created_at: new Date().toISOString()
     }
 
-    console.log('Dados da movimentação a ser inserida:', movimentacaoData)
+    console.log('📝 Dados da movimentação a ser inserida:', movimentacaoData)
 
     // Registrar movimentação
     const { data: movimentacao, error: movimentacaoError } = await supabaseAdmin
@@ -541,7 +552,9 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
       .single()
 
     if (movimentacaoError) {
-      console.error('Erro ao registrar movimentação:', movimentacaoError)
+      console.error('❌ Erro ao registrar movimentação:', movimentacaoError)
+    } else {
+      console.log('✅ Movimentação registrada com sucesso:', movimentacao?.id)
     }
 
     res.json({
@@ -1046,38 +1059,18 @@ router.post('/teste-insercao', authenticateToken, async (req, res) => {
   }
 })
 
-// Endpoint para criar movimentações de estoque (POST)
-router.post('/movimentacoes', authenticateToken, requirePermission('movimentar_estoque'), async (req, res) => {
+// Endpoint duplicado removido - usar /movimentar
+
+// Endpoint de teste para verificar se há triggers no banco
+router.post('/teste-trigger', authenticateToken, async (req, res) => {
   try {
-    const { error, value } = movimentacaoSchema.validate(req.body)
-    if (error) {
-      return res.status(400).json({
-        error: 'Dados inválidos',
-        details: error.details[0].message
-      })
-    }
-
-    const { produto_id, tipo, quantidade, motivo, observacoes } = value
-
-    // Verificar se produto existe
-    const { data: produto, error: produtoError } = await supabaseAdmin
-      .from('produtos')
-      .select('id, nome, valor_unitario, estoque_minimo, estoque_maximo')
-      .eq('id', produto_id)
-      .single()
-
-    if (produtoError || !produto) {
-      return res.status(404).json({
-        error: 'Produto não encontrado',
-        message: 'O produto especificado não existe'
-      })
-    }
-
-    // Obter estoque atual
-    const { data: estoqueAtual, error: estoqueError } = await supabaseAdmin
+    console.log('🧪 Testando se há triggers no banco...')
+    
+    // Primeiro, vamos verificar o estoque atual
+    const { data: estoqueAntes, error: estoqueError } = await supabaseAdmin
       .from('estoque')
-      .select('quantidade_atual, quantidade_reservada, quantidade_disponivel, valor_total')
-      .eq('produto_id', produto_id)
+      .select('quantidade_atual, produto_id')
+      .eq('produto_id', 'P0003')
       .single()
 
     if (estoqueError) {
@@ -1087,107 +1080,70 @@ router.post('/movimentacoes', authenticateToken, requirePermission('movimentar_e
       })
     }
 
-    // Calcular nova quantidade
-    let novaQuantidade = estoqueAtual.quantidade_atual
-    if (tipo === 'Entrada') {
-      novaQuantidade += quantidade
-      
-      // Verificar se excede estoque máximo
-      if (produto.estoque_maximo && novaQuantidade > produto.estoque_maximo) {
-        return res.status(400).json({
-          error: 'Estoque máximo excedido',
-          message: `Estoque máximo: ${produto.estoque_maximo}, quantidade após entrada: ${novaQuantidade}`
-        })
-      }
-    } else if (tipo === 'Saída') {
-      // Verificar se há estoque disponível suficiente
-      const estoqueDisponivel = estoqueAtual.quantidade_disponivel
-      if (estoqueDisponivel < quantidade) {
-        return res.status(400).json({
-          error: 'Estoque insuficiente',
-          message: `Estoque disponível: ${estoqueDisponivel}, tentativa de saída: ${quantidade}`
-        })
-      }
-      
-      novaQuantidade -= quantidade
-      
-      // Verificar se ficará abaixo do estoque mínimo
-      if (novaQuantidade < produto.estoque_minimo) {
-        return res.status(400).json({
-          error: 'Estoque abaixo do mínimo',
-          message: `Estoque restante: ${novaQuantidade}, mínimo: ${produto.estoque_minimo}`
-        })
-      }
-    } else if (tipo === 'Ajuste') {
-      novaQuantidade = quantidade
-    }
+    console.log('📊 Estoque ANTES do teste:', estoqueAntes)
 
-    // Calcular valores atualizados
-    const quantidadeDisponivel = novaQuantidade - estoqueAtual.quantidade_reservada
-    const valorTotal = novaQuantidade * produto.valor_unitario
-
-    // Atualizar estoque
-    const { error: updateEstoqueError } = await supabaseAdmin
-      .from('estoque')
-      .update({ 
-        quantidade_atual: novaQuantidade,
-        quantidade_disponivel: quantidadeDisponivel,
-        valor_total: valorTotal,
-        ultima_movimentacao: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('produto_id', produto_id)
-
-    if (updateEstoqueError) {
-      return res.status(500).json({
-        error: 'Erro ao atualizar estoque',
-        message: updateEstoqueError.message
-      })
-    }
-
-    // Preparar dados para inserção
-    const movimentacaoData = {
-      produto_id: produto_id.toString(),
-      tipo,
-      quantidade: quantidade.toString(),
-      valor_unitario: produto.valor_unitario.toString(),
-      valor_total: valorTotal.toString(),
-      data_movimentacao: new Date().toISOString(),
-      responsavel_id: req.user.id,
-      observacoes: observacoes || null,
-      status: 'Confirmada',
-      motivo: motivo || null,
-      created_at: new Date().toISOString()
-    }
-
-    console.log('Dados da movimentação a ser inserida:', movimentacaoData)
-
-    // Registrar movimentação
+    // Inserir uma movimentação de teste
     const { data: movimentacao, error: movimentacaoError } = await supabaseAdmin
       .from('movimentacoes_estoque')
-      .insert(movimentacaoData)
+      .insert({
+        produto_id: 'P0003',
+        tipo: 'Entrada',
+        quantidade: '1',
+        valor_unitario: '10.00',
+        valor_total: '10.00',
+        data_movimentacao: new Date().toISOString(),
+        responsavel_id: 2,
+        status: 'Confirmada',
+        motivo: 'TESTE_TRIGGER',
+        created_at: new Date().toISOString()
+      })
       .select()
       .single()
 
     if (movimentacaoError) {
-      console.error('Erro ao registrar movimentação:', movimentacaoError)
+      console.error('❌ Erro ao inserir movimentação de teste:', movimentacaoError)
+      return res.status(500).json({
+        error: 'Erro ao inserir movimentação',
+        message: movimentacaoError.message
+      })
     }
+
+    console.log('✅ Movimentação de teste inserida:', movimentacao?.id)
+
+    // Verificar o estoque depois
+    const { data: estoqueDepois, error: estoqueDepoisError } = await supabaseAdmin
+      .from('estoque')
+      .select('quantidade_atual, produto_id')
+      .eq('produto_id', 'P0003')
+      .single()
+
+    if (estoqueDepoisError) {
+      return res.status(500).json({
+        error: 'Erro ao consultar estoque depois',
+        message: estoqueDepoisError.message
+      })
+    }
+
+    console.log('📊 Estoque DEPOIS do teste:', estoqueDepois)
+
+    const diferenca = estoqueDepois.quantidade_atual - estoqueAntes.quantidade_atual
+    console.log('🔍 Diferença no estoque:', diferenca)
 
     res.json({
       success: true,
       data: {
-        movimentacao,
-        estoque_anterior: estoqueAtual.quantidade_atual,
-        estoque_atual: novaQuantidade,
-        quantidade_disponivel: quantidadeDisponivel,
-        valor_total: valorTotal
+        estoque_antes: estoqueAntes,
+        estoque_depois: estoqueDepois,
+        diferenca: diferenca,
+        movimentacao_teste: movimentacao,
+        tem_trigger: diferenca > 0
       },
-      message: 'Movimentação realizada com sucesso'
+      message: `Teste concluído. Diferença no estoque: ${diferenca}`
     })
   } catch (error) {
-    console.error('Erro ao movimentar estoque:', error)
+    console.error('Erro no teste de trigger:', error)
     res.status(500).json({
-      error: 'Erro interno do servidor',
+      error: 'Erro interno',
       message: error.message
     })
   }
