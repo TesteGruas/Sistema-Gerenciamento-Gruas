@@ -25,8 +25,8 @@ import { usePathname } from "next/navigation"
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane },
-  { name: "Estoque", href: "/dashboard/estoque", icon: Package },
-  { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock },
+  // { name: "Estoque", href: "/dashboard/estoque", icon: Package },
+  // { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock },
   // { name: "Recursos Humanos", href: "/dashboard/rh", icon: Users },
   // { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature },
   // { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign },
@@ -99,6 +99,18 @@ export default function DashboardLayout({
             <LogOut className="w-4 h-4 mr-3" />
             Sair do Sistema
           </Button>
+          
+          {/* Controle de versão */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="text-center">
+              <div className="text-xs text-gray-500 font-medium">
+                Sistema de Gerenciamento de Gruas
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                Versão: 1.1.0
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

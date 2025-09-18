@@ -2,7 +2,11 @@
 
 // Utilitários de autenticação
 export class AuthService {
+<<<<<<< HEAD
   private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+=======
+  private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api'
+>>>>>>> 1221d50945ef91dc9152648cfaf2cc2d3042d17f
   private static readonly LOGIN_CREDENTIALS = {
     email: 'admin@admin.com',
     password: 'teste@123'

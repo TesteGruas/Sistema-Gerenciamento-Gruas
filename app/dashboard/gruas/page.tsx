@@ -952,6 +952,17 @@ export default function GruasPage() {
         body: JSON.stringify(relacionamentoData),
       })
 
+      // Adicionar equipamento ao array local também (para exibição no formulário)
+      if (!equipamentos.find(e => e.id === equipamento.id)) {
+        setEquipamentos([...equipamentos, {
+          id: equipamento.id,
+          nome: equipamento.nome,
+          tipo: equipamento.tipo,
+          status: equipamento.status,
+          responsavel: "",
+        }])
+      }
+
       // Atualizar a grua selecionada
       const dadosCompletos = await carregarDadosCompletosGrua(selectedGrua.id)
       if (dadosCompletos) {
@@ -3041,7 +3052,7 @@ export default function GruasPage() {
                           onFocus={() => setMostrarSugestoesEquipamentos(buscaEquipamento.length > 0)}
                         />
                         {mostrarSugestoesEquipamentos && (
-                          <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
                             {equipamentosExistentes
                               .filter(equip => 
                                 equip.nome.toLowerCase().includes(buscaEquipamento.toLowerCase()) &&
@@ -3051,7 +3062,16 @@ export default function GruasPage() {
                                 <div
                                   key={equipamento.id}
                                   className="p-2 hover:bg-gray-100 cursor-pointer border-b"
-                                  onClick={() => adicionarEquipamentoExistenteAGrua(equipamento)}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    adicionarEquipamentoExistente(equipamento)
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    adicionarEquipamentoExistente(equipamento)
+                                  }}
                                 >
                                   <div className="font-medium">{equipamento.nome}</div>
                                   <div className="text-sm text-gray-600">
@@ -3646,7 +3666,7 @@ export default function GruasPage() {
                           onFocus={() => setMostrarSugestoesEquipamentos(buscaEquipamento.length > 0)}
                         />
                         {mostrarSugestoesEquipamentos && (
-                          <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
                             {equipamentosExistentes
                               .filter(equip => 
                                 equip.nome.toLowerCase().includes(buscaEquipamento.toLowerCase()) &&
@@ -3656,7 +3676,16 @@ export default function GruasPage() {
                                 <div
                                   key={equipamento.id}
                                   className="p-2 hover:bg-gray-100 cursor-pointer border-b"
-                                  onClick={() => adicionarEquipamentoExistenteAGrua(equipamento)}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    adicionarEquipamentoExistenteAGrua(equipamento)
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    adicionarEquipamentoExistenteAGrua(equipamento)
+                                  }}
                                 >
                                   <div className="font-medium">{equipamento.nome}</div>
                                   <div className="text-sm text-gray-600">
@@ -3770,7 +3799,7 @@ export default function GruasPage() {
                           onFocus={() => setMostrarSugestoesFuncionarios(buscaFuncionario.length > 0)}
                         />
                         {mostrarSugestoesFuncionarios && (
-                          <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
                             {funcionariosExistentes
                               .filter(func => 
                                 func.nome.toLowerCase().includes(buscaFuncionario.toLowerCase()) &&
