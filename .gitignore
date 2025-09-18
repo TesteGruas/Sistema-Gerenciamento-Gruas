@@ -25,3 +25,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/backend-api/node_modules
+/backend-api/.env
+/backend-api/package-lock.json
+/backend-api/package.json
+/backend-api/README.md
+/backend-api/src/config/supabase.js
+/backend-api/src/database/create-historico-locacoes.sql
+/backend-api/src/database/create-obras.sql
+/backend-api/src/database/create-produtos.sql
+/backend-api/src/database/create-usuarios.sql
