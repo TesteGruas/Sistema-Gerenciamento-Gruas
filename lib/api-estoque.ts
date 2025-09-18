@@ -129,12 +129,12 @@ class EstoqueAPI {
     if (params.status) queryParams.append('status', params.status)
 
     const queryString = queryParams.toString()
-    return this.request<EstoqueResponse>(`/api/estoque${queryString ? `?${queryString}` : ''}`)
+    return this.request<EstoqueResponse>(`/estoque${queryString ? `?${queryString}` : ''}`)
   }
 
   // Obter produto por ID
   async obterProduto(id: string): Promise<{ success: boolean; data: Produto }> {
-    return this.request<{ success: boolean; data: Produto }>(`/api/estoque/${id}`)
+    return this.request<{ success: boolean; data: Produto }>(`/estoque/${id}`)
   }
 
   // Criar novo produto
@@ -150,7 +150,7 @@ class EstoqueAPI {
     localizacao?: string
     status?: 'Ativo' | 'Inativo'
   }): Promise<{ success: boolean; data: Produto; message: string }> {
-    return this.request<{ success: boolean; data: Produto; message: string }>('/api/estoque', {
+    return this.request<{ success: boolean; data: Produto; message: string }>('/estoque', {
       method: 'POST',
       body: JSON.stringify(dados),
     })
@@ -172,7 +172,7 @@ class EstoqueAPI {
       status: 'Ativo' | 'Inativo'
     }>
   ): Promise<{ success: boolean; data: Produto; message: string }> {
-    return this.request<{ success: boolean; data: Produto; message: string }>(`/api/estoque/${id}`, {
+    return this.request<{ success: boolean; data: Produto; message: string }>(`/estoque/${id}`, {
       method: 'PUT',
       body: JSON.stringify(dados),
     })
@@ -180,7 +180,7 @@ class EstoqueAPI {
 
   // Excluir produto
   async excluirProduto(id: string): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(`/api/estoque/${id}`, {
+    return this.request<{ success: boolean; message: string }>(`/estoque/${id}`, {
       method: 'DELETE',
     })
   }
@@ -193,7 +193,7 @@ class EstoqueAPI {
     motivo: string
     observacoes?: string
   }): Promise<MovimentacaoResponse> {
-    return this.request<MovimentacaoResponse>('/api/estoque/movimentar', {
+    return this.request<MovimentacaoResponse>('/estoque/movimentar', {
       method: 'POST',
       body: JSON.stringify(dados),
     })
@@ -207,7 +207,7 @@ class EstoqueAPI {
     observacoes?: string
     referencia?: string
   }): Promise<MovimentacaoResponse> {
-    return this.request<MovimentacaoResponse>('/api/estoque/reservar', {
+    return this.request<MovimentacaoResponse>('/estoque/reservar', {
       method: 'POST',
       body: JSON.stringify(dados),
     })
@@ -221,7 +221,7 @@ class EstoqueAPI {
     observacoes?: string
     referencia?: string
   }): Promise<MovimentacaoResponse> {
-    return this.request<MovimentacaoResponse>('/api/estoque/liberar-reserva', {
+    return this.request<MovimentacaoResponse>('/estoque/liberar-reserva', {
       method: 'POST',
       body: JSON.stringify(dados),
     })
@@ -246,7 +246,7 @@ class EstoqueAPI {
     if (params.data_fim) queryParams.append('data_fim', params.data_fim)
 
     const queryString = queryParams.toString()
-    return this.request<{ success: boolean; data: Movimentacao[]; pagination: any }>(`/api/estoque/movimentacoes${queryString ? `?${queryString}` : ''}`)
+    return this.request<{ success: boolean; data: Movimentacao[]; pagination: any }>(`/estoque/movimentacoes${queryString ? `?${queryString}` : ''}`)
   }
 
   // Obter relatório de estoque
@@ -262,12 +262,12 @@ class EstoqueAPI {
     if (params.estoque_baixo !== undefined) queryParams.append('estoque_baixo', params.estoque_baixo.toString())
 
     const queryString = queryParams.toString()
-    return this.request<RelatorioResponse>(`/api/estoque/relatorio${queryString ? `?${queryString}` : ''}`)
+    return this.request<RelatorioResponse>(`/estoque/relatorio${queryString ? `?${queryString}` : ''}`)
   }
 
   // Listar categorias (assumindo que existe um endpoint para isso)
   async listarCategorias(): Promise<{ success: boolean; data: Categoria[] }> {
-    return this.request<{ success: boolean; data: Categoria[] }>('/api/categorias')
+    return this.request<{ success: boolean; data: Categoria[] }>('/categorias')
   }
 }
 
