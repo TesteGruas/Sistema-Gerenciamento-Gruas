@@ -24,7 +24,8 @@ import {
   Eye,
   Edit,
   Wrench,
-  ConeIcon as Crane
+  ConeIcon as Crane,
+  X
 } from "lucide-react"
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers } from "@/lib/mock-data"
 
@@ -496,47 +497,33 @@ export default function ObrasPage() {
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Crane className="w-5 h-5 text-blue-600" />
-                    <h3 className="font-medium text-blue-900">Dados da Grua</h3>
+                    <h3 className="font-medium text-blue-900">Selecionar Grua</h3>
                   </div>
                   <p className="text-sm text-blue-700">
-                    A grua será automaticamente atrelada a esta obra
+                    Selecione uma grua existente para atrelar a esta obra
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="gruaName">Nome da Grua *</Label>
-                    <Input
-                      id="gruaName"
-                      value={obraFormData.gruaName}
-                      onChange={(e) => setObraFormData({ ...obraFormData, gruaName: e.target.value })}
-                      placeholder="Ex: Grua 001"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="gruaModel">Modelo *</Label>
-                    <Input
-                      id="gruaModel"
-                      value={obraFormData.gruaModel}
-                      onChange={(e) => setObraFormData({ ...obraFormData, gruaModel: e.target.value })}
-                      placeholder="Ex: Liebherr 200HC"
-                      required
-                    />
-                  </div>
+                <div>
+                  <Label htmlFor="gruaId">Grua *</Label>
+                  <Select
+                    value={obraFormData.gruaId}
+                    onValueChange={(value) => setObraFormData({ ...obraFormData, gruaId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma grua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mockGruas.filter(grua => grua.status === 'disponivel').map(grua => (
+                        <SelectItem key={grua.id} value={grua.id}>
+                          {grua.name} - {grua.model} ({grua.capacity})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="gruaCapacity">Capacidade *</Label>
-                    <Input
-                      id="gruaCapacity"
-                      value={obraFormData.gruaCapacity}
-                      onChange={(e) => setObraFormData({ ...obraFormData, gruaCapacity: e.target.value })}
-                      placeholder="Ex: 200 ton"
-                      required
-                    />
-                  </div>
                   <div>
                     <Label htmlFor="gruaValue">Valor da Grua (R$) *</Label>
                     <Input
@@ -548,18 +535,17 @@ export default function ObrasPage() {
                       required
                     />
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="monthlyFee">Mensalidade (R$) *</Label>
-                  <Input
-                    id="monthlyFee"
-                    type="number"
-                    value={obraFormData.monthlyFee}
-                    onChange={(e) => setObraFormData({ ...obraFormData, monthlyFee: e.target.value })}
-                    placeholder="Ex: 15000"
-                    required
-                  />
+                  <div>
+                    <Label htmlFor="monthlyFee">Mensalidade (R$) *</Label>
+                    <Input
+                      id="monthlyFee"
+                      type="number"
+                      value={obraFormData.monthlyFee}
+                      onChange={(e) => setObraFormData({ ...obraFormData, monthlyFee: e.target.value })}
+                      placeholder="Ex: 15000"
+                      required
+                    />
+                  </div>
                 </div>
               </TabsContent>
 
@@ -568,35 +554,70 @@ export default function ObrasPage() {
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-5 h-5 text-green-600" />
-                    <h3 className="font-medium text-green-900">Responsável pela Grua</h3>
+                    <h3 className="font-medium text-green-900">Funcionários da Obra</h3>
                   </div>
                   <p className="text-sm text-green-700">
-                    Selecione o funcionário responsável pela operação da grua
+                    Adicione quantos funcionários desejar para esta obra
                   </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="responsibleId">Funcionário Responsável *</Label>
-                  <Select
-                    value={obraFormData.responsibleId}
-                    onValueChange={(value) => setObraFormData({ ...obraFormData, responsibleId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um funcionário" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockUsers.filter(user => 
-                        user.role === 'engenheiro' || 
-                        user.role === 'chefe_obras' || 
-                        user.role === 'funcionario'
-                      ).map(user => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-3">
+                  {obraFormData.funcionarios.map((funcionario) => (
+                    <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg">
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <Select
+                          value={funcionario.userId}
+                          onValueChange={(value) => {
+                            const user = mockUsers.find(u => u.id === value)
+                            updateFuncionario(funcionario.id, 'userId', value)
+                            updateFuncionario(funcionario.id, 'name', user?.name || '')
+                            updateFuncionario(funcionario.id, 'role', user?.role || '')
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um funcionário" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {mockUsers.filter(user => 
+                              user.role === 'engenheiro' || 
+                              user.role === 'chefe_obras' || 
+                              user.role === 'funcionario'
+                            ).map(user => (
+                              <SelectItem key={user.id} value={user.id}>
+                                {user.name} ({user.role})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={funcionario.role}
+                          readOnly
+                          placeholder="Cargo será preenchido automaticamente"
+                          className="bg-gray-50"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeFuncionario(funcionario.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addFuncionario}
+                  className="w-full"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Funcionário
+                </Button>
               </TabsContent>
 
             </Tabs>
@@ -744,47 +765,33 @@ export default function ObrasPage() {
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Crane className="w-5 h-5 text-blue-600" />
-                    <h3 className="font-medium text-blue-900">Dados da Grua</h3>
+                    <h3 className="font-medium text-blue-900">Selecionar Grua</h3>
                   </div>
                   <p className="text-sm text-blue-700">
-                    Editar informações da grua vinculada a esta obra
+                    Selecione uma grua existente para atrelar a esta obra
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="edit-gruaName">Nome da Grua *</Label>
-                    <Input
-                      id="edit-gruaName"
-                      value={obraFormData.gruaName}
-                      onChange={(e) => setObraFormData({ ...obraFormData, gruaName: e.target.value })}
-                      placeholder="Ex: Grua 001"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="edit-gruaModel">Modelo *</Label>
-                    <Input
-                      id="edit-gruaModel"
-                      value={obraFormData.gruaModel}
-                      onChange={(e) => setObraFormData({ ...obraFormData, gruaModel: e.target.value })}
-                      placeholder="Ex: Liebherr 200HC"
-                      required
-                    />
-                  </div>
+                <div>
+                  <Label htmlFor="edit-gruaId">Grua *</Label>
+                  <Select
+                    value={obraFormData.gruaId}
+                    onValueChange={(value) => setObraFormData({ ...obraFormData, gruaId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma grua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mockGruas.filter(grua => grua.status === 'disponivel').map(grua => (
+                        <SelectItem key={grua.id} value={grua.id}>
+                          {grua.name} - {grua.model} ({grua.capacity})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="edit-gruaCapacity">Capacidade *</Label>
-                    <Input
-                      id="edit-gruaCapacity"
-                      value={obraFormData.gruaCapacity}
-                      onChange={(e) => setObraFormData({ ...obraFormData, gruaCapacity: e.target.value })}
-                      placeholder="Ex: 200 ton"
-                      required
-                    />
-                  </div>
                   <div>
                     <Label htmlFor="edit-gruaValue">Valor da Grua (R$) *</Label>
                     <Input
@@ -796,18 +803,17 @@ export default function ObrasPage() {
                       required
                     />
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="edit-monthlyFee">Mensalidade (R$) *</Label>
-                  <Input
-                    id="edit-monthlyFee"
-                    type="number"
-                    value={obraFormData.monthlyFee}
-                    onChange={(e) => setObraFormData({ ...obraFormData, monthlyFee: e.target.value })}
-                    placeholder="Ex: 15000"
-                    required
-                  />
+                  <div>
+                    <Label htmlFor="edit-monthlyFee">Mensalidade (R$) *</Label>
+                    <Input
+                      id="edit-monthlyFee"
+                      type="number"
+                      value={obraFormData.monthlyFee}
+                      onChange={(e) => setObraFormData({ ...obraFormData, monthlyFee: e.target.value })}
+                      placeholder="Ex: 15000"
+                      required
+                    />
+                  </div>
                 </div>
               </TabsContent>
 
@@ -816,35 +822,70 @@ export default function ObrasPage() {
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-5 h-5 text-green-600" />
-                    <h3 className="font-medium text-green-900">Responsável pela Grua</h3>
+                    <h3 className="font-medium text-green-900">Funcionários da Obra</h3>
                   </div>
                   <p className="text-sm text-green-700">
-                    Selecione o funcionário responsável pela operação da grua
+                    Adicione quantos funcionários desejar para esta obra
                   </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="edit-responsibleId">Funcionário Responsável *</Label>
-                  <Select
-                    value={obraFormData.responsibleId}
-                    onValueChange={(value) => setObraFormData({ ...obraFormData, responsibleId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um funcionário" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockUsers.filter(user => 
-                        user.role === 'engenheiro' || 
-                        user.role === 'chefe_obras' || 
-                        user.role === 'funcionario'
-                      ).map(user => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-3">
+                  {obraFormData.funcionarios.map((funcionario) => (
+                    <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg">
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <Select
+                          value={funcionario.userId}
+                          onValueChange={(value) => {
+                            const user = mockUsers.find(u => u.id === value)
+                            updateFuncionario(funcionario.id, 'userId', value)
+                            updateFuncionario(funcionario.id, 'name', user?.name || '')
+                            updateFuncionario(funcionario.id, 'role', user?.role || '')
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um funcionário" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {mockUsers.filter(user => 
+                              user.role === 'engenheiro' || 
+                              user.role === 'chefe_obras' || 
+                              user.role === 'funcionario'
+                            ).map(user => (
+                              <SelectItem key={user.id} value={user.id}>
+                                {user.name} ({user.role})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={funcionario.role}
+                          readOnly
+                          placeholder="Cargo será preenchido automaticamente"
+                          className="bg-gray-50"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeFuncionario(funcionario.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addFuncionario}
+                  className="w-full"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Funcionário
+                </Button>
               </TabsContent>
             </Tabs>
 
