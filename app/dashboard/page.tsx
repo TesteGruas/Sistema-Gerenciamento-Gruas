@@ -10,21 +10,22 @@ import {
   ConeIcon as Crane,
   TrendingUp,
   AlertTriangle,
+  Building2,
 } from "lucide-react"
 
 export default function Dashboard() {
   const stats = [
-    { title: "Gruas Ativas", value: "12", icon: Crane, color: "bg-blue-500" },
-    { title: "Itens em Estoque", value: "1,247", icon: Package, color: "bg-green-500" },
-    { title: "Funcionários", value: "45", icon: Users, color: "bg-purple-500" },
-    { title: "Receita Mensal", value: "R$ 125.400", icon: DollarSign, color: "bg-yellow-500" },
+    { title: "Obras Ativas", value: "3", icon: Building2, color: "bg-blue-500" },
+    { title: "Gruas em Operação", value: "2", icon: Crane, color: "bg-green-500" },
+    { title: "Funcionários", value: "5", icon: Users, color: "bg-purple-500" },
+    { title: "Total de Custos", value: "R$ 420.000", icon: DollarSign, color: "bg-yellow-500" },
   ]
 
   const recentActivities = [
-    { action: "Grua #007 - Manutenção concluída", time: "2 horas atrás", type: "success" },
-    { action: "Novo funcionário cadastrado: João Silva", time: "4 horas atrás", type: "info" },
-    { action: "Estoque baixo: Cabos de aço", time: "6 horas atrás", type: "warning" },
-    { action: "Pagamento recebido: R$ 15.000", time: "1 dia atrás", type: "success" },
+    { action: "Grua 002 - Falha hidráulica identificada", time: "2 horas atrás", type: "warning" },
+    { action: "Checklist diário - Grua 001 OK", time: "4 horas atrás", type: "success" },
+    { action: "Documento assinado: Contrato Principal", time: "6 horas atrás", type: "success" },
+    { action: "Novo custo registrado: R$ 25.000", time: "1 dia atrás", type: "info" },
   ]
 
   return (
@@ -92,24 +93,24 @@ export default function Dashboard() {
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <button className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left transition-colors">
-                <Crane className="w-6 h-6 text-blue-600 mb-2" />
-                <p className="font-medium text-gray-900">Nova Grua</p>
-                <p className="text-xs text-gray-600">Cadastrar equipamento</p>
+                <Building2 className="w-6 h-6 text-blue-600 mb-2" />
+                <p className="font-medium text-gray-900">Nova Obra</p>
+                <p className="text-xs text-gray-600">Criar projeto</p>
               </button>
               <button className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left transition-colors">
-                <Package className="w-6 h-6 text-green-600 mb-2" />
-                <p className="font-medium text-gray-900">Estoque</p>
-                <p className="text-xs text-gray-600">Gerenciar itens</p>
+                <Clock className="w-6 h-6 text-green-600 mb-2" />
+                <p className="font-medium text-gray-900">Histórico</p>
+                <p className="text-xs text-gray-600">Registrar checklist</p>
               </button>
               <button className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-left transition-colors">
-                <Clock className="w-6 h-6 text-purple-600 mb-2" />
-                <p className="font-medium text-gray-900">Ponto</p>
-                <p className="text-xs text-gray-600">Registrar ponto</p>
+                <Users className="w-6 h-6 text-purple-600 mb-2" />
+                <p className="font-medium text-gray-900">RH</p>
+                <p className="text-xs text-gray-600">Gerenciar usuários</p>
               </button>
               <button className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-left transition-colors">
                 <DollarSign className="w-6 h-6 text-yellow-600 mb-2" />
                 <p className="font-medium text-gray-900">Financeiro</p>
-                <p className="text-xs text-gray-600">Ver relatórios</p>
+                <p className="text-xs text-gray-600">Ver custos</p>
               </button>
             </div>
           </CardContent>
@@ -117,13 +118,13 @@ export default function Dashboard() {
       </div>
 
       {/* Alerts */}
-      <Card className="border-yellow-200 bg-yellow-50">
+      <Card className="border-red-200 bg-red-50">
         <CardContent className="p-6">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600" />
+            <AlertTriangle className="w-5 h-5 text-red-600" />
             <div>
-              <p className="font-medium text-yellow-800">Atenção necessária</p>
-              <p className="text-sm text-yellow-700">3 gruas precisam de manutenção preventiva nos próximos 7 dias</p>
+              <p className="font-medium text-red-800">Falha identificada</p>
+              <p className="text-sm text-red-700">Grua 002 - Falha no sistema hidráulico. Notificação enviada para o responsável.</p>
             </div>
           </div>
         </CardContent>

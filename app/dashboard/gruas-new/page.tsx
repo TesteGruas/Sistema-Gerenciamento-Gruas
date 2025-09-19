@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
   ConeIcon as Crane, 
   Plus, 
@@ -25,43 +23,19 @@ import {
   Building2,
   Calendar,
   User,
-  Bell,
-  BookOpen
+  Bell
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { mockGruas, mockObras, mockUsers, getHistoricoByGrua } from "@/lib/mock-data"
 
 export default function GruasPage() {
-  const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedObra, setSelectedObra] = useState("all")
   const [selectedGrua, setSelectedGrua] = useState<any>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isHistoricoDialogOpen, setIsHistoricoDialogOpen] = useState(false)
-  const [gruaFormData, setGruaFormData] = useState({
-    name: '',
-    model: '',
-    capacity: '',
-    status: 'disponivel',
-    obraId: '',
-    observacoes: ''
-  })
-
-  // Aplicar filtros da URL
-  useEffect(() => {
-    const gruaParam = searchParams.get('grua')
-    const obraParam = searchParams.get('obra')
-    
-    if (gruaParam) {
-      setSelectedGrua(mockGruas.find(g => g.id === gruaParam))
-      setIsHistoricoDialogOpen(true)
-    }
-    if (obraParam) {
-      setSelectedObra(obraParam)
-    }
-  }, [searchParams])
 
   const filteredGruas = mockGruas.filter(grua => {
     const matchesSearch = grua.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -99,42 +73,6 @@ export default function GruasPage() {
   const handleAddHistorico = (grua: any) => {
     setSelectedGrua(grua)
     setIsHistoricoDialogOpen(true)
-  }
-
-  const handleCreateGrua = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Simular criação da grua
-    const newGrua = {
-      id: (mockGruas.length + 1).toString(),
-      name: gruaFormData.name,
-      model: gruaFormData.model,
-      capacity: gruaFormData.capacity,
-      status: gruaFormData.status as 'disponivel' | 'em_obra' | 'manutencao' | 'inativa',
-      currentObraId: gruaFormData.obraId || null,
-      currentObraName: gruaFormData.obraId ? mockObras.find(o => o.id === gruaFormData.obraId)?.name : null,
-      responsavelId: null,
-      responsavelName: null,
-      createdAt: new Date().toISOString(),
-      historico: []
-    }
-
-    // Em uma aplicação real, isso seria uma chamada para a API
-    console.log('Nova grua criada:', newGrua)
-    
-    // Resetar formulário e fechar dialog
-    setGruaFormData({
-      name: '',
-      model: '',
-      capacity: '',
-      status: 'disponivel',
-      obraId: '',
-      observacoes: ''
-    })
-    setIsCreateDialogOpen(false)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert('Grua criada com sucesso!')
   }
 
   const stats = [
@@ -331,10 +269,10 @@ export default function GruasPage() {
                             variant="outline" 
                             size="sm" 
                             className="w-full mt-2"
-                            onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/livro`}
+                            onClick={() => handleViewDetails(grua)}
                           >
-                            <BookOpen className="w-4 h-4 mr-1" />
-                            Abrir Livro da Grua
+                            <Eye className="w-4 h-4 mr-1" />
+                            Ver Histórico Completo
                           </Button>
                         )}
                       </div>
@@ -357,11 +295,11 @@ export default function GruasPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/livro`}
+                      onClick={() => handleViewDetails(grua)}
                       className="flex-1"
                     >
-                      <BookOpen className="w-4 h-4 mr-1" />
-                      Abrir Livro
+                      <Eye className="w-4 h-4 mr-1" />
+                      Ver Detalhes
                     </Button>
                     <Button
                       variant="outline"
@@ -386,115 +324,6 @@ export default function GruasPage() {
           onClose={() => setIsHistoricoDialogOpen(false)}
         />
       )}
-
-      {/* Dialog de Criação de Grua */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Crane className="w-5 h-5" />
-              Nova Grua
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateGrua} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="name">Nome da Grua *</Label>
-                <Input
-                  id="name"
-                  value={gruaFormData.name}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, name: e.target.value })}
-                  placeholder="Ex: Grua 001"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="model">Modelo *</Label>
-                <Input
-                  id="model"
-                  value={gruaFormData.model}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, model: e.target.value })}
-                  placeholder="Ex: Liebherr 200HC"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="capacity">Capacidade *</Label>
-                <Input
-                  id="capacity"
-                  value={gruaFormData.capacity}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, capacity: e.target.value })}
-                  placeholder="Ex: 200 ton"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="status">Status *</Label>
-                <Select
-                  value={gruaFormData.status}
-                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disponivel">Disponível</SelectItem>
-                    <SelectItem value="em_obra">Em Obra</SelectItem>
-                    <SelectItem value="manutencao">Manutenção</SelectItem>
-                    <SelectItem value="inativa">Inativa</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="obraId">Obra (Opcional)</Label>
-              <Select
-                value={gruaFormData.obraId || "none"}
-                onValueChange={(value) => setGruaFormData({ ...gruaFormData, obraId: value === "none" ? "" : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma obra (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma obra</SelectItem>
-                  {mockObras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
-                      {obra.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Uma grua pode ser criada sem estar atrelada a uma obra
-              </p>
-            </div>
-
-            <div>
-              <Label htmlFor="observacoes">Observações</Label>
-              <Textarea
-                id="observacoes"
-                value={gruaFormData.observacoes}
-                onChange={(e) => setGruaFormData({ ...gruaFormData, observacoes: e.target.value })}
-                placeholder="Observações sobre a grua..."
-                rows={3}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">
-                Criar Grua
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

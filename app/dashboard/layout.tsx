@@ -24,13 +24,14 @@ import { usePathname } from "next/navigation"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Obras", href: "/dashboard/obras", icon: Building2 },
   { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane },
   { name: "Estoque", href: "/dashboard/estoque", icon: Package },
   { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock },
-  // { name: "Recursos Humanos", href: "/dashboard/rh", icon: Users },
-  // { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature },
-  // { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign },
-  // { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3 },
+  { name: "Recursos Humanos", href: "/dashboard/rh", icon: Users },
+  { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature },
+  { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign },
+  { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3 },
 ]
 
 export default function DashboardLayout({
