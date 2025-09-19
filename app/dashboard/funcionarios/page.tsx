@@ -34,7 +34,9 @@ export default function FuncionariosPage() {
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingFuncionario, setEditingFuncionario] = useState<any>(null)
+  const [funcionarioToDelete, setFuncionarioToDelete] = useState<any>(null)
   const [funcionarioFormData, setFuncionarioFormData] = useState({
     name: '',
     email: '',
@@ -195,11 +197,28 @@ export default function FuncionariosPage() {
   }
 
   const handleDeleteFuncionario = (funcionario: any) => {
-    if (confirm(`Tem certeza que deseja excluir o funcionário ${funcionario.name}?`)) {
-      // Simular exclusão do funcionário
-      console.log('Funcionário excluído:', funcionario)
-      alert('Funcionário excluído com sucesso!')
+    setFuncionarioToDelete(funcionario)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteFuncionario = () => {
+    if (!funcionarioToDelete) return
+
+    // Verificar se o funcionário está vinculado a uma obra
+    if (funcionarioToDelete.obraId) {
+      alert(`Não é possível excluir o funcionário "${funcionarioToDelete.name}" pois ele está vinculado à obra "${funcionarioToDelete.obraName}". Remova-o da obra primeiro.`)
+      setIsDeleteDialogOpen(false)
+      return
     }
+
+    // Simular exclusão do funcionário
+    console.log('Funcionário excluído:', funcionarioToDelete)
+    
+    setIsDeleteDialogOpen(false)
+    setFuncionarioToDelete(null)
+    
+    // Mostrar mensagem de sucesso (simulado)
+    alert(`Funcionário "${funcionarioToDelete.name}" excluído com sucesso!`)
   }
 
   return (
@@ -624,6 +643,47 @@ export default function FuncionariosPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Tem certeza que deseja excluir o funcionário <strong>{funcionarioToDelete?.name}</strong>?
+            </p>
+            <p className="text-xs text-red-600">
+              ⚠️ Esta ação não pode ser desfeita. O funcionário será permanentemente removido do sistema.
+            </p>
+            {funcionarioToDelete?.obraId && (
+              <p className="text-xs text-orange-600">
+                ⚠️ Este funcionário está vinculado à obra "{funcionarioToDelete.obraName}". A exclusão será bloqueada.
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteFuncionario}
+              disabled={funcionarioToDelete?.obraId}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

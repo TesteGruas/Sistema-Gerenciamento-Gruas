@@ -25,7 +25,8 @@ import {
   Edit,
   Wrench,
   ConeIcon as Crane,
-  X
+  X,
+  Trash2
 } from "lucide-react"
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos } from "@/lib/mock-data"
 
@@ -33,7 +34,9 @@ export default function ObrasPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingObra, setEditingObra] = useState<any>(null)
+  const [obraToDelete, setObraToDelete] = useState<any>(null)
   const [obraFormData, setObraFormData] = useState({
     name: '',
     description: '',
@@ -247,6 +250,40 @@ export default function ObrasPage() {
     window.location.href = `/dashboard/obras/${obra.id}`
   }
 
+  const handleDeleteObra = (obra: any) => {
+    setObraToDelete(obra)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteObra = () => {
+    if (!obraToDelete) return
+
+    // Verificar se a obra tem gruas vinculadas
+    const gruasVinculadas = getGruasByObra(obraToDelete.id)
+    if (gruasVinculadas.length > 0) {
+      alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${gruasVinculadas.length} grua(s) vinculada(s). Remova as gruas primeiro.`)
+      setIsDeleteDialogOpen(false)
+      return
+    }
+
+    // Verificar se a obra tem custos
+    const custos = getCustosByObra(obraToDelete.id)
+    if (custos.length > 0) {
+      alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${custos.length} custo(s) registrado(s). Remova os custos primeiro.`)
+      setIsDeleteDialogOpen(false)
+      return
+    }
+
+    // Simular exclusão da obra
+    console.log('Obra excluída:', obraToDelete)
+    
+    setIsDeleteDialogOpen(false)
+    setObraToDelete(null)
+    
+    // Mostrar mensagem de sucesso (simulado)
+    alert(`Obra "${obraToDelete.name}" excluída com sucesso!`)
+  }
+
   const handleEditObra = (obra: any) => {
     setEditingObra(obra)
     // Preencher formulário com dados da obra
@@ -444,6 +481,14 @@ export default function ObrasPage() {
                       onClick={() => handleEditObra(obra)}
                     >
                       <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteObra(obra)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
@@ -1009,6 +1054,47 @@ export default function ObrasPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Tem certeza que deseja excluir a obra <strong>{obraToDelete?.name}</strong>?
+            </p>
+            <p className="text-xs text-red-600">
+              ⚠️ Esta ação não pode ser desfeita. A obra será permanentemente removida do sistema.
+            </p>
+            {obraToDelete && (getGruasByObra(obraToDelete.id).length > 0 || getCustosByObra(obraToDelete.id).length > 0) && (
+              <p className="text-xs text-orange-600">
+                ⚠️ Esta obra possui gruas ou custos vinculados. A exclusão será bloqueada.
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteObra}
+              disabled={obraToDelete && (getGruasByObra(obraToDelete.id).length > 0 || getCustosByObra(obraToDelete.id).length > 0)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

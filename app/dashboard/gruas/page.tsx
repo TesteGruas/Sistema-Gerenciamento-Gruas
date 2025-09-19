@@ -22,7 +22,8 @@ import {
   Clock,
   Wrench,
   Building2,
-  Calendar
+  Calendar,
+  Trash2
 } from "lucide-react"
 import { mockGruas, mockObras, mockUsers } from "@/lib/mock-data"
 
@@ -33,6 +34,8 @@ export default function GruasPage() {
   const [selectedObra, setSelectedObra] = useState("all")
   const [selectedGrua, setSelectedGrua] = useState<any>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [gruaToDelete, setGruaToDelete] = useState<any>(null)
   const [gruaFormData, setGruaFormData] = useState({
     name: '',
     model: '',
@@ -82,6 +85,31 @@ export default function GruasPage() {
 
   const handleViewDetails = (grua: any) => {
     setSelectedGrua(grua)
+  }
+
+  const handleDeleteGrua = (grua: any) => {
+    setGruaToDelete(grua)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteGrua = () => {
+    if (!gruaToDelete) return
+
+    // Verificar se a grua está em obra
+    if (gruaToDelete.status === 'em_obra') {
+      alert(`Não é possível excluir a grua "${gruaToDelete.name}" pois ela está atualmente em obra. Remova-a da obra primeiro.`)
+      setIsDeleteDialogOpen(false)
+      return
+    }
+
+    // Simular exclusão da grua
+    console.log('Grua excluída:', gruaToDelete)
+    
+    setIsDeleteDialogOpen(false)
+    setGruaToDelete(null)
+    
+    // Mostrar mensagem de sucesso (simulado)
+    alert(`Grua "${gruaToDelete.name}" excluída com sucesso!`)
   }
 
   const handleCreateGrua = (e: React.FormEvent) => {
@@ -301,6 +329,14 @@ export default function GruasPage() {
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteGrua(grua)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -415,6 +451,47 @@ export default function GruasPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Tem certeza que deseja excluir a grua <strong>{gruaToDelete?.name}</strong>?
+            </p>
+            <p className="text-xs text-red-600">
+              ⚠️ Esta ação não pode ser desfeita. A grua será permanentemente removida do sistema.
+            </p>
+            {gruaToDelete?.status === 'em_obra' && (
+              <p className="text-xs text-orange-600">
+                ⚠️ Esta grua está atualmente em obra. A exclusão será bloqueada.
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteGrua}
+              disabled={gruaToDelete?.status === 'em_obra'}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

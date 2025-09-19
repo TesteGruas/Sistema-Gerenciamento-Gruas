@@ -23,7 +23,8 @@ import {
   MapPin,
   User,
   FileText,
-  Calendar
+  Calendar,
+  Trash2
 } from "lucide-react"
 import { mockClientes, getObrasByCliente } from "@/lib/mock-data"
 
@@ -34,6 +35,8 @@ export default function ClientesPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [clienteToDelete, setClienteToDelete] = useState<any>(null)
   const [clienteFormData, setClienteFormData] = useState({
     name: '',
     email: '',
@@ -164,6 +167,32 @@ export default function ClientesPage() {
     
     // Mostrar mensagem de sucesso (simulado)
     alert('Cliente atualizado com sucesso!')
+  }
+
+  const handleDeleteCliente = (cliente: any) => {
+    setClienteToDelete(cliente)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteCliente = () => {
+    if (!clienteToDelete) return
+
+    // Verificar se o cliente tem obras vinculadas
+    const obrasVinculadas = getObrasByCliente(clienteToDelete.id)
+    if (obrasVinculadas.length > 0) {
+      alert(`Não é possível excluir o cliente "${clienteToDelete.name}" pois ele possui ${obrasVinculadas.length} obra(s) vinculada(s). Remova as obras primeiro.`)
+      setIsDeleteDialogOpen(false)
+      return
+    }
+
+    // Simular exclusão do cliente
+    console.log('Cliente excluído:', clienteToDelete)
+    
+    setIsDeleteDialogOpen(false)
+    setClienteToDelete(null)
+    
+    // Mostrar mensagem de sucesso (simulado)
+    alert(`Cliente "${clienteToDelete.name}" excluído com sucesso!`)
   }
 
   const stats = [
@@ -355,6 +384,14 @@ export default function ClientesPage() {
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteCliente(cliente)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -411,6 +448,47 @@ export default function ClientesPage() {
             </DialogTitle>
           </DialogHeader>
           {selectedCliente && <ClienteDetails cliente={selectedCliente} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Tem certeza que deseja excluir o cliente <strong>{clienteToDelete?.name}</strong>?
+            </p>
+            <p className="text-xs text-red-600">
+              ⚠️ Esta ação não pode ser desfeita. O cliente será permanentemente removido do sistema.
+            </p>
+            {clienteToDelete && getObrasByCliente(clienteToDelete.id).length > 0 && (
+              <p className="text-xs text-orange-600">
+                ⚠️ Este cliente possui obras vinculadas. A exclusão será bloqueada.
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteCliente}
+              disabled={clienteToDelete && getObrasByCliente(clienteToDelete.id).length > 0}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
