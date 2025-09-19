@@ -27,7 +27,7 @@ import {
   PieChart,
   BarChart3
 } from "lucide-react"
-import { mockCustos, mockObras, getCustosByObra } from "@/lib/mock-data"
+import { mockCustos, mockObras, getCustosByObra, mockCustosMensais, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis } from "@/lib/mock-data"
 
 export default function FinanceiroPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -38,6 +38,9 @@ export default function FinanceiroPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [mesSelecionado, setMesSelecionado] = useState("todos")
+  const [custosMensais, setCustosMensais] = useState<any[]>([])
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
 
   const filteredCustos = mockCustos.filter(custo => {
     const matchesSearch = custo.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -77,48 +80,149 @@ export default function FinanceiroPage() {
     setIsEditDialogOpen(true)
   }
 
+  const carregarCustosMensais = (obraId: string) => {
+    if (mesSelecionado && mesSelecionado !== 'todos') {
+      const custos = getCustosMensaisByObraAndMes(obraId, mesSelecionado)
+      setCustosMensais(custos)
+    } else {
+      const custos = getCustosMensaisByObra(obraId)
+      setCustosMensais(custos)
+    }
+  }
+
+  const handleExportarCustos = (tipo: 'geral' | 'mes', obraId: string) => {
+    let dadosParaExportar = custosMensais
+    
+    if (tipo === 'mes' && mesSelecionado && mesSelecionado !== 'todos') {
+      dadosParaExportar = getCustosMensaisByObraAndMes(obraId, mesSelecionado)
+    } else if (tipo === 'geral') {
+      dadosParaExportar = getCustosMensaisByObra(obraId)
+    }
+
+    if (dadosParaExportar.length === 0) {
+      alert('Não há dados para exportar!')
+      return
+    }
+
+    // Cabeçalho do CSV
+    const cabecalho = [
+      'Item',
+      'Descrição',
+      'Unidade',
+      'Qtd Orçamento',
+      'Valor Unitário',
+      'Total Orçamento',
+      'Qtd Realizada',
+      'Valor Realizado',
+      'Qtd Acumulada',
+      'Valor Acumulado',
+      'Qtd Saldo',
+      'Valor Saldo',
+      'Mês',
+      'Tipo'
+    ]
+
+    // Dados do CSV
+    const linhas = dadosParaExportar.map(custo => [
+      custo.item,
+      custo.descricao,
+      custo.unidade,
+      custo.quantidadeOrcamento.toFixed(2),
+      custo.valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.totalOrcamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.quantidadeRealizada.toFixed(2),
+      custo.valorRealizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.quantidadeAcumulada.toFixed(2),
+      custo.valorAcumulado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.quantidadeSaldo.toFixed(2),
+      custo.valorSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+      custo.tipo
+    ])
+
+    // Criar CSV
+    const csvContent = [cabecalho, ...linhas]
+      .map(row => row.map(field => `"${field}"`).join(','))
+      .join('\n')
+
+    // Criar e baixar arquivo
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    
+    const obra = mockObras.find(o => o.id === obraId)
+    const nomeArquivo = tipo === 'geral' 
+      ? `custos_geral_${obra?.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+      : `custos_${mesSelecionado}_${obra?.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+    
+    link.setAttribute('download', nomeArquivo)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    alert(`Arquivo ${nomeArquivo} baixado com sucesso!`)
+  }
+
   // Calcular estatísticas
   const totalCustos = mockCustos.reduce((sum, custo) => sum + custo.valor, 0)
   const custosIniciais = mockCustos.filter(c => c.tipo === 'inicial').reduce((sum, custo) => sum + custo.valor, 0)
   const custosAdicionais = mockCustos.filter(c => c.tipo === 'adicional').reduce((sum, custo) => sum + custo.valor, 0)
+  
+  // Calcular estatísticas dos custos mensais (BMM)
+  const totalCustosMensais = mockCustosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0)
+  const totalOrcamento = mockCustosMensais.reduce((sum, custo) => sum + custo.totalOrcamento, 0)
+  const totalRealizado = mockCustosMensais.reduce((sum, custo) => sum + custo.valorRealizado, 0)
+  const totalSaldo = mockCustosMensais.reduce((sum, custo) => sum + custo.valorSaldo, 0)
+  
   const custosPorObra = mockObras.map(obra => {
     const custos = getCustosByObra(obra.id)
+    const custosMensaisObra = getCustosMensaisByObra(obra.id)
+    const totalOrcamentoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.totalOrcamento, 0)
+    const totalRealizadoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.valorRealizado, 0)
+    
     return {
       obra: obra.name,
+      obraId: obra.id,
       total: custos.reduce((sum, custo) => sum + custo.valor, 0),
       inicial: custos.filter(c => c.tipo === 'inicial').reduce((sum, custo) => sum + custo.valor, 0),
-      adicional: custos.filter(c => c.tipo === 'adicional').reduce((sum, custo) => sum + custo.valor, 0)
+      adicional: custos.filter(c => c.tipo === 'adicional').reduce((sum, custo) => sum + custo.valor, 0),
+      totalOrcamento: totalOrcamentoObra,
+      totalRealizado: totalRealizadoObra,
+      saldo: totalOrcamentoObra - totalRealizadoObra,
+      mesesDisponiveis: getMesesDisponiveis(obra.id).length
     }
   })
 
   const stats = [
     { 
-      title: "Total de Custos", 
-      value: `R$ ${totalCustos.toLocaleString('pt-BR')}`, 
+      title: "Total Orçado (BMM)", 
+      value: `R$ ${totalOrcamento.toLocaleString('pt-BR')}`, 
       icon: DollarSign, 
       color: "bg-blue-500",
-      change: "+12%"
+      change: `${((totalRealizado / totalOrcamento) * 100).toFixed(1)}% realizado`
     },
     { 
-      title: "Custos Iniciais", 
-      value: `R$ ${custosIniciais.toLocaleString('pt-BR')}`, 
+      title: "Total Realizado", 
+      value: `R$ ${totalRealizado.toLocaleString('pt-BR')}`, 
       icon: TrendingUp, 
       color: "bg-green-500",
-      change: "+8%"
+      change: `${((totalRealizado / totalOrcamento) * 100).toFixed(1)}% do orçamento`
     },
     { 
-      title: "Custos Adicionais", 
-      value: `R$ ${custosAdicionais.toLocaleString('pt-BR')}`, 
+      title: "Saldo Restante", 
+      value: `R$ ${totalSaldo.toLocaleString('pt-BR')}`, 
       icon: TrendingDown, 
       color: "bg-orange-500",
-      change: "+15%"
+      change: `${((totalSaldo / totalOrcamento) * 100).toFixed(1)}% do orçamento`
     },
     { 
       title: "Obras Ativas", 
       value: mockObras.filter(o => o.status === 'ativa').length.toString(), 
       icon: Building2, 
       color: "bg-purple-500",
-      change: "+2"
+      change: `${mockObras.filter(o => o.status === 'ativa').length} obras`
     },
   ]
 
@@ -175,33 +279,179 @@ export default function FinanceiroPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <PieChart className="w-5 h-5" />
-            Resumo por Obra
+            Resumo por Obra - BMM
           </CardTitle>
-          <CardDescription>Distribuição de custos por obra</CardDescription>
+          <CardDescription>Distribuição de custos mensais por obra</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Obra</TableHead>
-                <TableHead>Custos Iniciais</TableHead>
-                <TableHead>Custos Adicionais</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>% do Total</TableHead>
+                <TableHead>Total Orçado</TableHead>
+                <TableHead>Total Realizado</TableHead>
+                <TableHead>Saldo</TableHead>
+                <TableHead>% Realizado</TableHead>
+                <TableHead>Meses</TableHead>
+                <TableHead>Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {custosPorObra.map((obra, index) => (
                 <TableRow key={index}>
                   <TableCell className="font-medium">{obra.obra}</TableCell>
-                  <TableCell>R$ {obra.inicial.toLocaleString('pt-BR')}</TableCell>
-                  <TableCell>R$ {obra.adicional.toLocaleString('pt-BR')}</TableCell>
-                  <TableCell className="font-semibold">R$ {obra.total.toLocaleString('pt-BR')}</TableCell>
-                  <TableCell>{((obra.total / totalCustos) * 100).toFixed(1)}%</TableCell>
+                  <TableCell>R$ {obra.totalOrcamento.toLocaleString('pt-BR')}</TableCell>
+                  <TableCell>R$ {obra.totalRealizado.toLocaleString('pt-BR')}</TableCell>
+                  <TableCell className={`font-semibold ${obra.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    R$ {obra.saldo.toLocaleString('pt-BR')}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full" 
+                          style={{ width: `${(obra.totalRealizado / obra.totalOrcamento) * 100}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm">
+                        {((obra.totalRealizado / obra.totalOrcamento) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {obra.mesesDisponiveis} meses
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.location.href = `/dashboard/obras/${obra.obraId}?tab=custos`}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Ver BMM
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          carregarCustosMensais(obra.obraId)
+                          setIsExportDialogOpen(true)
+                        }}
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Exportar
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      {/* Boletins Mensais de Medição */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Boletins Mensais de Medição (BMM)
+          </CardTitle>
+          <CardDescription>Controle de medições mensais por obra</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {mockObras.map((obra) => {
+              const custosMensaisObra = getCustosMensaisByObra(obra.id)
+              const totalOrcamentoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.totalOrcamento, 0)
+              const totalRealizadoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.valorRealizado, 0)
+              const mesesDisponiveis = getMesesDisponiveis(obra.id)
+              const ultimoMes = custosMensaisObra.length > 0 ? 
+                custosMensaisObra[custosMensaisObra.length - 1] : null
+              
+              return (
+                <Card key={obra.id} className="border-l-4 border-l-blue-500">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <Building2 className="w-5 h-5 text-blue-600" />
+                        <div>
+                          <CardTitle className="text-lg">{obra.name}</CardTitle>
+                          <CardDescription className="mt-1">
+                            {obra.description} • {obra.status}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={obra.status === 'ativa' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                          {obra.status}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.location.href = `/dashboard/obras/${obra.id}?tab=custos`}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Ver BMM
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-600">Início:</span>
+                        <span>{new Date(obra.startDate).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-600">Fim:</span>
+                        <span>{obra.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-600">Orçado:</span>
+                        <span className="font-medium">R$ {totalOrcamentoObra.toLocaleString('pt-BR')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-gray-500" />
+                        <span className="text-gray-600">Realizado:</span>
+                        <span className="font-medium">R$ {totalRealizadoObra.toLocaleString('pt-BR')}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Progresso do BMM</p>
+                          <p className="text-xs text-gray-500">
+                            {mesesDisponiveis.length} meses disponíveis • 
+                            {((totalRealizadoObra / totalOrcamentoObra) * 100).toFixed(1)}% realizado
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-green-600">
+                            R$ {(totalOrcamentoObra - totalRealizadoObra).toLocaleString('pt-BR')}
+                          </p>
+                          <p className="text-xs text-gray-500">Saldo restante</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${(totalRealizadoObra / totalOrcamentoObra) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         </CardContent>
       </Card>
 
@@ -381,6 +631,59 @@ export default function FinanceiroPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedCusto && <CustoForm custo={selectedCusto} onClose={() => setIsEditDialogOpen(false)} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Exportação */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="w-5 h-5" />
+              Exportar Custos Mensais
+            </DialogTitle>
+            <DialogDescription>
+              Escolha o tipo de exportação desejada
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Button
+                onClick={() => {
+                  const obraId = custosPorObra.find(o => o.obraId)?.obraId || '1'
+                  handleExportarCustos('geral', obraId)
+                  setIsExportDialogOpen(false)
+                }}
+                className="h-20 flex flex-col items-center justify-center gap-2"
+              >
+                <Download className="w-6 h-6" />
+                <span>Exportar Geral</span>
+                <span className="text-xs text-gray-500">Todos os meses</span>
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const obraId = custosPorObra.find(o => o.obraId)?.obraId || '1'
+                  handleExportarCustos('mes', obraId)
+                  setIsExportDialogOpen(false)
+                }}
+                className="h-20 flex flex-col items-center justify-center gap-2"
+                disabled={mesSelecionado === 'todos' || !mesSelecionado}
+              >
+                <Download className="w-6 h-6" />
+                <span>Exportar Mês</span>
+                <span className="text-xs text-gray-500">Mês selecionado</span>
+              </Button>
+            </div>
+            
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                {custosMensais.length} itens disponíveis para exportação
+              </p>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -27,7 +27,7 @@ import {
   ConeIcon as Crane,
   X
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers } from "@/lib/mock-data"
+import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal } from "@/lib/mock-data"
 
 export default function ObrasPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -110,6 +110,65 @@ export default function ObrasPage() {
   }
 
 
+  const criarCustosIniciais = (obraId: string, mesInicial: string): CustoMensal[] => {
+    // Custos padrão que serão criados para toda nova obra
+    const custosPadrao = [
+      {
+        item: '01.01',
+        descricao: 'Locação de grua torre',
+        unidade: 'mês',
+        quantidadeOrcamento: 12, // 12 meses padrão
+        valorUnitario: 25000, // Valor padrão
+        tipo: 'contrato' as const
+      },
+      {
+        item: '01.02',
+        descricao: 'Chumbador e fixações',
+        unidade: 'und',
+        quantidadeOrcamento: 1,
+        valorUnitario: 15000,
+        tipo: 'contrato' as const
+      },
+      {
+        item: '01.03',
+        descricao: 'Custos de Operação',
+        unidade: 'mês',
+        quantidadeOrcamento: 12,
+        valorUnitario: 5000,
+        tipo: 'contrato' as const
+      },
+      {
+        item: '01.04',
+        descricao: 'Transporte e montagem',
+        unidade: 'und',
+        quantidadeOrcamento: 2,
+        valorUnitario: 8000,
+        tipo: 'contrato' as const
+      }
+    ]
+
+    return custosPadrao.map((custo, index) => ({
+      id: `cm_${Date.now()}_${index}`,
+      obraId: obraId,
+      item: custo.item,
+      descricao: custo.descricao,
+      unidade: custo.unidade,
+      quantidadeOrcamento: custo.quantidadeOrcamento,
+      valorUnitario: custo.valorUnitario,
+      totalOrcamento: custo.quantidadeOrcamento * custo.valorUnitario,
+      mes: mesInicial,
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: 0,
+      valorAcumulado: 0,
+      quantidadeSaldo: custo.quantidadeOrcamento,
+      valorSaldo: custo.quantidadeOrcamento * custo.valorUnitario,
+      tipo: custo.tipo,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }))
+  }
+
   const handleCreateObra = (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -138,10 +197,18 @@ export default function ObrasPage() {
       selectedGrua.monthlyFee = parseFloat(obraFormData.monthlyFee) || 0
     }
 
+    // Criar custos iniciais automaticamente
+    const mesInicial = new Date(obraFormData.startDate).toISOString().slice(0, 7)
+    const custosIniciais = criarCustosIniciais(newObra.id, mesInicial)
+    
+    // Adicionar custos iniciais ao array mockado (simulando persistência)
+    mockCustosMensais.push(...custosIniciais)
+
     // Em uma aplicação real, isso seria uma chamada para a API
     console.log('Nova obra criada:', newObra)
     console.log('Grua selecionada:', selectedGrua)
     console.log('Funcionários:', obraFormData.funcionarios)
+    console.log('Custos iniciais criados:', custosIniciais)
     
     // Resetar formulário e fechar dialog
     setObraFormData({
@@ -162,7 +229,7 @@ export default function ObrasPage() {
     setIsCreateDialogOpen(false)
     
     // Mostrar mensagem de sucesso (simulado)
-    alert('Obra criada com sucesso!')
+    alert('Obra criada com sucesso! Custos iniciais foram configurados automaticamente.')
   }
 
   const handleViewDetails = (obra: any) => {

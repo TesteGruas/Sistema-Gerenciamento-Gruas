@@ -109,6 +109,27 @@ export interface CustoObra {
   comprovante?: string
 }
 
+export interface CustoMensal {
+  id: string
+  obraId: string
+  item: string
+  descricao: string
+  unidade: string
+  quantidadeOrcamento: number
+  valorUnitario: number
+  totalOrcamento: number
+  mes: string // formato YYYY-MM
+  quantidadeRealizada: number
+  valorRealizado: number
+  quantidadeAcumulada: number
+  valorAcumulado: number
+  quantidadeSaldo: number
+  valorSaldo: number
+  tipo: 'contrato' | 'aditivo'
+  createdAt: string
+  updatedAt: string
+}
+
 // Dados mockados
 export const mockUsers: User[] = [
   {
@@ -429,6 +450,193 @@ export const mockCustos: CustoObra[] = [
   }
 ]
 
+// Dados mockados para custos mensais
+export const mockCustosMensais: CustoMensal[] = [
+  // Obra 1 - Janeiro 2025
+  {
+    id: 'cm1',
+    obraId: '1',
+    item: '01.01',
+    descricao: 'Locação de grua torre PINGON BR47',
+    unidade: 'mês',
+    quantidadeOrcamento: 17,
+    valorUnitario: 30900,
+    totalOrcamento: 525300,
+    mes: '2025-01',
+    quantidadeRealizada: 1,
+    valorRealizado: 30900,
+    quantidadeAcumulada: 1,
+    valorAcumulado: 30900,
+    quantidadeSaldo: 16,
+    valorSaldo: 494400,
+    tipo: 'contrato',
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z'
+  },
+  {
+    id: 'cm2',
+    obraId: '1',
+    item: '01.02',
+    descricao: 'Chumbador',
+    unidade: 'und',
+    quantidadeOrcamento: 1,
+    valorUnitario: 18600,
+    totalOrcamento: 18600,
+    mes: '2025-01',
+    quantidadeRealizada: 1,
+    valorRealizado: 18600,
+    quantidadeAcumulada: 1,
+    valorAcumulado: 18600,
+    quantidadeSaldo: 0,
+    valorSaldo: 0,
+    tipo: 'contrato',
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z'
+  },
+  {
+    id: 'cm3',
+    obraId: '1',
+    item: '01.04',
+    descricao: 'Custos de Operação',
+    unidade: 'mês',
+    quantidadeOrcamento: 17,
+    valorUnitario: 6800,
+    totalOrcamento: 115600,
+    mes: '2025-01',
+    quantidadeRealizada: 1,
+    valorRealizado: 6800,
+    quantidadeAcumulada: 1,
+    valorAcumulado: 6800,
+    quantidadeSaldo: 16,
+    valorSaldo: 108800,
+    tipo: 'contrato',
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z'
+  },
+  // Obra 1 - Fevereiro 2025
+  {
+    id: 'cm4',
+    obraId: '1',
+    item: '01.01',
+    descricao: 'Locação de grua torre PINGON BR47',
+    unidade: 'mês',
+    quantidadeOrcamento: 17,
+    valorUnitario: 30900,
+    totalOrcamento: 525300,
+    mes: '2025-02',
+    quantidadeRealizada: 1,
+    valorRealizado: 30900,
+    quantidadeAcumulada: 2,
+    valorAcumulado: 61800,
+    quantidadeSaldo: 15,
+    valorSaldo: 463500,
+    tipo: 'contrato',
+    createdAt: '2025-02-01T00:00:00Z',
+    updatedAt: '2025-02-01T00:00:00Z'
+  },
+  {
+    id: 'cm5',
+    obraId: '1',
+    item: '01.02',
+    descricao: 'Chumbador',
+    unidade: 'und',
+    quantidadeOrcamento: 1,
+    valorUnitario: 18600,
+    totalOrcamento: 18600,
+    mes: '2025-02',
+    quantidadeRealizada: 0,
+    valorRealizado: 0,
+    quantidadeAcumulada: 1,
+    valorAcumulado: 18600,
+    quantidadeSaldo: 0,
+    valorSaldo: 0,
+    tipo: 'contrato',
+    createdAt: '2025-02-01T00:00:00Z',
+    updatedAt: '2025-02-01T00:00:00Z'
+  },
+  {
+    id: 'cm6',
+    obraId: '1',
+    item: '01.04',
+    descricao: 'Custos de Operação',
+    unidade: 'mês',
+    quantidadeOrcamento: 17,
+    valorUnitario: 6800,
+    totalOrcamento: 115600,
+    mes: '2025-02',
+    quantidadeRealizada: 1,
+    valorRealizado: 6800,
+    quantidadeAcumulada: 2,
+    valorAcumulado: 13600,
+    quantidadeSaldo: 15,
+    valorSaldo: 102000,
+    tipo: 'contrato',
+    createdAt: '2025-02-01T00:00:00Z',
+    updatedAt: '2025-02-01T00:00:00Z'
+  },
+  // Obra 1 - Março 2025
+  {
+    id: 'cm7',
+    obraId: '1',
+    item: '01.01',
+    descricao: 'Locação de grua torre PINGON BR47',
+    unidade: 'mês',
+    quantidadeOrcamento: 17,
+    valorUnitario: 30900,
+    totalOrcamento: 525300,
+    mes: '2025-03',
+    quantidadeRealizada: 1,
+    valorRealizado: 30900,
+    quantidadeAcumulada: 3,
+    valorAcumulado: 92700,
+    quantidadeSaldo: 14,
+    valorSaldo: 432600,
+    tipo: 'contrato',
+    createdAt: '2025-03-01T00:00:00Z',
+    updatedAt: '2025-03-01T00:00:00Z'
+  },
+  {
+    id: 'cm8',
+    obraId: '1',
+    item: '01.02',
+    descricao: 'Chumbador',
+    unidade: 'und',
+    quantidadeOrcamento: 1,
+    valorUnitario: 18600,
+    totalOrcamento: 18600,
+    mes: '2025-03',
+    quantidadeRealizada: 0,
+    valorRealizado: 0,
+    quantidadeAcumulada: 1,
+    valorAcumulado: 18600,
+    quantidadeSaldo: 0,
+    valorSaldo: 0,
+    tipo: 'contrato',
+    createdAt: '2025-03-01T00:00:00Z',
+    updatedAt: '2025-03-01T00:00:00Z'
+  },
+  {
+    id: 'cm9',
+    obraId: '1',
+    item: '01.04',
+    descricao: 'Custos de Operação',
+    unidade: 'mês',
+    quantidadeOrcamento: 17,
+    valorUnitario: 6800,
+    totalOrcamento: 115600,
+    mes: '2025-03',
+    quantidadeRealizada: 1,
+    valorRealizado: 6800,
+    quantidadeAcumulada: 3,
+    valorAcumulado: 20400,
+    quantidadeSaldo: 14,
+    valorSaldo: 95200,
+    tipo: 'contrato',
+    createdAt: '2025-03-01T00:00:00Z',
+    updatedAt: '2025-03-01T00:00:00Z'
+  }
+]
+
 // Funções utilitárias para simular operações
 export const getUserById = (id: string): User | undefined => {
   return mockUsers.find(user => user.id === id)
@@ -460,6 +668,50 @@ export const getDocumentosByObra = (obraId: string): Documento[] => {
 
 export const getCustosByObra = (obraId: string): CustoObra[] => {
   return mockCustos.filter(custo => custo.obraId === obraId)
+}
+
+export const getCustosMensaisByObra = (obraId: string): CustoMensal[] => {
+  return mockCustosMensais.filter(custo => custo.obraId === obraId)
+}
+
+export const getCustosMensaisByObraAndMes = (obraId: string, mes: string): CustoMensal[] => {
+  return mockCustosMensais.filter(custo => custo.obraId === obraId && custo.mes === mes)
+}
+
+export const getMesesDisponiveis = (obraId: string): string[] => {
+  const custos = getCustosMensaisByObra(obraId)
+  const meses = [...new Set(custos.map(custo => custo.mes))]
+  return meses.sort()
+}
+
+export const criarCustosParaNovoMes = (obraId: string, mes: string): CustoMensal[] => {
+  // Busca os custos do mês anterior para replicar
+  const mesAnterior = new Date(mes + '-01')
+  mesAnterior.setMonth(mesAnterior.getMonth() - 1)
+  const mesAnteriorStr = mesAnterior.toISOString().slice(0, 7)
+  
+  const custosAnteriores = getCustosMensaisByObraAndMes(obraId, mesAnteriorStr)
+  
+  if (custosAnteriores.length === 0) {
+    return []
+  }
+  
+  // Cria novos custos para o mês atual baseados nos anteriores
+  const novosCustos: CustoMensal[] = custosAnteriores.map(custo => ({
+    ...custo,
+    id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    mes: mes,
+    quantidadeRealizada: 0,
+    valorRealizado: 0,
+    quantidadeAcumulada: custo.quantidadeAcumulada,
+    valorAcumulado: custo.valorAcumulado,
+    quantidadeSaldo: custo.quantidadeSaldo,
+    valorSaldo: custo.valorSaldo,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }))
+  
+  return novosCustos
 }
 
 export const getHistoricoByGrua = (gruaId: string): HistoricoGrua[] => {

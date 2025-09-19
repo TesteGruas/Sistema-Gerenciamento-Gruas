@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,9 +35,13 @@ import {
   Printer,
   ChevronDown,
   ChevronRight,
-  Edit
+  Edit,
+  Folder,
+  File,
+  Trash2,
+  Paperclip
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers } from "@/lib/mock-data"
+import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis, criarCustosParaNovoMes, CustoMensal } from "@/lib/mock-data"
 import { Progress } from "@/components/ui/progress"
 import { useParams } from "next/navigation"
 
@@ -54,6 +58,38 @@ export default function ObraDetailsPage() {
   const [isNovaEntradaOpen, setIsNovaEntradaOpen] = useState(false)
   const [isVisualizarEntradaOpen, setIsVisualizarEntradaOpen] = useState(false)
   const [entradaSelecionada, setEntradaSelecionada] = useState<any>(null)
+  const [isNovoArquivoOpen, setIsNovoArquivoOpen] = useState(false)
+  const [arquivosAdicionais, setArquivosAdicionais] = useState<any[]>([])
+  const [novoArquivoData, setNovoArquivoData] = useState({
+    nome: '',
+    descricao: '',
+    categoria: 'geral',
+    arquivo: null as File | null
+  })
+  const [isNovoItemOpen, setIsNovoItemOpen] = useState(false)
+  const [isNovoAditivoOpen, setIsNovoAditivoOpen] = useState(false)
+  const [itensContrato, setItensContrato] = useState<any[]>([])
+  const [aditivos, setAditivos] = useState<any[]>([])
+  const [novoItemData, setNovoItemData] = useState({
+    item: '',
+    descricao: '',
+    unidade: 'mês',
+    quantidadeOrcamento: 0,
+    valorUnitario: 0,
+    quantidadeAnterior: 0,
+    valorAnterior: 0,
+    quantidadePeriodo: 0,
+    valorPeriodo: 0
+  })
+  
+  // Estados para custos mensais
+  const [mesSelecionado, setMesSelecionado] = useState('')
+  const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
+  const [isNovoMesOpen, setIsNovoMesOpen] = useState(false)
+  const [novoMesData, setNovoMesData] = useState({
+    mes: ''
+  })
+  const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([])
   const [novaEntradaData, setNovaEntradaData] = useState({
     gruaId: '',
     funcionarioId: '',
@@ -178,6 +214,285 @@ export default function ObraDetailsPage() {
     window.print()
   }
 
+  const handleNovoArquivo = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!novoArquivoData.arquivo) {
+      alert('Por favor, selecione um arquivo')
+      return
+    }
+
+    const novoArquivo = {
+      id: Date.now().toString(),
+      nome: novoArquivoData.nome,
+      descricao: novoArquivoData.descricao,
+      categoria: novoArquivoData.categoria,
+      nomeArquivo: novoArquivoData.arquivo.name,
+      tamanho: novoArquivoData.arquivo.size,
+      tipo: novoArquivoData.arquivo.type,
+      dataUpload: new Date().toISOString(),
+      obraId: obra.id
+    }
+
+    setArquivosAdicionais([...arquivosAdicionais, novoArquivo])
+    setNovoArquivoData({
+      nome: '',
+      descricao: '',
+      categoria: 'geral',
+      arquivo: null
+    })
+    setIsNovoArquivoOpen(false)
+    alert('Arquivo adicionado com sucesso!')
+  }
+
+  const handleRemoverArquivo = (arquivoId: string) => {
+    setArquivosAdicionais(arquivosAdicionais.filter(arq => arq.id !== arquivoId))
+  }
+
+  const formatarTamanhoArquivo = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const handleNovoItem = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    const novoItem = {
+      id: Date.now().toString(),
+      item: novoItemData.item,
+      descricao: novoItemData.descricao,
+      unidade: novoItemData.unidade,
+      quantidadeOrcamento: novoItemData.quantidadeOrcamento,
+      valorUnitario: novoItemData.valorUnitario,
+      totalOrcamento: novoItemData.quantidadeOrcamento * novoItemData.valorUnitario,
+      quantidadeAnterior: novoItemData.quantidadeAnterior,
+      valorAnterior: novoItemData.valorAnterior,
+      quantidadePeriodo: novoItemData.quantidadePeriodo,
+      valorPeriodo: novoItemData.valorPeriodo,
+      quantidadeAcumulada: novoItemData.quantidadeAnterior + novoItemData.quantidadePeriodo,
+      valorAcumulado: novoItemData.valorAnterior + novoItemData.valorPeriodo,
+      quantidadeSaldo: novoItemData.quantidadeOrcamento - (novoItemData.quantidadeAnterior + novoItemData.quantidadePeriodo),
+      valorSaldo: (novoItemData.quantidadeOrcamento * novoItemData.valorUnitario) - (novoItemData.valorAnterior + novoItemData.valorPeriodo)
+    }
+
+    setItensContrato([...itensContrato, novoItem])
+    setNovoItemData({
+      item: '',
+      descricao: '',
+      unidade: 'mês',
+      quantidadeOrcamento: 0,
+      valorUnitario: 0,
+      quantidadeAnterior: 0,
+      valorAnterior: 0,
+      quantidadePeriodo: 0,
+      valorPeriodo: 0
+    })
+    setIsNovoItemOpen(false)
+    alert('Item adicionado com sucesso!')
+  }
+
+  const handleNovoAditivo = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    const novoAditivo = {
+      id: Date.now().toString(),
+      item: novoItemData.item,
+      descricao: novoItemData.descricao,
+      unidade: novoItemData.unidade,
+      quantidadeOrcamento: novoItemData.quantidadeOrcamento,
+      valorUnitario: novoItemData.valorUnitario,
+      totalOrcamento: novoItemData.quantidadeOrcamento * novoItemData.valorUnitario,
+      quantidadeAnterior: novoItemData.quantidadeAnterior,
+      valorAnterior: novoItemData.valorAnterior,
+      quantidadePeriodo: novoItemData.quantidadePeriodo,
+      valorPeriodo: novoItemData.valorPeriodo,
+      quantidadeAcumulada: novoItemData.quantidadeAnterior + novoItemData.quantidadePeriodo,
+      valorAcumulado: novoItemData.valorAnterior + novoItemData.valorPeriodo,
+      quantidadeSaldo: novoItemData.quantidadeOrcamento - (novoItemData.quantidadeAnterior + novoItemData.quantidadePeriodo),
+      valorSaldo: (novoItemData.quantidadeOrcamento * novoItemData.valorUnitario) - (novoItemData.valorAnterior + novoItemData.valorPeriodo)
+    }
+
+    setAditivos([...aditivos, novoAditivo])
+    setNovoItemData({
+      item: '',
+      descricao: '',
+      unidade: 'mês',
+      quantidadeOrcamento: 0,
+      valorUnitario: 0,
+      quantidadeAnterior: 0,
+      valorAnterior: 0,
+      quantidadePeriodo: 0,
+      valorPeriodo: 0
+    })
+    setIsNovoAditivoOpen(false)
+    alert('Aditivo adicionado com sucesso!')
+  }
+
+  // Funções para custos mensais
+  const gerarMesesDisponiveis = () => {
+    const mesesExistentes = getMesesDisponiveis(obra.id)
+    const mesesDisponiveis: string[] = []
+    
+    // Gerar próximos 12 meses a partir do mês atual
+    const hoje = new Date()
+    for (let i = 0; i < 12; i++) {
+      const mes = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1)
+      const mesStr = mes.toISOString().slice(0, 7)
+      
+      // Só adicionar se não existir ainda
+      if (!mesesExistentes.includes(mesStr)) {
+        mesesDisponiveis.push(mesStr)
+      }
+    }
+    
+    return mesesDisponiveis
+  }
+
+  const handleNovoMes = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!novoMesData.mes) {
+      alert('Selecione um mês válido!')
+      return
+    }
+    
+    const novosCustos = criarCustosParaNovoMes(obra.id, novoMesData.mes)
+    
+    if (novosCustos.length === 0) {
+      alert('Não há custos anteriores para replicar. Crie primeiro os custos iniciais da obra.')
+      return
+    }
+    
+    setCustosMensais([...custosMensais, ...novosCustos])
+    setMesSelecionado(novoMesData.mes)
+    setNovoMesData({ mes: '' })
+    setIsNovoMesOpen(false)
+    alert(`Custos criados para ${novoMesData.mes} com sucesso!`)
+  }
+
+  const handleAbrirNovoMes = () => {
+    const meses = gerarMesesDisponiveis()
+    setMesesDisponiveis(meses)
+    setIsNovoMesOpen(true)
+  }
+
+  const handleAtualizarQuantidade = (custoId: string, novaQuantidade: number) => {
+    const custosAtualizados = custosMensais.map(custo => {
+      if (custo.id === custoId) {
+        const novoValorRealizado = novaQuantidade * custo.valorUnitario
+        const novaQuantidadeAcumulada = custo.quantidadeAcumulada - custo.quantidadeRealizada + novaQuantidade
+        const novoValorAcumulado = custo.valorAcumulado - custo.valorRealizado + novoValorRealizado
+        const novaQuantidadeSaldo = custo.quantidadeOrcamento - novaQuantidadeAcumulada
+        const novoValorSaldo = custo.totalOrcamento - novoValorAcumulado
+        
+        return {
+          ...custo,
+          quantidadeRealizada: novaQuantidade,
+          valorRealizado: novoValorRealizado,
+          quantidadeAcumulada: novaQuantidadeAcumulada,
+          valorAcumulado: novoValorAcumulado,
+          quantidadeSaldo: novaQuantidadeSaldo,
+          valorSaldo: novoValorSaldo,
+          updatedAt: new Date().toISOString()
+        }
+      }
+      return custo
+    })
+    
+    setCustosMensais(custosAtualizados)
+  }
+
+  const carregarCustosMensais = () => {
+    if (mesSelecionado && mesSelecionado !== 'todos') {
+      const custos = getCustosMensaisByObraAndMes(obra.id, mesSelecionado)
+      setCustosMensais(custos)
+    } else {
+      const custos = getCustosMensaisByObra(obra.id)
+      setCustosMensais(custos)
+    }
+  }
+
+  const handleExportarCustos = (tipo: 'geral' | 'mes') => {
+    let dadosParaExportar = custosMensais
+    
+    if (tipo === 'mes' && mesSelecionado && mesSelecionado !== 'todos') {
+      dadosParaExportar = getCustosMensaisByObraAndMes(obra.id, mesSelecionado)
+    } else if (tipo === 'geral') {
+      dadosParaExportar = getCustosMensaisByObra(obra.id)
+    }
+
+    if (dadosParaExportar.length === 0) {
+      alert('Não há dados para exportar!')
+      return
+    }
+
+    // Cabeçalho do CSV
+    const cabecalho = [
+      'Item',
+      'Descrição',
+      'Unidade',
+      'Qtd Orçamento',
+      'Valor Unitário',
+      'Total Orçamento',
+      'Qtd Realizada',
+      'Valor Realizado',
+      'Qtd Acumulada',
+      'Valor Acumulado',
+      'Qtd Saldo',
+      'Valor Saldo',
+      'Mês',
+      'Tipo'
+    ]
+
+    // Dados do CSV
+    const linhas = dadosParaExportar.map(custo => [
+      custo.item,
+      custo.descricao,
+      custo.unidade,
+      custo.quantidadeOrcamento.toFixed(2),
+      custo.valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.totalOrcamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.quantidadeRealizada.toFixed(2),
+      custo.valorRealizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.quantidadeAcumulada.toFixed(2),
+      custo.valorAcumulado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      custo.quantidadeSaldo.toFixed(2),
+      custo.valorSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+      custo.tipo
+    ])
+
+    // Criar CSV
+    const csvContent = [cabecalho, ...linhas]
+      .map(row => row.map(field => `"${field}"`).join(','))
+      .join('\n')
+
+    // Criar e baixar arquivo
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    
+    const nomeArquivo = tipo === 'geral' 
+      ? `custos_geral_${obra.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+      : `custos_${mesSelecionado}_${obra.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+    
+    link.setAttribute('download', nomeArquivo)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    alert(`Arquivo ${nomeArquivo} baixado com sucesso!`)
+  }
+
+  // Carregar custos mensais quando a obra ou mês mudar
+  useEffect(() => {
+    carregarCustosMensais()
+  }, [obra.id, mesSelecionado])
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ativa': return 'bg-green-100 text-green-800'
@@ -234,13 +549,14 @@ export default function ObraDetailsPage() {
       </div>
 
       <Tabs defaultValue="geral" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="geral">Geral</TabsTrigger>
-          <TabsTrigger value="gruas">Gruas</TabsTrigger>
-          <TabsTrigger value="custos">Custos</TabsTrigger>
-          <TabsTrigger value="documentos">Documentos</TabsTrigger>
-          <TabsTrigger value="livro-grua">Livro da Grua</TabsTrigger>
-        </TabsList>
+      <TabsList className="grid w-full grid-cols-6">
+        <TabsTrigger value="geral">Geral</TabsTrigger>
+        <TabsTrigger value="gruas">Gruas</TabsTrigger>
+        <TabsTrigger value="custos">Custos</TabsTrigger>
+        <TabsTrigger value="documentos">Documentos</TabsTrigger>
+        <TabsTrigger value="arquivos">Arquivos</TabsTrigger>
+        <TabsTrigger value="livro-grua">Livro da Grua</TabsTrigger>
+      </TabsList>
 
         <TabsContent value="geral" className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -378,52 +694,209 @@ export default function ObraDetailsPage() {
         </TabsContent>
 
         <TabsContent value="custos" className="space-y-4">
+          {/* Controles de Mês */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle className="text-sm">Histórico de Custos ({custos.length})</CardTitle>
-                <Button 
-                  size="sm"
-                  onClick={() => window.location.href = `/dashboard/financeiro?obra=${obra.id}`}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Novo Custo
-                </Button>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Custos Mensais - {obra.name}
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Selecionar mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os meses</SelectItem>
+                      {getMesesDisponiveis(obra.id).map(mes => (
+                        <SelectItem key={mes} value={mes}>
+                          {new Date(mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleExportarCustos('geral')}
+                    disabled={custosMensais.length === 0}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Exportar Geral
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleExportarCustos('mes')}
+                    disabled={custosMensais.length === 0 || (mesSelecionado === 'todos' || !mesSelecionado)}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Exportar Mês
+                  </Button>
+                  <Button onClick={handleAbrirNovoMes}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Novo Mês
+                  </Button>
+                </div>
               </div>
             </CardHeader>
+          </Card>
+
+          {/* Resumo Financeiro */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Resumo Financeiro</CardTitle>
+            </CardHeader>
             <CardContent>
-              {custos.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Data</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {custos.map((custo) => (
-                      <TableRow key={custo.id}>
-                        <TableCell>{custo.descricao}</TableCell>
-                        <TableCell>
-                          <Badge variant={custo.tipo === 'inicial' ? 'default' : 'secondary'}>
-                            {custo.tipo}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{custo.categoria}</TableCell>
-                        <TableCell>R$ {custo.valor.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell>{new Date(custo.data).toLocaleDateString('pt-BR')}</TableCell>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <Label className="text-sm font-medium text-gray-600">Valor Total da Obra</Label>
+                  <p className="text-lg font-bold text-blue-600">R$ {obra.custosIniciais.toLocaleString('pt-BR')}</p>
+                </div>
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <Label className="text-sm font-medium text-gray-600">Gastos Acumulados</Label>
+                  <p className="text-lg font-bold text-green-600">
+                    R$ {custosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+                <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                  <Label className="text-sm font-medium text-gray-600">Gastos do Mês</Label>
+                  <p className="text-lg font-bold text-yellow-600">
+                    R$ {custosMensais.reduce((sum, custo) => sum + custo.valorRealizado, 0).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+                <div className="text-center p-4 bg-red-50 rounded-lg">
+                  <Label className="text-sm font-medium text-gray-600">Saldo Restante</Label>
+                  <p className="text-lg font-bold text-red-600">
+                    R$ {(obra.custosIniciais - custosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0)).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Custos Mensais */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">
+                Custos Mensais {mesSelecionado && mesSelecionado !== 'todos' && `- ${new Date(mesSelecionado + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`}
+              </CardTitle>
+              <CardDescription>
+                {custosMensais.length > 0 ? `${custosMensais.length} itens encontrados` : 'Nenhum custo encontrado para este período'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {custosMensais.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[80px]">Item</TableHead>
+                        <TableHead className="min-w-[200px]">Descrição</TableHead>
+                        <TableHead className="w-[60px]">UND</TableHead>
+                        <TableHead className="w-[100px]">Orçamento</TableHead>
+                        <TableHead className="w-[100px]">Acumulado Anterior</TableHead>
+                        <TableHead className="w-[120px]">Realizado Período</TableHead>
+                        <TableHead className="w-[100px]">Acumulado Total</TableHead>
+                        <TableHead className="w-[100px]">Saldo Contrato</TableHead>
+                        <TableHead className="w-[60px]">Mês</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {custosMensais.map((custo) => (
+                        <TableRow key={custo.id}>
+                          <TableCell className="font-medium">{custo.item}</TableCell>
+                          <TableCell>{custo.descricao}</TableCell>
+                          <TableCell>{custo.unidade}</TableCell>
+                          <TableCell>
+                            <div className="text-xs">
+                              <div>Qtd: {custo.quantidadeOrcamento.toFixed(2)}</div>
+                              <div>Unit: R$ {custo.valorUnitario.toLocaleString('pt-BR')}</div>
+                              <div className="font-bold">Total: R$ {custo.totalOrcamento.toLocaleString('pt-BR')}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs">
+                              <div>Qtd: {(custo.quantidadeAcumulada - custo.quantidadeRealizada).toFixed(2)}</div>
+                              <div>Valor: R$ {(custo.valorAcumulado - custo.valorRealizado).toLocaleString('pt-BR')}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={custo.quantidadeRealizada}
+                                onChange={(e) => handleAtualizarQuantidade(custo.id, parseFloat(e.target.value) || 0)}
+                                className="w-20 h-8 text-xs"
+                              />
+                              <div className="text-xs text-gray-600">
+                                R$ {custo.valorRealizado.toLocaleString('pt-BR')}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs">
+                              <div>Qtd: {custo.quantidadeAcumulada.toFixed(2)}</div>
+                              <div>Valor: R$ {custo.valorAcumulado.toLocaleString('pt-BR')}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs">
+                              <div>Qtd: {custo.quantidadeSaldo.toFixed(2)}</div>
+                              <div>Valor: R$ {custo.valorSaldo.toLocaleString('pt-BR')}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      
+                      <TableRow className="bg-gray-50 font-bold">
+                        <TableCell colSpan={3}>TOTAIS (R$)</TableCell>
+                        <TableCell>
+                          R$ {custosMensais.reduce((sum, custo) => sum + custo.totalOrcamento, 0).toLocaleString('pt-BR')}
+                        </TableCell>
+                        <TableCell>
+                          R$ {custosMensais.reduce((sum, custo) => sum + (custo.valorAcumulado - custo.valorRealizado), 0).toLocaleString('pt-BR')}
+                        </TableCell>
+                        <TableCell>
+                          R$ {custosMensais.reduce((sum, custo) => sum + custo.valorRealizado, 0).toLocaleString('pt-BR')}
+                        </TableCell>
+                        <TableCell>
+                          R$ {custosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0).toLocaleString('pt-BR')}
+                        </TableCell>
+                        <TableCell>
+                          R$ {custosMensais.reduce((sum, custo) => sum + custo.valorSaldo, 0).toLocaleString('pt-BR')}
+                        </TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center py-4">Nenhum custo registrado para esta obra</p>
+                <div className="text-center py-8">
+                  <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum custo encontrado</h3>
+                  <p className="text-gray-600 mb-4">
+                    {mesSelecionado && mesSelecionado !== 'todos'
+                      ? `Não há custos registrados para ${new Date(mesSelecionado + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+                      : 'Esta obra ainda não possui custos mensais registrados.'
+                    }
+                  </p>
+                  <Button onClick={handleAbrirNovoMes}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Primeiro Mês
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
+
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-4">
@@ -572,6 +1045,109 @@ export default function ObraDetailsPage() {
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Criar Primeiro Documento
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aba: Arquivos */}
+        <TabsContent value="arquivos" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle className="flex items-center gap-2">
+                  <Folder className="w-5 h-5" />
+                  Arquivos Adicionais - {obra.name}
+                </CardTitle>
+                <Button 
+                  size="sm"
+                  onClick={() => setIsNovoArquivoOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Arquivo
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {arquivosAdicionais.length > 0 ? (
+                <div className="space-y-4">
+                  {arquivosAdicionais.map((arquivo) => (
+                    <Card key={arquivo.id} className="border-l-4 border-l-green-500">
+                      <CardHeader className="pb-3">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3">
+                            <File className="w-5 h-5 text-green-600" />
+                            <div>
+                              <CardTitle className="text-lg">{arquivo.nome}</CardTitle>
+                              <CardDescription className="mt-1">{arquivo.descricao}</CardDescription>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="bg-green-100 text-green-800">
+                              {arquivo.categoria}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Simular download
+                                console.log('Download arquivo:', arquivo.nomeArquivo)
+                                alert('Download iniciado!')
+                              }}
+                            >
+                              <Download className="w-4 h-4 mr-1" />
+                              Baixar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRemoverArquivo(arquivo.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Paperclip className="w-4 h-4 text-gray-500" />
+                            <span className="text-gray-600">Arquivo:</span>
+                            <span className="font-medium">{arquivo.nomeArquivo}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-gray-500" />
+                            <span className="text-gray-600">Upload:</span>
+                            <span>{new Date(arquivo.dataUpload).toLocaleDateString('pt-BR')}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-gray-500" />
+                            <span className="text-gray-600">Tamanho:</span>
+                            <span>{formatarTamanhoArquivo(arquivo.tamanho)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <File className="w-4 h-4 text-gray-500" />
+                            <span className="text-gray-600">Tipo:</span>
+                            <span>{arquivo.tipo}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Folder className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum arquivo encontrado</h3>
+                  <p className="text-gray-600 mb-4">Esta obra ainda não possui arquivos adicionais.</p>
+                  <Button 
+                    onClick={() => setIsNovoArquivoOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Primeiro Arquivo
                   </Button>
                 </div>
               )}
@@ -1092,6 +1668,483 @@ export default function ObraDetailsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Novo Arquivo */}
+      <Dialog open={isNovoArquivoOpen} onOpenChange={setIsNovoArquivoOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Adicionar Novo Arquivo
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleNovoArquivo} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="nome">Nome do Arquivo *</Label>
+                <Input
+                  id="nome"
+                  value={novoArquivoData.nome}
+                  onChange={(e) => setNovoArquivoData({ ...novoArquivoData, nome: e.target.value })}
+                  placeholder="Ex: Manual de Operação"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="categoria">Categoria *</Label>
+                <Select
+                  value={novoArquivoData.categoria}
+                  onValueChange={(value) => setNovoArquivoData({ ...novoArquivoData, categoria: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="geral">Geral</SelectItem>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="certificado">Certificado</SelectItem>
+                    <SelectItem value="licenca">Licença</SelectItem>
+                    <SelectItem value="contrato">Contrato</SelectItem>
+                    <SelectItem value="relatorio">Relatório</SelectItem>
+                    <SelectItem value="foto">Foto</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="descricao">Descrição</Label>
+              <Textarea
+                id="descricao"
+                value={novoArquivoData.descricao}
+                onChange={(e) => setNovoArquivoData({ ...novoArquivoData, descricao: e.target.value })}
+                placeholder="Descreva o conteúdo do arquivo..."
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="arquivo">Selecionar Arquivo *</Label>
+              <div className="mt-2">
+                <Input
+                  id="arquivo"
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      setNovoArquivoData({ ...novoArquivoData, arquivo: file })
+                    }
+                  }}
+                  accept="*/*"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Formatos aceitos: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, PNG, etc.
+                </p>
+              </div>
+            </div>
+
+            {novoArquivoData.arquivo && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <File className="w-5 h-5 text-gray-600" />
+                  <div>
+                    <p className="font-medium text-sm">{novoArquivoData.arquivo.name}</p>
+                    <p className="text-xs text-gray-600">
+                      {formatarTamanhoArquivo(novoArquivoData.arquivo.size)} • {novoArquivoData.arquivo.type}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setIsNovoArquivoOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit">
+                <Upload className="w-4 h-4 mr-2" />
+                Adicionar Arquivo
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Novo Mês */}
+      <Dialog open={isNovoMesOpen} onOpenChange={setIsNovoMesOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Criar Novo Mês
+            </DialogTitle>
+            <CardDescription>
+              Selecione um mês para criar os custos. Os custos do mês anterior serão replicados automaticamente.
+            </CardDescription>
+          </DialogHeader>
+          
+          {mesesDisponiveis.length > 0 ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
+                {mesesDisponiveis.map((mes) => (
+                  <Card 
+                    key={mes} 
+                    className={`cursor-pointer transition-colors hover:bg-gray-50 ${
+                      novoMesData.mes === mes ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                    }`}
+                    onClick={() => setNovoMesData({ ...novoMesData, mes })}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium">
+                            {new Date(mes + '-01').toLocaleDateString('pt-BR', { 
+                              month: 'long', 
+                              year: 'numeric' 
+                            })}
+                          </h4>
+                          <p className="text-sm text-gray-500">
+                            {new Date(mes + '-01').toLocaleDateString('pt-BR', { 
+                              month: 'short', 
+                              year: 'numeric' 
+                            })}
+                          </p>
+                        </div>
+                        {novoMesData.mes === mes && (
+                          <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                            <span className="text-white text-sm">✓</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => {
+                  setIsNovoMesOpen(false)
+                  setNovoMesData({ mes: '' })
+                }}>
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleNovoMes}
+                  disabled={!novoMesData.mes}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Criar Mês
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Todos os meses já foram criados</h3>
+              <p className="text-gray-600 mb-4">
+                Não há mais meses disponíveis para criar nos próximos 12 meses.
+              </p>
+              <Button variant="outline" onClick={() => setIsNovoMesOpen(false)}>
+                Fechar
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Novo Item */}
+      <Dialog open={isNovoItemOpen} onOpenChange={setIsNovoItemOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Novo Item do Contrato
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleNovoItem} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="item">Item *</Label>
+                <Input
+                  id="item"
+                  value={novoItemData.item}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, item: e.target.value })}
+                  placeholder="Ex: 01.16"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="unidade">Unidade *</Label>
+                <Select
+                  value={novoItemData.unidade}
+                  onValueChange={(value) => setNovoItemData({ ...novoItemData, unidade: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mês">mês</SelectItem>
+                    <SelectItem value="und">und</SelectItem>
+                    <SelectItem value="und.">und.</SelectItem>
+                    <SelectItem value="km">km</SelectItem>
+                    <SelectItem value="h">h</SelectItem>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="m²">m²</SelectItem>
+                    <SelectItem value="m³">m³</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="descricao">Descrição *</Label>
+                <Input
+                  id="descricao"
+                  value={novoItemData.descricao}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, descricao: e.target.value })}
+                  placeholder="Ex: Hora Extra Operador"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="quantidadeOrcamento">Quantidade Orçamento *</Label>
+                <Input
+                  id="quantidadeOrcamento"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.quantidadeOrcamento}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, quantidadeOrcamento: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="valorUnitario">Valor Unitário *</Label>
+                <Input
+                  id="valorUnitario"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.valorUnitario}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, valorUnitario: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Total Orçamento</Label>
+                <Input
+                  value={`R$ ${(novoItemData.quantidadeOrcamento * novoItemData.valorUnitario).toLocaleString('pt-BR')}`}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="quantidadeAnterior">Quantidade Acumulado Anterior</Label>
+                <Input
+                  id="quantidadeAnterior"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.quantidadeAnterior}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, quantidadeAnterior: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="valorAnterior">Valor Acumulado Anterior</Label>
+                <Input
+                  id="valorAnterior"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.valorAnterior}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, valorAnterior: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="quantidadePeriodo">Quantidade Realizado Período</Label>
+                <Input
+                  id="quantidadePeriodo"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.quantidadePeriodo}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, quantidadePeriodo: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="valorPeriodo">Valor Realizado Período</Label>
+                <Input
+                  id="valorPeriodo"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.valorPeriodo}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, valorPeriodo: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setIsNovoItemOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit">
+                <Plus className="w-4 h-4 mr-2" />
+                Adicionar Item
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Novo Aditivo */}
+      <Dialog open={isNovoAditivoOpen} onOpenChange={setIsNovoAditivoOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Novo Aditivo
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleNovoAditivo} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="item">Item *</Label>
+                <Input
+                  id="item"
+                  value={novoItemData.item}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, item: e.target.value })}
+                  placeholder="Ex: 01.20"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="unidade">Unidade *</Label>
+                <Select
+                  value={novoItemData.unidade}
+                  onValueChange={(value) => setNovoItemData({ ...novoItemData, unidade: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mês">mês</SelectItem>
+                    <SelectItem value="und">und</SelectItem>
+                    <SelectItem value="und.">und.</SelectItem>
+                    <SelectItem value="km">km</SelectItem>
+                    <SelectItem value="h">h</SelectItem>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="m²">m²</SelectItem>
+                    <SelectItem value="m³">m³</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="descricao">Descrição *</Label>
+                <Input
+                  id="descricao"
+                  value={novoItemData.descricao}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, descricao: e.target.value })}
+                  placeholder="Ex: Caixão de grua"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="quantidadeOrcamento">Quantidade Orçamento *</Label>
+                <Input
+                  id="quantidadeOrcamento"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.quantidadeOrcamento}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, quantidadeOrcamento: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="valorUnitario">Valor Unitário *</Label>
+                <Input
+                  id="valorUnitario"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.valorUnitario}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, valorUnitario: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Total Orçamento</Label>
+                <Input
+                  value={`R$ ${(novoItemData.quantidadeOrcamento * novoItemData.valorUnitario).toLocaleString('pt-BR')}`}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="quantidadeAnterior">Quantidade Acumulado Anterior</Label>
+                <Input
+                  id="quantidadeAnterior"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.quantidadeAnterior}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, quantidadeAnterior: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="valorAnterior">Valor Acumulado Anterior</Label>
+                <Input
+                  id="valorAnterior"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.valorAnterior}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, valorAnterior: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="quantidadePeriodo">Quantidade Realizado Período</Label>
+                <Input
+                  id="quantidadePeriodo"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.quantidadePeriodo}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, quantidadePeriodo: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="valorPeriodo">Valor Realizado Período</Label>
+                <Input
+                  id="valorPeriodo"
+                  type="number"
+                  step="0.01"
+                  value={novoItemData.valorPeriodo}
+                  onChange={(e) => setNovoItemData({ ...novoItemData, valorPeriodo: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setIsNovoAditivoOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit">
+                <Plus className="w-4 h-4 mr-2" />
+                Adicionar Aditivo
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
