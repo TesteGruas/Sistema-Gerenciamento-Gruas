@@ -27,7 +27,7 @@ import {
   ConeIcon as Crane,
   X
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal } from "@/lib/mock-data"
+import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos } from "@/lib/mock-data"
 
 export default function ObrasPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -42,7 +42,7 @@ export default function ObrasPage() {
     endDate: '',
     budget: '',
     location: '',
-    client: '',
+    clienteId: '',
     observations: '',
     // Dados da grua
     gruaId: '',
@@ -172,6 +172,9 @@ export default function ObrasPage() {
   const handleCreateObra = (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Buscar dados do cliente selecionado
+    const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
+    
     // Simular criação da obra
     const newObra = {
       id: (mockObras.length + 1).toString(),
@@ -182,9 +185,17 @@ export default function ObrasPage() {
       endDate: obraFormData.endDate,
       budget: parseFloat(obraFormData.budget) || 0,
       location: obraFormData.location,
-      client: obraFormData.client,
+      clienteId: obraFormData.clienteId,
+      clienteName: clienteSelecionado?.name || '',
+      client: clienteSelecionado?.name || '',
+      observations: obraFormData.observations,
+      responsavelId: '3', // Pedro Costa por padrão
+      responsavelName: 'Pedro Costa',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      custosIniciais: 0,
+      custosAdicionais: 0,
+      totalCustos: 0
     }
 
     // Atualizar grua selecionada para estar em obra
@@ -219,7 +230,7 @@ export default function ObrasPage() {
       endDate: '',
       budget: '',
       location: '',
-      client: '',
+      clienteId: '',
       observations: '',
       gruaId: '',
       gruaValue: '',
@@ -247,7 +258,7 @@ export default function ObrasPage() {
       endDate: obra.endDate || '',
       budget: obra.budget?.toString() || '',
       location: obra.location || '',
-      client: obra.client || '',
+      clienteId: obra.clienteId || '',
       observations: obra.observations || '',
       // Dados da grua (buscar grua vinculada)
       gruaId: '',
@@ -261,6 +272,9 @@ export default function ObrasPage() {
   const handleUpdateObra = (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Buscar dados do cliente selecionado
+    const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
+    
     // Simular atualização da obra
     const updatedObra = {
       ...editingObra,
@@ -271,7 +285,9 @@ export default function ObrasPage() {
       endDate: obraFormData.endDate,
       budget: parseFloat(obraFormData.budget) || 0,
       location: obraFormData.location,
-      client: obraFormData.client,
+      clienteId: obraFormData.clienteId,
+      clienteName: clienteSelecionado?.name || '',
+      client: clienteSelecionado?.name || '',
       observations: obraFormData.observations,
       updatedAt: new Date().toISOString()
     }
@@ -291,7 +307,7 @@ export default function ObrasPage() {
       endDate: '',
       budget: '',
       location: '',
-      client: '',
+      clienteId: '',
       observations: '',
       gruaId: '',
       gruaValue: '',
@@ -373,6 +389,10 @@ export default function ObrasPage() {
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Users className="w-4 h-4" />
                     <span>Responsável: {obra.responsavelName}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Building2 className="w-4 h-4" />
+                    <span>Cliente: {obra.clienteName}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <DollarSign className="w-4 h-4" />
@@ -538,13 +558,25 @@ export default function ObrasPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="client">Cliente</Label>
-                  <Input
-                    id="client"
-                    value={obraFormData.client}
-                    onChange={(e) => setObraFormData({ ...obraFormData, client: e.target.value })}
-                    placeholder="Nome do cliente"
-                  />
+                  <Label htmlFor="clienteId">Cliente *</Label>
+                  <Select
+                    value={obraFormData.clienteId}
+                    onValueChange={(value) => setObraFormData({ ...obraFormData, clienteId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getClientesAtivos().map(cliente => (
+                        <SelectItem key={cliente.id} value={cliente.id}>
+                          {cliente.name} - {cliente.cnpj}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    O cliente deve ser criado antes de criar a obra
+                  </p>
                 </div>
 
                 <div>
@@ -806,13 +838,25 @@ export default function ObrasPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="edit-client">Cliente</Label>
-                  <Input
-                    id="edit-client"
-                    value={obraFormData.client}
-                    onChange={(e) => setObraFormData({ ...obraFormData, client: e.target.value })}
-                    placeholder="Nome do cliente"
-                  />
+                  <Label htmlFor="edit-clienteId">Cliente *</Label>
+                  <Select
+                    value={obraFormData.clienteId}
+                    onValueChange={(value) => setObraFormData({ ...obraFormData, clienteId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getClientesAtivos().map(cliente => (
+                        <SelectItem key={cliente.id} value={cliente.id}>
+                          {cliente.name} - {cliente.cnpj}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    O cliente deve ser criado antes de criar a obra
+                  </p>
                 </div>
 
                 <div>

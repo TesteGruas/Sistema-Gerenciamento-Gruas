@@ -1,5 +1,32 @@
 // Dados mockados para o sistema de gerenciamento de gruas
 
+export interface Cliente {
+  id: string
+  name: string
+  email: string
+  telefone: string
+  cnpj: string
+  endereco: {
+    rua: string
+    numero: string
+    complemento?: string
+    bairro: string
+    cidade: string
+    estado: string
+    cep: string
+  }
+  contato: {
+    nome: string
+    cargo: string
+    telefone: string
+    email: string
+  }
+  status: 'ativo' | 'inativo'
+  observacoes?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface User {
   id: string
   name: string
@@ -21,7 +48,14 @@ export interface Obra {
   status: 'ativa' | 'pausada' | 'concluida'
   responsavelId: string
   responsavelName: string
+  clienteId: string
+  clienteName: string
+  budget: number
+  location: string
+  client: string
+  observations?: string
   createdAt: string
+  updatedAt: string
   custosIniciais: number
   custosAdicionais: number
   totalCustos: number
@@ -131,6 +165,86 @@ export interface CustoMensal {
 }
 
 // Dados mockados
+export const mockClientes: Cliente[] = [
+  {
+    id: '1',
+    name: 'Construtora Alpha Ltda',
+    email: 'contato@alpha.com',
+    telefone: '(11) 99999-9999',
+    cnpj: '12.345.678/0001-90',
+    endereco: {
+      rua: 'Rua das Flores',
+      numero: '123',
+      complemento: 'Sala 45',
+      bairro: 'Centro',
+      cidade: 'São Paulo',
+      estado: 'SP',
+      cep: '01234-567'
+    },
+    contato: {
+      nome: 'João Silva',
+      cargo: 'Gerente de Projetos',
+      telefone: '(11) 88888-8888',
+      email: 'joao.silva@alpha.com'
+    },
+    status: 'ativo',
+    observacoes: 'Cliente preferencial com histórico de pagamentos em dia',
+    createdAt: '2024-01-10T00:00:00Z',
+    updatedAt: '2024-01-10T00:00:00Z'
+  },
+  {
+    id: '2',
+    name: 'Beta Incorporações S.A.',
+    email: 'projetos@beta.com',
+    telefone: '(21) 77777-7777',
+    cnpj: '98.765.432/0001-10',
+    endereco: {
+      rua: 'Av. Copacabana',
+      numero: '456',
+      bairro: 'Copacabana',
+      cidade: 'Rio de Janeiro',
+      estado: 'RJ',
+      cep: '22000-000'
+    },
+    contato: {
+      nome: 'Maria Santos',
+      cargo: 'Diretora Comercial',
+      telefone: '(21) 66666-6666',
+      email: 'maria.santos@beta.com'
+    },
+    status: 'ativo',
+    observacoes: 'Cliente novo, primeira obra conosco',
+    createdAt: '2024-01-20T00:00:00Z',
+    updatedAt: '2024-01-20T00:00:00Z'
+  },
+  {
+    id: '3',
+    name: 'Gamma Empreendimentos',
+    email: 'contato@gamma.com',
+    telefone: '(31) 55555-5555',
+    cnpj: '11.222.333/0001-44',
+    endereco: {
+      rua: 'Rua da Liberdade',
+      numero: '789',
+      complemento: 'Conjunto 201',
+      bairro: 'Savassi',
+      cidade: 'Belo Horizonte',
+      estado: 'MG',
+      cep: '30112-000'
+    },
+    contato: {
+      nome: 'Carlos Mendes',
+      cargo: 'Engenheiro Responsável',
+      telefone: '(31) 44444-4444',
+      email: 'carlos.mendes@gamma.com'
+    },
+    status: 'inativo',
+    observacoes: 'Cliente inativo - obra concluída em 2023',
+    createdAt: '2023-06-01T00:00:00Z',
+    updatedAt: '2023-12-31T00:00:00Z'
+  }
+]
+
 export const mockUsers: User[] = [
   {
     id: '1',
@@ -226,7 +340,14 @@ export const mockObras: Obra[] = [
     status: 'ativa',
     responsavelId: '3',
     responsavelName: 'Pedro Costa',
-    createdAt: '2024-01-15',
+    clienteId: '1',
+    clienteName: 'Construtora Alpha Ltda',
+    budget: 5000000,
+    location: 'São Paulo, SP',
+    client: 'Construtora Alpha Ltda',
+    observations: 'Obra de alto padrão com prazo apertado',
+    createdAt: '2024-01-15T00:00:00Z',
+    updatedAt: '2024-01-15T00:00:00Z',
     custosIniciais: 150000,
     custosAdicionais: 25000,
     totalCustos: 175000
@@ -240,7 +361,14 @@ export const mockObras: Obra[] = [
     status: 'ativa',
     responsavelId: '2',
     responsavelName: 'Maria Santos',
-    createdAt: '2024-03-01',
+    clienteId: '2',
+    clienteName: 'Beta Incorporações S.A.',
+    budget: 8000000,
+    location: 'Rio de Janeiro, RJ',
+    client: 'Beta Incorporações S.A.',
+    observations: 'Projeto comercial de grande porte',
+    createdAt: '2024-03-01T00:00:00Z',
+    updatedAt: '2024-03-01T00:00:00Z',
     custosIniciais: 200000,
     custosAdicionais: 45000,
     totalCustos: 245000
@@ -254,7 +382,14 @@ export const mockObras: Obra[] = [
     status: 'concluida',
     responsavelId: '2',
     responsavelName: 'Maria Santos',
-    createdAt: '2023-06-01',
+    clienteId: '3',
+    clienteName: 'Gamma Empreendimentos',
+    budget: 12000000,
+    location: 'Belo Horizonte, MG',
+    client: 'Gamma Empreendimentos',
+    observations: 'Obra pública concluída com sucesso',
+    createdAt: '2023-06-01T00:00:00Z',
+    updatedAt: '2024-05-31T00:00:00Z',
     custosIniciais: 300000,
     custosAdicionais: 50000,
     totalCustos: 350000
@@ -725,4 +860,17 @@ export const getHistoricoByMonth = (gruaId: string, month: number, year: number)
     const entryDate = new Date(entry.data)
     return entryDate.getMonth() === month && entryDate.getFullYear() === year
   })
+}
+
+// Funções utilitárias para clientes
+export const getClienteById = (id: string): Cliente | undefined => {
+  return mockClientes.find(cliente => cliente.id === id)
+}
+
+export const getClientesAtivos = (): Cliente[] => {
+  return mockClientes.filter(cliente => cliente.status === 'ativo')
+}
+
+export const getObrasByCliente = (clienteId: string): Obra[] => {
+  return mockObras.filter(obra => obra.clienteId === clienteId)
 }
