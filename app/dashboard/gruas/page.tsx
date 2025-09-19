@@ -18,19 +18,13 @@ import {
   Search, 
   Edit,
   Eye,
-  AlertTriangle,
   CheckCircle,
   Clock,
   Wrench,
   Building2,
-  Calendar,
-  User,
-  Bell,
-  BookOpen
+  Calendar
 } from "lucide-react"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import { mockGruas, mockObras, mockUsers, getHistoricoByGrua } from "@/lib/mock-data"
+import { mockGruas, mockObras, mockUsers } from "@/lib/mock-data"
 
 export default function GruasPage() {
   const searchParams = useSearchParams()
@@ -39,7 +33,6 @@ export default function GruasPage() {
   const [selectedObra, setSelectedObra] = useState("all")
   const [selectedGrua, setSelectedGrua] = useState<any>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isHistoricoDialogOpen, setIsHistoricoDialogOpen] = useState(false)
   const [gruaFormData, setGruaFormData] = useState({
     name: '',
     model: '',
@@ -51,13 +44,8 @@ export default function GruasPage() {
 
   // Aplicar filtros da URL
   useEffect(() => {
-    const gruaParam = searchParams.get('grua')
     const obraParam = searchParams.get('obra')
     
-    if (gruaParam) {
-      setSelectedGrua(mockGruas.find(g => g.id === gruaParam))
-      setIsHistoricoDialogOpen(true)
-    }
     if (obraParam) {
       setSelectedObra(obraParam)
     }
@@ -94,11 +82,6 @@ export default function GruasPage() {
 
   const handleViewDetails = (grua: any) => {
     setSelectedGrua(grua)
-  }
-
-  const handleAddHistorico = (grua: any) => {
-    setSelectedGrua(grua)
-    setIsHistoricoDialogOpen(true)
   }
 
   const handleCreateGrua = (e: React.FormEvent) => {
@@ -267,7 +250,6 @@ export default function GruasPage() {
       {/* Lista de Gruas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredGruas.map((grua) => {
-          const historico = getHistoricoByGrua(grua.id)
           const obra = mockObras.find(o => o.id === grua.currentObraId)
           
           return (
@@ -294,81 +276,30 @@ export default function GruasPage() {
                     </div>
                   )}
                   
-                  {/* Histórico Recente */}
-                  <div className="border-t pt-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-sm font-medium">Histórico Recente</h4>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleAddHistorico(grua)}
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Nova Entrada
-                      </Button>
+                  <div className="text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      <span>Criada em: {new Date(grua.createdAt).toLocaleDateString('pt-BR')}</span>
                     </div>
-                    {historico.length > 0 ? (
-                      <div className="space-y-2">
-                        {historico.slice(0, 3).map((entry) => (
-                          <div key={entry.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${
-                                entry.status === 'ok' ? 'bg-green-500' : 
-                                entry.status === 'falha' ? 'bg-red-500' : 'bg-yellow-500'
-                              }`} />
-                              <span className="text-sm">{entry.observacoes.substring(0, 40)}...</span>
-                              {entry.status === 'falha' && (
-                                <AlertTriangle className="w-4 h-4 text-red-500" />
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {format(new Date(entry.data), "dd/MM", { locale: ptBR })}
-                            </div>
-                          </div>
-                        ))}
-                        {historico.length > 3 && (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="w-full mt-2"
-                            onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/livro`}
-                          >
-                            <BookOpen className="w-4 h-4 mr-1" />
-                            Abrir Livro da Grua
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-center py-4">
-                        <p className="text-sm text-gray-500 mb-2">Nenhum histórico registrado</p>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleAddHistorico(grua)}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Primeira Entrada
-                        </Button>
-                      </div>
-                    )}
                   </div>
                   
                   <div className="flex gap-2 pt-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/livro`}
+                      onClick={() => window.location.href = `/dashboard/obras/${grua.currentObraId}?tab=livro`}
                       className="flex-1"
+                      disabled={!grua.currentObraId}
                     >
-                      <BookOpen className="w-4 h-4 mr-1" />
-                      Abrir Livro
+                      <Eye className="w-4 h-4 mr-1" />
+                      Ver na Obra
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleAddHistorico(grua)}
+                      onClick={() => handleViewDetails(grua)}
                     >
-                      <Wrench className="w-4 h-4" />
+                      <Edit className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
@@ -377,15 +308,6 @@ export default function GruasPage() {
           )
         })}
       </div>
-
-      {/* Dialog de Nova Entrada no Histórico */}
-      {selectedGrua && (
-        <HistoricoDialog 
-          grua={selectedGrua}
-          isOpen={isHistoricoDialogOpen}
-          onClose={() => setIsHistoricoDialogOpen(false)}
-        />
-      )}
 
       {/* Dialog de Criação de Grua */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -499,159 +421,3 @@ export default function GruasPage() {
   )
 }
 
-function HistoricoDialog({ grua, isOpen, onClose }: { grua: any; isOpen: boolean; onClose: () => void }) {
-  const [formData, setFormData] = useState({
-    data: new Date().toISOString().split('T')[0],
-    status: 'ok',
-    tipo: 'checklist',
-    observacoes: '',
-    funcionarioId: '4' // Ana Oliveira por padrão
-  })
-
-  // Preencher automaticamente baseado na grua e obra
-  useEffect(() => {
-    if (grua) {
-      const obra = mockObras.find(o => o.id === grua.currentObraId)
-      const funcionario = mockUsers.find(u => u.obraId === grua.currentObraId)
-      
-      setFormData(prev => ({
-        ...prev,
-        funcionarioId: funcionario?.id || '4',
-        // Se a grua está em obra, tipo padrão é checklist
-        tipo: grua.status === 'em_obra' ? 'checklist' : 'manutencao'
-      }))
-    }
-  }, [grua])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Aqui seria a lógica para salvar a entrada
-    console.log('Salvando entrada:', { ...formData, gruaId: grua.id })
-    onClose()
-  }
-
-  const obra = mockObras.find(o => o.id === grua.currentObraId)
-  const funcionario = mockUsers.find(u => u.id === formData.funcionarioId)
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Nova Entrada no Histórico</h2>
-              <Button variant="outline" size="sm" onClick={onClose}>
-                ✕
-              </Button>
-            </div>
-            
-            {/* Informações da Grua */}
-            <div className="bg-blue-50 p-4 rounded-lg mb-6">
-              <h3 className="font-medium text-blue-900">{grua.name}</h3>
-              <p className="text-sm text-blue-700">{grua.model} - {grua.capacity}</p>
-              {obra && (
-                <p className="text-sm text-blue-600">Obra: {obra.name}</p>
-              )}
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="data">Data *</Label>
-                  <Input
-                    id="data"
-                    type="date"
-                    value={formData.data}
-                    onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="tipo">Tipo *</Label>
-                  <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="checklist">Checklist Diário</SelectItem>
-                      <SelectItem value="manutencao">Manutenção</SelectItem>
-                      <SelectItem value="falha">Falha</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="status">Status *</Label>
-                  <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ok">OK</SelectItem>
-                      <SelectItem value="falha">Falha</SelectItem>
-                      <SelectItem value="manutencao">Manutenção</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="responsavel">Responsável *</Label>
-                  <Select value={formData.funcionarioId} onValueChange={(value) => setFormData({ ...formData, funcionarioId: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockUsers.filter(user => user.obraId === grua.currentObraId || user.role === 'admin').map(user => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="observacoes">Observações *</Label>
-                <Textarea
-                  id="observacoes"
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                  rows={4}
-                  placeholder="Descreva as observações da inspeção ou manutenção..."
-                  required
-                />
-              </div>
-
-              {/* Resumo dos dados preenchidos */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-medium text-sm mb-2">Resumo da Entrada:</h4>
-                <div className="text-sm text-gray-600 space-y-1">
-                  <p><strong>Grua:</strong> {grua.name} - {grua.model}</p>
-                  <p><strong>Obra:</strong> {obra?.name || 'Nenhuma obra vinculada'}</p>
-                  <p><strong>Data:</strong> {new Date(formData.data).toLocaleDateString('pt-BR')}</p>
-                  <p><strong>Tipo:</strong> {formData.tipo}</p>
-                  <p><strong>Status:</strong> {formData.status}</p>
-                  <p><strong>Responsável:</strong> {funcionario?.name}</p>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={onClose}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  Registrar Entrada
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
