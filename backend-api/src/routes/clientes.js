@@ -14,9 +14,8 @@ const clienteSchema = Joi.object({
   endereco: Joi.string().allow('').optional(),
   cidade: Joi.string().allow('').optional(),
   estado: Joi.string().length(2).allow('').optional(),
-  cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).allow('').optional(),
-  contato: Joi.string().allow('').optional(), // Era 'contato_responsavel'
-  observacoes: Joi.string().allow('').optional()
+  cep: Joi.string().pattern(/^[\d]{2}\.?[\d]{3}-?[\d]{3}$/).allow('').optional(),
+  contato: Joi.string().allow('').optional() // Era 'contato_responsavel'
 })
 
 /**

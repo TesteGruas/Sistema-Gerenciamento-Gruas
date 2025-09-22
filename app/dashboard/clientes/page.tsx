@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,50 +24,140 @@ import {
   User,
   FileText,
   Calendar,
-  Trash2
+  Trash2,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react"
-import { mockClientes, getObrasByCliente } from "@/lib/mock-data"
+import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
+import { obrasApi, Obra } from "@/lib/api-obras"
 
 export default function ClientesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  const [selectedCliente, setSelectedCliente] = useState<any>(null)
+  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [clienteToDelete, setClienteToDelete] = useState<any>(null)
-  const [clienteFormData, setClienteFormData] = useState({
-    name: '',
+  const [clienteToDelete, setClienteToDelete] = useState<Cliente | null>(null)
+  const [clienteFormData, setClienteFormData] = useState<ClienteFormData>({
+    nome: '',
     email: '',
     telefone: '',
     cnpj: '',
-    endereco: {
-      rua: '',
-      numero: '',
-      complemento: '',
-      bairro: '',
-      cidade: '',
-      estado: '',
-      cep: ''
-    },
-    contato: {
-      nome: '',
-      cargo: '',
-      telefone: '',
-      email: ''
-    },
-    status: 'ativo',
-    observacoes: ''
+    endereco: '',
+    cidade: '',
+    estado: '',
+    cep: '',
+    contato: ''
   })
+  
+  // Estados para gerenciar dados da API
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [obras, setObras] = useState<Obra[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const filteredClientes = mockClientes.filter(cliente => {
-    const matchesSearch = cliente.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cliente.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cliente.cnpj.includes(searchTerm)
-    const matchesStatus = selectedStatus === "all" || cliente.status === selectedStatus
+  // Verificar autenticação e carregar dados da API
+  useEffect(() => {
+    // Verificar se há token de autenticação
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      setError('Usuário não autenticado. Redirecionando para login...')
+      setTimeout(() => {
+        window.location.href = '/'
+      }, 2000)
+      return
+    }
     
-    return matchesSearch && matchesStatus
+    carregarClientes()
+    carregarObras()
+  }, [pagination.page, pagination.limit])
+
+  // Carregar clientes quando o termo de busca mudar
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      buscarClientes()
+    } else {
+      carregarClientes()
+    }
+  }, [searchTerm])
+
+  const carregarClientes = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await clientesApi.listarClientes(pagination.page, pagination.limit)
+      setClientes(response.data)
+      setPagination(response.pagination)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar clientes')
+      console.error('Erro ao carregar clientes:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const carregarObras = async () => {
+    try {
+      // Carregar todas as obras (sem paginação para ter acesso completo)
+      const response = await obrasApi.listarObras(1, 1000)
+      setObras(response.data)
+    } catch (err) {
+      console.error('Erro ao carregar obras:', err)
+      // Não definir erro aqui para não quebrar a interface de clientes
+    }
+  }
+
+  const buscarClientes = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await clientesApi.buscarClientes(searchTerm, pagination.page, pagination.limit)
+      setClientes(response.data)
+      setPagination(response.pagination)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao buscar clientes')
+      console.error('Erro ao buscar clientes:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Funções de paginação
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= pagination.pages) {
+      setPagination(prev => ({ ...prev, page }))
+    }
+  }
+
+  const goToFirstPage = () => goToPage(1)
+  const goToLastPage = () => goToPage(pagination.pages)
+  const goToPreviousPage = () => goToPage(pagination.page - 1)
+  const goToNextPage = () => goToPage(pagination.page + 1)
+
+  const changePageSize = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }))
+  }
+
+  // Função para obter obras por cliente
+  const getObrasByCliente = (clienteId: number) => {
+    return obras.filter(obra => obra.cliente_id === clienteId)
+  }
+
+  const filteredClientes = clientes.filter(cliente => {
+    const matchesStatus = selectedStatus === "all" || true // Como o backend não tem status, sempre retorna true
+    return matchesStatus
   })
 
   const getStatusColor = (status: string) => {
@@ -86,141 +176,156 @@ export default function ClientesPage() {
     }
   }
 
-  const handleViewDetails = (cliente: any) => {
+  const handleViewDetails = (cliente: Cliente) => {
     setSelectedCliente(cliente)
     setIsDetailsDialogOpen(true)
   }
 
-  const handleEdit = (cliente: any) => {
+  const handleEdit = (cliente: Cliente) => {
     setSelectedCliente(cliente)
     setClienteFormData({
-      name: cliente.name,
-      email: cliente.email,
-      telefone: cliente.telefone,
+      nome: cliente.nome,
+      email: cliente.email || '',
+      telefone: cliente.telefone || '',
       cnpj: cliente.cnpj,
-      endereco: cliente.endereco,
-      contato: cliente.contato,
-      status: cliente.status,
-      observacoes: cliente.observacoes || ''
+      endereco: cliente.endereco || '',
+      cidade: cliente.cidade || '',
+      estado: cliente.estado || '',
+      cep: cliente.cep || '',
+      contato: cliente.contato || ''
     })
     setIsEditDialogOpen(true)
   }
 
-  const handleCreateCliente = (e: React.FormEvent) => {
+  const handleCreateCliente = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Simular criação do cliente
-    const newCliente = {
-      id: (mockClientes.length + 1).toString(),
-      ...clienteFormData,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-
-    // Em uma aplicação real, isso seria uma chamada para a API
-    console.log('Novo cliente criado:', newCliente)
-    
-    // Resetar formulário e fechar dialog
-    setClienteFormData({
-      name: '',
-      email: '',
-      telefone: '',
-      cnpj: '',
-      endereco: {
-        rua: '',
-        numero: '',
-        complemento: '',
-        bairro: '',
+    try {
+      setIsSubmitting(true)
+      
+      // Formatar CEP antes de enviar
+      const dadosFormatados = {
+        ...clienteFormData,
+        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : ''
+      }
+      
+      await clientesApi.criarCliente(dadosFormatados)
+      
+      // Recarregar lista de clientes
+      await carregarClientes()
+      
+      // Resetar formulário e fechar dialog
+      setClienteFormData({
+        nome: '',
+        email: '',
+        telefone: '',
+        cnpj: '',
+        endereco: '',
         cidade: '',
         estado: '',
-        cep: ''
-      },
-      contato: {
-        nome: '',
-        cargo: '',
-        telefone: '',
-        email: ''
-      },
-      status: 'ativo',
-      observacoes: ''
-    })
-    setIsCreateDialogOpen(false)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert('Cliente criado com sucesso!')
+        cep: '',
+        contato: ''
+      })
+      setIsCreateDialogOpen(false)
+      
+      alert('Cliente criado com sucesso!')
+    } catch (err) {
+      console.error('Erro ao criar cliente:', err)
+      alert(err instanceof Error ? err.message : 'Erro ao criar cliente')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleUpdateCliente = (e: React.FormEvent) => {
+  const handleUpdateCliente = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Simular atualização do cliente
-    const updatedCliente = {
-      ...selectedCliente,
-      ...clienteFormData,
-      updatedAt: new Date().toISOString()
+    if (!selectedCliente) return
+    
+    try {
+      setIsSubmitting(true)
+      
+      // Formatar CEP antes de enviar
+      const dadosFormatados = {
+        ...clienteFormData,
+        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : ''
+      }
+      
+      await clientesApi.atualizarCliente(selectedCliente.id, dadosFormatados)
+      
+      // Recarregar lista de clientes
+      await carregarClientes()
+      
+      setIsEditDialogOpen(false)
+      
+      alert('Cliente atualizado com sucesso!')
+    } catch (err) {
+      console.error('Erro ao atualizar cliente:', err)
+      alert(err instanceof Error ? err.message : 'Erro ao atualizar cliente')
+    } finally {
+      setIsSubmitting(false)
     }
-
-    // Em uma aplicação real, isso seria uma chamada para a API
-    console.log('Cliente atualizado:', updatedCliente)
-    
-    setIsEditDialogOpen(false)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert('Cliente atualizado com sucesso!')
   }
 
-  const handleDeleteCliente = (cliente: any) => {
+  const handleDeleteCliente = (cliente: Cliente) => {
     setClienteToDelete(cliente)
     setIsDeleteDialogOpen(true)
   }
 
-  const confirmDeleteCliente = () => {
+  const confirmDeleteCliente = async () => {
     if (!clienteToDelete) return
 
     // Verificar se o cliente tem obras vinculadas
     const obrasVinculadas = getObrasByCliente(clienteToDelete.id)
     if (obrasVinculadas.length > 0) {
-      alert(`Não é possível excluir o cliente "${clienteToDelete.name}" pois ele possui ${obrasVinculadas.length} obra(s) vinculada(s). Remova as obras primeiro.`)
+      alert(`Não é possível excluir o cliente "${clienteToDelete.nome}" pois ele possui ${obrasVinculadas.length} obra(s) vinculada(s). Remova as obras primeiro.`)
       setIsDeleteDialogOpen(false)
       return
     }
 
-    // Simular exclusão do cliente
-    console.log('Cliente excluído:', clienteToDelete)
-    
-    setIsDeleteDialogOpen(false)
-    setClienteToDelete(null)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert(`Cliente "${clienteToDelete.name}" excluído com sucesso!`)
+    try {
+      setIsSubmitting(true)
+      await clientesApi.excluirCliente(clienteToDelete.id)
+      
+      // Recarregar lista de clientes
+      await carregarClientes()
+      
+      setIsDeleteDialogOpen(false)
+      setClienteToDelete(null)
+      
+      alert(`Cliente "${clienteToDelete.nome}" excluído com sucesso!`)
+    } catch (err) {
+      console.error('Erro ao excluir cliente:', err)
+      alert(err instanceof Error ? err.message : 'Erro ao excluir cliente')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const stats = [
     { 
       title: "Total de Clientes", 
-      value: mockClientes.length, 
+      value: pagination.total, 
       icon: Building2, 
       color: "bg-blue-500" 
     },
     { 
-      title: "Clientes Ativos", 
-      value: mockClientes.filter(c => c.status === 'ativo').length, 
+      title: "Total de Obras", 
+      value: obras.length, 
+      icon: FileText, 
+      color: "bg-purple-500" 
+    },
+    { 
+      title: "Obras em Andamento", 
+      value: obras.filter(obra => obra.status === 'Em Andamento').length, 
       icon: CheckCircle, 
       color: "bg-green-500" 
     },
     { 
-      title: "Clientes Inativos", 
-      value: mockClientes.filter(c => c.status === 'inativo').length, 
+      title: "Obras Concluídas", 
+      value: obras.filter(obra => obra.status === 'Concluída').length, 
       icon: XCircle, 
       color: "bg-gray-500" 
-    },
-    { 
-      title: "Obras Ativas", 
-      value: mockClientes.filter(c => c.status === 'ativo').reduce((sum, cliente) => {
-        return sum + getObrasByCliente(cliente.id).filter(obra => obra.status === 'ativa').length
-      }, 0), 
-      icon: FileText, 
-      color: "bg-purple-500" 
     },
   ]
 
@@ -305,100 +410,296 @@ export default function ClientesPage() {
         </CardContent>
       </Card>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex justify-center items-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <span className="ml-2 text-gray-600">Carregando clientes...</span>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 text-red-600">
+              <XCircle className="w-5 h-5" />
+              <span className="font-medium">
+                {error.includes('autenticado') || error.includes('Sessão expirada') 
+                  ? 'Problema de Autenticação' 
+                  : 'Erro ao carregar clientes'}
+              </span>
+            </div>
+            <p className="text-red-600 mt-2">{error}</p>
+            {!error.includes('autenticado') && !error.includes('Sessão expirada') && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={carregarClientes}
+                className="mt-4"
+              >
+                Tentar Novamente
+              </Button>
+            )}
+            {(error.includes('autenticado') || error.includes('Sessão expirada')) && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => window.location.href = '/'}
+                className="mt-4"
+              >
+                Ir para Login
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lista de Clientes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredClientes.map((cliente) => {
-          const obras = getObrasByCliente(cliente.id)
-          const obrasAtivas = obras.filter(obra => obra.status === 'ativa')
-          
-          return (
-            <Card key={cliente.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-blue-600" />
-                    <CardTitle className="text-lg">{cliente.name}</CardTitle>
-                  </div>
-                  <Badge className={getStatusColor(cliente.status)}>
-                    {getStatusIcon(cliente.status)}
-                    <span className="ml-1 capitalize">{cliente.status}</span>
-                  </Badge>
-                </div>
-                <CardDescription>{cliente.cnpj}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Mail className="w-4 h-4" />
-                    <span>{cliente.email}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Phone className="w-4 h-4" />
-                    <span>{cliente.telefone}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MapPin className="w-4 h-4" />
-                    <span>{cliente.endereco.cidade}, {cliente.endereco.estado}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <User className="w-4 h-4" />
-                    <span>{cliente.contato.nome} - {cliente.contato.cargo}</span>
-                  </div>
-                  
-                  <div className="border-t pt-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-sm font-medium">Obras</h4>
-                      <Badge variant="outline">
-                        {obras.length} total
-                      </Badge>
+      {!loading && !error && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredClientes.map((cliente) => {
+            const obrasCliente = getObrasByCliente(cliente.id)
+            const obrasAtivas = obrasCliente.filter(obra => obra.status === 'Em Andamento')
+            
+            return (
+              <Card key={cliente.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-blue-600" />
+                      <CardTitle className="text-lg">{cliente.nome}</CardTitle>
                     </div>
-                    <div className="text-sm text-gray-600">
-                      <div className="flex justify-between">
-                        <span>Ativas:</span>
-                        <span className="font-medium text-green-600">{obrasAtivas.length}</span>
+                    <Badge className="bg-green-100 text-green-800">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="ml-1">Ativo</span>
+                    </Badge>
+                  </div>
+                  <CardDescription>{cliente.cnpj}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {cliente.email && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Mail className="w-4 h-4" />
+                        <span>{cliente.email}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>Concluídas:</span>
-                        <span className="font-medium text-gray-600">{obras.length - obrasAtivas.length}</span>
+                    )}
+                    
+                    {cliente.telefone && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Phone className="w-4 h-4" />
+                        <span>{cliente.telefone}</span>
+                      </div>
+                    )}
+                    
+                    {(cliente.cidade || cliente.estado) && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <MapPin className="w-4 h-4" />
+                        <span>{cliente.cidade}, {cliente.estado}</span>
+                      </div>
+                    )}
+                    
+                    {cliente.contato && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <User className="w-4 h-4" />
+                        <span>{cliente.contato}</span>
+                      </div>
+                    )}
+                    
+                    <div className="border-t pt-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="text-sm font-medium">Obras</h4>
+                        <Badge variant="outline">
+                          {obrasCliente.length} total
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <div className="flex justify-between">
+                          <span>Em Andamento:</span>
+                          <span className="font-medium text-green-600">{obrasAtivas.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Outras:</span>
+                          <span className="font-medium text-gray-600">{obrasCliente.length - obrasAtivas.length}</span>
+                        </div>
                       </div>
                     </div>
+                    
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(cliente)}
+                        className="flex-1"
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Ver Detalhes
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEdit(cliente)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteCliente(cliente)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewDetails(cliente)}
-                      className="flex-1"
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Ver Detalhes
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(cliente)}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteCliente(cliente)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && !error && filteredClientes.length === 0 && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum cliente encontrado</h3>
+            <p className="text-gray-600 mb-4">
+              {searchTerm ? 'Tente ajustar os filtros de busca.' : 'Comece criando seu primeiro cliente.'}
+            </p>
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Cliente
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Controles de Paginação */}
+      {!loading && !error && filteredClientes.length > 0 && pagination.pages > 1 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* Informações da paginação */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
+                <span>
+                  Mostrando {((pagination.page - 1) * pagination.limit) + 1} a{' '}
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} de{' '}
+                  {pagination.total} clientes
+                </span>
+                
+                {/* Seletor de itens por página */}
+                <div className="flex items-center gap-2">
+                  <span>Itens por página:</span>
+                  <Select value={pagination.limit.toString()} onValueChange={(value) => changePageSize(Number(value))}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+              </div>
+
+              {/* Controles de navegação */}
+              <div className="flex items-center gap-2">
+                {/* Primeira página - Desktop */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToFirstPage}
+                  disabled={pagination.page === 1}
+                  className="hidden sm:flex"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+
+                {/* Página anterior */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToPreviousPage}
+                  disabled={pagination.page === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+
+                {/* Números das páginas - Desktop */}
+                <div className="hidden sm:flex items-center gap-1">
+                  {(() => {
+                    const pages = []
+                    const totalPages = pagination.pages
+                    const currentPage = pagination.page
+                    
+                    // Mostrar até 5 páginas
+                    let startPage = Math.max(1, currentPage - 2)
+                    let endPage = Math.min(totalPages, currentPage + 2)
+                    
+                    // Ajustar se estiver no início ou fim
+                    if (endPage - startPage < 4) {
+                      if (startPage === 1) {
+                        endPage = Math.min(totalPages, startPage + 4)
+                      } else {
+                        startPage = Math.max(1, endPage - 4)
+                      }
+                    }
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <Button
+                          key={i}
+                          variant={i === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => goToPage(i)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {i}
+                        </Button>
+                      )
+                    }
+                    
+                    return pages
+                  })()}
+                </div>
+
+                {/* Indicador de página atual - Mobile */}
+                <div className="sm:hidden flex items-center gap-2">
+                  <span className="text-sm text-gray-600">
+                    Página {pagination.page} de {pagination.pages}
+                  </span>
+                </div>
+
+                {/* Próxima página */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToNextPage}
+                  disabled={pagination.page === pagination.pages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+
+                {/* Última página - Desktop */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToLastPage}
+                  disabled={pagination.page === pagination.pages}
+                  className="hidden sm:flex"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Dialog de Criação de Cliente */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -415,6 +716,7 @@ export default function ClientesPage() {
             onSubmit={handleCreateCliente}
             onClose={() => setIsCreateDialogOpen(false)}
             isEdit={false}
+            isSubmitting={isSubmitting}
           />
         </DialogContent>
       </Dialog>
@@ -434,6 +736,7 @@ export default function ClientesPage() {
             onSubmit={handleUpdateCliente}
             onClose={() => setIsEditDialogOpen(false)}
             isEdit={true}
+            isSubmitting={isSubmitting}
           />
         </DialogContent>
       </Dialog>
@@ -447,7 +750,7 @@ export default function ClientesPage() {
               Detalhes do Cliente
             </DialogTitle>
           </DialogHeader>
-          {selectedCliente && <ClienteDetails cliente={selectedCliente} />}
+          {selectedCliente && <ClienteDetails cliente={selectedCliente} getObrasByCliente={getObrasByCliente} />}
         </DialogContent>
       </Dialog>
 
@@ -462,7 +765,7 @@ export default function ClientesPage() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Tem certeza que deseja excluir o cliente <strong>{clienteToDelete?.name}</strong>?
+              Tem certeza que deseja excluir o cliente <strong>{clienteToDelete?.nome}</strong>?
             </p>
             <p className="text-xs text-red-600">
               ⚠️ Esta ação não pode ser desfeita. O cliente será permanentemente removido do sistema.
@@ -472,22 +775,24 @@ export default function ClientesPage() {
                 ⚠️ Este cliente possui obras vinculadas. A exclusão será bloqueada.
               </p>
             )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              Cancelar
-            </Button>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setIsDeleteDialogOpen(false)}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </Button>
             <Button 
               variant="destructive" 
               onClick={confirmDeleteCliente}
-              disabled={clienteToDelete && getObrasByCliente(clienteToDelete.id).length > 0}
+              disabled={(clienteToDelete && getObrasByCliente(clienteToDelete.id).length > 0) || isSubmitting}
             >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Excluir
-            </Button>
+            {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            <Trash2 className="w-4 h-4 mr-2" />
+            Excluir
+          </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -495,12 +800,13 @@ export default function ClientesPage() {
   )
 }
 
-function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit }: { 
-  formData: any; 
-  setFormData: (data: any) => void; 
+function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmitting }: { 
+  formData: ClienteFormData; 
+  setFormData: (data: ClienteFormData) => void; 
   onSubmit: (e: React.FormEvent) => void; 
   onClose: () => void;
   isEdit: boolean;
+  isSubmitting: boolean;
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -509,11 +815,11 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit }: {
         <h3 className="text-lg font-medium">Informações Básicas</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="name">Nome da Empresa *</Label>
+            <Label htmlFor="nome">Nome da Empresa *</Label>
             <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              id="nome"
+              value={formData.nome}
+              onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
               placeholder="Ex: Construtora ABC Ltda"
               required
             />
@@ -532,24 +838,22 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit }: {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="email">Email *</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
-              value={formData.email}
+              value={formData.email || ''}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="contato@empresa.com"
-              required
             />
           </div>
           <div>
-            <Label htmlFor="telefone">Telefone *</Label>
+            <Label htmlFor="telefone">Telefone</Label>
             <Input
               id="telefone"
-              value={formData.telefone}
+              value={formData.telefone || ''}
               onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
               placeholder="(11) 99999-9999"
-              required
             />
           </div>
         </div>
@@ -558,101 +862,51 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit }: {
       {/* Endereço */}
       <div className="space-y-4">
         <h3 className="text-lg font-medium">Endereço</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <Label htmlFor="rua">Rua *</Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="endereco">Endereço</Label>
             <Input
-              id="rua"
-              value={formData.endereco.rua}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                endereco: { ...formData.endereco, rua: e.target.value }
-              })}
-              placeholder="Nome da rua"
-              required
+              id="endereco"
+              value={formData.endereco || ''}
+              onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+              placeholder="Rua, número, bairro"
             />
           </div>
           <div>
-            <Label htmlFor="numero">Número *</Label>
-            <Input
-              id="numero"
-              value={formData.endereco.numero}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                endereco: { ...formData.endereco, numero: e.target.value }
-              })}
-              placeholder="123"
-              required
-            />
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <Label htmlFor="complemento">Complemento</Label>
-            <Input
-              id="complemento"
-              value={formData.endereco.complemento}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                endereco: { ...formData.endereco, complemento: e.target.value }
-              })}
-              placeholder="Sala 45"
-            />
-          </div>
-          <div>
-            <Label htmlFor="bairro">Bairro *</Label>
-            <Input
-              id="bairro"
-              value={formData.endereco.bairro}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                endereco: { ...formData.endereco, bairro: e.target.value }
-              })}
-              placeholder="Centro"
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="cep">CEP *</Label>
+            <Label htmlFor="cep">CEP</Label>
             <Input
               id="cep"
-              value={formData.endereco.cep}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                endereco: { ...formData.endereco, cep: e.target.value }
-              })}
+              value={formData.cep || ''}
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '')
+                if (value.length >= 5) {
+                  value = value.substring(0, 5) + '-' + value.substring(5, 8)
+                }
+                setFormData({ ...formData, cep: value })
+              }}
               placeholder="01234-567"
-              required
+              maxLength={9}
             />
           </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="cidade">Cidade *</Label>
+            <Label htmlFor="cidade">Cidade</Label>
             <Input
               id="cidade"
-              value={formData.endereco.cidade}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                endereco: { ...formData.endereco, cidade: e.target.value }
-              })}
+              value={formData.cidade || ''}
+              onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
               placeholder="São Paulo"
-              required
             />
           </div>
           <div>
-            <Label htmlFor="estado">Estado *</Label>
+            <Label htmlFor="estado">Estado</Label>
             <Input
               id="estado"
-              value={formData.endereco.estado}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                endereco: { ...formData.endereco, estado: e.target.value }
-              })}
+              value={formData.estado || ''}
+              onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
               placeholder="SP"
-              required
             />
           </div>
         </div>
@@ -661,104 +915,24 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit }: {
       {/* Contato */}
       <div className="space-y-4">
         <h3 className="text-lg font-medium">Pessoa de Contato</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="contatoNome">Nome *</Label>
-            <Input
-              id="contatoNome"
-              value={formData.contato.nome}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                contato: { ...formData.contato, nome: e.target.value }
-              })}
-              placeholder="João Silva"
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="contatoCargo">Cargo *</Label>
-            <Input
-              id="contatoCargo"
-              value={formData.contato.cargo}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                contato: { ...formData.contato, cargo: e.target.value }
-              })}
-              placeholder="Gerente de Projetos"
-              required
-            />
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="contatoEmail">Email *</Label>
-            <Input
-              id="contatoEmail"
-              type="email"
-              value={formData.contato.email}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                contato: { ...formData.contato, email: e.target.value }
-              })}
-              placeholder="joao.silva@empresa.com"
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="contatoTelefone">Telefone *</Label>
-            <Input
-              id="contatoTelefone"
-              value={formData.contato.telefone}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                contato: { ...formData.contato, telefone: e.target.value }
-              })}
-              placeholder="(11) 88888-8888"
-              required
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Status e Observações */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium">Status e Observações</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="status">Status *</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value) => setFormData({ ...formData, status: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ativo">Ativo</SelectItem>
-                <SelectItem value="inativo">Inativo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        
         <div>
-          <Label htmlFor="observacoes">Observações</Label>
-          <Textarea
-            id="observacoes"
-            value={formData.observacoes}
-            onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-            placeholder="Observações sobre o cliente..."
-            rows={3}
+          <Label htmlFor="contato">Nome do Contato</Label>
+          <Input
+            id="contato"
+            value={formData.contato || ''}
+            onChange={(e) => setFormData({ ...formData, contato: e.target.value })}
+            placeholder="João Silva - Gerente de Projetos"
           />
         </div>
       </div>
 
+
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
           Cancelar
         </Button>
-        <Button type="submit">
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           {isEdit ? 'Atualizar' : 'Criar'} Cliente
         </Button>
       </div>
@@ -766,7 +940,7 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit }: {
   )
 }
 
-function ClienteDetails({ cliente }: { cliente: any }) {
+function ClienteDetails({ cliente, getObrasByCliente }: { cliente: Cliente; getObrasByCliente: (id: number) => Obra[] }) {
   const obras = getObrasByCliente(cliente.id)
   
   return (
@@ -780,24 +954,28 @@ function ClienteDetails({ cliente }: { cliente: any }) {
           <CardContent className="space-y-3">
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Nome:</span>
-              <span className="text-sm font-medium">{cliente.name}</span>
+              <span className="text-sm font-medium">{cliente.nome}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">CNPJ:</span>
               <span className="text-sm">{cliente.cnpj}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Email:</span>
-              <span className="text-sm">{cliente.email}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Telefone:</span>
-              <span className="text-sm">{cliente.telefone}</span>
-            </div>
+            {cliente.email && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Email:</span>
+                <span className="text-sm">{cliente.email}</span>
+              </div>
+            )}
+            {cliente.telefone && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Telefone:</span>
+                <span className="text-sm">{cliente.telefone}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Status:</span>
-              <Badge className={cliente.status === 'ativo' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                {cliente.status}
+              <Badge className="bg-green-100 text-green-800">
+                Ativo
               </Badge>
             </div>
           </CardContent>
@@ -808,42 +986,35 @@ function ClienteDetails({ cliente }: { cliente: any }) {
             <CardTitle className="text-sm">Endereço</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm">
-              {cliente.endereco.rua}, {cliente.endereco.numero}
-              {cliente.endereco.complemento && `, ${cliente.endereco.complemento}`}
-            </p>
-            <p className="text-sm">
-              {cliente.endereco.bairro} - {cliente.endereco.cidade}/{cliente.endereco.estado}
-            </p>
-            <p className="text-sm">CEP: {cliente.endereco.cep}</p>
+            {cliente.endereco && (
+              <p className="text-sm">{cliente.endereco}</p>
+            )}
+            {(cliente.cidade || cliente.estado) && (
+              <p className="text-sm">
+                {cliente.cidade && cliente.estado ? `${cliente.cidade}/${cliente.estado}` : cliente.cidade || cliente.estado}
+              </p>
+            )}
+            {cliente.cep && (
+              <p className="text-sm">CEP: {cliente.cep}</p>
+            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Pessoa de Contato */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Pessoa de Contato</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Nome:</span>
-            <span className="text-sm font-medium">{cliente.contato.nome}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Cargo:</span>
-            <span className="text-sm">{cliente.contato.cargo}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Email:</span>
-            <span className="text-sm">{cliente.contato.email}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-gray-600">Telefone:</span>
-            <span className="text-sm">{cliente.contato.telefone}</span>
-          </div>
-        </CardContent>
-      </Card>
+      {cliente.contato && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Pessoa de Contato</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Contato:</span>
+              <span className="text-sm font-medium">{cliente.contato}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Obras do Cliente */}
       <Card>
@@ -856,16 +1027,21 @@ function ClienteDetails({ cliente }: { cliente: any }) {
               {obras.map((obra) => (
                 <div key={obra.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                   <div>
-                    <p className="text-sm font-medium">{obra.name}</p>
-                    <p className="text-xs text-gray-500">{obra.description}</p>
+                    <p className="text-sm font-medium">{obra.nome}</p>
+                    <p className="text-xs text-gray-500">{obra.endereco}, {obra.cidade}/{obra.estado}</p>
+                    <p className="text-xs text-gray-500">Tipo: {obra.tipo}</p>
                   </div>
                   <div className="text-right">
-                    <Badge className={obra.status === 'ativa' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                    <Badge className={
+                      obra.status === 'Em Andamento' ? 'bg-green-100 text-green-800' : 
+                      obra.status === 'Concluída' ? 'bg-blue-100 text-blue-800' :
+                      obra.status === 'Pausada' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }>
                       {obra.status}
                     </Badge>
                     <p className="text-xs text-gray-500 mt-1">
-                      {new Date(obra.startDate).toLocaleDateString('pt-BR')} - 
-                      {obra.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}
+                      Criada em: {new Date(obra.created_at).toLocaleDateString('pt-BR')}
                     </p>
                   </div>
                 </div>
@@ -879,17 +1055,6 @@ function ClienteDetails({ cliente }: { cliente: any }) {
         </CardContent>
       </Card>
 
-      {/* Observações */}
-      {cliente.observacoes && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Observações</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-700">{cliente.observacoes}</p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }
