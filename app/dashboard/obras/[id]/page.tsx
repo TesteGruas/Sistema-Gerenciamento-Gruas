@@ -41,14 +41,22 @@ import {
   Trash2,
   Paperclip
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis, criarCustosParaNovoMes, CustoMensal } from "@/lib/mock-data"
+import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis, criarCustosParaNovoMes, CustoMensal, Obra } from "@/lib/mock-data"
 import { Progress } from "@/components/ui/progress"
 import { useParams } from "next/navigation"
+import { obrasApi, converterObraBackendParaFrontend, ObraBackend, ensureAuthenticated } from "@/lib/api-obras"
+import { Loader2, AlertCircle } from "lucide-react"
 
 export default function ObraDetailsPage() {
   const params = useParams()
   const obraId = params.id as string
-  const obra = mockObras.find(o => o.id === obraId)
+  
+  // Estados para integração com backend
+  const [obra, setObra] = useState<Obra | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [gruasReais, setGruasReais] = useState<any[]>([])
+  const [loadingGruas, setLoadingGruas] = useState(false)
   
   // Estados para filtros e nova entrada
   const [searchTerm, setSearchTerm] = useState("")
@@ -101,49 +109,13 @@ export default function ObraDetailsPage() {
     observacoes: ''
   })
   
-  if (!obra) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Obra não encontrada</h2>
-          <p className="text-gray-600">A obra solicitada não existe ou foi removida.</p>
-        </div>
-      </div>
-    )
-  }
-
-  const gruasVinculadas = getGruasByObra(obra.id)
-  const custos = getCustosByObra(obra.id)
-  const documentos = getDocumentosByObra(obra.id)
-  
-  // Criar lista de entradas com dados expandidos
-  const todasEntradas = gruasVinculadas.flatMap(grua => {
-    const historico = getHistoricoByGrua(grua.id)
-    return historico.map(entrada => ({
-      ...entrada,
-      gruaName: grua.name,
-      gruaId: grua.id,
-      descricao: entrada.observacoes || 'Sem descrição',
-      responsavelResolucao: entrada.status === 'falha' ? 'A definir' : undefined
-    }))
-  }).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-  
-  // Filtrar entradas
-  const filteredEntradas = todasEntradas.filter(entrada => {
-    const matchesSearch = searchTerm === "" || 
-      entrada.funcionarioName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      entrada.descricao.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesGrua = selectedGrua === "all" || entrada.gruaId === selectedGrua
-    const matchesTipo = selectedTipo === "all" || entrada.tipo === selectedTipo
-    const matchesStatus = selectedStatus === "all" || entrada.status === selectedStatus
-    
-    return matchesSearch && matchesGrua && matchesTipo && matchesStatus
-  })
+  // Estas variáveis serão definidas dentro do return principal
   
   // Função para criar nova entrada
   const handleNovaEntrada = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!obra) return
     
     const novaEntrada = {
       id: Date.now().toString(),
@@ -183,6 +155,8 @@ export default function ObraDetailsPage() {
   }
 
   const handleExportarEntradas = () => {
+    if (!obra) return
+    
     // Simular exportação para CSV
     const csvContent = [
       ['Data', 'Hora', 'Grua', 'Funcionário', 'Tipo', 'Status', 'Descrição', 'Responsável Resolução', 'Observações'],
@@ -203,7 +177,7 @@ export default function ObraDetailsPage() {
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `livro-grua-${obra?.name}-${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute('download', `livro-grua-${obra.name}-${new Date().toISOString().split('T')[0]}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
@@ -216,6 +190,7 @@ export default function ObraDetailsPage() {
 
   const handleNovoArquivo = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!obra) return
     if (!novoArquivoData.arquivo) {
       alert('Por favor, selecione um arquivo')
       return
@@ -332,6 +307,8 @@ export default function ObraDetailsPage() {
 
   // Funções para custos mensais
   const gerarMesesDisponiveis = () => {
+    if (!obra) return []
+    
     const mesesExistentes = getMesesDisponiveis(obra.id)
     const mesesDisponiveis: string[] = []
     
@@ -353,6 +330,7 @@ export default function ObraDetailsPage() {
   const handleNovoMes = (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (!obra) return
     if (!novoMesData.mes) {
       alert('Selecione um mês válido!')
       return
@@ -405,6 +383,8 @@ export default function ObraDetailsPage() {
   }
 
   const carregarCustosMensais = () => {
+    if (!obra) return
+    
     if (mesSelecionado && mesSelecionado !== 'todos') {
       const custos = getCustosMensaisByObraAndMes(obra.id, mesSelecionado)
       setCustosMensais(custos)
@@ -415,6 +395,8 @@ export default function ObraDetailsPage() {
   }
 
   const handleExportarCustos = (tipo: 'geral' | 'mes') => {
+    if (!obra) return
+    
     let dadosParaExportar = custosMensais
     
     if (tipo === 'mes' && mesSelecionado && mesSelecionado !== 'todos') {
@@ -488,10 +470,72 @@ export default function ObraDetailsPage() {
     alert(`Arquivo ${nomeArquivo} baixado com sucesso!`)
   }
 
+  // Carregar dados da obra do backend
+  const carregarObra = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await obrasApi.obterObra(parseInt(obraId))
+      const obraConvertida = converterObraBackendParaFrontend(response.data)
+      setObra(obraConvertida)
+    } catch (err) {
+      console.error('Erro ao carregar obra:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao carregar obra')
+      // Fallback para dados mockados em caso de erro
+      const obraMockada = mockObras.find(o => o.id === obraId)
+      if (obraMockada) {
+        setObra(obraMockada)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Carregar gruas vinculadas à obra
+  const carregarGruasVinculadas = async () => {
+    if (!obra) return
+    
+    try {
+      setLoadingGruas(true)
+      const response = await obrasApi.buscarGruasVinculadas(parseInt(obra.id))
+      if (response.success) {
+        setGruasReais(response.data)
+      } else {
+        console.warn('Erro ao carregar gruas vinculadas, usando dados mockados')
+        setGruasReais([])
+      }
+    } catch (err) {
+      console.error('Erro ao carregar gruas vinculadas:', err)
+      setGruasReais([])
+    } finally {
+      setLoadingGruas(false)
+    }
+  }
+
+  // Verificar autenticação e carregar obra na inicialização
+  useEffect(() => {
+    const init = async () => {
+      const isAuth = await ensureAuthenticated()
+      if (isAuth) {
+        carregarObra()
+      }
+    }
+    init()
+  }, [obraId])
+
+  // Carregar gruas quando a obra for carregada
+  useEffect(() => {
+    if (obra) {
+      carregarGruasVinculadas()
+    }
+  }, [obra])
+
   // Carregar custos mensais quando a obra ou mês mudar
   useEffect(() => {
-    carregarCustosMensais()
-  }, [obra.id, mesSelecionado])
+    if (obra) {
+      carregarCustosMensais()
+    }
+  }, [obra?.id, mesSelecionado])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -530,6 +574,81 @@ export default function ObraDetailsPage() {
       default: return <AlertTriangle className="w-4 h-4" />
     }
   }
+
+  // Tratamento de loading e erro
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center p-8">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>Carregando detalhes da obra...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !obra) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+            <h2 className="text-xl font-semibold text-red-700 mb-2">Erro ao carregar obra</h2>
+            <p className="text-red-600 mb-4">{error}</p>
+            <Button onClick={carregarObra} variant="outline">
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!obra) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-center">
+            <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+            <h2 className="text-xl font-semibold text-gray-700 mb-2">Obra não encontrada</h2>
+            <p className="text-gray-600">A obra com ID {obraId} não foi encontrada.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Definir variáveis que dependem de obra
+  const gruasVinculadas = gruasReais.length > 0 ? gruasReais : getGruasByObra(obra.id)
+  const custos = getCustosByObra(obra.id)
+  const documentos = getDocumentosByObra(obra.id)
+  
+  // Criar lista de entradas com dados expandidos
+  const todasEntradas = gruasVinculadas.flatMap(grua => {
+    const historico = getHistoricoByGrua(grua.id)
+    return historico.map(entrada => ({
+      ...entrada,
+      gruaName: grua.name,
+      gruaId: grua.id,
+      descricao: entrada.observacoes || 'Sem descrição',
+      responsavelResolucao: entrada.status === 'falha' ? 'A definir' : undefined
+    }))
+  }).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  
+  // Filtrar entradas
+  const filteredEntradas = todasEntradas.filter(entrada => {
+    const matchesSearch = searchTerm === "" || 
+      entrada.funcionarioName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entrada.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesGrua = selectedGrua === "all" || entrada.gruaId === selectedGrua
+    const matchesTipo = selectedTipo === "all" || entrada.tipo === selectedTipo
+    const matchesStatus = selectedStatus === "all" || entrada.status === selectedStatus
+    
+    return matchesSearch && matchesGrua && matchesTipo && matchesStatus
+  })
 
   return (
     <div className="space-y-6">
@@ -613,31 +732,80 @@ export default function ObraDetailsPage() {
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle className="text-sm">Gruas Vinculadas ({gruasVinculadas.length})</CardTitle>
+                <CardTitle className="text-sm">
+                  Gruas Vinculadas ({gruasVinculadas.length})
+                  {loadingGruas && <Loader2 className="w-4 h-4 ml-2 animate-spin" />}
+                </CardTitle>
                 <Button 
                   size="sm"
                   onClick={() => window.location.href = `/dashboard/gruas?obra=${obra.id}`}
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Nova Entrada
+                  Vincular Grua
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {gruasVinculadas.length > 0 ? (
+              {loadingGruas ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  <span>Carregando gruas vinculadas...</span>
+                </div>
+              ) : gruasVinculadas.length > 0 ? (
                 <div className="space-y-6">
                   {gruasVinculadas.map((grua) => {
                     const historico = getHistoricoByGrua(grua.id)
+                    const isGruaReal = gruasReais.some(gr => gr.id === grua.id)
+                    
                     return (
                       <div key={grua.id} className="border rounded-lg p-4">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h3 className="font-semibold text-lg">{grua.name}</h3>
-                            <p className="text-sm text-gray-600">{grua.model} - {grua.capacity}</p>
+                            <h3 className="font-semibold text-lg">
+                              {isGruaReal ? grua.grua?.name || grua.name : grua.name}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              {isGruaReal ? 
+                                `${grua.grua?.manufacturer || 'N/A'} ${grua.grua?.model || 'N/A'}` : 
+                                `${grua.model} - ${grua.capacity}`
+                              }
+                            </p>
+                            {isGruaReal && (
+                              <div className="mt-2 space-y-1">
+                                <p className="text-xs text-gray-500">
+                                  <strong>Início da Locação:</strong> {new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR')}
+                                </p>
+                                {grua.dataFimLocacao && (
+                                  <p className="text-xs text-gray-500">
+                                    <strong>Fim da Locação:</strong> {new Date(grua.dataFimLocacao).toLocaleDateString('pt-BR')}
+                                  </p>
+                                )}
+                                {grua.valorLocacaoMensal && (
+                                  <p className="text-xs text-gray-500">
+                                    <strong>Valor Mensal:</strong> R$ {grua.valorLocacaoMensal.toLocaleString('pt-BR')}
+                                  </p>
+                                )}
+                                {grua.observacoes && (
+                                  <p className="text-xs text-gray-500">
+                                    <strong>Observações:</strong> {grua.observacoes}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <Badge variant={grua.status === 'em_obra' ? 'default' : 'secondary'}>
-                            {grua.status}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge 
+                              variant={grua.status === 'em_obra' || grua.status === 'ativa' ? 'default' : 'secondary'}
+                              className={grua.status === 'ativa' ? 'bg-green-100 text-green-800' : ''}
+                            >
+                              {grua.status}
+                            </Badge>
+                            {isGruaReal && (
+                              <Badge variant="outline" className="text-xs">
+                                {grua.grua?.type || 'N/A'}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Histórico da Grua */}
@@ -687,7 +855,17 @@ export default function ObraDetailsPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center py-4">Nenhuma grua vinculada a esta obra</p>
+                <div className="text-center py-8">
+                  <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua vinculada</h3>
+                  <p className="text-gray-600 mb-4">Esta obra ainda não possui gruas vinculadas.</p>
+                  <Button 
+                    onClick={() => window.location.href = `/dashboard/gruas?obra=${obra.id}`}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Vincular Primeira Grua
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

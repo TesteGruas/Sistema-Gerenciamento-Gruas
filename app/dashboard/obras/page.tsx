@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,9 +26,11 @@ import {
   Wrench,
   ConeIcon as Crane,
   X,
-  Trash2
+  Trash2,
+  Loader2
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos } from "@/lib/mock-data"
+import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos, Obra } from "@/lib/mock-data"
+import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
 
 export default function ObrasPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -37,6 +39,14 @@ export default function ObrasPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingObra, setEditingObra] = useState<any>(null)
   const [obraToDelete, setObraToDelete] = useState<any>(null)
+  
+  // Estados para integração com backend
+  const [obras, setObras] = useState<Obra[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [updating, setUpdating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [obraFormData, setObraFormData] = useState({
     name: '',
     description: '',
@@ -60,7 +70,36 @@ export default function ObrasPage() {
     }>
   })
 
-  const filteredObras = mockObras.filter(obra =>
+  // Carregar obras do backend
+  const carregarObras = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await obrasApi.listarObras({ limit: 100 })
+      const obrasConvertidas = response.data.map(converterObraBackendParaFrontend)
+      setObras(obrasConvertidas)
+    } catch (err) {
+      console.error('Erro ao carregar obras:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao carregar obras')
+      // Fallback para dados mockados em caso de erro
+      setObras(mockObras)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Verificar autenticação e carregar dados na inicialização
+  useEffect(() => {
+    const init = async () => {
+      const isAuth = await ensureAuthenticated()
+      if (isAuth) {
+        carregarObras()
+      }
+    }
+    init()
+  }, [])
+
+  const filteredObras = obras.filter(obra =>
     obra.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     obra.description.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -172,78 +211,96 @@ export default function ObrasPage() {
     }))
   }
 
-  const handleCreateObra = (e: React.FormEvent) => {
+  const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Buscar dados do cliente selecionado
-    const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
-    
-    // Simular criação da obra
-    const newObra = {
-      id: (mockObras.length + 1).toString(),
-      name: obraFormData.name,
-      description: obraFormData.description,
-      status: obraFormData.status as 'ativa' | 'pausada' | 'concluida',
-      startDate: obraFormData.startDate,
-      endDate: obraFormData.endDate,
-      budget: parseFloat(obraFormData.budget) || 0,
-      location: obraFormData.location,
-      clienteId: obraFormData.clienteId,
-      clienteName: clienteSelecionado?.name || '',
-      client: clienteSelecionado?.name || '',
-      observations: obraFormData.observations,
-      responsavelId: '3', // Pedro Costa por padrão
-      responsavelName: 'Pedro Costa',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      custosIniciais: 0,
-      custosAdicionais: 0,
-      totalCustos: 0
+    try {
+      setCreating(true)
+      
+      // Buscar dados do cliente selecionado
+      const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
+      
+      // Preparar dados para o backend
+      const obraData = {
+        name: obraFormData.name,
+        description: obraFormData.description,
+        status: obraFormData.status,
+        startDate: obraFormData.startDate,
+        endDate: obraFormData.endDate,
+        budget: obraFormData.budget,
+        location: obraFormData.location,
+        clienteId: obraFormData.clienteId,
+        observations: obraFormData.observations,
+        // Dados adicionais para criação automática de cliente se necessário
+        cliente_nome: clienteSelecionado?.name,
+        cliente_cnpj: clienteSelecionado?.cnpj,
+        cliente_email: clienteSelecionado?.email,
+        cliente_telefone: clienteSelecionado?.telefone,
+        // Campos específicos do backend
+        cidade: obraFormData.location?.split(',')[0]?.trim() || 'São Paulo',
+        estado: obraFormData.location?.split(',')[1]?.trim() || 'SP',
+        tipo: 'Residencial', // Valor padrão
+        endereco: obraFormData.location || 'Endereço não informado'
+      }
+
+      // Converter para formato do backend
+      const obraBackendData = converterObraFrontendParaBackend(obraData)
+      
+      // Criar obra no backend
+      const response = await obrasApi.criarObra(obraBackendData)
+      
+      // Atualizar grua selecionada para estar em obra (ainda usando mock)
+      const selectedGrua = mockGruas.find(g => g.id === obraFormData.gruaId)
+      if (selectedGrua) {
+        selectedGrua.status = 'em_obra'
+        selectedGrua.currentObraId = response.data.id.toString()
+        selectedGrua.currentObraName = obraFormData.name
+        // Nota: As propriedades value e monthlyFee não existem no tipo Grua
+        // Em uma implementação real, isso seria salvo em uma tabela separada
+        console.log('Valor da grua:', parseFloat(obraFormData.gruaValue) || 0)
+        console.log('Mensalidade:', parseFloat(obraFormData.monthlyFee) || 0)
+      }
+
+      // Criar custos iniciais automaticamente (ainda usando mock)
+      const mesInicial = new Date(obraFormData.startDate).toISOString().slice(0, 7)
+      const custosIniciais = criarCustosIniciais(response.data.id.toString(), mesInicial)
+      mockCustosMensais.push(...custosIniciais)
+
+      console.log('Nova obra criada no backend:', response.data)
+      console.log('Grua selecionada:', selectedGrua)
+      console.log('Funcionários:', obraFormData.funcionarios)
+      console.log('Custos iniciais criados:', custosIniciais)
+      
+      // Recarregar lista de obras
+      await carregarObras()
+      
+      // Resetar formulário e fechar dialog
+      setObraFormData({
+        name: '',
+        description: '',
+        status: 'ativa',
+        startDate: '',
+        endDate: '',
+        budget: '',
+        location: '',
+        clienteId: '',
+        observations: '',
+        gruaId: '',
+        gruaValue: '',
+        monthlyFee: '',
+        funcionarios: []
+      })
+      setIsCreateDialogOpen(false)
+      
+      // Mostrar mensagem de sucesso
+      alert('Obra criada com sucesso! Custos iniciais foram configurados automaticamente.')
+      
+    } catch (err) {
+      console.error('Erro ao criar obra:', err)
+      alert(`Erro ao criar obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`)
+    } finally {
+      setCreating(false)
     }
-
-    // Atualizar grua selecionada para estar em obra
-    const selectedGrua = mockGruas.find(g => g.id === obraFormData.gruaId)
-    if (selectedGrua) {
-      selectedGrua.status = 'em_obra'
-      selectedGrua.currentObraId = newObra.id
-      selectedGrua.currentObraName = newObra.name
-      selectedGrua.value = parseFloat(obraFormData.gruaValue) || 0
-      selectedGrua.monthlyFee = parseFloat(obraFormData.monthlyFee) || 0
-    }
-
-    // Criar custos iniciais automaticamente
-    const mesInicial = new Date(obraFormData.startDate).toISOString().slice(0, 7)
-    const custosIniciais = criarCustosIniciais(newObra.id, mesInicial)
-    
-    // Adicionar custos iniciais ao array mockado (simulando persistência)
-    mockCustosMensais.push(...custosIniciais)
-
-    // Em uma aplicação real, isso seria uma chamada para a API
-    console.log('Nova obra criada:', newObra)
-    console.log('Grua selecionada:', selectedGrua)
-    console.log('Funcionários:', obraFormData.funcionarios)
-    console.log('Custos iniciais criados:', custosIniciais)
-    
-    // Resetar formulário e fechar dialog
-    setObraFormData({
-      name: '',
-      description: '',
-      status: 'ativa',
-      startDate: '',
-      endDate: '',
-      budget: '',
-      location: '',
-      clienteId: '',
-      observations: '',
-      gruaId: '',
-      gruaValue: '',
-      monthlyFee: '',
-      funcionarios: []
-    })
-    setIsCreateDialogOpen(false)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert('Obra criada com sucesso! Custos iniciais foram configurados automaticamente.')
   }
 
   const handleViewDetails = (obra: any) => {
@@ -255,33 +312,48 @@ export default function ObrasPage() {
     setIsDeleteDialogOpen(true)
   }
 
-  const confirmDeleteObra = () => {
+  const confirmDeleteObra = async () => {
     if (!obraToDelete) return
 
-    // Verificar se a obra tem gruas vinculadas
-    const gruasVinculadas = getGruasByObra(obraToDelete.id)
-    if (gruasVinculadas.length > 0) {
-      alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${gruasVinculadas.length} grua(s) vinculada(s). Remova as gruas primeiro.`)
-      setIsDeleteDialogOpen(false)
-      return
-    }
+    try {
+      setDeleting(true)
 
-    // Verificar se a obra tem custos
-    const custos = getCustosByObra(obraToDelete.id)
-    if (custos.length > 0) {
-      alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${custos.length} custo(s) registrado(s). Remova os custos primeiro.`)
-      setIsDeleteDialogOpen(false)
-      return
-    }
+      // Verificar se a obra tem gruas vinculadas
+      const gruasVinculadas = getGruasByObra(obraToDelete.id)
+      if (gruasVinculadas.length > 0) {
+        alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${gruasVinculadas.length} grua(s) vinculada(s). Remova as gruas primeiro.`)
+        setIsDeleteDialogOpen(false)
+        return
+      }
 
-    // Simular exclusão da obra
-    console.log('Obra excluída:', obraToDelete)
-    
-    setIsDeleteDialogOpen(false)
-    setObraToDelete(null)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert(`Obra "${obraToDelete.name}" excluída com sucesso!`)
+      // Verificar se a obra tem custos
+      const custos = getCustosByObra(obraToDelete.id)
+      if (custos.length > 0) {
+        alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${custos.length} custo(s) registrado(s). Remova os custos primeiro.`)
+        setIsDeleteDialogOpen(false)
+        return
+      }
+
+      // Excluir obra no backend
+      await obrasApi.excluirObra(parseInt(obraToDelete.id))
+      
+      console.log('Obra excluída do backend:', obraToDelete)
+      
+      // Recarregar lista de obras
+      await carregarObras()
+      
+      setIsDeleteDialogOpen(false)
+      setObraToDelete(null)
+      
+      // Mostrar mensagem de sucesso
+      alert(`Obra "${obraToDelete.name}" excluída com sucesso!`)
+      
+    } catch (err) {
+      console.error('Erro ao excluir obra:', err)
+      alert(`Erro ao excluir obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const handleEditObra = (obra: any) => {
@@ -306,54 +378,73 @@ export default function ObrasPage() {
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdateObra = (e: React.FormEvent) => {
+  const handleUpdateObra = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Buscar dados do cliente selecionado
-    const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
-    
-    // Simular atualização da obra
-    const updatedObra = {
-      ...editingObra,
-      name: obraFormData.name,
-      description: obraFormData.description,
-      status: obraFormData.status,
-      startDate: obraFormData.startDate,
-      endDate: obraFormData.endDate,
-      budget: parseFloat(obraFormData.budget) || 0,
-      location: obraFormData.location,
-      clienteId: obraFormData.clienteId,
-      clienteName: clienteSelecionado?.name || '',
-      client: clienteSelecionado?.name || '',
-      observations: obraFormData.observations,
-      updatedAt: new Date().toISOString()
-    }
+    try {
+      setUpdating(true)
+      
+      // Buscar dados do cliente selecionado
+      const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
+      
+      // Preparar dados para o backend
+      const obraData = {
+        name: obraFormData.name,
+        description: obraFormData.description,
+        status: obraFormData.status,
+        startDate: obraFormData.startDate,
+        endDate: obraFormData.endDate,
+        budget: obraFormData.budget,
+        location: obraFormData.location,
+        clienteId: obraFormData.clienteId,
+        observations: obraFormData.observations,
+        // Campos específicos do backend
+        cidade: obraFormData.location?.split(',')[0]?.trim() || 'São Paulo',
+        estado: obraFormData.location?.split(',')[1]?.trim() || 'SP',
+        tipo: 'Residencial', // Valor padrão
+        endereco: obraFormData.location || 'Endereço não informado'
+      }
 
-    // Em uma aplicação real, isso seria uma chamada para a API
-    console.log('Obra atualizada:', updatedObra)
-    console.log('Funcionários:', obraFormData.funcionarios)
-    
-    // Fechar dialog e resetar
-    setIsEditDialogOpen(false)
-    setEditingObra(null)
-    setObraFormData({
-      name: '',
-      description: '',
-      status: 'ativa',
-      startDate: '',
-      endDate: '',
-      budget: '',
-      location: '',
-      clienteId: '',
-      observations: '',
-      gruaId: '',
-      gruaValue: '',
-      monthlyFee: '',
-      funcionarios: []
-    })
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert('Obra atualizada com sucesso!')
+      // Converter para formato do backend
+      const obraBackendData = converterObraFrontendParaBackend(obraData)
+      
+      // Atualizar obra no backend
+      const response = await obrasApi.atualizarObra(parseInt(editingObra.id), obraBackendData)
+      
+      console.log('Obra atualizada no backend:', response.data)
+      console.log('Funcionários:', obraFormData.funcionarios)
+      
+      // Recarregar lista de obras
+      await carregarObras()
+      
+      // Fechar dialog e resetar
+      setIsEditDialogOpen(false)
+      setEditingObra(null)
+      setObraFormData({
+        name: '',
+        description: '',
+        status: 'ativa',
+        startDate: '',
+        endDate: '',
+        budget: '',
+        location: '',
+        clienteId: '',
+        observations: '',
+        gruaId: '',
+        gruaValue: '',
+        monthlyFee: '',
+        funcionarios: []
+      })
+      
+      // Mostrar mensagem de sucesso
+      alert('Obra atualizada com sucesso!')
+      
+    } catch (err) {
+      console.error('Erro ao atualizar obra:', err)
+      alert(`Erro ao atualizar obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`)
+    } finally {
+      setUpdating(false)
+    }
   }
 
 
@@ -393,9 +484,42 @@ export default function ObrasPage() {
         </CardContent>
       </Card>
 
+      {/* Indicador de Loading */}
+      {loading && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Carregando obras...</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Indicador de Erro */}
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-5 h-5" />
+              <span>Erro ao carregar obras: {error}</span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={carregarObras}
+              className="mt-2"
+            >
+              Tentar novamente
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lista de Obras */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredObras.map((obra) => {
+      {!loading && !error && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredObras.map((obra) => {
           const gruasVinculadas = getGruasByObra(obra.id)
           const custos = getCustosByObra(obra.id)
           
@@ -496,7 +620,23 @@ export default function ObrasPage() {
             </Card>
           )
         })}
-      </div>
+        </div>
+      )}
+
+      {/* Mensagem quando não há obras */}
+      {!loading && !error && filteredObras.length === 0 && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center text-gray-500">
+              <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p>Nenhuma obra encontrada</p>
+              {searchTerm && (
+                <p className="text-sm">Tente ajustar os filtros de busca</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Dialog de Criação de Obra */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -767,11 +907,23 @@ export default function ObrasPage() {
             </Tabs>
 
             <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsCreateDialogOpen(false)}
+                disabled={creating}
+              >
                 Cancelar
               </Button>
-              <Button type="submit">
-                Criar Obra e Grua
+              <Button type="submit" disabled={creating}>
+                {creating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  'Criar Obra e Grua'
+                )}
               </Button>
             </div>
           </form>
@@ -1046,11 +1198,23 @@ export default function ObrasPage() {
             </Tabs>
 
             <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsEditDialogOpen(false)}
+                disabled={updating}
+              >
                 Cancelar
               </Button>
-              <Button type="submit">
-                Atualizar Obra
+              <Button type="submit" disabled={updating}>
+                {updating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Atualizando...
+                  </>
+                ) : (
+                  'Atualizar Obra'
+                )}
               </Button>
             </div>
           </form>
@@ -1089,10 +1253,19 @@ export default function ObrasPage() {
             <Button 
               variant="destructive" 
               onClick={confirmDeleteObra}
-              disabled={obraToDelete && (getGruasByObra(obraToDelete.id).length > 0 || getCustosByObra(obraToDelete.id).length > 0)}
+              disabled={deleting || (obraToDelete && (getGruasByObra(obraToDelete.id).length > 0 || getCustosByObra(obraToDelete.id).length > 0))}
             >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Excluir
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Excluir
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
