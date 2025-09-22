@@ -280,6 +280,11 @@ router.post('/grua-obra', async (req, res) => {
  *           type: integer
  *         description: Filtrar por ID do funcionário
  *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por ID da obra
+ *       - in: query
  *         name: status
  *         schema:
  *           type: string
@@ -310,6 +315,9 @@ router.get('/grua-funcionario', async (req, res) => {
     }
     if (req.query.funcionario_id) {
       query = query.eq('funcionario_id', req.query.funcionario_id)
+    }
+    if (req.query.obra_id) {
+      query = query.eq('obra_id', req.query.obra_id)
     }
     if (req.query.status) {
       query = query.eq('status', req.query.status)

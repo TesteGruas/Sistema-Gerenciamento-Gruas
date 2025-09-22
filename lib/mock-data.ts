@@ -59,6 +59,9 @@ export interface Obra {
   custosIniciais: number
   custosAdicionais: number
   totalCustos: number
+  // Relacionamentos
+  gruasVinculadas?: any[]
+  funcionariosVinculados?: any[]
 }
 
 export interface Grua {

@@ -1,22 +1,23 @@
+// API client para clientes
 import { buildApiUrl, API_ENDPOINTS } from './api'
 
-// Tipos para os dados de cliente
-export interface Cliente {
+// Interfaces baseadas no backend
+export interface ClienteBackend {
   id: number
   nome: string
   cnpj: string
-  email: string
-  telefone: string
-  endereco: string
-  cidade: string
-  estado: string
-  cep: string
-  contato: string
+  email?: string
+  telefone?: string
+  endereco?: string
+  cidade?: string
+  estado?: string
+  cep?: string
+  contato?: string
   created_at: string
   updated_at: string
 }
 
-export interface ClienteFormData {
+export interface ClienteCreateData {
   nome: string
   cnpj: string
   email?: string
@@ -28,10 +29,22 @@ export interface ClienteFormData {
   contato?: string
 }
 
+export interface ClienteUpdateData {
+  nome?: string
+  cnpj?: string
+  email?: string
+  telefone?: string
+  endereco?: string
+  cidade?: string
+  estado?: string
+  cep?: string
+  contato?: string
+}
+
 export interface ClientesResponse {
   success: boolean
-  data: Cliente[]
-  pagination: {
+  data: ClienteBackend[]
+  pagination?: {
     page: number
     limit: number
     total: number
@@ -41,74 +54,82 @@ export interface ClientesResponse {
 
 export interface ClienteResponse {
   success: boolean
-  data: Cliente
+  data: ClienteBackend
 }
 
 // Função para obter token de autenticação
-const getAuthToken = () => {
+const getAuthToken = (): string | null => {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('access_token')
   }
   return null
 }
 
-// Função para verificar se o usuário está autenticado
-const isAuthenticated = () => {
-  const token = getAuthToken()
-  return !!token
-}
-
-// Função para redirecionar para login
-const redirectToLogin = () => {
-  if (typeof window !== 'undefined') {
-    window.location.href = '/'
-  }
-}
-
 // Função para fazer requisições autenticadas
 const apiRequest = async (url: string, options: RequestInit = {}) => {
-  if (!isAuthenticated()) {
-    redirectToLogin()
-    throw new Error('Usuário não autenticado')
-  }
-  
   const token = getAuthToken()
   
-  const config: RequestInit = {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
+  if (!token) {
+    console.warn('Token não encontrado, redirecionando para login...')
+    if (typeof window !== 'undefined') {
+      window.location.href = '/'
+    }
+    throw new Error('Token de acesso requerido')
+  }
+  
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
   }
 
-  const response = await fetch(url, config)
-  
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+  })
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
     
-    // Tratamento específico para erros de autenticação
-    if (response.status === 401) {
-      // Remover token inválido e redirecionar
+    if (response.status === 401 || response.status === 403) {
+      console.warn('Token inválido ou expirado, redirecionando para login...')
+      localStorage.removeItem('access_token')
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('access_token')
+        window.location.href = '/'
       }
-      redirectToLogin()
-      throw new Error('Sessão expirada. Redirecionando para login...')
     }
     
-    throw new Error(errorData.message || `Erro na requisição: ${response.status}`)
+    throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`)
   }
 
   return response.json()
 }
 
-// Serviços da API de clientes
+// API functions
 export const clientesApi = {
-  // Listar todos os clientes com paginação
-  async listarClientes(page: number = 1, limit: number = 10): Promise<ClientesResponse> {
-    const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}?page=${page}&limit=${limit}`)
+  // Listar todos os clientes
+  async listarClientes(params?: {
+    page?: number
+    limit?: number
+  }): Promise<ClientesResponse> {
+    const searchParams = new URLSearchParams()
+    
+    if (params?.page) searchParams.append('page', params.page.toString())
+    if (params?.limit) searchParams.append('limit', params.limit.toString())
+
+    const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  // Buscar clientes por nome ou CNPJ
+  async buscarClientes(termo: string): Promise<{ success: boolean; data: ClienteBackend[] }> {
+    if (!termo || termo.length < 2) {
+      return { success: true, data: [] }
+    }
+
+    const url = buildApiUrl(`gruas/clientes/buscar?q=${encodeURIComponent(termo)}`)
     return apiRequest(url)
   },
 
@@ -119,20 +140,20 @@ export const clientesApi = {
   },
 
   // Criar novo cliente
-  async criarCliente(dados: ClienteFormData): Promise<ClienteResponse> {
+  async criarCliente(data: ClienteCreateData): Promise<ClienteResponse> {
     const url = buildApiUrl(API_ENDPOINTS.CLIENTES)
     return apiRequest(url, {
       method: 'POST',
-      body: JSON.stringify(dados),
+      body: JSON.stringify(data),
     })
   },
 
   // Atualizar cliente
-  async atualizarCliente(id: number, dados: ClienteFormData): Promise<ClienteResponse> {
+  async atualizarCliente(id: number, data: ClienteUpdateData): Promise<ClienteResponse> {
     const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}/${id}`)
     return apiRequest(url, {
       method: 'PUT',
-      body: JSON.stringify(dados),
+      body: JSON.stringify(data),
     })
   },
 
@@ -142,31 +163,39 @@ export const clientesApi = {
     return apiRequest(url, {
       method: 'DELETE',
     })
-  },
-
-  // Buscar clientes por termo
-  async buscarClientes(termo: string, page: number = 1, limit: number = 10): Promise<ClientesResponse> {
-    // Como o backend não tem endpoint de busca específico, vamos usar o listarClientes
-    // e filtrar no frontend por enquanto
-    const response = await this.listarClientes(page, limit)
-    
-    if (termo.trim()) {
-      const clientesFiltrados = response.data.filter(cliente =>
-        cliente.nome.toLowerCase().includes(termo.toLowerCase()) ||
-        cliente.email.toLowerCase().includes(termo.toLowerCase()) ||
-        cliente.cnpj.includes(termo)
-      )
-      
-      return {
-        ...response,
-        data: clientesFiltrados,
-        pagination: {
-          ...response.pagination,
-          total: clientesFiltrados.length
-        }
-      }
-    }
-    
-    return response
   }
 }
+
+// Funções utilitárias para converter dados entre frontend e backend
+export const converterClienteBackendParaFrontend = (clienteBackend: ClienteBackend) => {
+  return {
+    id: clienteBackend.id.toString(),
+    name: clienteBackend.nome,
+    cnpj: clienteBackend.cnpj,
+    email: clienteBackend.email || '',
+    phone: clienteBackend.telefone || '',
+    address: clienteBackend.endereco || '',
+    city: clienteBackend.cidade || '',
+    state: clienteBackend.estado || '',
+    zipCode: clienteBackend.cep || '',
+    contact: clienteBackend.contato || '',
+    createdAt: clienteBackend.created_at,
+    updatedAt: clienteBackend.updated_at
+  }
+}
+
+export const converterClienteFrontendParaBackend = (clienteFrontend: any): ClienteCreateData => {
+  return {
+    nome: clienteFrontend.name,
+    cnpj: clienteFrontend.cnpj,
+    email: clienteFrontend.email,
+    telefone: clienteFrontend.phone,
+    endereco: clienteFrontend.address,
+    cidade: clienteFrontend.city,
+    estado: clienteFrontend.state,
+    cep: clienteFrontend.zipCode,
+    contato: clienteFrontend.contact
+  }
+}
+
+export default clientesApi

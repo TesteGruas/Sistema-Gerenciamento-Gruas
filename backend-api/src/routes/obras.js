@@ -12,14 +12,35 @@ const obraSchema = Joi.object({
   endereco: Joi.string().required(),
   cidade: Joi.string().required(),
   estado: Joi.string().min(2).max(2).required(),
-  tipo: Joi.string().required(),
+  tipo: Joi.string().required(), // NOT NULL na tabela
   cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).optional(),
   contato_obra: Joi.string().allow('').optional(),
   telefone_obra: Joi.string().allow('').optional(),
   email_obra: Joi.string().email().allow('').optional(),
-  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').default('Pausada'),
+  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').default('Planejamento'),
+  // Novos campos adicionados - todos opcionais conforme tabela
+  descricao: Joi.string().allow('').optional(),
+  data_inicio: Joi.date().optional(),
+  data_fim: Joi.date().optional(),
+  orcamento: Joi.number().positive().optional(),
+  observacoes: Joi.string().allow('').optional(),
+  responsavel_id: Joi.number().integer().positive().optional(),
+  responsavel_nome: Joi.string().allow('').optional(),
   created_at: Joi.date().optional(),
   updated_at: Joi.date().optional(),
+  // Dados da grua
+  grua_id: Joi.string().optional(),
+  grua_valor: Joi.number().positive().optional(),
+  grua_mensalidade: Joi.number().positive().optional(),
+  // Dados dos funcionários
+  funcionarios: Joi.array().items(
+    Joi.object({
+      id: Joi.string().required(),
+      userId: Joi.string().required(),
+      role: Joi.string().required(),
+      name: Joi.string().required()
+    })
+  ).optional(),
   // Campos adicionais para criação automática de cliente
   cliente_nome: Joi.string().optional(),
   cliente_cnpj: Joi.string().optional(),
@@ -55,6 +76,11 @@ const obraSchema = Joi.object({
  *           type: string
  *           enum: [Planejamento, Em Andamento, Pausada, Concluída, Cancelada]
  *         description: Filtrar por status
+ *       - in: query
+ *         name: responsavel_id
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por responsável
  *       - in: query
  *         name: cliente_id
  *         schema:
@@ -209,7 +235,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *               - endereco
  *               - cidade
  *               - estado
- *               - data_inicio
+ *               - tipo
  *             properties:
  *               nome:
  *                 type: string
@@ -223,9 +249,49 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *                 type: string
  *               estado:
  *                 type: string
+ *               tipo:
+ *                 type: string
+ *               cep:
+ *                 type: string
+ *               contato_obra:
+ *                 type: string
+ *               telefone_obra:
+ *                 type: string
+ *               email_obra:
+ *                 type: string
  *               data_inicio:
  *                 type: string
  *                 format: date
+ *               data_fim:
+ *                 type: string
+ *                 format: date
+ *               orcamento:
+ *                 type: number
+ *               observacoes:
+ *                 type: string
+ *               responsavel_id:
+ *                 type: integer
+ *               responsavel_nome:
+ *                 type: string
+ *               grua_id:
+ *                 type: string
+ *               grua_valor:
+ *                 type: number
+ *               grua_mensalidade:
+ *                 type: number
+ *               funcionarios:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     userId:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     name:
+ *                       type: string
  *               status:
  *                 type: string
  *                 enum: [Planejamento, Em Andamento, Pausada, Concluída, Cancelada]
@@ -250,6 +316,12 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
     }
     
     console.log('✅ Dados validados com sucesso:', value)
+    console.log('🔧 Dados da grua recebidos:', {
+      grua_id: value.grua_id,
+      grua_valor: value.grua_valor,
+      grua_mensalidade: value.grua_mensalidade
+    })
+    console.log('👥 Funcionários recebidos:', value.funcionarios)
 
     // Verificar se cliente existe
     console.log('🔍 DEBUG - Verificando se cliente existe:', value.cliente_id)
@@ -332,7 +404,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
       console.log('✅ Cliente encontrado:', cliente.nome)
     }
 
-    // Preparar dados da obra (apenas campos que existem na tabela obras)
+    // Preparar dados da obra (incluindo todos os campos da tabela)
     const obraData = {
       nome: value.nome,
       cliente_id: value.cliente_id,
@@ -345,6 +417,14 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
       telefone_obra: value.telefone_obra,
       email_obra: value.email_obra,
       status: value.status,
+      // Novos campos adicionados
+      descricao: value.descricao,
+      data_inicio: value.data_inicio,
+      data_fim: value.data_fim,
+      orcamento: value.orcamento,
+      observacoes: value.observacoes,
+      responsavel_id: value.responsavel_id,
+      responsavel_nome: value.responsavel_nome,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -366,6 +446,98 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
     }
 
     console.log('✅ Obra criada com sucesso:', data?.id)
+
+    // Processar dados da grua se fornecidos
+    if (value.grua_id) {
+      console.log('🔧 Processando dados da grua...')
+      try {
+        // Aqui você pode criar um registro na tabela grua_obra
+        // Por enquanto, vamos apenas logar os dados
+        console.log('📝 Dados da grua para processar:', {
+          obra_id: data.id,
+          grua_id: value.grua_id,
+          valor_locacao_mensal: value.grua_mensalidade,
+          data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
+          status: 'Ativa'
+        })
+        
+        // Implementar criação do registro na tabela grua_obra
+        const gruaObraData = {
+          obra_id: data.id,
+          grua_id: value.grua_id,
+          valor_locacao_mensal: value.grua_mensalidade,
+          data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
+          status: 'Ativa',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+        
+        console.log('📝 Inserindo dados na tabela grua_obra:', gruaObraData)
+        
+        const { data: gruaObraResult, error: gruaObraError } = await supabaseAdmin
+          .from('grua_obra')
+          .insert(gruaObraData)
+          .select()
+          .single()
+        
+        if (gruaObraError) {
+          console.error('❌ Erro ao inserir na tabela grua_obra:', gruaObraError)
+        } else {
+          console.log('✅ Registro inserido na tabela grua_obra:', gruaObraResult)
+        }
+        
+      } catch (gruaError) {
+        console.error('❌ Erro ao processar dados da grua:', gruaError)
+        // Não falhar a criação da obra por causa da grua
+      }
+    }
+
+    // Processar dados dos funcionários se fornecidos
+    if (value.funcionarios && value.funcionarios.length > 0) {
+      console.log('👥 Processando dados dos funcionários...')
+      try {
+        // Aqui você pode criar registros na tabela de funcionários da obra
+        // Por enquanto, vamos apenas logar os dados
+        console.log('📝 Funcionários para processar:', value.funcionarios.map(f => ({
+          obra_id: data.id,
+          funcionario_id: f.userId,
+          cargo: f.role,
+          nome: f.name
+        })))
+        
+        // Implementar criação dos registros de funcionários da obra
+        for (const funcionario of value.funcionarios) {
+          const gruaFuncionarioData = {
+            grua_id: value.grua_id, // Usar a grua selecionada
+            funcionario_id: parseInt(funcionario.userId),
+            obra_id: data.id,
+            data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
+            status: 'Ativo',
+            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+          
+          console.log('📝 Inserindo funcionário na tabela grua_funcionario:', gruaFuncionarioData)
+          
+          const { data: gruaFuncionarioResult, error: gruaFuncionarioError } = await supabaseAdmin
+            .from('grua_funcionario')
+            .insert(gruaFuncionarioData)
+            .select()
+            .single()
+          
+          if (gruaFuncionarioError) {
+            console.error('❌ Erro ao inserir funcionário na tabela grua_funcionario:', gruaFuncionarioError)
+          } else {
+            console.log('✅ Funcionário inserido na tabela grua_funcionario:', gruaFuncionarioResult)
+          }
+        }
+        
+      } catch (funcionarioError) {
+        console.error('❌ Erro ao processar dados dos funcionários:', funcionarioError)
+        // Não falhar a criação da obra por causa dos funcionários
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -407,14 +579,39 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
  *                 type: string
  *               descricao:
  *                 type: string
+ *               endereco:
+ *                 type: string
+ *               cidade:
+ *                 type: string
+ *               estado:
+ *                 type: string
+ *               tipo:
+ *                 type: string
+ *               cep:
+ *                 type: string
+ *               contato_obra:
+ *                 type: string
+ *               telefone_obra:
+ *                 type: string
+ *               email_obra:
+ *                 type: string
+ *               data_inicio:
+ *                 type: string
+ *                 format: date
+ *               data_fim:
+ *                 type: string
+ *                 format: date
+ *               orcamento:
+ *                 type: number
+ *               observacoes:
+ *                 type: string
+ *               responsavel_id:
+ *                 type: integer
+ *               responsavel_nome:
+ *                 type: string
  *               status:
  *                 type: string
  *                 enum: [Planejamento, Em Andamento, Pausada, Concluída, Cancelada]
- *               data_prevista_fim:
- *                 type: string
- *                 format: date
- *               valor_total:
- *                 type: number
  *     responses:
  *       200:
  *         description: Obra atualizada com sucesso
@@ -433,7 +630,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
       })
     }
 
-    // Preparar dados da obra (apenas campos que existem na tabela obras)
+    // Preparar dados da obra (incluindo todos os campos da tabela)
     const updateData = {
       nome: value.nome,
       cliente_id: value.cliente_id,
@@ -446,6 +643,14 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
       telefone_obra: value.telefone_obra,
       email_obra: value.email_obra,
       status: value.status,
+      // Novos campos adicionados
+      descricao: value.descricao,
+      data_inicio: value.data_inicio,
+      data_fim: value.data_fim,
+      orcamento: value.orcamento,
+      observacoes: value.observacoes,
+      responsavel_id: value.responsavel_id,
+      responsavel_nome: value.responsavel_nome,
       updated_at: new Date().toISOString()
     }
 

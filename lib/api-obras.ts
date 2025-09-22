@@ -16,6 +16,14 @@ export interface ObraBackend {
   telefone_obra?: string
   email_obra?: string
   status: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
+  // Novos campos adicionados
+  descricao?: string
+  data_inicio?: string
+  data_fim?: string
+  orcamento?: number
+  observacoes?: string
+  responsavel_id?: number
+  responsavel_nome?: string
   created_at: string
   updated_at: string
   clientes?: {
@@ -39,6 +47,25 @@ export interface ObraCreateData {
   telefone_obra?: string
   email_obra?: string
   status?: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
+  // Novos campos adicionados
+  descricao?: string
+  data_inicio?: string
+  data_fim?: string
+  orcamento?: number
+  observacoes?: string
+  responsavel_id?: number
+  responsavel_nome?: string
+  // Dados da grua
+  grua_id?: string
+  grua_valor?: number
+  grua_mensalidade?: number
+  // Dados dos funcionários
+  funcionarios?: Array<{
+    id: string
+    userId: string
+    role: string
+    name: string
+  }>
   // Campos para criação automática de cliente
   cliente_nome?: string
   cliente_cnpj?: string
@@ -208,6 +235,76 @@ export const obrasApi = {
     }
   },
 
+  // Buscar funcionários vinculados a uma obra
+  async buscarFuncionariosVinculados(obraId: number): Promise<{ success: boolean; data: any[] }> {
+    try {
+      const url = buildApiUrl(`relacionamentos/grua-funcionario?obra_id=${obraId}`)
+      const response = await apiRequest(url)
+      
+      if (response.success) {
+        // Converter dados para o formato esperado pelo frontend
+        const funcionariosConvertidos = response.data.map((item: any) => ({
+          id: item.id,
+          gruaId: item.grua_id,
+          funcionarioId: item.funcionario_id,
+          obraId: item.obra_id,
+          dataInicio: item.data_inicio,
+          dataFim: item.data_fim,
+          status: item.status,
+          observacoes: item.observacoes,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at
+        }))
+        
+        return {
+          success: true,
+          data: funcionariosConvertidos
+        }
+      } else {
+        return {
+          success: false,
+          data: []
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar funcionários vinculados:', error)
+      return {
+        success: false,
+        data: []
+      }
+    }
+  },
+
+  // Buscar obra com todos os relacionamentos
+  async obterObraComRelacionamentos(id: number): Promise<{ success: boolean; data: any }> {
+    try {
+      const [obraResponse, gruasResponse, funcionariosResponse] = await Promise.all([
+        this.obterObra(id),
+        this.buscarGruasVinculadas(id),
+        this.buscarFuncionariosVinculados(id)
+      ])
+
+      if (obraResponse.success) {
+        return {
+          success: true,
+          data: {
+            ...obraResponse.data,
+            gruasVinculadas: gruasResponse.data,
+            funcionariosVinculados: funcionariosResponse.data
+          }
+        }
+      } else {
+        return obraResponse
+      }
+    } catch (error) {
+      console.error('Erro ao buscar obra com relacionamentos:', error)
+      return {
+        success: false,
+        data: null
+      }
+    }
+  },
+
   // Endpoints de teste e utilitários
   async testarValidacao(data: ObraCreateData): Promise<{ success: boolean; data?: any; error?: string; details?: string }> {
     const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/teste-validacao`)
@@ -244,22 +341,22 @@ export const obrasApi = {
 }
 
 // Funções utilitárias para converter dados entre frontend e backend
-export const converterObraBackendParaFrontend = (obraBackend: ObraBackend) => {
+export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relacionamentos?: { gruasVinculadas?: any[], funcionariosVinculados?: any[] }) => {
   return {
     id: obraBackend.id.toString(),
     name: obraBackend.nome,
-    description: `${obraBackend.tipo} - ${obraBackend.endereco}, ${obraBackend.cidade}/${obraBackend.estado}`,
-    startDate: obraBackend.created_at.split('T')[0],
-    endDate: undefined, // Não disponível no backend atual
+    description: obraBackend.descricao || `${obraBackend.tipo} - ${obraBackend.endereco}, ${obraBackend.cidade}/${obraBackend.estado}`,
+    startDate: obraBackend.data_inicio || obraBackend.created_at.split('T')[0],
+    endDate: obraBackend.data_fim,
     status: converterStatusBackendParaFrontend(obraBackend.status),
-    responsavelId: '3', // Valor padrão
-    responsavelName: 'Pedro Costa', // Valor padrão
+    responsavelId: obraBackend.responsavel_id?.toString() || '3',
+    responsavelName: obraBackend.responsavel_nome || 'Pedro Costa',
     clienteId: obraBackend.cliente_id.toString(),
     clienteName: obraBackend.clientes?.nome || 'Cliente não encontrado',
-    budget: 0, // Não disponível no backend atual
+    budget: obraBackend.orcamento || 0,
     location: `${obraBackend.cidade}, ${obraBackend.estado}`,
     client: obraBackend.clientes?.nome || 'Cliente não encontrado',
-    observations: obraBackend.contato_obra ? `Contato: ${obraBackend.contato_obra}` : undefined,
+    observations: obraBackend.observacoes || (obraBackend.contato_obra ? `Contato: ${obraBackend.contato_obra}` : undefined),
     createdAt: obraBackend.created_at,
     updatedAt: obraBackend.updated_at,
     custosIniciais: 0,
@@ -273,7 +370,10 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend) => {
     tipo: obraBackend.tipo,
     contato_obra: obraBackend.contato_obra,
     telefone_obra: obraBackend.telefone_obra,
-    email_obra: obraBackend.email_obra
+    email_obra: obraBackend.email_obra,
+    // Relacionamentos
+    gruasVinculadas: relacionamentos?.gruasVinculadas || [],
+    funcionariosVinculados: relacionamentos?.funcionariosVinculados || []
   }
 }
 
@@ -290,6 +390,26 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     telefone_obra: obraFrontend.telefone_obra,
     email_obra: obraFrontend.email_obra,
     status: converterStatusFrontendParaBackend(obraFrontend.status),
+    // Novos campos adicionados
+    descricao: obraFrontend.description,
+    data_inicio: obraFrontend.startDate,
+    data_fim: obraFrontend.endDate,
+    orcamento: obraFrontend.budget ? parseFloat(obraFrontend.budget) : undefined,
+    observacoes: obraFrontend.observations,
+    responsavel_id: obraFrontend.responsavelId ? parseInt(obraFrontend.responsavelId) : undefined,
+    responsavel_nome: obraFrontend.responsavelName,
+    // Dados da grua
+    grua_id: obraFrontend.gruaId,
+    grua_valor: obraFrontend.gruaValue ? parseFloat(obraFrontend.gruaValue) : undefined,
+    grua_mensalidade: obraFrontend.monthlyFee ? parseFloat(obraFrontend.monthlyFee) : undefined,
+            // Dados dos funcionários
+            funcionarios: obraFrontend.funcionarios?.map((func: any) => ({
+              id: func.id,
+              userId: func.userId,
+              role: func.role,
+              name: func.name,
+              gruaId: func.gruaId || obraFrontend.gruaId // Usar gruaId do funcionário ou da obra
+            })) || [],
     // Dados para criação automática de cliente se necessário
     cliente_nome: obraFrontend.cliente_nome,
     cliente_cnpj: obraFrontend.cliente_cnpj,

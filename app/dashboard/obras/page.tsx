@@ -17,6 +17,7 @@ import {
   Search, 
   Calendar, 
   Users, 
+  User,
   DollarSign, 
   AlertCircle,
   CheckCircle,
@@ -31,6 +32,9 @@ import {
 } from "lucide-react"
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos, Obra } from "@/lib/mock-data"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
+import ClienteSearch from "@/components/cliente-search"
+import GruaSearch from "@/components/grua-search"
+import FuncionarioSearch from "@/components/funcionario-search"
 
 export default function ObrasPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -50,7 +54,7 @@ export default function ObrasPage() {
   const [obraFormData, setObraFormData] = useState({
     name: '',
     description: '',
-    status: 'ativa',
+    status: 'Em Andamento',
     startDate: '',
     endDate: '',
     budget: '',
@@ -61,14 +65,22 @@ export default function ObrasPage() {
     gruaId: '',
     gruaValue: '',
     monthlyFee: '',
+    // Dados do responsável
+    responsavelId: '',
+    responsavelName: '',
     // Lista de funcionários
     funcionarios: [] as Array<{
       id: string
       userId: string
       role: string
       name: string
+      gruaId?: string
     }>
   })
+  const [clienteSelecionado, setClienteSelecionado] = useState<any>(null)
+  const [gruaSelecionada, setGruaSelecionada] = useState<any>(null)
+  const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
+  const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
 
   // Carregar obras do backend
   const carregarObras = async () => {
@@ -76,8 +88,28 @@ export default function ObrasPage() {
       setLoading(true)
       setError(null)
       const response = await obrasApi.listarObras({ limit: 100 })
-      const obrasConvertidas = response.data.map(converterObraBackendParaFrontend)
-      setObras(obrasConvertidas)
+      
+      // Carregar relacionamentos para cada obra
+      const obrasComRelacionamentos = await Promise.all(
+        response.data.map(async (obraBackend: any) => {
+          try {
+            const [gruasResponse, funcionariosResponse] = await Promise.all([
+              obrasApi.buscarGruasVinculadas(obraBackend.id),
+              obrasApi.buscarFuncionariosVinculados(obraBackend.id)
+            ])
+            
+            return converterObraBackendParaFrontend(obraBackend, {
+              gruasVinculadas: gruasResponse.data,
+              funcionariosVinculados: funcionariosResponse.data
+            })
+          } catch (error) {
+            console.error(`Erro ao carregar relacionamentos da obra ${obraBackend.id}:`, error)
+            return converterObraBackendParaFrontend(obraBackend)
+          }
+        })
+      )
+      
+      setObras(obrasComRelacionamentos)
     } catch (err) {
       console.error('Erro ao carregar obras:', err)
       setError(err instanceof Error ? err.message : 'Erro ao carregar obras')
@@ -85,6 +117,65 @@ export default function ObrasPage() {
       setObras(mockObras)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Função para lidar com seleção de cliente
+  const handleClienteSelect = (cliente: any) => {
+    setClienteSelecionado(cliente)
+    if (cliente) {
+      setObraFormData({ ...obraFormData, clienteId: cliente.id })
+    } else {
+      setObraFormData({ ...obraFormData, clienteId: '' })
+    }
+  }
+
+  // Função para lidar com seleção de grua
+  const handleGruaSelect = (grua: any) => {
+    setGruaSelecionada(grua)
+    if (grua) {
+      setObraFormData({ ...obraFormData, gruaId: grua.id })
+    } else {
+      setObraFormData({ ...obraFormData, gruaId: '' })
+    }
+  }
+
+  // Função para adicionar funcionário selecionado
+  const handleFuncionarioSelect = (funcionario: any) => {
+    if (funcionario && !funcionariosSelecionados.find(f => f.userId === funcionario.id)) {
+      const novoFuncionario = {
+        id: Date.now().toString(),
+        userId: funcionario.id,
+        role: funcionario.role,
+        name: funcionario.name,
+        gruaId: obraFormData.gruaId // Associar funcionário à grua selecionada
+      }
+      setFuncionariosSelecionados([...funcionariosSelecionados, novoFuncionario])
+      setObraFormData({
+        ...obraFormData,
+        funcionarios: [...obraFormData.funcionarios, novoFuncionario]
+      })
+    }
+  }
+
+  // Função para remover funcionário selecionado
+  const removeFuncionarioSelecionado = (funcionarioId: string) => {
+    setFuncionariosSelecionados(funcionariosSelecionados.filter(f => f.id !== funcionarioId))
+    setObraFormData({
+      ...obraFormData,
+      funcionarios: obraFormData.funcionarios.filter(f => f.id !== funcionarioId)
+    })
+  }
+
+  // Função para lidar com seleção de responsável
+  const handleResponsavelSelect = (responsavel: any) => {
+    setResponsavelSelecionado(responsavel)
+    if (responsavel) {
+      setObraFormData({
+        ...obraFormData,
+        responsavelId: responsavel.id,
+        responsavelName: responsavel.nome
+      })
     }
   }
 
@@ -135,18 +226,22 @@ export default function ObrasPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ativa': return 'bg-green-100 text-green-800'
-      case 'pausada': return 'bg-yellow-100 text-yellow-800'
-      case 'concluida': return 'bg-blue-100 text-blue-800'
+      case 'Planejamento': return 'bg-blue-100 text-blue-800'
+      case 'Em Andamento': return 'bg-green-100 text-green-800'
+      case 'Pausada': return 'bg-yellow-100 text-yellow-800'
+      case 'Concluída': return 'bg-gray-100 text-gray-800'
+      case 'Cancelada': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'ativa': return <CheckCircle className="w-4 h-4" />
-      case 'pausada': return <Clock className="w-4 h-4" />
-      case 'concluida': return <AlertCircle className="w-4 h-4" />
+      case 'Planejamento': return <Clock className="w-4 h-4" />
+      case 'Em Andamento': return <CheckCircle className="w-4 h-4" />
+      case 'Pausada': return <Clock className="w-4 h-4" />
+      case 'Concluída': return <CheckCircle className="w-4 h-4" />
+      case 'Cancelada': return <AlertCircle className="w-4 h-4" />
       default: return <AlertCircle className="w-4 h-4" />
     }
   }
@@ -220,28 +315,37 @@ export default function ObrasPage() {
       // Buscar dados do cliente selecionado
       const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
       
-      // Preparar dados para o backend
-      const obraData = {
-        name: obraFormData.name,
-        description: obraFormData.description,
-        status: obraFormData.status,
-        startDate: obraFormData.startDate,
-        endDate: obraFormData.endDate,
-        budget: obraFormData.budget,
-        location: obraFormData.location,
-        clienteId: obraFormData.clienteId,
-        observations: obraFormData.observations,
-        // Dados adicionais para criação automática de cliente se necessário
-        cliente_nome: clienteSelecionado?.name,
-        cliente_cnpj: clienteSelecionado?.cnpj,
-        cliente_email: clienteSelecionado?.email,
-        cliente_telefone: clienteSelecionado?.telefone,
-        // Campos específicos do backend
-        cidade: obraFormData.location?.split(',')[0]?.trim() || 'São Paulo',
-        estado: obraFormData.location?.split(',')[1]?.trim() || 'SP',
-        tipo: 'Residencial', // Valor padrão
-        endereco: obraFormData.location || 'Endereço não informado'
-      }
+            // Preparar dados para o backend
+            const obraData = {
+              name: obraFormData.name,
+              description: obraFormData.description,
+              status: obraFormData.status,
+              startDate: obraFormData.startDate,
+              endDate: obraFormData.endDate,
+              budget: obraFormData.budget,
+              location: obraFormData.location,
+              clienteId: obraFormData.clienteId,
+              observations: obraFormData.observations,
+              // Dados do responsável
+              responsavelId: responsavelSelecionado?.id,
+              responsavelName: responsavelSelecionado?.nome,
+              // Dados da grua selecionada
+              gruaId: obraFormData.gruaId,
+              gruaValue: obraFormData.gruaValue,
+              monthlyFee: obraFormData.monthlyFee,
+              // Dados dos funcionários selecionados
+              funcionarios: funcionariosSelecionados,
+              // Dados adicionais para criação automática de cliente se necessário
+              cliente_nome: clienteSelecionado?.name,
+              cliente_cnpj: clienteSelecionado?.cnpj,
+              cliente_email: clienteSelecionado?.email,
+              cliente_telefone: clienteSelecionado?.telefone,
+              // Campos específicos do backend
+              cidade: obraFormData.location?.split(',')[0]?.trim() || 'São Paulo',
+              estado: obraFormData.location?.split(',')[1]?.trim() || 'SP',
+              tipo: 'Residencial', // Valor padrão
+              endereco: obraFormData.location || 'Endereço não informado'
+            }
 
       // Converter para formato do backend
       const obraBackendData = converterObraFrontendParaBackend(obraData)
@@ -278,7 +382,7 @@ export default function ObrasPage() {
       setObraFormData({
         name: '',
         description: '',
-        status: 'ativa',
+        status: 'Em Andamento',
         startDate: '',
         endDate: '',
         budget: '',
@@ -288,8 +392,13 @@ export default function ObrasPage() {
         gruaId: '',
         gruaValue: '',
         monthlyFee: '',
+        responsavelId: '',
+        responsavelName: '',
         funcionarios: []
       })
+      setClienteSelecionado(null)
+      setGruaSelecionada(null)
+      setFuncionariosSelecionados([])
       setIsCreateDialogOpen(false)
       
       // Mostrar mensagem de sucesso
@@ -356,25 +465,108 @@ export default function ObrasPage() {
     }
   }
 
-  const handleEditObra = (obra: any) => {
+  const handleEditObra = async (obra: any) => {
     setEditingObra(obra)
-    // Preencher formulário com dados da obra
-    setObraFormData({
-      name: obra.name,
-      description: obra.description,
-      status: obra.status,
-      startDate: obra.startDate,
-      endDate: obra.endDate || '',
-      budget: obra.budget?.toString() || '',
-      location: obra.location || '',
-      clienteId: obra.clienteId || '',
-      observations: obra.observations || '',
-      // Dados da grua (buscar grua vinculada)
-      gruaId: '',
-      gruaValue: '',
-      monthlyFee: '',
-      funcionarios: []
-    })
+    
+    // Carregar relacionamentos da obra
+    try {
+      const [gruasResponse, funcionariosResponse] = await Promise.all([
+        obrasApi.buscarGruasVinculadas(parseInt(obra.id)),
+        obrasApi.buscarFuncionariosVinculados(parseInt(obra.id))
+      ])
+      
+      // Preencher dados da grua se existir
+      let gruaId = ''
+      let gruaValue = ''
+      let monthlyFee = ''
+      if (gruasResponse.data && gruasResponse.data.length > 0) {
+        const gruaVinculada = gruasResponse.data[0]
+        gruaId = gruaVinculada.gruaId
+        monthlyFee = gruaVinculada.valorLocacaoMensal?.toString() || ''
+        // O valor da grua não está disponível nos dados de relacionamento
+        gruaValue = ''
+      }
+      
+      // Preencher dados dos funcionários se existirem
+      const funcionarios = funcionariosResponse.data?.map((func: any) => ({
+        id: func.id.toString(),
+        userId: func.funcionarioId.toString(),
+        role: func.observacoes?.includes('(') ? 
+          func.observacoes.split('(')[1]?.split(')')[0] || 'Funcionário' : 
+          'Funcionário',
+        name: func.observacoes?.includes('Funcionário') ? 
+          func.observacoes.split('Funcionário ')[1]?.split(' (')[0] || 'Funcionário' : 
+          'Funcionário',
+        gruaId: func.gruaId
+      })) || []
+      
+      // Preencher formulário com dados da obra
+      setObraFormData({
+        name: obra.name,
+        description: obra.description,
+        status: obra.status,
+        startDate: obra.startDate,
+        endDate: obra.endDate || '',
+        budget: obra.budget?.toString() || '',
+        location: obra.location || '',
+        clienteId: obra.clienteId || '',
+        observations: obra.observations || '',
+        // Dados da grua vinculada
+        gruaId: gruaId,
+        gruaValue: gruaValue,
+        monthlyFee: monthlyFee,
+        // Dados do responsável
+        responsavelId: obra.responsavelId || '',
+        responsavelName: obra.responsavelName || '',
+        funcionarios: funcionarios
+      })
+      
+      // Atualizar estados dos componentes de busca
+      if (gruaId) {
+        // Buscar dados completos da grua
+        // Por enquanto, vamos usar dados básicos
+        setGruaSelecionada({
+          id: gruaId,
+          name: `Grua ${gruaId}`,
+          model: 'Modelo não disponível',
+          manufacturer: 'Fabricante não disponível',
+          capacity: 'Capacidade não disponível'
+        })
+      }
+      
+      setFuncionariosSelecionados(funcionarios)
+      
+      // Carregar responsável se existir
+      if (obra.responsavelId && obra.responsavelName) {
+        setResponsavelSelecionado({
+          id: obra.responsavelId,
+          nome: obra.responsavelName
+        })
+      }
+      
+    } catch (error) {
+      console.error('Erro ao carregar relacionamentos da obra:', error)
+      
+      // Preencher formulário básico em caso de erro
+      setObraFormData({
+        name: obra.name,
+        description: obra.description,
+        status: obra.status,
+        startDate: obra.startDate,
+        endDate: obra.endDate || '',
+        budget: obra.budget?.toString() || '',
+        location: obra.location || '',
+        clienteId: obra.clienteId || '',
+        observations: obra.observations || '',
+        gruaId: '',
+        gruaValue: '',
+        monthlyFee: '',
+        responsavelId: '',
+        responsavelName: '',
+        funcionarios: []
+      })
+    }
+    
     setIsEditDialogOpen(true)
   }
 
@@ -423,7 +615,7 @@ export default function ObrasPage() {
       setObraFormData({
         name: '',
         description: '',
-        status: 'ativa',
+        status: 'Em Andamento',
         startDate: '',
         endDate: '',
         budget: '',
@@ -433,8 +625,13 @@ export default function ObrasPage() {
         gruaId: '',
         gruaValue: '',
         monthlyFee: '',
+        responsavelId: '',
+        responsavelName: '',
         funcionarios: []
       })
+      setClienteSelecionado(null)
+      setGruaSelecionada(null)
+      setFuncionariosSelecionados([])
       
       // Mostrar mensagem de sucesso
       alert('Obra atualizada com sucesso!')
@@ -520,8 +717,8 @@ export default function ObrasPage() {
       {!loading && !error && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredObras.map((obra) => {
-          const gruasVinculadas = getGruasByObra(obra.id)
           const custos = getCustosByObra(obra.id)
+          const obraComRelacionamentos = obra as any
           
           return (
             <Card key={obra.id} className="hover:shadow-lg transition-shadow">
@@ -557,32 +754,83 @@ export default function ObrasPage() {
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <DollarSign className="w-4 h-4" />
-                    <span>Total: R$ {obra.totalCustos.toLocaleString('pt-BR')}</span>
+                    <span>Orçamento: R$ {obra.budget.toLocaleString('pt-BR')}</span>
                   </div>
                   
-                  {/* Gruas e Histórico */}
-                  {gruasVinculadas.length > 0 && (
+                  {/* Gruas Vinculadas */}
+                  {obraComRelacionamentos.gruasVinculadas && obraComRelacionamentos.gruasVinculadas.length > 0 && (
                     <div className="border-t pt-3">
-                      <h4 className="text-sm font-medium mb-2">Gruas ({gruasVinculadas.length})</h4>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                        <Crane className="w-4 h-4 text-blue-600" />
+                        Gruas ({obraComRelacionamentos.gruasVinculadas.length})
+                      </h4>
                       <div className="space-y-2">
-                        {gruasVinculadas.slice(0, 2).map((grua) => (
-                          <div key={grua.id} className="text-xs">
+                        {obraComRelacionamentos.gruasVinculadas.slice(0, 2).map((grua: any) => (
+                          <div key={grua.id} className="text-xs bg-blue-50 p-2 rounded border">
                             <div className="flex items-center justify-between">
-                              <span className="font-medium">{grua.name}</span>
-                              <Badge variant={grua.status === 'em_obra' ? 'default' : 'secondary'} className="text-xs">
+                              <span className="font-medium">{grua.gruaId}</span>
+                              <Badge variant="default" className="text-xs">
                                 {grua.status}
                               </Badge>
                             </div>
-                            {grua.historico.length > 0 && (
-                              <div className="mt-1 text-gray-500">
-                                Último: {grua.historico[0].observacoes.substring(0, 50)}...
-                              </div>
-                            )}
+                            <div className="mt-1 text-gray-600">
+                              <div>Mensalidade: R$ {parseFloat(grua.valorLocacaoMensal).toLocaleString('pt-BR')}</div>
+                              <div>Início: {new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR')}</div>
+                            </div>
                           </div>
                         ))}
-                        {gruasVinculadas.length > 2 && (
+                        {obraComRelacionamentos.gruasVinculadas.length > 2 && (
                           <div className="text-xs text-gray-500">
-                            +{gruasVinculadas.length - 2} mais...
+                            +{obraComRelacionamentos.gruasVinculadas.length - 2} mais...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Funcionários Vinculados */}
+                  {obraComRelacionamentos.funcionariosVinculados && obraComRelacionamentos.funcionariosVinculados.length > 0 && (
+                    <div className="border-t pt-3">
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+                        <User className="w-4 h-4 text-green-600" />
+                        Funcionários ({obraComRelacionamentos.funcionariosVinculados.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {obraComRelacionamentos.funcionariosVinculados.slice(0, 2).map((funcionario: any) => {
+                          // Extrair nome do funcionário das observações
+                          const nomeFuncionario = funcionario.observacoes?.includes('Funcionário') ? 
+                            funcionario.observacoes.split('Funcionário ')[1]?.split(' (')[0] || 'Funcionário' : 
+                            'Funcionário'
+                          
+                          // Extrair cargo do funcionário das observações
+                          const cargoFuncionario = funcionario.observacoes?.includes('(') ? 
+                            funcionario.observacoes.split('(')[1]?.split(')')[0] || 'Funcionário' : 
+                            'Funcionário'
+                          
+                          // Formatar data de início
+                          const dataInicio = funcionario.dataInicio
+                          const dataFormatada = dataInicio ? new Date(dataInicio).toLocaleDateString('pt-BR') : 'Data não informada'
+                          
+                          return (
+                            <div key={funcionario.id} className="text-xs bg-green-50 p-2 rounded border">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">{nomeFuncionario}</span>
+                                <Badge variant="default" className="text-xs">
+                                  {funcionario.status}
+                                </Badge>
+                              </div>
+                              <div className="mt-1 text-gray-600">
+                                <div>Cargo: {cargoFuncionario}</div>
+                                <div>ID: {funcionario.funcionarioId}</div>
+                                <div>Grua: {funcionario.gruaId}</div>
+                                <div>Início: {dataFormatada}</div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {obraComRelacionamentos.funcionariosVinculados.length > 2 && (
+                          <div className="text-xs text-gray-500">
+                            +{obraComRelacionamentos.funcionariosVinculados.length - 2} mais...
                           </div>
                         )}
                       </div>
@@ -678,9 +926,11 @@ export default function ObrasPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="ativa">Ativa</SelectItem>
-                        <SelectItem value="pausada">Pausada</SelectItem>
-                        <SelectItem value="concluida">Concluída</SelectItem>
+                        <SelectItem value="Planejamento">Planejamento</SelectItem>
+                        <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                        <SelectItem value="Pausada">Pausada</SelectItem>
+                        <SelectItem value="Concluída">Concluída</SelectItem>
+                        <SelectItem value="Cancelada">Cancelada</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -696,6 +946,21 @@ export default function ObrasPage() {
                     rows={3}
                     required
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="responsavel">Responsável pela Obra *</Label>
+                  <FuncionarioSearch
+                    onFuncionarioSelect={handleResponsavelSelect}
+                    selectedFuncionario={responsavelSelecionado}
+                    placeholder="Buscar responsável por nome ou cargo..."
+                    className="mt-1"
+                    onlyActive={true}
+                    allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente']}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o nome ou cargo do responsável pela obra
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -744,23 +1009,14 @@ export default function ObrasPage() {
 
                 <div>
                   <Label htmlFor="clienteId">Cliente *</Label>
-                  <Select
-                    value={obraFormData.clienteId}
-                    onValueChange={(value) => setObraFormData({ ...obraFormData, clienteId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getClientesAtivos().map(cliente => (
-                        <SelectItem key={cliente.id} value={cliente.id}>
-                          {cliente.name} - {cliente.cnpj}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ClienteSearch
+                    onClienteSelect={handleClienteSelect}
+                    selectedCliente={clienteSelecionado}
+                    placeholder="Buscar cliente por nome ou CNPJ..."
+                    className="mt-1"
+                  />
                   <p className="text-xs text-gray-500 mt-1">
-                    O cliente deve ser criado antes de criar a obra
+                    Digite o nome ou CNPJ do cliente para buscar
                   </p>
                 </div>
 
@@ -790,21 +1046,16 @@ export default function ObrasPage() {
 
                 <div>
                   <Label htmlFor="gruaId">Grua *</Label>
-                  <Select
-                    value={obraFormData.gruaId}
-                    onValueChange={(value) => setObraFormData({ ...obraFormData, gruaId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma grua" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockGruas.filter(grua => grua.status === 'disponivel').map(grua => (
-                        <SelectItem key={grua.id} value={grua.id}>
-                          {grua.name} - {grua.model} ({grua.capacity})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <GruaSearch
+                    onGruaSelect={handleGruaSelect}
+                    selectedGrua={gruaSelecionada}
+                    placeholder="Buscar grua por nome, modelo ou fabricante..."
+                    className="mt-1"
+                    onlyAvailable={true}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o nome, modelo ou fabricante da grua para buscar
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -841,67 +1092,52 @@ export default function ObrasPage() {
                     <h3 className="font-medium text-green-900">Funcionários da Obra</h3>
                   </div>
                   <p className="text-sm text-green-700">
-                    Adicione quantos funcionários desejar para esta obra
+                    Busque e adicione funcionários para esta obra
                   </p>
                 </div>
 
-                <div className="space-y-3">
-                  {obraFormData.funcionarios.map((funcionario) => (
-                    <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg">
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <Select
-                          value={funcionario.userId}
-                          onValueChange={(value) => {
-                            const user = mockUsers.find(u => u.id === value)
-                            updateFuncionario(funcionario.id, 'userId', value)
-                            updateFuncionario(funcionario.id, 'name', user?.name || '')
-                            updateFuncionario(funcionario.id, 'role', user?.role || '')
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione um funcionário" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {mockUsers.filter(user => 
-                              user.role === 'engenheiro' || 
-                              user.role === 'chefe_obras' || 
-                              user.role === 'funcionario'
-                            ).map(user => (
-                              <SelectItem key={user.id} value={user.id}>
-                                {user.name} ({user.role})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          value={funcionario.role}
-                          readOnly
-                          placeholder="Cargo será preenchido automaticamente"
-                          className="bg-gray-50"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeFuncionario(funcionario.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                <div>
+                  <Label htmlFor="funcionarioSearch">Buscar Funcionário</Label>
+                  <FuncionarioSearch
+                    onFuncionarioSelect={handleFuncionarioSelect}
+                    placeholder="Buscar funcionário por nome ou cargo..."
+                    className="mt-1"
+                    onlyActive={true}
+                    allowedRoles={['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o nome ou cargo do funcionário para buscar
+                  </p>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addFuncionario}
-                  className="w-full"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Adicionar Funcionário
-                </Button>
+                {/* Lista de funcionários selecionados */}
+                {funcionariosSelecionados.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-sm">Funcionários Selecionados ({funcionariosSelecionados.length})</h4>
+                    {funcionariosSelecionados.map((funcionario) => (
+                      <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg bg-green-50">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4 text-green-600" />
+                            <div>
+                              <p className="font-medium text-green-900">{funcionario.name}</p>
+                              <p className="text-sm text-green-700">{funcionario.role}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => removeFuncionarioSelecionado(funcionario.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
 
             </Tabs>
@@ -970,9 +1206,11 @@ export default function ObrasPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="ativa">Ativa</SelectItem>
-                        <SelectItem value="pausada">Pausada</SelectItem>
-                        <SelectItem value="concluida">Concluída</SelectItem>
+                        <SelectItem value="Planejamento">Planejamento</SelectItem>
+                        <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                        <SelectItem value="Pausada">Pausada</SelectItem>
+                        <SelectItem value="Concluída">Concluída</SelectItem>
+                        <SelectItem value="Cancelada">Cancelada</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -988,6 +1226,21 @@ export default function ObrasPage() {
                     rows={3}
                     required
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-responsavel">Responsável pela Obra *</Label>
+                  <FuncionarioSearch
+                    onFuncionarioSelect={handleResponsavelSelect}
+                    selectedFuncionario={responsavelSelecionado}
+                    placeholder="Buscar responsável por nome ou cargo..."
+                    className="mt-1"
+                    onlyActive={true}
+                    allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente']}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o nome ou cargo do responsável pela obra
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1036,23 +1289,14 @@ export default function ObrasPage() {
 
                 <div>
                   <Label htmlFor="edit-clienteId">Cliente *</Label>
-                  <Select
-                    value={obraFormData.clienteId}
-                    onValueChange={(value) => setObraFormData({ ...obraFormData, clienteId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getClientesAtivos().map(cliente => (
-                        <SelectItem key={cliente.id} value={cliente.id}>
-                          {cliente.name} - {cliente.cnpj}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ClienteSearch
+                    onClienteSelect={handleClienteSelect}
+                    selectedCliente={clienteSelecionado}
+                    placeholder="Buscar cliente por nome ou CNPJ..."
+                    className="mt-1"
+                  />
                   <p className="text-xs text-gray-500 mt-1">
-                    O cliente deve ser criado antes de criar a obra
+                    Digite o nome ou CNPJ do cliente para buscar
                   </p>
                 </div>
 
@@ -1082,21 +1326,16 @@ export default function ObrasPage() {
 
                 <div>
                   <Label htmlFor="edit-gruaId">Grua *</Label>
-                  <Select
-                    value={obraFormData.gruaId}
-                    onValueChange={(value) => setObraFormData({ ...obraFormData, gruaId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma grua" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockGruas.filter(grua => grua.status === 'disponivel').map(grua => (
-                        <SelectItem key={grua.id} value={grua.id}>
-                          {grua.name} - {grua.model} ({grua.capacity})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <GruaSearch
+                    onGruaSelect={handleGruaSelect}
+                    selectedGrua={gruaSelecionada}
+                    placeholder="Buscar grua por nome, modelo ou fabricante..."
+                    className="mt-1"
+                    onlyAvailable={true}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o nome, modelo ou fabricante da grua para buscar
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1133,67 +1372,52 @@ export default function ObrasPage() {
                     <h3 className="font-medium text-green-900">Funcionários da Obra</h3>
                   </div>
                   <p className="text-sm text-green-700">
-                    Adicione quantos funcionários desejar para esta obra
+                    Busque e adicione funcionários para esta obra
                   </p>
                 </div>
 
-                <div className="space-y-3">
-                  {obraFormData.funcionarios.map((funcionario) => (
-                    <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg">
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <Select
-                          value={funcionario.userId}
-                          onValueChange={(value) => {
-                            const user = mockUsers.find(u => u.id === value)
-                            updateFuncionario(funcionario.id, 'userId', value)
-                            updateFuncionario(funcionario.id, 'name', user?.name || '')
-                            updateFuncionario(funcionario.id, 'role', user?.role || '')
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione um funcionário" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {mockUsers.filter(user => 
-                              user.role === 'engenheiro' || 
-                              user.role === 'chefe_obras' || 
-                              user.role === 'funcionario'
-                            ).map(user => (
-                              <SelectItem key={user.id} value={user.id}>
-                                {user.name} ({user.role})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          value={funcionario.role}
-                          readOnly
-                          placeholder="Cargo será preenchido automaticamente"
-                          className="bg-gray-50"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeFuncionario(funcionario.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                <div>
+                  <Label htmlFor="edit-funcionarioSearch">Buscar Funcionário</Label>
+                  <FuncionarioSearch
+                    onFuncionarioSelect={handleFuncionarioSelect}
+                    placeholder="Buscar funcionário por nome ou cargo..."
+                    className="mt-1"
+                    onlyActive={true}
+                    allowedRoles={['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Digite o nome ou cargo do funcionário para buscar
+                  </p>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addFuncionario}
-                  className="w-full"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Adicionar Funcionário
-                </Button>
+                {/* Lista de funcionários selecionados */}
+                {funcionariosSelecionados.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-sm">Funcionários Selecionados ({funcionariosSelecionados.length})</h4>
+                    {funcionariosSelecionados.map((funcionario) => (
+                      <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg bg-green-50">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4 text-green-600" />
+                            <div>
+                              <p className="font-medium text-green-900">{funcionario.name}</p>
+                              <p className="text-sm text-green-700">{funcionario.role}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => removeFuncionarioSelecionado(funcionario.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
 
