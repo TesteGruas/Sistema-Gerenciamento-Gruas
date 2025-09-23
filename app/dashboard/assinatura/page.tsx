@@ -71,8 +71,8 @@ export default function AssinaturaPage() {
   }
 
   const filteredDocumentos = mockDocumentos.filter(doc => {
-    const matchesSearch = doc.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         doc.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = (doc.titulo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (doc.descricao || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = selectedStatus === "all" || doc.status === selectedStatus
     const matchesObra = selectedObra === "all" || doc.obraId === selectedObra
     const canView = canViewDocument(doc)

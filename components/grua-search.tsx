@@ -147,6 +147,8 @@ export default function GruaSearch({
   }
 
   const getStatusColor = (status: string) => {
+    if (!status) return 'bg-gray-100 text-gray-800'
+    
     switch (status.toLowerCase()) {
       case 'disponível':
       case 'disponivel':
@@ -164,6 +166,8 @@ export default function GruaSearch({
   }
 
   const getStatusIcon = (status: string) => {
+    if (!status) return <AlertCircle className="w-3 h-3" />
+    
     switch (status.toLowerCase()) {
       case 'disponível':
       case 'disponivel':

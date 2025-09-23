@@ -45,7 +45,7 @@ export interface Obra {
   description: string
   startDate: string
   endDate?: string
-  status: 'ativa' | 'pausada' | 'concluida'
+  status: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
   responsavelId: string
   responsavelName: string
   clienteId: string

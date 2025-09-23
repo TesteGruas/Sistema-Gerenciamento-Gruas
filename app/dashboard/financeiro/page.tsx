@@ -43,8 +43,8 @@ export default function FinanceiroPage() {
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
 
   const filteredCustos = mockCustos.filter(custo => {
-    const matchesSearch = custo.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         custo.obraName.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = (custo.descricao || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (custo.obraName || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesObra = selectedObra === "all" || custo.obraId === selectedObra
     const matchesTipo = selectedTipo === "all" || custo.tipo === selectedTipo
     const matchesCategoria = selectedCategoria === "all" || custo.categoria === selectedCategoria

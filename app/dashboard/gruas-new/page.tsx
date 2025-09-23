@@ -38,8 +38,8 @@ export default function GruasPage() {
   const [isHistoricoDialogOpen, setIsHistoricoDialogOpen] = useState(false)
 
   const filteredGruas = mockGruas.filter(grua => {
-    const matchesSearch = grua.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         grua.model.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = (grua.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (grua.model || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = selectedStatus === "all" || grua.status === selectedStatus
     const matchesObra = selectedObra === "all" || grua.currentObraId === selectedObra
     

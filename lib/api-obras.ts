@@ -348,7 +348,7 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     description: obraBackend.descricao || `${obraBackend.tipo} - ${obraBackend.endereco}, ${obraBackend.cidade}/${obraBackend.estado}`,
     startDate: obraBackend.data_inicio || obraBackend.created_at.split('T')[0],
     endDate: obraBackend.data_fim,
-    status: converterStatusBackendParaFrontend(obraBackend.status),
+    status: obraBackend.status,
     responsavelId: obraBackend.responsavel_id?.toString() || '3',
     responsavelName: obraBackend.responsavel_nome || 'Pedro Costa',
     clienteId: obraBackend.cliente_id.toString(),
@@ -435,12 +435,24 @@ export const converterStatusBackendParaFrontend = (status: string): 'ativa' | 'p
 
 export const converterStatusFrontendParaBackend = (status: string): 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada' => {
   switch (status) {
+    // Valores convertidos do frontend
     case 'ativa':
       return 'Em Andamento'
     case 'pausada':
       return 'Pausada'
     case 'concluida':
       return 'Concluída'
+    // Valores diretos do backend (para compatibilidade com edição)
+    case 'Em Andamento':
+      return 'Em Andamento'
+    case 'Pausada':
+      return 'Pausada'
+    case 'Concluída':
+      return 'Concluída'
+    case 'Planejamento':
+      return 'Planejamento'
+    case 'Cancelada':
+      return 'Cancelada'
     default:
       return 'Pausada'
   }

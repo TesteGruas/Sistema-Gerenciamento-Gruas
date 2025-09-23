@@ -106,6 +106,8 @@ export default function FuncionarioSearch({
   }
 
   const getStatusColor = (status: string) => {
+    if (!status) return 'bg-gray-100 text-gray-800'
+    
     switch (status.toLowerCase()) {
       case 'ativo':
         return 'bg-green-100 text-green-800'
@@ -120,6 +122,8 @@ export default function FuncionarioSearch({
   }
 
   const getStatusIcon = (status: string) => {
+    if (!status) return <AlertCircle className="w-3 h-3" />
+    
     switch (status.toLowerCase()) {
       case 'ativo':
         return <CheckCircle className="w-3 h-3" />
@@ -134,6 +138,8 @@ export default function FuncionarioSearch({
   }
 
   const getRoleColor = (role: string) => {
+    if (!role) return 'bg-gray-100 text-gray-800'
+    
     switch (role.toLowerCase()) {
       case 'operador':
         return 'bg-blue-100 text-blue-800'

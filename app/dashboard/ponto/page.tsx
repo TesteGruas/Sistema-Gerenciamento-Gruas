@@ -336,9 +336,9 @@ export default function PontoPage() {
     .filter((registro) => {
       // Filtro por termo de busca
       const matchesSearch = 
-        registro.funcionario.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (registro.funcionario || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         registro.data.includes(searchTerm) ||
-        registro.status.toLowerCase().includes(searchTerm.toLowerCase())
+        (registro.status || '').toLowerCase().includes(searchTerm.toLowerCase())
       
       // Filtro por funcionário
       const matchesFuncionario = 

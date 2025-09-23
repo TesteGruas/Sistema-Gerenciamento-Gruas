@@ -33,8 +33,8 @@ export default function RHPage() {
   const [selectedObra, setSelectedObra] = useState("all")
 
   const filteredUsers = mockUsers.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = (user.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (user.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesRole = selectedRole === "all" || user.role === selectedRole
     const matchesObra = selectedObra === "all" || user.obraId === selectedObra
     

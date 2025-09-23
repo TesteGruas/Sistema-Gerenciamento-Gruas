@@ -67,8 +67,8 @@ export default function HistoricoPage() {
 
     return historico
       .filter(entry => {
-        const matchesSearch = entry.observacoes.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             entry.funcionarioName.toLowerCase().includes(searchTerm.toLowerCase())
+        const matchesSearch = (entry.observacoes || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             (entry.funcionarioName || '').toLowerCase().includes(searchTerm.toLowerCase())
         const matchesStatus = selectedStatus === "all" || entry.status === selectedStatus
         return matchesSearch && matchesStatus
       })

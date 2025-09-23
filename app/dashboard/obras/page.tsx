@@ -30,7 +30,7 @@ import {
   Trash2,
   Loader2
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos, Obra } from "@/lib/mock-data"
+import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos } from "@/lib/mock-data"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
@@ -45,7 +45,7 @@ export default function ObrasPage() {
   const [obraToDelete, setObraToDelete] = useState<any>(null)
   
   // Estados para integração com backend
-  const [obras, setObras] = useState<Obra[]>([])
+  const [obras, setObras] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -174,7 +174,7 @@ export default function ObrasPage() {
       setObraFormData({
         ...obraFormData,
         responsavelId: responsavel.id,
-        responsavelName: responsavel.nome
+        responsavelName: responsavel.name || responsavel.nome
       })
     }
   }
@@ -191,8 +191,8 @@ export default function ObrasPage() {
   }, [])
 
   const filteredObras = obras.filter(obra =>
-    obra.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    obra.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (obra.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (obra.description || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const addFuncionario = () => {
@@ -327,8 +327,8 @@ export default function ObrasPage() {
               clienteId: obraFormData.clienteId,
               observations: obraFormData.observations,
               // Dados do responsável
-              responsavelId: responsavelSelecionado?.id,
-              responsavelName: responsavelSelecionado?.nome,
+              responsavelId: obraFormData.responsavelId,
+              responsavelName: obraFormData.responsavelName,
               // Dados da grua selecionada
               gruaId: obraFormData.gruaId,
               gruaValue: obraFormData.gruaValue,
@@ -540,6 +540,7 @@ export default function ObrasPage() {
       if (obra.responsavelId && obra.responsavelName) {
         setResponsavelSelecionado({
           id: obra.responsavelId,
+          name: obra.responsavelName,
           nome: obra.responsavelName
         })
       }
@@ -590,6 +591,9 @@ export default function ObrasPage() {
         location: obraFormData.location,
         clienteId: obraFormData.clienteId,
         observations: obraFormData.observations,
+        // Dados do responsável
+        responsavelId: obraFormData.responsavelId,
+        responsavelName: obraFormData.responsavelName,
         // Campos específicos do backend
         cidade: obraFormData.location?.split(',')[0]?.trim() || 'São Paulo',
         estado: obraFormData.location?.split(',')[1]?.trim() || 'SP',
@@ -956,7 +960,7 @@ export default function ObrasPage() {
                     placeholder="Buscar responsável por nome ou cargo..."
                     className="mt-1"
                     onlyActive={true}
-                    allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente']}
+                    allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente', 'Operador']}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Digite o nome ou cargo do responsável pela obra
@@ -1236,7 +1240,7 @@ export default function ObrasPage() {
                     placeholder="Buscar responsável por nome ou cargo..."
                     className="mt-1"
                     onlyActive={true}
-                    allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente']}
+                    allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente', 'Operador']}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Digite o nome ou cargo do responsável pela obra

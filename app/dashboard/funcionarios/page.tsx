@@ -52,8 +52,8 @@ export default function FuncionariosPage() {
   })
 
   const filteredFuncionarios = mockUsers.filter(funcionario =>
-    (funcionario.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     funcionario.email.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    ((funcionario.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+     (funcionario.email || '').toLowerCase().includes(searchTerm.toLowerCase())) &&
     (selectedRole === "all" || funcionario.role === selectedRole) &&
     (selectedStatus === "all" || funcionario.status === selectedStatus)
   )
