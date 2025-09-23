@@ -30,6 +30,19 @@ const transferenciaSchema = Joi.object({
   observacoes: Joi.string().allow('').optional()
 })
 
+// Schema para histórico de gruas (compatível com mocks)
+const historicoGruaSchema = Joi.object({
+  id: Joi.string().required(),
+  gruaId: Joi.string().required(),
+  data: Joi.date().required(),
+  status: Joi.string().valid('ok', 'falha', 'manutencao').required(),
+  observacoes: Joi.string().required(),
+  funcionarioId: Joi.string().required(),
+  funcionarioName: Joi.string().required(),
+  tipo: Joi.string().valid('checklist', 'manutencao', 'falha').required(),
+  notificacaoEnviada: Joi.boolean().optional()
+})
+
 const disponibilidadeSchema = Joi.object({
   data_inicio: Joi.date().required(),
   data_fim: Joi.date().required(),
@@ -358,6 +371,111 @@ router.post('/transferir', async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao transferir grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+// =====================================================
+// ENDPOINTS PARA HISTÓRICO DE GRUAS
+// =====================================================
+
+/**
+ * @swagger
+ * /api/gestao-gruas/historico-grua/{grua_id}:
+ *   get:
+ *     summary: Obter histórico de manutenções e checklists de uma grua
+ *     tags: [Gestão de Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: grua_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID da grua
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [checklist, manutencao, falha]
+ *         description: Filtrar por tipo de histórico
+ *     responses:
+ *       200:
+ *         description: Histórico da grua
+ *       404:
+ *         description: Grua não encontrada
+ */
+router.get('/historico-grua/:grua_id', async (req, res) => {
+  try {
+    const { grua_id } = req.params
+    const { tipo } = req.query
+
+    // Verificar se grua existe
+    const { data: grua, error: gruaError } = await supabaseAdmin
+      .from('gruas')
+      .select('id, modelo, fabricante, tipo, capacidade')
+      .eq('id', grua_id)
+      .single()
+
+    if (gruaError || !grua) {
+      return res.status(404).json({
+        error: 'Grua não encontrada',
+        message: 'A grua especificada não existe'
+      })
+    }
+
+    // Buscar histórico de manutenções/checklists
+    let query = supabaseAdmin
+      .from('historico_manutencoes')
+      .select(`
+        *,
+        funcionario:funcionarios(id, nome, cargo)
+      `)
+      .eq('grua_id', grua_id)
+      .order('data_manutencao', { ascending: false })
+
+    if (tipo) {
+      query = query.eq('tipo', tipo)
+    }
+
+    const { data: historico, error: historicoError } = await query
+
+    if (historicoError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar histórico',
+        message: historicoError.message
+      })
+    }
+
+    // Transformar dados para compatibilidade com mocks
+    const historicoFormatado = historico.map(item => ({
+      id: item.id.toString(),
+      gruaId: grua_id,
+      data: item.data_manutencao,
+      status: item.status === 'Concluída' ? 'ok' : 
+              item.status === 'Falha' ? 'falha' : 'manutencao',
+      observacoes: item.observacoes || '',
+      funcionarioId: item.funcionario_id?.toString() || '',
+      funcionarioName: item.funcionario?.nome || 'Não informado',
+      tipo: item.tipo || 'manutencao',
+      notificacaoEnviada: item.notificacao_enviada || false
+    }))
+
+    res.json({
+      success: true,
+      data: {
+        grua,
+        historico: historicoFormatado,
+        total_registros: historicoFormatado.length
+      }
+    })
+
+  } catch (error) {
+    console.error('Erro ao buscar histórico da grua:', error)
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message

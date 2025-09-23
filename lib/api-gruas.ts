@@ -1,43 +1,85 @@
 // API client para gruas
 import { buildApiUrl, API_ENDPOINTS } from './api'
 
-// Interfaces baseadas no backend
+// Interfaces baseadas no backend atualizado
 export interface GruaBackend {
   id: string
+  name: string
   modelo: string
-  fabricante: string
+  fabricante?: string
+  tipo?: string
   capacidade: string
-  tipo: string
-  status: string
+  capacidade_ponta?: string
+  lanca?: string
+  altura_trabalho?: string
+  ano?: number
+  status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
   localizacao?: string
+  horas_operacao?: number
+  valor_locacao?: number
+  valor_real?: number
+  valor_operacao?: number
+  valor_sinaleiro?: number
+  valor_manutencao?: number
   ultima_manutencao?: string
   proxima_manutencao?: string
   created_at: string
   updated_at: string
+  current_obra_id?: number
+  current_obra_name?: string
+  // Campos de compatibilidade com frontend
+  model?: string
+  capacity?: string
+  currentObraId?: string
+  currentObraName?: string
 }
 
 export interface GruaCreateData {
   name: string
-  manufacturer: string
   model: string
   capacity: string
-  type: string
-  status?: string
-  location?: string
-  last_maintenance?: string
-  next_maintenance?: string
+  status?: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
+  obraId?: string
+  observacoes?: string
+  fabricante?: string
+  tipo?: string
+  capacidade_ponta?: string
+  lanca?: string
+  altura_trabalho?: string
+  ano?: number
+  localizacao?: string
+  horas_operacao?: number
+  valor_locacao?: number
+  valor_real?: number
+  valor_operacao?: number
+  valor_sinaleiro?: number
+  valor_manutencao?: number
+  ultima_manutencao?: string
+  proxima_manutencao?: string
 }
 
 export interface GruaUpdateData {
   name?: string
-  manufacturer?: string
   model?: string
   capacity?: string
-  type?: string
-  status?: string
-  location?: string
-  last_maintenance?: string
-  next_maintenance?: string
+  status?: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
+  obraId?: string
+  observacoes?: string
+  fabricante?: string
+  tipo?: string
+  capacidade_ponta?: string
+  lanca?: string
+  altura_trabalho?: string
+  ano?: number
+  localizacao?: string
+  horas_operacao?: number
+  valor_locacao?: number
+  valor_real?: number
+  valor_operacao?: number
+  valor_sinaleiro?: number
+  valor_manutencao?: number
+  ultima_manutencao?: string
+  proxima_manutencao?: string
 }
 
 export interface GruasResponse {
@@ -78,7 +120,7 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
   
   const defaultHeaders = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
+    'Authorization': `Bearer ${token}`
   }
 
   const response = await fetch(url, {
@@ -103,7 +145,8 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
     throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`)
   }
 
-  return response.json()
+  const responseData = await response.json()
+  return responseData
 }
 
 // API functions
@@ -128,7 +171,7 @@ export const gruasApi = {
 
   // Buscar gruas disponíveis (para seleção em obras)
   async buscarGruasDisponiveis(): Promise<{ success: boolean; data: GruaBackend[] }> {
-    const url = buildApiUrl(`${API_ENDPOINTS.GRUAS}?status=Disponível&limit=100`)
+    const url = buildApiUrl(`${API_ENDPOINTS.GRUAS}?status=disponivel&limit=100`)
     return apiRequest(url)
   },
 
@@ -169,15 +212,27 @@ export const gruasApi = {
 export const converterGruaBackendParaFrontend = (gruaBackend: GruaBackend) => {
   return {
     id: gruaBackend.id,
-    name: `${gruaBackend.fabricante} ${gruaBackend.modelo}`, // Criar nome a partir de fabricante + modelo
-    manufacturer: gruaBackend.fabricante,
-    model: gruaBackend.modelo,
-    capacity: gruaBackend.capacidade,
-    type: gruaBackend.tipo,
+    name: gruaBackend.name || `Grua ${gruaBackend.id}`,
+    model: gruaBackend.model || gruaBackend.modelo,
+    capacity: gruaBackend.capacity || gruaBackend.capacidade,
     status: gruaBackend.status,
-    location: gruaBackend.localizacao || '',
-    lastMaintenance: gruaBackend.ultima_manutencao || '',
-    nextMaintenance: gruaBackend.proxima_manutencao || '',
+    currentObraId: gruaBackend.currentObraId || gruaBackend.current_obra_id?.toString(),
+    currentObraName: gruaBackend.currentObraName || gruaBackend.current_obra_name,
+    fabricante: gruaBackend.fabricante,
+    tipo: gruaBackend.tipo,
+    capacidade_ponta: gruaBackend.capacidade_ponta,
+    lanca: gruaBackend.lanca,
+    altura_trabalho: gruaBackend.altura_trabalho,
+    ano: gruaBackend.ano,
+    localizacao: gruaBackend.localizacao,
+    horas_operacao: gruaBackend.horas_operacao,
+    valor_locacao: gruaBackend.valor_locacao,
+    valor_real: gruaBackend.valor_real,
+    valor_operacao: gruaBackend.valor_operacao,
+    valor_sinaleiro: gruaBackend.valor_sinaleiro,
+    valor_manutencao: gruaBackend.valor_manutencao,
+    ultima_manutencao: gruaBackend.ultima_manutencao,
+    proxima_manutencao: gruaBackend.proxima_manutencao,
     createdAt: gruaBackend.created_at,
     updatedAt: gruaBackend.updated_at
   }
@@ -186,14 +241,26 @@ export const converterGruaBackendParaFrontend = (gruaBackend: GruaBackend) => {
 export const converterGruaFrontendParaBackend = (gruaFrontend: any): GruaCreateData => {
   return {
     name: gruaFrontend.name,
-    manufacturer: gruaFrontend.manufacturer,
     model: gruaFrontend.model,
     capacity: gruaFrontend.capacity,
-    type: gruaFrontend.type,
-    status: gruaFrontend.status || 'Disponível',
-    location: gruaFrontend.location,
-    last_maintenance: gruaFrontend.lastMaintenance,
-    next_maintenance: gruaFrontend.nextMaintenance
+    status: gruaFrontend.status || 'disponivel',
+    obraId: gruaFrontend.obraId || '',
+    observacoes: gruaFrontend.observacoes || '',
+    fabricante: gruaFrontend.fabricante || 'Não informado',
+    tipo: gruaFrontend.tipo || 'Grua Torre',
+    capacidade_ponta: gruaFrontend.capacidade_ponta || gruaFrontend.capacity || 'Não informado',
+    lanca: gruaFrontend.lanca || 'Não informado',
+    altura_trabalho: gruaFrontend.altura_trabalho || 'Não informado',
+    ano: gruaFrontend.ano || new Date().getFullYear(),
+    localizacao: gruaFrontend.localizacao || 'Não informado',
+    horas_operacao: gruaFrontend.horas_operacao || 0,
+    valor_locacao: gruaFrontend.valor_locacao || null, // Permitir null em vez de 0
+    valor_real: gruaFrontend.valor_real || 0,
+    valor_operacao: gruaFrontend.valor_operacao || 0,
+    valor_sinaleiro: gruaFrontend.valor_sinaleiro || 0,
+    valor_manutencao: gruaFrontend.valor_manutencao || 0,
+    ultima_manutencao: gruaFrontend.ultima_manutencao || null,
+    proxima_manutencao: gruaFrontend.proxima_manutencao || null
   }
 }
 

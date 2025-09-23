@@ -38,7 +38,8 @@ const obraSchema = Joi.object({
       id: Joi.string().required(),
       userId: Joi.string().required(),
       role: Joi.string().required(),
-      name: Joi.string().required()
+      name: Joi.string().required(),
+      gruaId: Joi.string().optional()
     })
   ).optional(),
   // Campos adicionais para criação automática de cliente

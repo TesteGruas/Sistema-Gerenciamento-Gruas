@@ -92,6 +92,56 @@ router.get('/clientes/buscar', async (req, res) => {
   }
 })
 
+// Função auxiliar para enriquecer dados da grua com informações calculadas
+const enriquecerDadosGrua = async (grua) => {
+  try {
+    // Buscar obra atual da grua
+    const { data: obraAtual, error: obraError } = await supabase
+      .from('grua_obra')
+      .select(`
+        obra_id,
+        obra:obras(id, nome)
+      `)
+      .eq('grua_id', grua.id)
+      .eq('status', 'Ativa')
+      .single()
+
+    // Enriquecer dados
+    const gruaEnriquecida = {
+      ...grua,
+      // Campos calculados para compatibilidade com mocks
+      name: grua.name || `Grua ${grua.id}`,
+      model: grua.modelo, // modelo -> model para frontend
+      capacity: grua.capacidade, // capacidade -> capacity para frontend
+      currentObraId: obraAtual?.obra_id?.toString() || null,
+      currentObraName: obraAtual?.obra?.nome || null,
+      
+      // Campos de compatibilidade com frontend
+      alturaTrabalho: grua.altura_trabalho,
+      capacidadePonta: grua.capacidade_ponta,
+      valorLocacao: grua.valor_locacao,
+      valorOperacao: grua.valor_operacao,
+      valorSinaleiro: grua.valor_sinaleiro,
+      valorManutencao: grua.valor_manutencao,
+      horasOperacao: grua.horas_operacao,
+      ultimaManutencao: grua.ultima_manutencao,
+      proximaManutencao: grua.proxima_manutencao
+    }
+
+    return gruaEnriquecida
+  } catch (error) {
+    console.warn('Erro ao enriquecer dados da grua:', error.message)
+    return {
+      ...grua,
+      name: grua.name || `Grua ${grua.id}`,
+      model: grua.modelo, // modelo -> model para frontend
+      capacity: grua.capacidade, // capacidade -> capacity para frontend
+      currentObraId: null,
+      currentObraName: null
+    }
+  }
+}
+
 // Função auxiliar para buscar ou criar cliente
 const buscarOuCriarCliente = async (clienteData) => {
   if (!clienteData.nome) return null
@@ -153,48 +203,73 @@ const buscarOuCriarCliente = async (clienteData) => {
   return clienteCriado
 }
 
-// Schema de validação para gruas - baseado no schema real da tabela do Supabase
+// Schema de validação para gruas - baseado nos campos do frontend
 const gruaSchema = Joi.object({
-  modelo: Joi.string().min(2).required(),
-  fabricante: Joi.string().min(2).required(),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').required(),
-  capacidade: Joi.string().required(),
-  capacidade_ponta: Joi.string().required(),
-  lanca: Joi.string().required(),
-  altura_trabalho: Joi.string().allow(null).optional(),
+  // Campos obrigatórios (baseados no frontend)
+  name: Joi.string().min(2).required(), // Nome da grua (ex: "Grua 001")
+  model: Joi.string().min(2).required(), // Modelo da grua
+  capacity: Joi.string().required(), // Capacidade da grua
+  status: Joi.string().valid('disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
+  
+  // Campos opcionais (baseados no frontend)
+  obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
+  observacoes: Joi.string().allow(null, '').optional(), // Observações (opcional)
+  
+  // Campos opcionais adicionais (para compatibilidade com banco)
+  fabricante: Joi.string().allow(null, '').optional(),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').allow(null, '').optional(),
+  capacidade_ponta: Joi.string().allow(null, '').optional(),
+  lanca: Joi.string().allow(null, '').optional(),
+  altura_trabalho: Joi.string().allow(null, '').optional(),
   ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
-  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida').default('Disponível'),
-  localizacao: Joi.string().allow(null).optional(),
+  localizacao: Joi.string().allow(null, '').optional(),
   horas_operacao: Joi.number().integer().min(0).default(0),
-  valor_locacao: Joi.number().positive().allow(null).optional(),
-  valor_real: Joi.number().min(0).default(0),
-  valor_operacao: Joi.number().min(0).default(0),
-  valor_sinaleiro: Joi.number().min(0).default(0),
-  valor_manutencao: Joi.number().min(0).default(0),
-  ultima_manutencao: Joi.date().allow(null).optional(),
-  proxima_manutencao: Joi.date().allow(null).optional()
-})
-
-// Schema para dados de entrada (inclui campos de cliente para processamento)
-const gruaInputSchema = Joi.object({
-  modelo: Joi.string().min(2).required(),
-  fabricante: Joi.string().min(2).required(),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').required(),
-  capacidade: Joi.string().required(),
-  capacidade_ponta: Joi.string().required(),
-  lanca: Joi.string().required(),
-  altura_trabalho: Joi.string().allow(null).optional(),
-  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
-  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida').default('Disponível'),
-  localizacao: Joi.string().allow(null).optional(),
-  horas_operacao: Joi.number().integer().min(0).default(0),
-  valor_locacao: Joi.number().positive().allow(null).optional(),
+  valor_locacao: Joi.number().min(0).allow(null).optional(),
   valor_real: Joi.number().min(0).default(0),
   valor_operacao: Joi.number().min(0).default(0),
   valor_sinaleiro: Joi.number().min(0).default(0),
   valor_manutencao: Joi.number().min(0).default(0),
   ultima_manutencao: Joi.date().allow(null).optional(),
   proxima_manutencao: Joi.date().allow(null).optional(),
+  
+  // Campos adicionais para compatibilidade com mocks (serão calculados dinamicamente)
+  currentObraId: Joi.string().allow(null, '').optional(), // ID da obra atual - obtido de grua_obra
+  currentObraName: Joi.string().allow(null, '').optional() // Nome da obra atual - obtido de grua_obra
+})
+
+// Schema para dados de entrada (baseado nos campos do frontend)
+const gruaInputSchema = Joi.object({
+  // Campos obrigatórios (baseados no frontend)
+  name: Joi.string().min(2).required(), // Nome da grua (ex: "Grua 001")
+  model: Joi.string().min(2).required(), // Modelo da grua
+  capacity: Joi.string().required(), // Capacidade da grua
+  status: Joi.string().valid('disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
+  
+  // Campos opcionais (baseados no frontend)
+  obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
+  observacoes: Joi.string().allow(null, '').optional(), // Observações (opcional)
+  
+  // Campos opcionais adicionais (para compatibilidade com banco)
+  fabricante: Joi.string().allow(null, '').optional(),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').allow(null, '').optional(),
+  capacidade_ponta: Joi.string().allow(null, '').optional(),
+  lanca: Joi.string().allow(null, '').optional(),
+  altura_trabalho: Joi.string().allow(null, '').optional(),
+  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
+  localizacao: Joi.string().allow(null, '').optional(),
+  horas_operacao: Joi.number().integer().min(0).default(0),
+  valor_locacao: Joi.number().min(0).allow(null).optional(),
+  valor_real: Joi.number().min(0).default(0),
+  valor_operacao: Joi.number().min(0).default(0),
+  valor_sinaleiro: Joi.number().min(0).default(0),
+  valor_manutencao: Joi.number().min(0).default(0),
+  ultima_manutencao: Joi.date().allow(null).optional(),
+  proxima_manutencao: Joi.date().allow(null).optional(),
+  
+  // Campos adicionais para compatibilidade com mocks (serão calculados dinamicamente)
+  currentObraId: Joi.string().allow(null, '').optional(), // ID da obra atual - obtido de grua_obra
+  currentObraName: Joi.string().allow(null, '').optional(), // Nome da obra atual - obtido de grua_obra
+  
   // Campos de cliente enviados do frontend (usados internamente)
   cliente_nome: Joi.string().allow(null, '').optional(),
   cliente_documento: Joi.string().allow(null, '').optional(),
@@ -284,82 +359,10 @@ router.get('/', async (req, res) => {
     const offset = (page - 1) * limit
     const { status, tipo } = req.query
 
-    // Construir query com relacionamentos
-    let query = supabase
+    // Construir query simples (sem relacionamentos por enquanto)
+    let query = supabaseAdmin
       .from('gruas')
-      .select(`
-        *,
-        grua_funcionarios:grua_funcionario(
-          id,
-          funcionario_id,
-          obra_id,
-          data_inicio,
-          data_fim,
-          status,
-          observacoes,
-          funcionario:funcionarios(
-            id,
-            nome,
-            cargo,
-            telefone,
-            email,
-            status
-          ),
-          obra:obras(
-            id,
-            nome,
-            status
-          )
-        ),
-        grua_equipamentos:grua_equipamento(
-          id,
-          equipamento_id,
-          obra_id,
-          data_inicio,
-          data_fim,
-          status,
-          observacoes,
-          equipamento:equipamentos_auxiliares(
-            id,
-            nome,
-            tipo,
-            capacidade,
-            status
-          ),
-          obra:obras(
-            id,
-            nome,
-            status
-          )
-        ),
-        grua_obras:grua_obra(
-          id,
-          obra_id,
-          data_inicio_locacao,
-          data_fim_locacao,
-          valor_locacao_mensal,
-          status,
-          observacoes,
-          obra:obras(
-            id,
-            nome,
-            cliente_id,
-            status,
-            tipo,
-            contato_obra,
-            telefone_obra,
-            email_obra,
-            cliente:clientes(
-              id,
-              nome,
-              cnpj,
-              email,
-              telefone,
-              contato
-            )
-          )
-        )
-      `, { count: 'exact' })
+      .select('*', { count: 'exact' })
 
     // Aplicar filtros
     if (status) {
@@ -383,9 +386,31 @@ router.get('/', async (req, res) => {
 
     const totalPages = Math.ceil(count / limit)
 
+    // Enriquecer dados de cada grua (temporariamente simplificado para debug)
+    const gruasEnriquecidas = (data || []).map(grua => ({
+      ...grua,
+      // Campos calculados para compatibilidade com mocks
+      name: grua.name || `Grua ${grua.id}`,
+      model: grua.modelo, // modelo -> model para frontend
+      capacity: grua.capacidade, // capacidade -> capacity para frontend
+      currentObraId: null,
+      currentObraName: null,
+      
+      // Campos de compatibilidade com frontend
+      alturaTrabalho: grua.altura_trabalho,
+      capacidadePonta: grua.capacidade_ponta,
+      valorLocacao: grua.valor_locacao,
+      valorOperacao: grua.valor_operacao,
+      valorSinaleiro: grua.valor_sinaleiro,
+      valorManutencao: grua.valor_manutencao,
+      horasOperacao: grua.horas_operacao,
+      ultimaManutencao: grua.ultima_manutencao,
+      proximaManutencao: grua.proxima_manutencao
+    }))
+
     res.json({
       success: true,
-      data: data || [],
+      data: gruasEnriquecidas,
       pagination: {
         page,
         limit,
@@ -445,82 +470,10 @@ router.get('/export', async (req, res) => {
   try {
     const { status, tipo } = req.query
 
-    // Construir query com relacionamentos (sem paginação)
-    let query = supabase
+    // Construir query simples (sem relacionamentos por enquanto)
+    let query = supabaseAdmin
       .from('gruas')
-      .select(`
-        *,
-        grua_funcionarios:grua_funcionario(
-          id,
-          funcionario_id,
-          obra_id,
-          data_inicio,
-          data_fim,
-          status,
-          observacoes,
-          funcionario:funcionarios(
-            id,
-            nome,
-            cargo,
-            telefone,
-            email,
-            status
-          ),
-          obra:obras(
-            id,
-            nome,
-            status
-          )
-        ),
-        grua_equipamentos:grua_equipamento(
-          id,
-          equipamento_id,
-          obra_id,
-          data_inicio,
-          data_fim,
-          status,
-          observacoes,
-          equipamento:equipamentos_auxiliares(
-            id,
-            nome,
-            tipo,
-            capacidade,
-            status
-          ),
-          obra:obras(
-            id,
-            nome,
-            status
-          )
-        ),
-        grua_obras:grua_obra(
-          id,
-          obra_id,
-          data_inicio_locacao,
-          data_fim_locacao,
-          valor_locacao_mensal,
-          status,
-          observacoes,
-          obra:obras(
-            id,
-            nome,
-            cliente_id,
-            status,
-            tipo,
-            contato_obra,
-            telefone_obra,
-            email_obra,
-            cliente:clientes(
-              id,
-              nome,
-              cnpj,
-              email,
-              telefone,
-              contato
-            )
-          )
-        )
-      `, { count: 'exact' })
+      .select('*', { count: 'exact' })
 
     // Aplicar filtros
     if (status) {
@@ -542,9 +495,31 @@ router.get('/export', async (req, res) => {
       })
     }
 
+    // Enriquecer dados de cada grua (temporariamente simplificado para debug)
+    const gruasEnriquecidas = (data || []).map(grua => ({
+      ...grua,
+      // Campos calculados para compatibilidade com mocks
+      name: grua.name || `Grua ${grua.id}`,
+      model: grua.modelo, // modelo -> model para frontend
+      capacity: grua.capacidade, // capacidade -> capacity para frontend
+      currentObraId: null,
+      currentObraName: null,
+      
+      // Campos de compatibilidade com frontend
+      alturaTrabalho: grua.altura_trabalho,
+      capacidadePonta: grua.capacidade_ponta,
+      valorLocacao: grua.valor_locacao,
+      valorOperacao: grua.valor_operacao,
+      valorSinaleiro: grua.valor_sinaleiro,
+      valorManutencao: grua.valor_manutencao,
+      horasOperacao: grua.horas_operacao,
+      ultimaManutencao: grua.ultima_manutencao,
+      proximaManutencao: grua.proxima_manutencao
+    }))
+
     res.json({
       success: true,
-      data: data || [],
+      data: gruasEnriquecidas,
       total: count || 0
     })
   } catch (error) {
@@ -822,31 +797,33 @@ router.post('/', async (req, res) => {
       })
     }
 
-    // Preparar dados da grua (apenas campos que existem na tabela gruas)
+    // Preparar dados da grua (mapear campos do frontend para campos do banco)
     const gruaData = {
-      modelo: value.modelo,
-      fabricante: value.fabricante,
-      tipo: value.tipo,
-      capacidade: value.capacidade,
-      capacidade_ponta: value.capacidade_ponta,
-      lanca: value.lanca,
-      altura_trabalho: value.altura_trabalho,
-      ano: value.ano,
+      // Campos obrigatórios do frontend
+      name: value.name, // Nome da grua
+      modelo: value.model, // model -> modelo
+      fabricante: value.fabricante || 'Não informado',
+      tipo: value.tipo || 'Grua Torre',
+      capacidade: value.capacity, // capacity -> capacidade
+      capacidade_ponta: value.capacidade_ponta || value.capacity || 'Não informado', // garantir que não seja null
+      lanca: value.lanca || 'Não informado',
+      altura_trabalho: value.altura_trabalho || 'Não informado',
+      ano: value.ano || new Date().getFullYear(),
       status: value.status,
-      localizacao: value.localizacao,
-      horas_operacao: value.horas_operacao,
-      valor_locacao: value.valor_locacao,
-      valor_real: value.valor_real,
-      valor_operacao: value.valor_operacao,
-      valor_sinaleiro: value.valor_sinaleiro,
-      valor_manutencao: value.valor_manutencao,
-      ultima_manutencao: value.ultima_manutencao,
-      proxima_manutencao: value.proxima_manutencao,
+      localizacao: value.localizacao || 'Não informado',
+      horas_operacao: value.horas_operacao || 0,
+      valor_locacao: value.valor_locacao || null,
+      valor_real: value.valor_real || 0,
+      valor_operacao: value.valor_operacao || 0,
+      valor_sinaleiro: value.valor_sinaleiro || 0,
+      valor_manutencao: value.valor_manutencao || 0,
+      ultima_manutencao: value.ultima_manutencao || null,
+      proxima_manutencao: value.proxima_manutencao || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: insertError } = await supabase
+    const { data, error: insertError } = await supabaseAdmin
       .from('gruas')
       .insert(gruaData)
       .select()
@@ -931,30 +908,32 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Preparar dados da grua (apenas campos que existem na tabela gruas)
+    // Preparar dados da grua (mapear campos do frontend para campos do banco)
     const updateData = {
-      modelo: value.modelo,
-      fabricante: value.fabricante,
-      tipo: value.tipo,
-      capacidade: value.capacidade,
-      capacidade_ponta: value.capacidade_ponta,
-      lanca: value.lanca,
-      altura_trabalho: value.altura_trabalho,
-      ano: value.ano,
+      // Campos obrigatórios do frontend
+      name: value.name, // Nome da grua
+      modelo: value.model, // model -> modelo
+      fabricante: value.fabricante || 'Não informado',
+      tipo: value.tipo || 'Grua Torre',
+      capacidade: value.capacity, // capacity -> capacidade
+      capacidade_ponta: value.capacidade_ponta || value.capacity || 'Não informado', // garantir que não seja null
+      lanca: value.lanca || 'Não informado',
+      altura_trabalho: value.altura_trabalho || 'Não informado',
+      ano: value.ano || new Date().getFullYear(),
       status: value.status,
-      localizacao: value.localizacao,
-      horas_operacao: value.horas_operacao,
-      valor_locacao: value.valor_locacao,
-      valor_real: value.valor_real,
-      valor_operacao: value.valor_operacao,
-      valor_sinaleiro: value.valor_sinaleiro,
-      valor_manutencao: value.valor_manutencao,
-      ultima_manutencao: value.ultima_manutencao,
-      proxima_manutencao: value.proxima_manutencao,
+      localizacao: value.localizacao || 'Não informado',
+      horas_operacao: value.horas_operacao || 0,
+      valor_locacao: value.valor_locacao || null,
+      valor_real: value.valor_real || 0,
+      valor_operacao: value.valor_operacao || 0,
+      valor_sinaleiro: value.valor_sinaleiro || 0,
+      valor_manutencao: value.valor_manutencao || 0,
+      ultima_manutencao: value.ultima_manutencao || null,
+      proxima_manutencao: value.proxima_manutencao || null,
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: updateError } = await supabase
+    const { data, error: updateError } = await supabaseAdmin
       .from('gruas')
       .update(updateData)
       .eq('id', id)
@@ -1020,7 +999,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('gruas')
       .delete()
       .eq('id', id)
@@ -1125,34 +1104,46 @@ router.delete('/:id', async (req, res) => {
  *     GruaInput:
  *       type: object
  *       required:
- *         - modelo
- *         - fabricante
- *         - tipo
- *         - capacidade
- *         - capacidade_ponta
- *         - lanca
+ *         - name
+ *         - model
+ *         - capacity
+ *         - status
  *       properties:
- *         modelo:
+ *         name:
+ *           type: string
+ *           minLength: 2
+ *           description: Nome da grua (ex: "Grua 001")
+ *         model:
  *           type: string
  *           minLength: 2
  *           description: Modelo da grua
+ *         capacity:
+ *           type: string
+ *           description: Capacidade da grua
+ *         status:
+ *           type: string
+ *           enum: [disponivel, em_obra, manutencao, inativa]
+ *           default: disponivel
+ *           description: Status atual da grua
+ *         obraId:
+ *           type: string
+ *           description: ID da obra (opcional)
+ *         observacoes:
+ *           type: string
+ *           description: Observações sobre a grua (opcional)
  *         fabricante:
  *           type: string
- *           minLength: 2
- *           description: Fabricante da grua
+ *           description: Fabricante da grua (opcional)
  *         tipo:
  *           type: string
  *           enum: [Grua Torre, Grua Móvel, Guincho, Outros]
- *           description: Tipo da grua
- *         capacidade:
- *           type: string
- *           description: Capacidade máxima da grua
+ *           description: Tipo da grua (opcional)
  *         capacidade_ponta:
  *           type: string
- *           description: Capacidade na ponta da lança
+ *           description: Capacidade na ponta da lança (opcional)
  *         lanca:
  *           type: string
- *           description: Comprimento da lança
+ *           description: Comprimento da lança (opcional)
  *         altura_trabalho:
  *           type: string
  *           description: Altura máxima de trabalho
@@ -1163,7 +1154,7 @@ router.delete('/:id', async (req, res) => {
  *           description: Ano de fabricação
  *         status:
  *           type: string
- *           enum: [Disponível, Operacional, Manutenção, Vendida]
+ *           enum: [Disponível, Operacional, Manutenção, Vendida, disponivel, em_obra, manutencao, inativa]
  *           default: Disponível
  *           description: Status atual da grua
  *         localizacao:

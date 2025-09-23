@@ -40,6 +40,7 @@ import funcionariosRoutes from './routes/funcionarios.js'
 import equipamentosRoutes from './routes/equipamentos.js'
 import relacionamentosRoutes from './routes/relacionamentos.js'
 import gestaoGruasRoutes from './routes/gestao-gruas.js'
+import livroGruaRoutes from './routes/livro-grua.js'
 import relatoriosRoutes from './routes/relatorios.js'
 import funcionalidadesAvancadasRoutes from './routes/funcionalidades-avancadas.js'
 import arquivosRoutes from './routes/arquivos.js'
@@ -194,6 +195,7 @@ app.use('/api/funcionarios', funcionariosRoutes)
 app.use('/api/equipamentos', equipamentosRoutes)
 app.use('/api/relacionamentos', relacionamentosRoutes)
 app.use('/api/gestao-gruas', gestaoGruasRoutes)
+app.use('/api/livro-grua', livroGruaRoutes)
 app.use('/api/relatorios', relatoriosRoutes)
 app.use('/api/funcionalidades-avancadas', funcionalidadesAvancadasRoutes)
 app.use('/api/arquivos', arquivosRoutes)

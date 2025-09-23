@@ -1,484 +1,436 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
-  ConeIcon as Crane, 
-  ArrowLeft,
+  ArrowLeft, 
+  Wrench, 
+  BookOpen, 
   Plus, 
-  Search, 
-  Edit,
-  Eye,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  Wrench,
-  Building2,
-  Calendar,
-  User,
-  Bell,
-  BookOpen
+  Download, 
+  BarChart3,
+  AlertCircle,
+  Loader2
 } from "lucide-react"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import { mockGruas, mockObras, mockUsers, getHistoricoByGrua } from "@/lib/mock-data"
+import LivroGruaForm from "@/components/livro-grua-form"
+import LivroGruaList from "@/components/livro-grua-list"
+import { livroGruaApi, EntradaLivroGruaCompleta } from "@/lib/api-livro-grua"
+import { mockGruas } from "@/lib/mock-data"
 
 export default function LivroGruaPage() {
   const params = useParams()
+  const router = useRouter()
   const gruaId = params.id as string
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedStatus, setSelectedStatus] = useState("all")
-  const [selectedMonth, setSelectedMonth] = useState(new Date())
-  const [viewMode, setViewMode] = useState<'all' | 'month'>('all')
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
-  const grua = mockGruas.find(g => g.id === gruaId)
+  // Estados
+  const [grua, setGrua] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [estatisticas, setEstatisticas] = useState<any>(null)
   
-  if (!grua) {
+  // Estados dos modais
+  const [isNovaEntradaOpen, setIsNovaEntradaOpen] = useState(false)
+  const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
+  const [isVisualizarEntradaOpen, setIsVisualizarEntradaOpen] = useState(false)
+  const [entradaSelecionada, setEntradaSelecionada] = useState<EntradaLivroGruaCompleta | null>(null)
+
+  // Carregar dados da grua
+  const carregarGrua = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Verificar se há token de autenticação
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        throw new Error('Usuário não autenticado. Faça login para acessar esta página.')
+      }
+
+      // Buscar grua pela relação grua_obra
+      const { relacao, grua, obra } = await livroGruaApi.buscarGruaPorRelacao(parseInt(gruaId))
+      
+      if (grua) {
+        // Adicionar informações da obra à grua
+        const gruaCompleta = {
+          ...grua,
+          obraAtual: obra,
+          relacaoAtual: relacao
+        }
+        setGrua(gruaCompleta)
+      } else {
+        throw new Error('Grua não encontrada')
+      }
+
+    } catch (err) {
+      console.error('Erro ao carregar grua:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar grua'
+      setError(errorMessage)
+      
+      // Se for erro de autenticação, redirecionar para login
+      if (errorMessage.includes('autenticado') || errorMessage.includes('Token')) {
+        setTimeout(() => {
+          window.location.href = '/'
+        }, 2000)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Carregar estatísticas
+  const carregarEstatisticas = async () => {
+    try {
+      // Usar o grua_id da relação em vez do ID da relação
+      if (grua?.id) {
+        const response = await livroGruaApi.obterEstatisticas(grua.id)
+        setEstatisticas(response.data.estatisticas)
+      }
+    } catch (err) {
+      console.error('Erro ao carregar estatísticas:', err)
+    }
+  }
+
+  // Carregar dados na inicialização
+  useEffect(() => {
+    carregarGrua()
+  }, [gruaId])
+
+  // Carregar estatísticas quando a grua for carregada
+  useEffect(() => {
+    if (grua?.id) {
+      carregarEstatisticas()
+    }
+  }, [grua])
+
+  // Handlers
+  const handleNovaEntrada = () => {
+    setEntradaSelecionada(null)
+    setIsNovaEntradaOpen(true)
+  }
+
+  const handleEditarEntrada = (entrada: EntradaLivroGruaCompleta) => {
+    setEntradaSelecionada(entrada)
+    setIsEditarEntradaOpen(true)
+  }
+
+  const handleVisualizarEntrada = (entrada: EntradaLivroGruaCompleta) => {
+    setEntradaSelecionada(entrada)
+    setIsVisualizarEntradaOpen(true)
+  }
+
+  const handleExcluirEntrada = async (entrada: EntradaLivroGruaCompleta) => {
+    if (!entrada.id) return
+
+    if (confirm(`Tem certeza que deseja excluir esta entrada?`)) {
+      try {
+        await livroGruaApi.excluirEntrada(entrada.id)
+        // Recarregar lista
+        window.location.reload()
+      } catch (err) {
+        console.error('Erro ao excluir entrada:', err)
+        alert('Erro ao excluir entrada')
+      }
+    }
+  }
+
+  const handleSucessoEntrada = () => {
+    setIsNovaEntradaOpen(false)
+    setIsEditarEntradaOpen(false)
+    // Recarregar estatísticas
+    carregarEstatisticas()
+  }
+
+  const handleExportar = async () => {
+    try {
+      if (grua?.id) {
+        await livroGruaApi.baixarCSV(grua.id)
+      }
+    } catch (err) {
+      console.error('Erro ao exportar:', err)
+      alert('Erro ao exportar dados')
+    }
+  }
+
+  // Loading
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Grua não encontrada</h2>
-          <p className="text-gray-600">A grua solicitada não existe ou foi removida.</p>
+      <div className="space-y-6">
+        <div className="flex items-center justify-center p-8">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>Carregando livro da grua...</span>
+          </div>
         </div>
       </div>
     )
   }
 
-  const obra = mockObras.find(o => o.id === grua.currentObraId)
-  const historico = getHistoricoByGrua(gruaId)
-
-  // Obter histórico baseado nos filtros
-  const getFilteredHistorico = () => {
-    let filtered = historico
-
-    if (viewMode === 'month') {
-      filtered = historico.filter(entry => {
-        const entryDate = new Date(entry.data)
-        return entryDate.getMonth() === selectedMonth.getMonth() && 
-               entryDate.getFullYear() === selectedMonth.getFullYear()
-      })
-    }
-
-    return filtered
-      .filter(entry => {
-        const matchesSearch = (entry.observacoes || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             (entry.funcionarioName || '').toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesStatus = selectedStatus === "all" || entry.status === selectedStatus
-        return matchesSearch && matchesStatus
-      })
-      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  // Erro
+  if (error || !grua) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+            <h2 className="text-xl font-semibold text-red-700 mb-2">Erro ao carregar grua</h2>
+            <p className="text-red-600 mb-4">{error || 'Grua não encontrada'}</p>
+            <Button onClick={() => router.back()} variant="outline">
+              Voltar
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
-
-  const filteredHistorico = getFilteredHistorico()
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ok': return 'bg-green-100 text-green-800'
-      case 'falha': return 'bg-red-100 text-red-800'
-      case 'manutencao': return 'bg-yellow-100 text-yellow-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'ok': return <CheckCircle className="w-4 h-4" />
-      case 'falha': return <AlertTriangle className="w-4 h-4" />
-      case 'manutencao': return <Wrench className="w-4 h-4" />
-      default: return <Clock className="w-4 h-4" />
-    }
-  }
-
-  const getTipoColor = (tipo: string) => {
-    switch (tipo) {
-      case 'checklist': return 'bg-blue-100 text-blue-800'
-      case 'manutencao': return 'bg-yellow-100 text-yellow-800'
-      case 'falha': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const stats = [
-    { 
-      title: "Total de Entradas", 
-      value: historico.length, 
-      icon: BookOpen, 
-      color: "bg-blue-500" 
-    },
-    { 
-      title: "Status OK", 
-      value: historico.filter(e => e.status === 'ok').length, 
-      icon: CheckCircle, 
-      color: "bg-green-500" 
-    },
-    { 
-      title: "Falhas Registradas", 
-      value: historico.filter(e => e.status === 'falha').length, 
-      icon: AlertTriangle, 
-      color: "bg-red-500" 
-    },
-    { 
-      title: "Manutenções", 
-      value: historico.filter(e => e.tipo === 'manutencao').length, 
-      icon: Wrench, 
-      color: "bg-yellow-500" 
-    },
-  ]
 
   return (
     <div className="space-y-6">
+      {/* Cabeçalho */}
       <div className="flex items-center gap-4">
         <Button 
           variant="outline" 
           size="sm"
-          onClick={() => window.history.back()}
+          onClick={() => router.back()}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Voltar
         </Button>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Livro da Grua</h1>
-          <p className="text-gray-600">{grua.name} - {grua.model} - {grua.capacity}</p>
-          {obra && (
-            <p className="text-sm text-blue-600">Obra: {obra.name}</p>
-          )}
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <BookOpen className="w-8 h-8" />
+            Livro da Grua
+          </h1>
+          <p className="text-gray-600">
+            {grua.name} - {grua.model} ({grua.capacity})
+          </p>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-full ${stat.color}`}>
-                  <stat.icon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="search">Buscar entradas</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  id="search"
-                  placeholder="Observações ou funcionário..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="status">Status</Label>
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="ok">OK</SelectItem>
-                  <SelectItem value="falha">Falha</SelectItem>
-                  <SelectItem value="manutencao">Manutenção</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Visualização</Label>
-              <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'all' | 'month')}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="all">Todas</TabsTrigger>
-                  <TabsTrigger value="month">Mensal</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-            <div className="flex items-end">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setSearchTerm("")
-                  setSelectedStatus("all")
-                }}
-                className="w-full"
-              >
-                Limpar Filtros
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Botão Nova Entrada */}
-      <div className="flex justify-end">
-        <Button 
-          className="flex items-center gap-2"
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          Nova Entrada
-        </Button>
-      </div>
-
-      {/* Lista de Histórico */}
+      {/* Informações da Grua */}
       <Card>
         <CardHeader>
-          <CardTitle>Histórico de Entradas ({filteredHistorico.length})</CardTitle>
-          <CardDescription>Registros de checklists e manutenções da grua</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="w-5 h-5" />
+            Informações da Grua
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Funcionário</TableHead>
-                <TableHead>Observações</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredHistorico.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">
-                        {format(new Date(entry.data), "dd/MM/yyyy", { locale: ptBR })}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(entry.status)}>
-                      {getStatusIcon(entry.status)}
-                      <span className="ml-1 capitalize">{entry.status}</span>
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getTipoColor(entry.tipo)}>
-                      {entry.tipo === 'checklist' && <Clock className="w-3 h-3 mr-1" />}
-                      {entry.tipo === 'manutencao' && <Wrench className="w-3 h-3 mr-1" />}
-                      {entry.tipo === 'falha' && <AlertTriangle className="w-3 h-3 mr-1" />}
-                      <span className="capitalize">{entry.tipo}</span>
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">{entry.funcionarioName}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-xs truncate">
-                      {entry.observacoes}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {entry.status === 'falha' && entry.notificacaoEnviada && (
-                        <Bell className="w-4 h-4 text-red-500" title="Notificação enviada" />
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = `/dashboard/gruas/${gruaId}/livro/${entry.id}`}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <p className="text-sm text-gray-600">Modelo</p>
+              <p className="font-medium">{grua.model}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Fabricante</p>
+              <p className="font-medium">{grua.manufacturer || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Capacidade</p>
+              <p className="font-medium">{grua.capacity}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Status</p>
+              <Badge className={
+                grua.status === 'disponivel' ? 'bg-green-100 text-green-800' :
+                grua.status === 'em_obra' ? 'bg-blue-100 text-blue-800' :
+                grua.status === 'manutencao' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-gray-100 text-gray-800'
+              }>
+                {grua.status}
+              </Badge>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Tipo</p>
+              <p className="font-medium">{grua.type || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Criada em</p>
+              <p className="font-medium">{new Date(grua.createdAt).toLocaleDateString('pt-BR')}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Dialog de Nova Entrada */}
-      {isCreateDialogOpen && (
-        <NovaEntradaDialog 
-          grua={grua}
-          isOpen={isCreateDialogOpen}
-          onClose={() => setIsCreateDialogOpen(false)}
-        />
+      {/* Estatísticas */}
+      {estatisticas && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              Estatísticas do Livro
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <p className="text-2xl font-bold text-blue-600">{estatisticas.total_entradas}</p>
+                <p className="text-sm text-gray-600">Total de Entradas</p>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <p className="text-2xl font-bold text-green-600">{estatisticas.entradas_ultimos_30_dias}</p>
+                <p className="text-sm text-gray-600">Últimos 30 dias</p>
+              </div>
+              <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                <p className="text-2xl font-bold text-yellow-600">
+                  {estatisticas.por_status?.falha || 0}
+                </p>
+                <p className="text-sm text-gray-600">Falhas</p>
+              </div>
+              <div className="text-center p-4 bg-purple-50 rounded-lg">
+                <p className="text-2xl font-bold text-purple-600">
+                  {estatisticas.por_tipo?.checklist || 0}
+                </p>
+                <p className="text-sm text-gray-600">Checklists</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
-    </div>
-  )
-}
 
-function NovaEntradaDialog({ grua, isOpen, onClose }: { grua: any; isOpen: boolean; onClose: () => void }) {
-  const [formData, setFormData] = useState({
-    data: new Date().toISOString().split('T')[0],
-    status: 'ok',
-    tipo: 'checklist',
-    observacoes: '',
-    funcionarioId: '4'
-  })
+      {/* Lista de Entradas */}
+        <LivroGruaList
+          gruaId={grua?.id || gruaId}
+          onNovaEntrada={handleNovaEntrada}
+          onEditarEntrada={handleEditarEntrada}
+          onVisualizarEntrada={handleVisualizarEntrada}
+          onExcluirEntrada={handleExcluirEntrada}
+        />
 
-  // Preencher automaticamente baseado na grua e obra
-  useEffect(() => {
-    if (grua) {
-      const obra = mockObras.find(o => o.id === grua.currentObraId)
-      const funcionario = mockUsers.find(u => u.obraId === grua.currentObraId)
-      
-      setFormData(prev => ({
-        ...prev,
-        funcionarioId: funcionario?.id || '4',
-        tipo: grua.status === 'em_obra' ? 'checklist' : 'manutencao'
-      }))
-    }
-  }, [grua])
+      {/* Modal Nova Entrada */}
+      <Dialog open={isNovaEntradaOpen} onOpenChange={setIsNovaEntradaOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nova Entrada no Livro da Grua</DialogTitle>
+          </DialogHeader>
+          <LivroGruaForm
+            gruaId={grua?.id || gruaId}
+            onSave={handleSucessoEntrada}
+            onCancel={() => setIsNovaEntradaOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log('Salvando entrada:', { ...formData, gruaId: grua.id })
-    onClose()
-  }
+      {/* Modal Editar Entrada */}
+      <Dialog open={isEditarEntradaOpen} onOpenChange={setIsEditarEntradaOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Entrada do Livro da Grua</DialogTitle>
+          </DialogHeader>
+          <LivroGruaForm
+            gruaId={grua?.id || gruaId}
+            modoEdicao={true}
+            entrada={entradaSelecionada}
+            onSave={handleSucessoEntrada}
+            onCancel={() => setIsEditarEntradaOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
-  const obra = mockObras.find(o => o.id === grua.currentObraId)
-  const funcionario = mockUsers.find(u => u.id === formData.funcionarioId)
+      {/* Modal Visualizar Entrada */}
+      <Dialog open={isVisualizarEntradaOpen} onOpenChange={setIsVisualizarEntradaOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Entrada</DialogTitle>
+          </DialogHeader>
+          {entradaSelecionada && (
+            <div className="space-y-6">
+              {/* Informações Básicas */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Informações Básicas</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Data e Hora</p>
+                      <p className="text-sm">
+                        {livroGruaApi.formatarDataHora(entradaSelecionada.data_entrada, entradaSelecionada.hora_entrada)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Grua</p>
+                      <p className="text-sm font-medium">
+                        {entradaSelecionada.grua_modelo || entradaSelecionada.grua_id}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Funcionário</p>
+                      <p className="text-sm">{entradaSelecionada.funcionario_nome || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Tipo</p>
+                      <Badge className={livroGruaApi.obterCorTipo(entradaSelecionada.tipo_entrada)}>
+                        {entradaSelecionada.tipo_entrada_display || entradaSelecionada.tipo_entrada}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Status</p>
+                      <Badge className={livroGruaApi.obterCorStatus(entradaSelecionada.status_entrada)}>
+                        {entradaSelecionada.status_entrada}
+                      </Badge>
+                    </div>
+                    {entradaSelecionada.responsavel_resolucao && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Responsável pela Resolução</p>
+                        <p className="text-sm">{entradaSelecionada.responsavel_resolucao}</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-  if (!isOpen) return null
+              {/* Descrição */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Descrição</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {entradaSelecionada.descricao}
+                  </p>
+                </CardContent>
+              </Card>
 
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Nova Entrada no Livro da Grua</h2>
-              <Button variant="outline" size="sm" onClick={onClose}>
-                ✕
-              </Button>
-            </div>
-            
-            {/* Informações da Grua */}
-            <div className="bg-blue-50 p-4 rounded-lg mb-6">
-              <h3 className="font-medium text-blue-900">{grua.name}</h3>
-              <p className="text-sm text-blue-700">{grua.model} - {grua.capacity}</p>
-              {obra && (
-                <p className="text-sm text-blue-600">Obra: {obra.name}</p>
+              {/* Observações */}
+              {entradaSelecionada.observacoes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Observações</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {entradaSelecionada.observacoes}
+                    </p>
+                  </CardContent>
+                </Card>
               )}
+
+              {/* Ações */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsVisualizarEntradaOpen(false)}
+                >
+                  Fechar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIsVisualizarEntradaOpen(false)
+                    handleEditarEntrada(entradaSelecionada)
+                  }}
+                >
+                  Editar
+                </Button>
+              </div>
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="data">Data *</Label>
-                  <Input
-                    id="data"
-                    type="date"
-                    value={formData.data}
-                    onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="tipo">Tipo *</Label>
-                  <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="checklist">Checklist Diário</SelectItem>
-                      <SelectItem value="manutencao">Manutenção</SelectItem>
-                      <SelectItem value="falha">Falha</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="status">Status *</Label>
-                  <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ok">OK</SelectItem>
-                      <SelectItem value="falha">Falha</SelectItem>
-                      <SelectItem value="manutencao">Manutenção</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="responsavel">Responsável *</Label>
-                  <Select value={formData.funcionarioId} onValueChange={(value) => setFormData({ ...formData, funcionarioId: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockUsers.filter(user => user.obraId === grua.currentObraId || user.role === 'admin').map(user => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="observacoes">Observações *</Label>
-                <Textarea
-                  id="observacoes"
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                  rows={4}
-                  placeholder="Descreva as observações da inspeção ou manutenção..."
-                  required
-                />
-              </div>
-
-              {/* Resumo dos dados preenchidos */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-medium text-sm mb-2">Resumo da Entrada:</h4>
-                <div className="text-sm text-gray-600 space-y-1">
-                  <p><strong>Grua:</strong> {grua.name} - {grua.model}</p>
-                  <p><strong>Obra:</strong> {obra?.name || 'Nenhuma obra vinculada'}</p>
-                  <p><strong>Data:</strong> {new Date(formData.data).toLocaleDateString('pt-BR')}</p>
-                  <p><strong>Tipo:</strong> {formData.tipo}</p>
-                  <p><strong>Status:</strong> {formData.status}</p>
-                  <p><strong>Responsável:</strong> {funcionario?.name}</p>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={onClose}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  Registrar Entrada
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

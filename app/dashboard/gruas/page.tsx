@@ -25,7 +25,8 @@ import {
   Calendar,
   Trash2
 } from "lucide-react"
-import { mockGruas, mockObras, mockUsers } from "@/lib/mock-data"
+import { mockObras, mockUsers } from "@/lib/mock-data"
+import { gruasApi, converterGruaBackendParaFrontend, converterGruaFrontendParaBackend, GruaBackend } from "@/lib/api-gruas"
 
 export default function GruasPage() {
   const searchParams = useSearchParams()
@@ -34,8 +35,10 @@ export default function GruasPage() {
   const [selectedObra, setSelectedObra] = useState("all")
   const [selectedGrua, setSelectedGrua] = useState<any>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [gruaToDelete, setGruaToDelete] = useState<any>(null)
+  const [gruaToEdit, setGruaToEdit] = useState<any>(null)
   const [gruaFormData, setGruaFormData] = useState({
     name: '',
     model: '',
@@ -44,6 +47,49 @@ export default function GruasPage() {
     obraId: '',
     observacoes: ''
   })
+  
+  // Estados para API
+  const [gruas, setGruas] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [updating, setUpdating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // Função para carregar gruas da API
+  const carregarGruas = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const params: any = {
+        limit: 100 // Carregar todas as gruas
+      }
+      
+      if (selectedStatus !== "all") {
+        params.status = selectedStatus
+      }
+      
+        const response = await gruasApi.listarGruas(params)
+        
+        if (response.success) {
+          const gruasConvertidas = response.data.map(converterGruaBackendParaFrontend)
+          setGruas(gruasConvertidas)
+        } else {
+          setError('Erro ao carregar gruas')
+        }
+    } catch (err) {
+      console.error('Erro ao carregar gruas:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao carregar gruas')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Carregar gruas quando o componente montar ou filtros mudarem
+  useEffect(() => {
+    carregarGruas()
+  }, [selectedStatus])
 
   // Aplicar filtros da URL
   useEffect(() => {
@@ -54,7 +100,7 @@ export default function GruasPage() {
     }
   }, [searchParams])
 
-  const filteredGruas = mockGruas.filter(grua => {
+  const filteredGruas = gruas.filter(grua => {
     const matchesSearch = (grua.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (grua.model || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = selectedStatus === "all" || grua.status === selectedStatus
@@ -87,12 +133,25 @@ export default function GruasPage() {
     setSelectedGrua(grua)
   }
 
+  const handleEditGrua = (grua: any) => {
+    setGruaToEdit(grua)
+    setGruaFormData({
+      name: grua.name || '',
+      model: grua.model || '',
+      capacity: grua.capacity || '',
+      status: grua.status || 'disponivel',
+      obraId: grua.currentObraId || '',
+      observacoes: grua.observacoes || ''
+    })
+    setIsEditDialogOpen(true)
+  }
+
   const handleDeleteGrua = (grua: any) => {
     setGruaToDelete(grua)
     setIsDeleteDialogOpen(true)
   }
 
-  const confirmDeleteGrua = () => {
+  const confirmDeleteGrua = async () => {
     if (!gruaToDelete) return
 
     // Verificar se a grua está em obra
@@ -102,74 +161,129 @@ export default function GruasPage() {
       return
     }
 
-    // Simular exclusão da grua
-    console.log('Grua excluída:', gruaToDelete)
-    
-    setIsDeleteDialogOpen(false)
-    setGruaToDelete(null)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert(`Grua "${gruaToDelete.name}" excluída com sucesso!`)
+    try {
+      setDeleting(true)
+      
+      const response = await gruasApi.excluirGrua(gruaToDelete.id)
+      
+      if (response.success) {
+        // Recarregar a lista de gruas
+        await carregarGruas()
+        setIsDeleteDialogOpen(false)
+        setGruaToDelete(null)
+        alert(`Grua "${gruaToDelete.name}" excluída com sucesso!`)
+      } else {
+        alert('Erro ao excluir grua')
+      }
+    } catch (err) {
+      console.error('Erro ao excluir grua:', err)
+      alert(err instanceof Error ? err.message : 'Erro ao excluir grua')
+    } finally {
+      setDeleting(false)
+    }
   }
 
-  const handleCreateGrua = (e: React.FormEvent) => {
+  const handleCreateGrua = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Simular criação da grua
-    const newGrua = {
-      id: (mockGruas.length + 1).toString(),
-      name: gruaFormData.name,
-      model: gruaFormData.model,
-      capacity: gruaFormData.capacity,
-      status: gruaFormData.status as 'disponivel' | 'em_obra' | 'manutencao' | 'inativa',
-      currentObraId: gruaFormData.obraId || null,
-      currentObraName: gruaFormData.obraId ? mockObras.find(o => o.id === gruaFormData.obraId)?.name : null,
-      responsavelId: null,
-      responsavelName: null,
-      createdAt: new Date().toISOString(),
-      historico: []
+    try {
+      setCreating(true)
+      
+      // Converter dados do frontend para o formato do backend
+      const gruaData = converterGruaFrontendParaBackend(gruaFormData)
+      
+      const response = await gruasApi.criarGrua(gruaData)
+      
+      if (response.success) {
+        // Recarregar a lista de gruas
+        await carregarGruas()
+        
+        // Resetar formulário e fechar dialog
+        setGruaFormData({
+          name: '',
+          model: '',
+          capacity: '',
+          status: 'disponivel',
+          obraId: '',
+          observacoes: ''
+        })
+        setIsCreateDialogOpen(false)
+        
+        alert('Grua criada com sucesso!')
+      } else {
+        alert('Erro ao criar grua')
+      }
+    } catch (err) {
+      console.error('Erro ao criar grua:', err)
+      alert(err instanceof Error ? err.message : 'Erro ao criar grua')
+    } finally {
+      setCreating(false)
     }
+  }
 
-    // Em uma aplicação real, isso seria uma chamada para a API
-    console.log('Nova grua criada:', newGrua)
+  const handleUpdateGrua = async (e: React.FormEvent) => {
+    e.preventDefault()
     
-    // Resetar formulário e fechar dialog
-    setGruaFormData({
-      name: '',
-      model: '',
-      capacity: '',
-      status: 'disponivel',
-      obraId: '',
-      observacoes: ''
-    })
-    setIsCreateDialogOpen(false)
+    if (!gruaToEdit) return
     
-    // Mostrar mensagem de sucesso (simulado)
-    alert('Grua criada com sucesso!')
+    try {
+      setUpdating(true)
+      
+      // Converter dados do frontend para o formato do backend
+      const gruaData = converterGruaFrontendParaBackend(gruaFormData)
+      
+      const response = await gruasApi.atualizarGrua(gruaToEdit.id, gruaData)
+      
+      if (response.success) {
+        // Recarregar a lista de gruas
+        await carregarGruas()
+        
+        // Resetar formulário e fechar dialog
+        setGruaFormData({
+          name: '',
+          model: '',
+          capacity: '',
+          status: 'disponivel',
+          obraId: '',
+          observacoes: ''
+        })
+        setIsEditDialogOpen(false)
+        setGruaToEdit(null)
+        
+        alert('Grua atualizada com sucesso!')
+      } else {
+        alert('Erro ao atualizar grua')
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar grua:', err)
+      alert(err instanceof Error ? err.message : 'Erro ao atualizar grua')
+    } finally {
+      setUpdating(false)
+    }
   }
 
   const stats = [
     { 
       title: "Total de Gruas", 
-      value: mockGruas.length, 
+      value: gruas.length, 
       icon: Crane, 
       color: "bg-blue-500" 
     },
     { 
       title: "Em Obra", 
-      value: mockGruas.filter(g => g.status === 'em_obra').length, 
+      value: gruas.filter(g => g.status === 'em_obra').length, 
       icon: Building2, 
       color: "bg-green-500" 
     },
     { 
       title: "Em Manutenção", 
-      value: mockGruas.filter(g => g.status === 'manutencao').length, 
+      value: gruas.filter(g => g.status === 'manutencao').length, 
       icon: Wrench, 
       color: "bg-yellow-500" 
     },
     { 
       title: "Disponíveis", 
-      value: mockGruas.filter(g => g.status === 'disponivel').length, 
+      value: gruas.filter(g => g.status === 'disponivel').length, 
       icon: CheckCircle, 
       color: "bg-purple-500" 
     },
@@ -275,9 +389,40 @@ export default function GruasPage() {
         </CardContent>
       </Card>
 
+      {/* Estados de Loading e Error */}
+      {loading && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-2">Carregando gruas...</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center text-red-600">
+              <span>❌ {error}</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={carregarGruas}
+                className="ml-4"
+              >
+                Tentar Novamente
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lista de Gruas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredGruas.map((grua) => {
+      {!loading && !error && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredGruas.map((grua) => {
           const obra = mockObras.find(o => o.id === grua.currentObraId)
           
           return (
@@ -325,7 +470,7 @@ export default function GruasPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleViewDetails(grua)}
+                      onClick={() => handleEditGrua(grua)}
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
@@ -343,7 +488,8 @@ export default function GruasPage() {
             </Card>
           )
         })}
-      </div>
+        </div>
+      )}
 
       {/* Dialog de Criação de Grua */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -443,11 +589,147 @@ export default function GruasPage() {
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsCreateDialogOpen(false)}
+                disabled={creating}
+              >
                 Cancelar
               </Button>
-              <Button type="submit">
-                Criar Grua
+              <Button type="submit" disabled={creating}>
+                {creating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Criando...
+                  </>
+                ) : (
+                  'Criar Grua'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Edição de Grua */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5" />
+              Editar Grua
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateGrua} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-name">Nome da Grua *</Label>
+                <Input
+                  id="edit-name"
+                  value={gruaFormData.name}
+                  onChange={(e) => setGruaFormData({ ...gruaFormData, name: e.target.value })}
+                  placeholder="Ex: Grua 001"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-model">Modelo *</Label>
+                <Input
+                  id="edit-model"
+                  value={gruaFormData.model}
+                  onChange={(e) => setGruaFormData({ ...gruaFormData, model: e.target.value })}
+                  placeholder="Ex: Liebherr 200HC"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-capacity">Capacidade *</Label>
+                <Input
+                  id="edit-capacity"
+                  value={gruaFormData.capacity}
+                  onChange={(e) => setGruaFormData({ ...gruaFormData, capacity: e.target.value })}
+                  placeholder="Ex: 200 ton"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-status">Status *</Label>
+                <Select
+                  value={gruaFormData.status}
+                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="disponivel">Disponível</SelectItem>
+                    <SelectItem value="em_obra">Em Obra</SelectItem>
+                    <SelectItem value="manutencao">Manutenção</SelectItem>
+                    <SelectItem value="inativa">Inativa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-obraId">Obra (Opcional)</Label>
+              <Select
+                value={gruaFormData.obraId || "none"}
+                onValueChange={(value) => setGruaFormData({ ...gruaFormData, obraId: value === "none" ? "" : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma obra (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma obra</SelectItem>
+                  {mockObras.map(obra => (
+                    <SelectItem key={obra.id} value={obra.id}>
+                      {obra.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">
+                Uma grua pode ser editada sem estar atrelada a uma obra
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-observacoes">Observações</Label>
+              <Textarea
+                id="edit-observacoes"
+                value={gruaFormData.observacoes}
+                onChange={(e) => setGruaFormData({ ...gruaFormData, observacoes: e.target.value })}
+                placeholder="Observações sobre a grua..."
+                rows={3}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setIsEditDialogOpen(false)
+                  setGruaToEdit(null)
+                }}
+                disabled={updating}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={updating}>
+                {updating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Atualizando...
+                  </>
+                ) : (
+                  'Atualizar Grua'
+                )}
               </Button>
             </div>
           </form>
@@ -486,10 +768,19 @@ export default function GruasPage() {
             <Button 
               variant="destructive" 
               onClick={confirmDeleteGrua}
-              disabled={gruaToDelete?.status === 'em_obra'}
+              disabled={gruaToDelete?.status === 'em_obra' || deleting}
             >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Excluir
+              {deleting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Excluir
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
