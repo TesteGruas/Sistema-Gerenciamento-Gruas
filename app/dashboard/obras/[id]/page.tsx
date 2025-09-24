@@ -42,6 +42,10 @@ import {
   Paperclip
 } from "lucide-react"
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis, criarCustosParaNovoMes, CustoMensal, Obra } from "@/lib/mock-data"
+import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalCreate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
+import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
+import LivroGruaForm from "@/components/livro-grua-form"
+import LivroGruaList from "@/components/livro-grua-list"
 import { Progress } from "@/components/ui/progress"
 import { useParams } from "next/navigation"
 import { obrasApi, converterObraBackendParaFrontend, ObraBackend, ensureAuthenticated } from "@/lib/api-obras"
@@ -58,6 +62,10 @@ export default function ObraDetailsPage() {
   const [gruasReais, setGruasReais] = useState<any[]>([])
   const [loadingGruas, setLoadingGruas] = useState(false)
   
+  // Estados para livro da grua
+  const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
+  const [entradaSelecionada, setEntradaSelecionada] = useState<EntradaLivroGruaCompleta | null>(null)
+  
   // Estados para filtros e nova entrada
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedGrua, setSelectedGrua] = useState("all")
@@ -65,7 +73,6 @@ export default function ObraDetailsPage() {
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [isNovaEntradaOpen, setIsNovaEntradaOpen] = useState(false)
   const [isVisualizarEntradaOpen, setIsVisualizarEntradaOpen] = useState(false)
-  const [entradaSelecionada, setEntradaSelecionada] = useState<any>(null)
   const [isNovoArquivoOpen, setIsNovoArquivoOpen] = useState(false)
   const [arquivosAdicionais, setArquivosAdicionais] = useState<any[]>([])
   const [novoArquivoData, setNovoArquivoData] = useState({
@@ -92,12 +99,41 @@ export default function ObraDetailsPage() {
   
   // Estados para custos mensais
   const [mesSelecionado, setMesSelecionado] = useState('')
-  const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
+  const [custosMensais, setCustosMensais] = useState<CustoMensalApi[]>([])
+  const [todosCustosMensais, setTodosCustosMensais] = useState<CustoMensalApi[]>([]) // Para armazenar todos os custos
+  const [custosMensaisLoading, setCustosMensaisLoading] = useState(false)
+  const [custosMensaisError, setCustosMensaisError] = useState<string | null>(null)
   const [isNovoMesOpen, setIsNovoMesOpen] = useState(false)
   const [novoMesData, setNovoMesData] = useState({
     mes: ''
   })
   const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([])
+  const [isNovoCustoOpen, setIsNovoCustoOpen] = useState(false)
+  const [isEditandoCusto, setIsEditandoCusto] = useState(false)
+  const [custoSelecionado, setCustoSelecionado] = useState<CustoMensalApi | null>(null)
+  const [novoCustoData, setNovoCustoData] = useState({
+    item: '',
+    descricao: '',
+    unidade: 'mês',
+    quantidade_orcamento: 0,
+    valor_unitario: 0,
+    quantidade_realizada: 0,
+    quantidade_acumulada: 0,
+    valor_acumulado: 0,
+    tipo: 'contrato' as 'contrato' | 'aditivo'
+  })
+  const [isCustosIniciaisOpen, setIsCustosIniciaisOpen] = useState(false)
+  const [custosIniciaisData, setCustosIniciaisData] = useState({
+    mes: '',
+    custos: [{
+      item: '',
+      descricao: '',
+      unidade: 'mês',
+      quantidade_orcamento: 0,
+      valor_unitario: 0,
+      tipo: 'contrato' as 'contrato' | 'aditivo'
+    }]
+  })
   const [novaEntradaData, setNovaEntradaData] = useState({
     gruaId: '',
     funcionarioId: '',
@@ -111,42 +147,10 @@ export default function ObraDetailsPage() {
   
   // Estas variáveis serão definidas dentro do return principal
   
-  // Função para criar nova entrada
-  const handleNovaEntrada = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!obra) return
-    
-    const novaEntrada = {
-      id: Date.now().toString(),
-      gruaId: novaEntradaData.gruaId,
-      data: novaEntradaData.data,
-      status: novaEntradaData.status as 'ok' | 'falha' | 'manutencao',
-      observacoes: novaEntradaData.descricao,
-      funcionarioId: novaEntradaData.funcionarioId,
-      funcionarioName: mockUsers.find(u => u.id === novaEntradaData.funcionarioId)?.name || 'Funcionário não encontrado',
-      tipo: novaEntradaData.tipo as 'checklist' | 'manutencao' | 'falha',
-      notificacaoEnviada: false
-    }
-    
-    // Em uma aplicação real, isso seria uma chamada para a API
-    console.log('Nova entrada criada:', novaEntrada)
-    
-    // Resetar formulário e fechar dialog
-    setNovaEntradaData({
-      gruaId: '',
-      funcionarioId: '',
-      data: new Date().toISOString().split('T')[0],
-      tipo: 'checklist',
-      status: 'ok',
-      descricao: '',
-      responsavelResolucao: '',
-      observacoes: ''
-    })
-    setIsNovaEntradaOpen(false)
-    
-    // Mostrar mensagem de sucesso (simulado)
-    alert('Entrada adicionada com sucesso!')
+  // Função para abrir modal de nova entrada
+  const handleNovaEntrada = () => {
+    setEntradaSelecionada(null)
+    setIsNovaEntradaOpen(true)
   }
 
   const handleVisualizarEntrada = (entrada: any) => {
@@ -154,34 +158,20 @@ export default function ObraDetailsPage() {
     setIsVisualizarEntradaOpen(true)
   }
 
-  const handleExportarEntradas = () => {
-    if (!obra) return
+  const handleExportarEntradas = async () => {
+    if (!gruasReais.length) return
     
-    // Simular exportação para CSV
-    const csvContent = [
-      ['Data', 'Hora', 'Grua', 'Funcionário', 'Tipo', 'Status', 'Descrição', 'Responsável Resolução', 'Observações'],
-      ...filteredEntradas.map(entrada => [
-        new Date(entrada.data).toLocaleDateString('pt-BR'),
-        new Date(entrada.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        entrada.gruaName,
-        entrada.funcionarioName,
-        entrada.tipo,
-        entrada.status,
-        entrada.descricao,
-        entrada.responsavelResolucao || '-',
-        entrada.observacoes || '-'
-      ])
-    ].map(row => row.map(field => `"${field}"`).join(',')).join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `livro-grua-${obra.name}-${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    try {
+      // Exportar para cada grua vinculada
+      for (const grua of gruasReais) {
+        await livroGruaApi.baixarCSV(grua.id.toString())
+      }
+      
+      alert('Arquivos CSV baixados com sucesso!')
+    } catch (error: any) {
+      console.error('Erro ao exportar entradas:', error)
+      alert('Erro ao exportar entradas')
+    }
   }
 
   const handleImprimirEntradas = () => {
@@ -327,7 +317,27 @@ export default function ObraDetailsPage() {
     return mesesDisponiveis
   }
 
-  const handleNovoMes = (e: React.FormEvent) => {
+  // Função para extrair meses dos dados reais da API
+  const getMesesDisponiveisDaAPI = () => {
+    if (!todosCustosMensais || todosCustosMensais.length === 0) return []
+    
+    const meses = [...new Set(todosCustosMensais.map(custo => custo.mes))]
+    return meses.sort()
+  }
+
+  // Função para filtrar custos por mês sem nova chamada à API
+  const filtrarCustosPorMes = (mes: string) => {
+    if (!todosCustosMensais || todosCustosMensais.length === 0) return
+
+    if (mes === 'todos' || !mes) {
+      setCustosMensais(todosCustosMensais)
+    } else {
+      const custosFiltrados = todosCustosMensais.filter(custo => custo.mes === mes)
+      setCustosMensais(custosFiltrados)
+    }
+  }
+
+  const handleNovoMes = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!obra) return
@@ -336,61 +346,314 @@ export default function ObraDetailsPage() {
       return
     }
     
-    const novosCustos = criarCustosParaNovoMes(obra.id, novoMesData.mes)
-    
-    if (novosCustos.length === 0) {
-      alert('Não há custos anteriores para replicar. Crie primeiro os custos iniciais da obra.')
-      return
-    }
-    
-    setCustosMensais([...custosMensais, ...novosCustos])
-    setMesSelecionado(novoMesData.mes)
-    setNovoMesData({ mes: '' })
-    setIsNovoMesOpen(false)
-    alert(`Custos criados para ${novoMesData.mes} com sucesso!`)
-  }
-
-  const handleAbrirNovoMes = () => {
-    const meses = gerarMesesDisponiveis()
-    setMesesDisponiveis(meses)
-    setIsNovoMesOpen(true)
-  }
-
-  const handleAtualizarQuantidade = (custoId: string, novaQuantidade: number) => {
-    const custosAtualizados = custosMensais.map(custo => {
-      if (custo.id === custoId) {
-        const novoValorRealizado = novaQuantidade * custo.valorUnitario
-        const novaQuantidadeAcumulada = custo.quantidadeAcumulada - custo.quantidadeRealizada + novaQuantidade
-        const novoValorAcumulado = custo.valorAcumulado - custo.valorRealizado + novoValorRealizado
-        const novaQuantidadeSaldo = custo.quantidadeOrcamento - novaQuantidadeAcumulada
-        const novoValorSaldo = custo.totalOrcamento - novoValorAcumulado
-        
-        return {
-          ...custo,
-          quantidadeRealizada: novaQuantidade,
-          valorRealizado: novoValorRealizado,
-          quantidadeAcumulada: novaQuantidadeAcumulada,
-          valorAcumulado: novoValorAcumulado,
-          quantidadeSaldo: novaQuantidadeSaldo,
-          valorSaldo: novoValorSaldo,
-          updatedAt: new Date().toISOString()
-        }
+    try {
+      // Buscar o último mês com custos para replicar
+      const mesesExistentes = await custosMensaisApi.obterMesesDisponiveis(parseInt(obra.id))
+      if (mesesExistentes.length === 0) {
+        alert('Não há custos anteriores para replicar. Crie primeiro os custos iniciais da obra.')
+        return
       }
-      return custo
-    })
-    
-    setCustosMensais(custosAtualizados)
+      
+      const ultimoMes = mesesExistentes[mesesExistentes.length - 1]
+      
+      await custosMensaisApi.replicar({
+        obra_id: parseInt(obra.id),
+        mes_origem: ultimoMes,
+        mes_destino: novoMesData.mes
+      })
+      
+      await carregarCustosMensais()
+      setMesSelecionado(novoMesData.mes)
+      setNovoMesData({ mes: '' })
+      setIsNovoMesOpen(false)
+      alert(`Custos criados para ${formatarMes(novoMesData.mes)} com sucesso!`)
+    } catch (error: any) {
+      console.error('Erro ao criar novo mês:', error)
+      alert(`Erro ao criar novo mês: ${error.message}`)
+    }
   }
 
-  const carregarCustosMensais = () => {
+  const handleAbrirNovoMes = async () => {
     if (!obra) return
     
-    if (mesSelecionado && mesSelecionado !== 'todos') {
-      const custos = getCustosMensaisByObraAndMes(obra.id, mesSelecionado)
-      setCustosMensais(custos)
-    } else {
+    try {
+      const mesesExistentes = await custosMensaisApi.obterMesesDisponiveis(parseInt(obra.id))
+      const meses = custosMensaisApi.gerarProximosMeses(mesesExistentes)
+      setMesesDisponiveis(meses)
+      setIsNovoMesOpen(true)
+    } catch (error: any) {
+      console.error('Erro ao obter meses disponíveis:', error)
+      // Fallback para função mockada
+      const meses = gerarMesesDisponiveis()
+      setMesesDisponiveis(meses)
+      setIsNovoMesOpen(true)
+    }
+  }
+
+  const handleAtualizarQuantidade = async (custoId: number, novaQuantidade: number) => {
+    try {
+      await custosMensaisApi.atualizarQuantidadeRealizada(custoId, novaQuantidade)
+      await carregarCustosMensais() // Recarregar dados
+    } catch (error: any) {
+      console.error('Erro ao atualizar quantidade:', error)
+      alert(`Erro ao atualizar quantidade: ${error.message}`)
+    }
+  }
+
+  const handleNovoCusto = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!obra) return
+
+    try {
+      const dadosCusto: CustoMensalCreate = {
+        obra_id: parseInt(obra.id),
+        item: novoCustoData.item,
+        descricao: novoCustoData.descricao,
+        unidade: novoCustoData.unidade,
+        quantidade_orcamento: novoCustoData.quantidade_orcamento,
+        valor_unitario: novoCustoData.valor_unitario,
+        mes: mesSelecionado || new Date().toISOString().slice(0, 7),
+        quantidade_realizada: novoCustoData.quantidade_realizada,
+        quantidade_acumulada: novoCustoData.quantidade_acumulada,
+        valor_acumulado: novoCustoData.valor_acumulado,
+        tipo: novoCustoData.tipo
+      }
+
+      await custosMensaisApi.criar(dadosCusto)
+      await carregarCustosMensais()
+      
+      // Resetar formulário
+      setNovoCustoData({
+        item: '',
+        descricao: '',
+        unidade: 'mês',
+        quantidade_orcamento: 0,
+        valor_unitario: 0,
+        quantidade_realizada: 0,
+        quantidade_acumulada: 0,
+        valor_acumulado: 0,
+        tipo: 'contrato'
+      })
+      setIsNovoCustoOpen(false)
+      alert('Custo criado com sucesso!')
+    } catch (error: any) {
+      console.error('Erro ao criar custo:', error)
+      alert(`Erro ao criar custo: ${error.message}`)
+    }
+  }
+
+  const handleEditarCusto = (custo: CustoMensalApi) => {
+    setCustoSelecionado(custo)
+    setNovoCustoData({
+      item: custo.item,
+      descricao: custo.descricao,
+      unidade: custo.unidade,
+      quantidade_orcamento: custo.quantidade_orcamento,
+      valor_unitario: custo.valor_unitario,
+      quantidade_realizada: custo.quantidade_realizada,
+      quantidade_acumulada: custo.quantidade_acumulada,
+      valor_acumulado: custo.valor_acumulado,
+      tipo: custo.tipo
+    })
+    setIsEditandoCusto(true)
+    setIsNovoCustoOpen(true)
+  }
+
+  const handleAtualizarCusto = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!custoSelecionado) return
+
+    try {
+      await custosMensaisApi.atualizar(custoSelecionado.id, novoCustoData)
+      await carregarCustosMensais()
+      
+      // Resetar formulário
+      setCustoSelecionado(null)
+      setNovoCustoData({
+        item: '',
+        descricao: '',
+        unidade: 'mês',
+        quantidade_orcamento: 0,
+        valor_unitario: 0,
+        quantidade_realizada: 0,
+        quantidade_acumulada: 0,
+        valor_acumulado: 0,
+        tipo: 'contrato'
+      })
+      setIsEditandoCusto(false)
+      setIsNovoCustoOpen(false)
+      alert('Custo atualizado com sucesso!')
+    } catch (error: any) {
+      console.error('Erro ao atualizar custo:', error)
+      alert(`Erro ao atualizar custo: ${error.message}`)
+    }
+  }
+
+  const handleExcluirCusto = async (custoId: number) => {
+    if (!confirm('Tem certeza que deseja excluir este custo?')) return
+
+    try {
+      await custosMensaisApi.excluir(custoId)
+      await carregarCustosMensais()
+      alert('Custo excluído com sucesso!')
+    } catch (error: any) {
+      console.error('Erro ao excluir custo:', error)
+      alert(`Erro ao excluir custo: ${error.message}`)
+    }
+  }
+
+  // Funções para custos iniciais
+  const handleAbrirCustosIniciais = () => {
+    const mesAtual = new Date().toISOString().slice(0, 7) // YYYY-MM
+    setCustosIniciaisData({
+      mes: mesAtual,
+      custos: [{
+        item: '',
+        descricao: '',
+        unidade: 'mês',
+        quantidade_orcamento: 0,
+        valor_unitario: 0,
+        tipo: 'contrato'
+      }]
+    })
+    setIsCustosIniciaisOpen(true)
+  }
+
+  const handleAdicionarCustoInicial = () => {
+    setCustosIniciaisData(prev => ({
+      ...prev,
+      custos: [...prev.custos, {
+        item: '',
+        descricao: '',
+        unidade: 'mês',
+        quantidade_orcamento: 0,
+        valor_unitario: 0,
+        tipo: 'contrato'
+      }]
+    }))
+  }
+
+  const handleRemoverCustoInicial = (index: number) => {
+    if (custosIniciaisData.custos.length > 1) {
+      setCustosIniciaisData(prev => ({
+        ...prev,
+        custos: prev.custos.filter((_, i) => i !== index)
+      }))
+    }
+  }
+
+  const handleAtualizarCustoInicial = (index: number, campo: string, valor: any) => {
+    setCustosIniciaisData(prev => ({
+      ...prev,
+      custos: prev.custos.map((custo, i) => 
+        i === index ? { ...custo, [campo]: valor } : custo
+      )
+    }))
+  }
+
+  const handleCriarCustosIniciais = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!obra) return
+
+    try {
+      // Validar dados
+      const custosValidos = custosIniciaisData.custos.filter(custo => 
+        custo.item && custo.descricao && custo.quantidade_orcamento > 0 && custo.valor_unitario > 0
+      )
+
+      if (custosValidos.length === 0) {
+        alert('Adicione pelo menos um custo válido!')
+        return
+      }
+
+      // Criar cada custo
+      for (const custo of custosValidos) {
+        const dadosCusto: CustoMensalCreate = {
+          obra_id: parseInt(obra.id),
+          item: custo.item,
+          descricao: custo.descricao,
+          unidade: custo.unidade,
+          quantidade_orcamento: custo.quantidade_orcamento,
+          valor_unitario: custo.valor_unitario,
+          mes: custosIniciaisData.mes,
+          quantidade_realizada: 0,
+          quantidade_acumulada: 0,
+          valor_acumulado: 0,
+          tipo: custo.tipo
+        }
+
+        await custosMensaisApi.criar(dadosCusto)
+      }
+
+      await carregarCustosMensais()
+      setMesSelecionado(custosIniciaisData.mes)
+      setIsCustosIniciaisOpen(false)
+      alert(`${custosValidos.length} custos iniciais criados com sucesso!`)
+    } catch (error: any) {
+      console.error('Erro ao criar custos iniciais:', error)
+      alert(`Erro ao criar custos iniciais: ${error.message}`)
+    }
+  }
+
+  const carregarCustosMensais = async () => {
+    if (!obra) return
+    
+    try {
+      setCustosMensaisLoading(true)
+      setCustosMensaisError(null)
+      
+      // Sempre carregar todos os custos primeiro
+      const response = await custosMensaisApi.listarPorObra(parseInt(obra.id))
+      
+      // Armazenar todos os custos
+      setTodosCustosMensais(response.data)
+      
+      // Filtrar por mês se necessário
+      if (mesSelecionado && mesSelecionado !== 'todos') {
+        const custosFiltrados = response.data.filter(custo => custo.mes === mesSelecionado)
+        setCustosMensais(custosFiltrados)
+      } else {
+        setCustosMensais(response.data)
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar custos mensais:', error)
+      setCustosMensaisError(error.message || 'Erro ao carregar custos mensais')
+      // Fallback para dados mockados em caso de erro
       const custos = getCustosMensaisByObra(obra.id)
-      setCustosMensais(custos)
+      // Converter dados mockados para formato da API
+      const custosConvertidos = custos.map(custo => ({
+        id: parseInt(custo.id),
+        obra_id: parseInt(obra.id),
+        item: custo.item,
+        descricao: custo.descricao,
+        unidade: custo.unidade,
+        quantidade_orcamento: custo.quantidadeOrcamento,
+        valor_unitario: custo.valorUnitario,
+        total_orcamento: custo.totalOrcamento,
+        mes: custo.mes,
+        quantidade_realizada: custo.quantidadeRealizada,
+        valor_realizado: custo.valorRealizado,
+        quantidade_acumulada: custo.quantidadeAcumulada,
+        valor_acumulado: custo.valorAcumulado,
+        quantidade_saldo: custo.quantidadeSaldo,
+        valor_saldo: custo.valorSaldo,
+        tipo: custo.tipo as 'contrato' | 'aditivo',
+        created_at: custo.createdAt,
+        updated_at: custo.updatedAt
+      }))
+      
+      // Armazenar todos os custos mockados
+      setTodosCustosMensais(custosConvertidos)
+      
+      // Filtrar por mês se necessário
+      if (mesSelecionado && mesSelecionado !== 'todos') {
+        const custosFiltrados = custosConvertidos.filter(custo => custo.mes === mesSelecionado)
+        setCustosMensais(custosFiltrados)
+      } else {
+        setCustosMensais(custosConvertidos)
+      }
+    } finally {
+      setCustosMensaisLoading(false)
     }
   }
 
@@ -399,12 +662,6 @@ export default function ObraDetailsPage() {
     
     let dadosParaExportar = custosMensais
     
-    if (tipo === 'mes' && mesSelecionado && mesSelecionado !== 'todos') {
-      dadosParaExportar = getCustosMensaisByObraAndMes(obra.id, mesSelecionado)
-    } else if (tipo === 'geral') {
-      dadosParaExportar = getCustosMensaisByObra(obra.id)
-    }
-
     if (dadosParaExportar.length === 0) {
       alert('Não há dados para exportar!')
       return
@@ -433,16 +690,16 @@ export default function ObraDetailsPage() {
       custo.item,
       custo.descricao,
       custo.unidade,
-      custo.quantidadeOrcamento.toFixed(2),
-      custo.valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.totalOrcamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.quantidadeRealizada.toFixed(2),
-      custo.valorRealizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.quantidadeAcumulada.toFixed(2),
-      custo.valorAcumulado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.quantidadeSaldo.toFixed(2),
-      custo.valorSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+      formatarQuantidade(custo.quantidade_orcamento),
+      formatarValor(custo.valor_unitario),
+      formatarValor(custo.total_orcamento),
+      formatarQuantidade(custo.quantidade_realizada),
+      formatarValor(custo.valor_realizado),
+      formatarQuantidade(custo.quantidade_acumulada),
+      formatarValor(custo.valor_acumulado),
+      formatarQuantidade(custo.quantidade_saldo),
+      formatarValor(custo.valor_saldo),
+      formatarMes(custo.mes),
       custo.tipo
     ])
 
@@ -512,6 +769,19 @@ export default function ObraDetailsPage() {
     }
   }
 
+  // Handlers para livro da grua
+  const handleEditarEntrada = (entrada: EntradaLivroGruaCompleta) => {
+    setEntradaSelecionada(entrada)
+    setIsEditarEntradaOpen(true)
+  }
+
+  const handleSucessoEntrada = () => {
+    setIsNovaEntradaOpen(false)
+    setIsEditarEntradaOpen(false)
+    // Recarregar a página para atualizar os dados
+    window.location.reload()
+  }
+
   // Verificar autenticação e carregar obra na inicialização
   useEffect(() => {
     const init = async () => {
@@ -530,12 +800,20 @@ export default function ObraDetailsPage() {
     }
   }, [obra])
 
-  // Carregar custos mensais quando a obra ou mês mudar
+
+  // Carregar custos mensais quando a obra mudar
   useEffect(() => {
     if (obra) {
       carregarCustosMensais()
     }
-  }, [obra?.id, mesSelecionado])
+  }, [obra?.id])
+
+  // Filtrar custos quando o mês selecionado mudar
+  useEffect(() => {
+    if (todosCustosMensais.length > 0) {
+      filtrarCustosPorMes(mesSelecionado)
+    }
+  }, [mesSelecionado, todosCustosMensais])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -627,30 +905,6 @@ export default function ObraDetailsPage() {
   const custos = getCustosByObra(obra.id)
   const documentos = getDocumentosByObra(obra.id)
   
-  // Criar lista de entradas com dados expandidos
-  const todasEntradas = gruasVinculadas.flatMap(grua => {
-    const historico = getHistoricoByGrua(grua.id)
-    return historico.map(entrada => ({
-      ...entrada,
-      gruaName: grua.name,
-      gruaId: grua.id,
-      descricao: entrada.observacoes || 'Sem descrição',
-      responsavelResolucao: entrada.status === 'falha' ? 'A definir' : undefined
-    }))
-  }).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-  
-  // Filtrar entradas
-  const filteredEntradas = todasEntradas.filter(entrada => {
-    const matchesSearch = searchTerm === "" || 
-      (entrada.funcionarioName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (entrada.descricao || '').toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesGrua = selectedGrua === "all" || entrada.gruaId === selectedGrua
-    const matchesTipo = selectedTipo === "all" || entrada.tipo === selectedTipo
-    const matchesStatus = selectedStatus === "all" || entrada.status === selectedStatus
-    
-    return matchesSearch && matchesGrua && matchesTipo && matchesStatus
-  })
 
   return (
     <div className="space-y-6">
@@ -889,7 +1143,7 @@ export default function ObraDetailsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="todos">Todos os meses</SelectItem>
-                      {getMesesDisponiveis(obra.id).map(mes => (
+                      {getMesesDisponiveisDaAPI().map(mes => (
                         <SelectItem key={mes} value={mes}>
                           {new Date(mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
                         </SelectItem>
@@ -914,9 +1168,25 @@ export default function ObraDetailsPage() {
                     <Download className="w-4 h-4 mr-2" />
                     Exportar Mês
                   </Button>
+                  <Button 
+                    variant="default"
+                    onClick={handleAbrirCustosIniciais}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Custos Iniciais
+                  </Button>
                   <Button onClick={handleAbrirNovoMes}>
                     <Plus className="w-4 h-4 mr-2" />
                     Novo Mês
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsNovoCustoOpen(true)}
+                    disabled={!mesSelecionado || mesSelecionado === 'todos'}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Novo Custo
                   </Button>
                 </div>
               </div>
@@ -937,19 +1207,19 @@ export default function ObraDetailsPage() {
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Gastos Acumulados</Label>
                   <p className="text-lg font-bold text-green-600">
-                    R$ {custosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0).toLocaleString('pt-BR')}
+                    R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
                   </p>
                 </div>
                 <div className="text-center p-4 bg-yellow-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Gastos do Mês</Label>
                   <p className="text-lg font-bold text-yellow-600">
-                    R$ {custosMensais.reduce((sum, custo) => sum + custo.valorRealizado, 0).toLocaleString('pt-BR')}
+                    R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_realizado, 0))}
                   </p>
                 </div>
                 <div className="text-center p-4 bg-red-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Saldo Restante</Label>
                   <p className="text-lg font-bold text-red-600">
-                    R$ {(obra.custosIniciais - custosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0)).toLocaleString('pt-BR')}
+                    R$ {formatarValor(obra.custosIniciais - custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
                   </p>
                 </div>
               </div>
@@ -967,92 +1237,200 @@ export default function ObraDetailsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {custosMensais.length > 0 ? (
-                <div className="overflow-x-auto">
+              {custosMensaisLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  <span>Carregando custos mensais...</span>
+                </div>
+              ) : custosMensaisError ? (
+                <div className="text-center py-8">
+                  <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-700 mb-2">Erro ao carregar custos</h3>
+                  <p className="text-red-600 mb-4">{custosMensaisError}</p>
+                  <Button onClick={carregarCustosMensais} variant="outline">
+                    Tentar novamente
+                  </Button>
+                </div>
+              ) : custosMensais.length > 0 ? (
+                <div className="overflow-x-auto border rounded-lg">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[80px]">Item</TableHead>
-                        <TableHead className="min-w-[200px]">Descrição</TableHead>
-                        <TableHead className="w-[60px]">UND</TableHead>
-                        <TableHead className="w-[100px]">Orçamento</TableHead>
-                        <TableHead className="w-[100px]">Acumulado Anterior</TableHead>
-                        <TableHead className="w-[120px]">Realizado Período</TableHead>
-                        <TableHead className="w-[100px]">Acumulado Total</TableHead>
-                        <TableHead className="w-[100px]">Saldo Contrato</TableHead>
-                        <TableHead className="w-[60px]">Mês</TableHead>
+                      <TableRow className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+                        <TableHead className="w-[80px] font-semibold text-blue-900 text-center">Item</TableHead>
+                        <TableHead className="min-w-[200px] font-semibold text-blue-900">Descrição</TableHead>
+                        <TableHead className="w-[60px] font-semibold text-blue-900 text-center">UND</TableHead>
+                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Orçamento</TableHead>
+                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Acumulado Anterior</TableHead>
+                        <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Realizado Período</TableHead>
+                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Acumulado Total</TableHead>
+                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Saldo Contrato</TableHead>
+                        <TableHead className="w-[80px] font-semibold text-blue-900 text-center">Mês</TableHead>
+                        <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {custosMensais.map((custo) => (
-                        <TableRow key={custo.id}>
-                          <TableCell className="font-medium">{custo.item}</TableCell>
-                          <TableCell>{custo.descricao}</TableCell>
-                          <TableCell>{custo.unidade}</TableCell>
-                          <TableCell>
-                            <div className="text-xs">
-                              <div>Qtd: {custo.quantidadeOrcamento.toFixed(2)}</div>
-                              <div>Unit: R$ {custo.valorUnitario.toLocaleString('pt-BR')}</div>
-                              <div className="font-bold">Total: R$ {custo.totalOrcamento.toLocaleString('pt-BR')}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-xs">
-                              <div>Qtd: {(custo.quantidadeAcumulada - custo.quantidadeRealizada).toFixed(2)}</div>
-                              <div>Valor: R$ {(custo.valorAcumulado - custo.valorRealizado).toLocaleString('pt-BR')}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={custo.quantidadeRealizada}
-                                onChange={(e) => handleAtualizarQuantidade(custo.id, parseFloat(e.target.value) || 0)}
-                                className="w-20 h-8 text-xs"
-                              />
-                              <div className="text-xs text-gray-600">
-                                R$ {custo.valorRealizado.toLocaleString('pt-BR')}
+                      {custosMensais.map((custo, index) => (
+                        <TableRow key={custo.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+                          <TableCell className="font-semibold text-center text-blue-700">
+                            <div className="flex flex-col items-center gap-1">
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                {custo.item}
+                              </Badge>
+                              {/* Indicador de status */}
+                              <div className="flex items-center gap-1">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  custo.valor_acumulado === 0 ? 'bg-gray-400' :
+                                  custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'bg-yellow-400' :
+                                  custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'bg-blue-400' :
+                                  'bg-green-400'
+                                }`}></div>
+                                <span className="text-xs text-gray-600">
+                                  {custo.valor_acumulado === 0 ? 'Não iniciado' :
+                                   custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'Iniciado' :
+                                   custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'Em andamento' :
+                                   'Quase concluído'}
+                                </span>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="text-xs">
-                              <div>Qtd: {custo.quantidadeAcumulada.toFixed(2)}</div>
-                              <div>Valor: R$ {custo.valorAcumulado.toLocaleString('pt-BR')}</div>
+                          <TableCell className="font-medium text-gray-800">
+                            {custo.descricao}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" className="text-xs">
+                              {custo.unidade}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="bg-blue-50 p-2 rounded-lg border border-blue-200">
+                              <div className="text-xs text-blue-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_orcamento)}</div>
+                              <div className="text-xs text-blue-600 mb-1">Unit: R$ {formatarValor(custo.valor_unitario)}</div>
+                              <div className="text-sm font-bold text-blue-800">Total: R$ {formatarValor(custo.total_orcamento)}</div>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="text-xs">
-                              <div>Qtd: {custo.quantidadeSaldo.toFixed(2)}</div>
-                              <div>Valor: R$ {custo.valorSaldo.toLocaleString('pt-BR')}</div>
+                          <TableCell className="text-center">
+                            <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
+                              <div className="text-xs text-gray-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada - custo.quantidade_realizada)}</div>
+                              <div className="text-sm font-medium text-gray-800">R$ {formatarValor(custo.valor_acumulado - custo.valor_realizado)}</div>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">
+                          <TableCell className="text-center">
+                            <div className="bg-green-50 p-2 rounded-lg border border-green-200">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={custo.quantidade_realizada}
+                                onChange={(e) => handleAtualizarQuantidade(custo.id, parseFloat(e.target.value) || 0)}
+                                className="w-20 h-8 text-xs mb-1 border-green-300 focus:border-green-500"
+                              />
+                              <div className="text-sm font-medium text-green-800">
+                                R$ {formatarValor(custo.valor_realizado)}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="bg-purple-50 p-2 rounded-lg border border-purple-200">
+                              <div className="text-xs text-purple-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada)}</div>
+                              <div className="text-sm font-medium text-purple-800">R$ {formatarValor(custo.valor_acumulado)}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className={`p-2 rounded-lg border ${custo.valor_saldo >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                              <div className="text-xs mb-1">Qtd: {formatarQuantidade(custo.quantidade_saldo)}</div>
+                              <div className={`text-sm font-medium ${custo.valor_saldo >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                                R$ {formatarValor(custo.valor_saldo)}
+                              </div>
+                              {/* Barra de progresso */}
+                              <div className="mt-2">
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                                      custo.valor_saldo >= 0 ? 'bg-green-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ 
+                                      width: `${Math.min(100, Math.max(0, (custo.valor_acumulado / custo.total_orcamento) * 100))}%` 
+                                    }}
+                                  ></div>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {Math.round((custo.valor_acumulado / custo.total_orcamento) * 100)}% executado
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
                               {new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex gap-1 justify-center">
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-8 w-8 p-0 hover:bg-blue-100 text-blue-600"
+                                onClick={() => handleEditarCusto(custo)}
+                                title="Editar custo"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-8 w-8 p-0 hover:bg-red-100 text-red-600"
+                                onClick={() => handleExcluirCusto(custo.id)}
+                                title="Excluir custo"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
                       
-                      <TableRow className="bg-gray-50 font-bold">
-                        <TableCell colSpan={3}>TOTAIS (R$)</TableCell>
-                        <TableCell>
-                          R$ {custosMensais.reduce((sum, custo) => sum + custo.totalOrcamento, 0).toLocaleString('pt-BR')}
+                      <TableRow className="bg-gradient-to-r from-gray-100 to-gray-200 border-t-2 border-gray-300">
+                        <TableCell colSpan={3} className="font-bold text-lg text-gray-800 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <DollarSign className="w-5 h-5" />
+                            TOTAIS (R$)
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          R$ {custosMensais.reduce((sum, custo) => sum + (custo.valorAcumulado - custo.valorRealizado), 0).toLocaleString('pt-BR')}
+                        <TableCell className="text-center">
+                          <div className="bg-blue-100 p-2 rounded-lg border-2 border-blue-300">
+                            <div className="text-sm font-bold text-blue-900">
+                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.total_orcamento, 0))}
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          R$ {custosMensais.reduce((sum, custo) => sum + custo.valorRealizado, 0).toLocaleString('pt-BR')}
+                        <TableCell className="text-center">
+                          <div className="bg-gray-100 p-2 rounded-lg border-2 border-gray-300">
+                            <div className="text-sm font-bold text-gray-900">
+                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + (custo.valor_acumulado - custo.valor_realizado), 0))}
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          R$ {custosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0).toLocaleString('pt-BR')}
+                        <TableCell className="text-center">
+                          <div className="bg-green-100 p-2 rounded-lg border-2 border-green-300">
+                            <div className="text-sm font-bold text-green-900">
+                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_realizado, 0))}
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          R$ {custosMensais.reduce((sum, custo) => sum + custo.valorSaldo, 0).toLocaleString('pt-BR')}
+                        <TableCell className="text-center">
+                          <div className="bg-purple-100 p-2 rounded-lg border-2 border-purple-300">
+                            <div className="text-sm font-bold text-purple-900">
+                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
+                            </div>
+                          </div>
                         </TableCell>
+                        <TableCell className="text-center">
+                          <div className={`p-2 rounded-lg border-2 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
+                            <div className={`text-sm font-bold ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0))}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell></TableCell>
                         <TableCell></TableCell>
                       </TableRow>
                     </TableBody>
@@ -1363,7 +1741,7 @@ export default function ObraDetailsPage() {
                 </Button>
                 <Button 
                   size="sm"
-                  onClick={() => setIsNovaEntradaOpen(true)}
+                  onClick={handleNovaEntrada}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Nova Entrada
@@ -1438,128 +1816,29 @@ export default function ObraDetailsPage() {
                     </CardContent>
                   </Card>
 
-                  {/* Lista de Entradas */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Entradas do Livro</CardTitle>
-                      <CardDescription>
-                        {filteredEntradas.length} entradas encontradas
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {filteredEntradas.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-[120px]">Data</TableHead>
-                                <TableHead className="w-[150px]">Grua</TableHead>
-                                <TableHead className="w-[150px]">Funcionário</TableHead>
-                                <TableHead className="w-[100px]">Tipo</TableHead>
-                                <TableHead className="w-[100px]">Status</TableHead>
-                                <TableHead className="min-w-[200px]">Descrição</TableHead>
-                                <TableHead className="w-[150px]">Responsável Resolução</TableHead>
-                                <TableHead className="w-[80px]">Ações</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {filteredEntradas.map((entrada, index) => (
-                                <TableRow key={index} className="hover:bg-gray-50">
-                                  <TableCell className="text-sm">
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="w-4 h-4 text-gray-500" />
-                                      <span>{new Date(entrada.data).toLocaleDateString('pt-BR')}</span>
-                                    </div>
-                                    <div className="text-xs text-gray-500 mt-1">
-                                      {new Date(entrada.data).toLocaleTimeString('pt-BR', { 
-                                        hour: '2-digit', 
-                                        minute: '2-digit' 
-                                      })}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-sm font-medium">
-                                    <div className="flex items-center gap-2">
-                                      <Wrench className="w-4 h-4 text-blue-600" />
-                                      <span>{entrada.gruaName}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-sm">
-                                    <div className="flex items-center gap-2">
-                                      <Users className="w-4 h-4 text-gray-500" />
-                                      <span>{entrada.funcionarioName}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge 
-                                      variant="outline" 
-                                      className={`text-xs ${
-                                        entrada.tipo === 'checklist' ? 'bg-green-100 text-green-800' :
-                                        entrada.tipo === 'manutencao' ? 'bg-blue-100 text-blue-800' :
-                                        entrada.tipo === 'falha' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
-                                      }`}
-                                    >
-                                      {entrada.tipo}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge 
-                                      variant="outline" 
-                                      className={`text-xs ${
-                                        entrada.status === 'ok' ? 'bg-green-100 text-green-800' :
-                                        entrada.status === 'manutencao' ? 'bg-yellow-100 text-yellow-800' :
-                                        'bg-red-100 text-red-800'
-                                      }`}
-                                    >
-                                      {entrada.status}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-sm">
-                                    <div className="max-w-[200px] truncate" title={entrada.descricao}>
-                                      {entrada.descricao}
-                                    </div>
-                                    {entrada.observacoes && (
-                                      <div className="text-xs text-gray-500 mt-1 truncate" title={entrada.observacoes}>
-                                        Obs: {entrada.observacoes}
-                                      </div>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-sm">
-                                    {entrada.responsavelResolucao ? (
-                                      <div className="flex items-center gap-2">
-                                        <Users className="w-4 h-4 text-gray-500" />
-                                        <span className="text-xs">{entrada.responsavelResolucao}</span>
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-gray-400">-</span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      className="h-8 w-8 p-0"
-                                      onClick={() => handleVisualizarEntrada(entrada)}
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                    </Button>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      ) : (
-                        <div className="text-center py-8">
-                          <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma entrada encontrada</h3>
-                          <p className="text-gray-600 mb-4">
-                            Não há entradas que correspondam aos filtros selecionados.
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  {/* Lista de Entradas por Grua */}
+                  {gruasVinculadas.map((grua) => (
+                    <Card key={grua.id} className="border-l-4 border-l-blue-500">
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Wrench className="w-5 h-5" />
+                          {grua.grua?.name || grua.name}
+                        </CardTitle>
+                        <CardDescription>
+                          {grua.grua?.manufacturer || 'N/A'} {grua.grua?.model || 'N/A'} - {grua.grua?.capacity || 'N/A'}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <LivroGruaList
+                          gruaId={grua.grua?.id?.toString() || grua.id.toString()}
+                          onNovaEntrada={handleNovaEntrada}
+                          onEditarEntrada={handleEditarEntrada}
+                          onVisualizarEntrada={handleVisualizarEntrada}
+                          modoCompacto={true}
+                        />
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               ) : (
                 <div className="text-center py-8">
@@ -1754,7 +2033,7 @@ export default function ObraDetailsPage() {
                     <div>
                       <Label className="text-sm font-medium text-gray-600">Data e Hora</Label>
                       <p className="text-sm">
-                        {new Date(entradaSelecionada.data).toLocaleString('pt-BR')}
+                        {new Date(entradaSelecionada.data_entrada).toLocaleDateString('pt-BR')} {entradaSelecionada.hora_entrada && `às ${entradaSelecionada.hora_entrada}`}
                       </p>
                     </div>
                     <div>
@@ -1770,13 +2049,13 @@ export default function ObraDetailsPage() {
                       <Badge 
                         variant="outline" 
                         className={`text-xs ${
-                          entradaSelecionada.tipo === 'checklist' ? 'bg-green-100 text-green-800' :
-                          entradaSelecionada.tipo === 'manutencao' ? 'bg-blue-100 text-blue-800' :
-                          entradaSelecionada.tipo === 'falha' ? 'bg-red-100 text-red-800' :
+                          entradaSelecionada.tipo_entrada === 'checklist' ? 'bg-green-100 text-green-800' :
+                          entradaSelecionada.tipo_entrada === 'manutencao' ? 'bg-blue-100 text-blue-800' :
+                          entradaSelecionada.tipo_entrada === 'falha' ? 'bg-red-100 text-red-800' :
                           'bg-gray-100 text-gray-800'
                         }`}
                       >
-                        {entradaSelecionada.tipo}
+                        {entradaSelecionada.tipo_entrada}
                       </Badge>
                     </div>
                     <div>
@@ -1784,18 +2063,18 @@ export default function ObraDetailsPage() {
                       <Badge 
                         variant="outline" 
                         className={`text-xs ${
-                          entradaSelecionada.status === 'ok' ? 'bg-green-100 text-green-800' :
-                          entradaSelecionada.status === 'manutencao' ? 'bg-yellow-100 text-yellow-800' :
+                          entradaSelecionada.status_entrada === 'ok' ? 'bg-green-100 text-green-800' :
+                          entradaSelecionada.status_entrada === 'manutencao' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-red-100 text-red-800'
                         }`}
                       >
-                        {entradaSelecionada.status}
+                        {entradaSelecionada.status_entrada}
                       </Badge>
                     </div>
-                    {entradaSelecionada.responsavelResolucao && (
+                    {entradaSelecionada.responsavel_resolucao && (
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Responsável pela Resolução</Label>
-                        <p className="text-sm">{entradaSelecionada.responsavelResolucao}</p>
+                        <p className="text-sm">{entradaSelecionada.responsavel_resolucao}</p>
                       </div>
                     )}
                   </div>
@@ -2322,6 +2601,517 @@ export default function ObraDetailsPage() {
               <Button type="submit">
                 <Plus className="w-4 h-4 mr-2" />
                 Adicionar Aditivo
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Novo/Editar Custo Mensal */}
+      <Dialog open={isNovoCustoOpen} onOpenChange={setIsNovoCustoOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              {isEditandoCusto ? 'Editar Custo Mensal' : 'Novo Custo Mensal'}
+            </DialogTitle>
+            <CardDescription>
+              {isEditandoCusto 
+                ? 'Edite as informações do custo mensal'
+                : `Adicione um novo custo para ${mesSelecionado ? formatarMes(mesSelecionado) : 'o mês selecionado'}`
+              }
+            </CardDescription>
+          </DialogHeader>
+          <form onSubmit={isEditandoCusto ? handleAtualizarCusto : handleNovoCusto} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="item">Item *</Label>
+                <Input
+                  id="item"
+                  value={novoCustoData.item}
+                  onChange={(e) => setNovoCustoData({ ...novoCustoData, item: e.target.value })}
+                  placeholder="Ex: 01.01"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="unidade">Unidade *</Label>
+                <Select
+                  value={novoCustoData.unidade}
+                  onValueChange={(value) => setNovoCustoData({ ...novoCustoData, unidade: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mês">mês</SelectItem>
+                    <SelectItem value="und">und</SelectItem>
+                    <SelectItem value="und.">und.</SelectItem>
+                    <SelectItem value="km">km</SelectItem>
+                    <SelectItem value="h">h</SelectItem>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="m²">m²</SelectItem>
+                    <SelectItem value="m³">m³</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="tipo">Tipo *</Label>
+                <Select
+                  value={novoCustoData.tipo}
+                  onValueChange={(value: 'contrato' | 'aditivo') => setNovoCustoData({ ...novoCustoData, tipo: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contrato">Contrato</SelectItem>
+                    <SelectItem value="aditivo">Aditivo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="descricao">Descrição *</Label>
+              <Input
+                id="descricao"
+                value={novoCustoData.descricao}
+                onChange={(e) => setNovoCustoData({ ...novoCustoData, descricao: e.target.value })}
+                placeholder="Ex: Locação de grua torre PINGON BR47"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="quantidade_orcamento">Quantidade Orçamento *</Label>
+                <Input
+                  id="quantidade_orcamento"
+                  type="number"
+                  step="0.01"
+                  value={novoCustoData.quantidade_orcamento}
+                  onChange={(e) => setNovoCustoData({ ...novoCustoData, quantidade_orcamento: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="valor_unitario">Valor Unitário *</Label>
+                <Input
+                  id="valor_unitario"
+                  type="number"
+                  step="0.01"
+                  value={novoCustoData.valor_unitario}
+                  onChange={(e) => setNovoCustoData({ ...novoCustoData, valor_unitario: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Total Orçamento</Label>
+                <Input
+                  value={`R$ ${formatarValor(novoCustoData.quantidade_orcamento * novoCustoData.valor_unitario)}`}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="quantidade_realizada">Quantidade Realizada</Label>
+                <Input
+                  id="quantidade_realizada"
+                  type="number"
+                  step="0.01"
+                  value={novoCustoData.quantidade_realizada}
+                  onChange={(e) => setNovoCustoData({ ...novoCustoData, quantidade_realizada: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="quantidade_acumulada">Quantidade Acumulada</Label>
+                <Input
+                  id="quantidade_acumulada"
+                  type="number"
+                  step="0.01"
+                  value={novoCustoData.quantidade_acumulada}
+                  onChange={(e) => setNovoCustoData({ ...novoCustoData, quantidade_acumulada: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="valor_acumulado">Valor Acumulado</Label>
+              <Input
+                id="valor_acumulado"
+                type="number"
+                step="0.01"
+                value={novoCustoData.valor_acumulado}
+                onChange={(e) => setNovoCustoData({ ...novoCustoData, valor_acumulado: parseFloat(e.target.value) || 0 })}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setIsNovoCustoOpen(false)
+                  setIsEditandoCusto(false)
+                  setCustoSelecionado(null)
+                  setNovoCustoData({
+                    item: '',
+                    descricao: '',
+                    unidade: 'mês',
+                    quantidade_orcamento: 0,
+                    valor_unitario: 0,
+                    quantidade_realizada: 0,
+                    quantidade_acumulada: 0,
+                    valor_acumulado: 0,
+                    tipo: 'contrato'
+                  })
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit">
+                {isEditandoCusto ? 'Atualizar Custo' : 'Criar Custo'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Nova Entrada Livro da Grua */}
+      <Dialog open={isNovaEntradaOpen} onOpenChange={setIsNovaEntradaOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nova Entrada no Livro da Grua</DialogTitle>
+          </DialogHeader>
+          <LivroGruaForm
+            gruaId={gruasVinculadas.length > 0 ? (gruasVinculadas[0].grua?.id?.toString() || gruasVinculadas[0].id.toString()) : ''}
+            onSave={handleSucessoEntrada}
+            onCancel={() => setIsNovaEntradaOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Entrada Livro da Grua */}
+      <Dialog open={isEditarEntradaOpen} onOpenChange={setIsEditarEntradaOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Entrada do Livro da Grua</DialogTitle>
+          </DialogHeader>
+          <LivroGruaForm
+            gruaId={entradaSelecionada?.grua_id || ''}
+            modoEdicao={true}
+            entrada={entradaSelecionada as any}
+            onSave={handleSucessoEntrada}
+            onCancel={() => setIsEditarEntradaOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Visualizar Entrada Livro da Grua */}
+      <Dialog open={isVisualizarEntradaOpen} onOpenChange={setIsVisualizarEntradaOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              Detalhes da Entrada
+            </DialogTitle>
+          </DialogHeader>
+          {entradaSelecionada && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Informações Básicas</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Data e Hora</Label>
+                      <p className="text-sm">
+                        {new Date(entradaSelecionada.data_entrada).toLocaleDateString('pt-BR')} {entradaSelecionada.hora_entrada && `às ${entradaSelecionada.hora_entrada}`}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Grua</Label>
+                      <p className="text-sm font-medium">{entradaSelecionada.grua_id}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Funcionário</Label>
+                      <p className="text-sm">{entradaSelecionada.funcionario_id}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Tipo</Label>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${
+                          entradaSelecionada.tipo_entrada === 'checklist' ? 'bg-green-100 text-green-800' :
+                          entradaSelecionada.tipo_entrada === 'manutencao' ? 'bg-blue-100 text-blue-800' :
+                          entradaSelecionada.tipo_entrada === 'falha' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {entradaSelecionada.tipo_entrada}
+                      </Badge>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Status</Label>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${
+                          entradaSelecionada.status_entrada === 'ok' ? 'bg-green-100 text-green-800' :
+                          entradaSelecionada.status_entrada === 'manutencao' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {entradaSelecionada.status_entrada}
+                      </Badge>
+                    </div>
+                    {entradaSelecionada.responsavel_resolucao && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Responsável pela Resolução</Label>
+                        <p className="text-sm">{entradaSelecionada.responsavel_resolucao}</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Descrição</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {entradaSelecionada.descricao}
+                  </p>
+                </CardContent>
+              </Card>
+              {entradaSelecionada.observacoes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Observações</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {entradaSelecionada.observacoes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsVisualizarEntradaOpen(false)}
+                >
+                  Fechar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIsVisualizarEntradaOpen(false)
+                    handleEditarEntrada(entradaSelecionada)
+                  }}
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Custos Iniciais */}
+      <Dialog open={isCustosIniciaisOpen} onOpenChange={setIsCustosIniciaisOpen}>
+        <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Criar Custos Iniciais da Obra
+            </DialogTitle>
+            <CardDescription>
+              Crie os custos iniciais da obra. Estes custos serão replicados automaticamente para os próximos meses.
+            </CardDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleCriarCustosIniciais} className="space-y-6">
+            {/* Seleção do Mês */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="mes">Mês Inicial *</Label>
+                <Input
+                  id="mes"
+                  type="month"
+                  value={custosIniciaisData.mes}
+                  onChange={(e) => setCustosIniciaisData(prev => ({ ...prev, mes: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="flex items-end">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handleAdicionarCustoInicial}
+                  className="w-full"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Custo
+                </Button>
+              </div>
+            </div>
+
+            {/* Lista de Custos */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Custos da Obra</h3>
+              {custosIniciaisData.custos.map((custo, index) => (
+                <Card key={index} className="p-4">
+                  <div className="flex justify-between items-start mb-4">
+                    <h4 className="font-medium">Custo {index + 1}</h4>
+                    {custosIniciaisData.custos.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoverCustoInicial(index)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Item *</Label>
+                      <Input
+                        value={custo.item}
+                        onChange={(e) => handleAtualizarCustoInicial(index, 'item', e.target.value)}
+                        placeholder="Ex: 01.01"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label>Unidade *</Label>
+                      <Select
+                        value={custo.unidade}
+                        onValueChange={(value) => handleAtualizarCustoInicial(index, 'unidade', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mês">mês</SelectItem>
+                          <SelectItem value="und">und</SelectItem>
+                          <SelectItem value="und.">und.</SelectItem>
+                          <SelectItem value="km">km</SelectItem>
+                          <SelectItem value="h">h</SelectItem>
+                          <SelectItem value="kg">kg</SelectItem>
+                          <SelectItem value="m²">m²</SelectItem>
+                          <SelectItem value="m³">m³</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Tipo *</Label>
+                      <Select
+                        value={custo.tipo}
+                        onValueChange={(value: 'contrato' | 'aditivo') => handleAtualizarCustoInicial(index, 'tipo', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="contrato">Contrato</SelectItem>
+                          <SelectItem value="aditivo">Aditivo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <Label>Descrição *</Label>
+                    <Input
+                      value={custo.descricao}
+                      onChange={(e) => handleAtualizarCustoInicial(index, 'descricao', e.target.value)}
+                      placeholder="Ex: Locação de grua torre PINGON BR47"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <Label>Quantidade Orçamento *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={custo.quantidade_orcamento}
+                        onChange={(e) => handleAtualizarCustoInicial(index, 'quantidade_orcamento', parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label>Valor Unitário *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={custo.valor_unitario}
+                        onChange={(e) => handleAtualizarCustoInicial(index, 'valor_unitario', parseFloat(e.target.value) || 0)}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="text-sm text-gray-600">
+                      <strong>Total Orçamento:</strong> R$ {formatarValor(custo.quantidade_orcamento * custo.valor_unitario)}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Resumo Total */}
+            <Card className="p-4 bg-blue-50">
+              <h3 className="font-medium text-blue-900 mb-2">Resumo dos Custos Iniciais</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="text-blue-700">Total de Itens:</span>
+                  <span className="ml-2 font-medium">{custosIniciaisData.custos.length}</span>
+                </div>
+                <div>
+                  <span className="text-blue-700">Valor Total:</span>
+                  <span className="ml-2 font-medium">
+                    R$ {formatarValor(
+                      custosIniciaisData.custos.reduce((sum, custo) => 
+                        sum + (custo.quantidade_orcamento * custo.valor_unitario), 0
+                      )
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-blue-700">Mês:</span>
+                  <span className="ml-2 font-medium">
+                    {custosIniciaisData.mes ? formatarMes(custosIniciaisData.mes) : 'Não selecionado'}
+                  </span>
+                </div>
+              </div>
+            </Card>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsCustosIniciaisOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit"
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Criar Custos Iniciais
               </Button>
             </div>
           </form>

@@ -223,15 +223,15 @@ export default function LivroGruaPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-gray-600">Modelo</p>
-              <p className="font-medium">{grua.model}</p>
+              <p className="font-medium">{grua.model || grua.modelo || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Fabricante</p>
-              <p className="font-medium">{grua.manufacturer || 'N/A'}</p>
+              <p className="font-medium">{grua.fabricante || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Capacidade</p>
-              <p className="font-medium">{grua.capacity}</p>
+              <p className="font-medium">{grua.capacity || grua.capacidade || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Status</p>
@@ -246,11 +246,13 @@ export default function LivroGruaPage() {
             </div>
             <div>
               <p className="text-sm text-gray-600">Tipo</p>
-              <p className="font-medium">{grua.type || 'N/A'}</p>
+              <p className="font-medium">{grua.tipo || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Criada em</p>
-              <p className="font-medium">{new Date(grua.createdAt).toLocaleDateString('pt-BR')}</p>
+              <p className="font-medium">
+                {grua.createdAt ? new Date(grua.createdAt).toLocaleDateString('pt-BR') : 'N/A'}
+              </p>
             </div>
           </div>
         </CardContent>
@@ -324,7 +326,7 @@ export default function LivroGruaPage() {
           <LivroGruaForm
             gruaId={grua?.id || gruaId}
             modoEdicao={true}
-            entrada={entradaSelecionada}
+            entrada={entradaSelecionada || undefined}
             onSave={handleSucessoEntrada}
             onCancel={() => setIsEditarEntradaOpen(false)}
           />

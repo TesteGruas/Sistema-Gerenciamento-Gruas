@@ -89,25 +89,10 @@ export default function ObrasPage() {
       setError(null)
       const response = await obrasApi.listarObras({ limit: 100 })
       
-      // Carregar relacionamentos para cada obra
-      const obrasComRelacionamentos = await Promise.all(
-        response.data.map(async (obraBackend: any) => {
-          try {
-            const [gruasResponse, funcionariosResponse] = await Promise.all([
-              obrasApi.buscarGruasVinculadas(obraBackend.id),
-              obrasApi.buscarFuncionariosVinculados(obraBackend.id)
-            ])
-            
-            return converterObraBackendParaFrontend(obraBackend, {
-              gruasVinculadas: gruasResponse.data,
-              funcionariosVinculados: funcionariosResponse.data
-            })
-          } catch (error) {
-            console.error(`Erro ao carregar relacionamentos da obra ${obraBackend.id}:`, error)
-            return converterObraBackendParaFrontend(obraBackend)
-          }
-        })
-      )
+      // Converter obras - os relacionamentos já vêm incluídos no endpoint
+      const obrasComRelacionamentos = response.data.map((obraBackend: any) => {
+        return converterObraBackendParaFrontend(obraBackend)
+      })
       
       setObras(obrasComRelacionamentos)
     } catch (err) {

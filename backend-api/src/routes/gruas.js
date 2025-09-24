@@ -112,6 +112,8 @@ const enriquecerDadosGrua = async (grua) => {
       // Campos calculados para compatibilidade com mocks
       name: grua.name || `Grua ${grua.id}`,
       model: grua.modelo, // modelo -> model para frontend
+      fabricante: grua.fabricante, // fabricante -> fabricante para frontend
+      tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
       currentObraId: obraAtual?.obra_id?.toString() || null,
       currentObraName: obraAtual?.obra?.nome || null,
@@ -135,6 +137,8 @@ const enriquecerDadosGrua = async (grua) => {
       ...grua,
       name: grua.name || `Grua ${grua.id}`,
       model: grua.modelo, // modelo -> model para frontend
+      fabricante: grua.fabricante, // fabricante -> fabricante para frontend
+      tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
       currentObraId: null,
       currentObraName: null
@@ -392,6 +396,8 @@ router.get('/', async (req, res) => {
       // Campos calculados para compatibilidade com mocks
       name: grua.name || `Grua ${grua.id}`,
       model: grua.modelo, // modelo -> model para frontend
+      fabricante: grua.fabricante, // fabricante -> fabricante para frontend
+      tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
       currentObraId: null,
       currentObraName: null,
@@ -501,6 +507,8 @@ router.get('/export', async (req, res) => {
       // Campos calculados para compatibilidade com mocks
       name: grua.name || `Grua ${grua.id}`,
       model: grua.modelo, // modelo -> model para frontend
+      fabricante: grua.fabricante, // fabricante -> fabricante para frontend
+      tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
       currentObraId: null,
       currentObraName: null,

@@ -1,5 +1,5 @@
 // Serviço de API para integração com endpoints de estoque
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+import { buildApiUrl } from './api'
 
 // Importar AuthService para gerenciar autenticação
 import { AuthService } from '../app/lib/auth'
@@ -103,7 +103,7 @@ class EstoqueAPI {
     options: RequestInit = {}
   ): Promise<T> {
     try {
-      const url = `${API_BASE_URL}${endpoint}`
+      const url = buildApiUrl(endpoint)
       
       // Usar AuthService para fazer requisições autenticadas
       const result = await AuthService.authenticatedRequest(url, options)

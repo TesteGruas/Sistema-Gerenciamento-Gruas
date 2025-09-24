@@ -1,5 +1,5 @@
 // API client para obras
-import { buildApiUrl, API_ENDPOINTS } from './api'
+import { buildApiUrl, API_ENDPOINTS } from './api.ts'
 import { gruaObraApi, converterGruaObraBackendParaFrontend } from './api-grua-obra'
 
 // Interfaces baseadas no backend
@@ -33,6 +33,43 @@ export interface ObraBackend {
     email?: string
     telefone?: string
   }
+  // Relacionamentos incluídos diretamente
+  grua_obra?: Array<{
+    id: number
+    grua_id: string
+    data_inicio_locacao: string
+    data_fim_locacao?: string
+    valor_locacao_mensal?: number
+    status: string
+    observacoes?: string
+    grua: {
+      id: string
+      modelo: string
+      fabricante: string
+      tipo: string
+    }
+  }>
+  grua_funcionario?: Array<{
+    id: number
+    grua_id: string
+    funcionario_id: number
+    data_inicio: string
+    data_fim?: string
+    status: string
+    observacoes?: string
+    funcionario: {
+      id: number
+      nome: string
+      cargo: string
+      status: string
+    }
+    grua: {
+      id: string
+      modelo: string
+      fabricante: string
+      tipo: string
+    }
+  }>
 }
 
 export interface ObraCreateData {
@@ -342,6 +379,54 @@ export const obrasApi = {
 
 // Funções utilitárias para converter dados entre frontend e backend
 export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relacionamentos?: { gruasVinculadas?: any[], funcionariosVinculados?: any[] }) => {
+  // Converter relacionamentos que vêm diretamente do backend
+  const gruasVinculadas = obraBackend.grua_obra?.map(relacao => ({
+    id: relacao.id.toString(),
+    gruaId: relacao.grua_id,
+    obraId: obraBackend.id.toString(),
+    dataInicioLocacao: relacao.data_inicio_locacao,
+    dataFimLocacao: relacao.data_fim_locacao,
+    valorLocacaoMensal: relacao.valor_locacao_mensal,
+    status: relacao.status,
+    observacoes: relacao.observacoes,
+    createdAt: obraBackend.created_at,
+    updatedAt: obraBackend.updated_at,
+    // Dados da grua
+    grua: {
+      id: relacao.grua.id,
+      modelo: relacao.grua.modelo,
+      fabricante: relacao.grua.fabricante,
+      tipo: relacao.grua.tipo
+    }
+  })) || []
+
+  const funcionariosVinculados = obraBackend.grua_funcionario?.map(relacao => ({
+    id: relacao.id.toString(),
+    gruaId: relacao.grua_id,
+    funcionarioId: relacao.funcionario_id.toString(),
+    obraId: obraBackend.id.toString(),
+    dataInicio: relacao.data_inicio,
+    dataFim: relacao.data_fim,
+    status: relacao.status,
+    observacoes: relacao.observacoes,
+    createdAt: obraBackend.created_at,
+    updatedAt: obraBackend.updated_at,
+    // Dados do funcionário
+    funcionario: {
+      id: relacao.funcionario.id.toString(),
+      nome: relacao.funcionario.nome,
+      cargo: relacao.funcionario.cargo,
+      status: relacao.funcionario.status
+    },
+    // Dados da grua
+    grua: {
+      id: relacao.grua.id,
+      modelo: relacao.grua.modelo,
+      fabricante: relacao.grua.fabricante,
+      tipo: relacao.grua.tipo
+    }
+  })) || []
+
   return {
     id: obraBackend.id.toString(),
     name: obraBackend.nome,
@@ -371,9 +456,9 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     contato_obra: obraBackend.contato_obra,
     telefone_obra: obraBackend.telefone_obra,
     email_obra: obraBackend.email_obra,
-    // Relacionamentos
-    gruasVinculadas: relacionamentos?.gruasVinculadas || [],
-    funcionariosVinculados: relacionamentos?.funcionariosVinculados || []
+    // Relacionamentos - usar os que vêm do backend ou fallback para os passados como parâmetro
+    gruasVinculadas: gruasVinculadas.length > 0 ? gruasVinculadas : (relacionamentos?.gruasVinculadas || []),
+    funcionariosVinculados: funcionariosVinculados.length > 0 ? funcionariosVinculados : (relacionamentos?.funcionariosVinculados || [])
   }
 }
 

@@ -873,7 +873,8 @@ router.get('/grua-by-relation/:id', async (req, res) => {
           tipo,
           capacidade,
           status,
-          ano
+          ano,
+          created_at
         ),
         obras (
           id,
@@ -897,11 +898,20 @@ router.get('/grua-by-relation/:id', async (req, res) => {
       })
     }
 
+    // Mapear dados da grua para compatibilidade com frontend
+    const gruaMapeada = relacao.gruas ? {
+      ...relacao.gruas,
+      // Campos de compatibilidade com frontend
+      model: relacao.gruas.modelo,
+      capacity: relacao.gruas.capacidade,
+      createdAt: relacao.gruas.created_at
+    } : null
+
     res.json({
       success: true,
       data: {
         relacao,
-        grua: relacao.gruas,
+        grua: gruaMapeada,
         obra: relacao.obras
       }
     })

@@ -99,6 +99,10 @@ export interface EntradaLivroGruaCompleta extends EntradaLivroGrua {
   funcionario_email?: string
   status_color?: string
   tipo_entrada_display?: string
+  // Propriedades adicionais para compatibilidade com o frontend
+  gruaName?: string
+  funcionarioName?: string
+  obraName?: string
 }
 
 export interface FiltrosLivroGrua {

@@ -42,10 +42,13 @@ export default function GruasPage() {
   const [gruaFormData, setGruaFormData] = useState({
     name: '',
     model: '',
+    fabricante: '',
     capacity: '',
     status: 'disponivel',
+    tipo: '',
     obraId: '',
-    observacoes: ''
+    observacoes: '',
+    createdAt: ''
   })
   
   // Estados para API
@@ -138,10 +141,13 @@ export default function GruasPage() {
     setGruaFormData({
       name: grua.name || '',
       model: grua.model || '',
+      fabricante: grua.fabricante || '',
       capacity: grua.capacity || '',
       status: grua.status || 'disponivel',
+      tipo: grua.tipo || '',
       obraId: grua.currentObraId || '',
-      observacoes: grua.observacoes || ''
+      observacoes: grua.observacoes || '',
+      createdAt: grua.createdAt || ''
     })
     setIsEditDialogOpen(true)
   }
@@ -202,10 +208,13 @@ export default function GruasPage() {
         setGruaFormData({
           name: '',
           model: '',
+          fabricante: '',
           capacity: '',
           status: 'disponivel',
+          tipo: '',
           obraId: '',
-          observacoes: ''
+          observacoes: '',
+          createdAt: ''
         })
         setIsCreateDialogOpen(false)
         
@@ -242,10 +251,13 @@ export default function GruasPage() {
         setGruaFormData({
           name: '',
           model: '',
+          fabricante: '',
           capacity: '',
           status: 'disponivel',
+          tipo: '',
           obraId: '',
-          observacoes: ''
+          observacoes: '',
+          createdAt: ''
         })
         setIsEditDialogOpen(false)
         setGruaToEdit(null)
@@ -526,6 +538,35 @@ export default function GruasPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <Label htmlFor="fabricante">Fabricante</Label>
+                <Input
+                  id="fabricante"
+                  value={gruaFormData.fabricante}
+                  onChange={(e) => setGruaFormData({ ...gruaFormData, fabricante: e.target.value })}
+                  placeholder="Ex: Liebherr, Potain, etc."
+                />
+              </div>
+              <div>
+                <Label htmlFor="tipo">Tipo</Label>
+                <Select
+                  value={gruaFormData.tipo}
+                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, tipo: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                    <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                    <SelectItem value="Guincho">Guincho</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <Label htmlFor="capacity">Capacidade *</Label>
                 <Input
                   id="capacity"
@@ -647,6 +688,35 @@ export default function GruasPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <Label htmlFor="edit-fabricante">Fabricante</Label>
+                <Input
+                  id="edit-fabricante"
+                  value={gruaFormData.fabricante}
+                  onChange={(e) => setGruaFormData({ ...gruaFormData, fabricante: e.target.value })}
+                  placeholder="Ex: Liebherr, Potain, etc."
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-tipo">Tipo</Label>
+                <Select
+                  value={gruaFormData.tipo}
+                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, tipo: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                    <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                    <SelectItem value="Guincho">Guincho</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <Label htmlFor="edit-capacity">Capacidade *</Label>
                 <Input
                   id="edit-capacity"
@@ -708,6 +778,18 @@ export default function GruasPage() {
                 rows={3}
               />
             </div>
+
+            {gruaFormData.createdAt && (
+              <div>
+                <Label htmlFor="edit-createdAt">Criada em</Label>
+                <Input
+                  id="edit-createdAt"
+                  value={new Date(gruaFormData.createdAt).toLocaleDateString('pt-BR')}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button 
