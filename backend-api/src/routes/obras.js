@@ -89,7 +89,134 @@ const obraSchema = Joi.object({
  *         description: Filtrar por cliente
  *     responses:
  *       200:
- *         description: Lista de obras
+ *         description: Lista de obras com relacionamentos incluídos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       cliente_id:
+ *                         type: integer
+ *                       endereco:
+ *                         type: string
+ *                       cidade:
+ *                         type: string
+ *                       estado:
+ *                         type: string
+ *                       tipo:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       clientes:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           nome:
+ *                             type: string
+ *                           cnpj:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           telefone:
+ *                             type: string
+ *                       grua_obra:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             grua_id:
+ *                               type: string
+ *                             data_inicio_locacao:
+ *                               type: string
+ *                               format: date
+ *                             data_fim_locacao:
+ *                               type: string
+ *                               format: date
+ *                             valor_locacao_mensal:
+ *                               type: number
+ *                             status:
+ *                               type: string
+ *                             observacoes:
+ *                               type: string
+ *                             grua:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: string
+ *                                 modelo:
+ *                                   type: string
+ *                                 fabricante:
+ *                                   type: string
+ *                                 tipo:
+ *                                   type: string
+ *                       grua_funcionario:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             grua_id:
+ *                               type: string
+ *                             funcionario_id:
+ *                               type: integer
+ *                             data_inicio:
+ *                               type: string
+ *                               format: date
+ *                             data_fim:
+ *                               type: string
+ *                               format: date
+ *                             status:
+ *                               type: string
+ *                             observacoes:
+ *                               type: string
+ *                             funcionario:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 nome:
+ *                                   type: string
+ *                                 cargo:
+ *                                   type: string
+ *                                 status:
+ *                                   type: string
+ *                             grua:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: string
+ *                                 modelo:
+ *                                   type: string
+ *                                 fabricante:
+ *                                   type: string
+ *                                 tipo:
+ *                                   type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
  */
 router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -108,6 +235,42 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
           cnpj,
           email,
           telefone
+        ),
+        grua_obra (
+          id,
+          grua_id,
+          data_inicio_locacao,
+          data_fim_locacao,
+          valor_locacao_mensal,
+          status,
+          observacoes,
+          grua:gruas (
+            id,
+            modelo,
+            fabricante,
+            tipo
+          )
+        ),
+        grua_funcionario (
+          id,
+          grua_id,
+          funcionario_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          funcionario:funcionarios (
+            id,
+            nome,
+            cargo,
+            status
+          ),
+          grua:gruas (
+            id,
+            modelo,
+            fabricante,
+            tipo
+          )
         )
       `, { count: 'exact' })
 
@@ -167,7 +330,123 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *         description: ID da obra
  *     responses:
  *       200:
- *         description: Dados da obra
+ *         description: Dados da obra com relacionamentos incluídos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     nome:
+ *                       type: string
+ *                     cliente_id:
+ *                       type: integer
+ *                     endereco:
+ *                       type: string
+ *                     cidade:
+ *                       type: string
+ *                     estado:
+ *                       type: string
+ *                     tipo:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     clientes:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         nome:
+ *                           type: string
+ *                         cnpj:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         telefone:
+ *                           type: string
+ *                     grua_obra:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           grua_id:
+ *                             type: string
+ *                           data_inicio_locacao:
+ *                             type: string
+ *                             format: date
+ *                           data_fim_locacao:
+ *                             type: string
+ *                             format: date
+ *                           valor_locacao_mensal:
+ *                             type: number
+ *                           status:
+ *                             type: string
+ *                           observacoes:
+ *                             type: string
+ *                           grua:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               modelo:
+ *                                 type: string
+ *                               fabricante:
+ *                                 type: string
+ *                               tipo:
+ *                                 type: string
+ *                               numero_serie:
+ *                                 type: string
+ *                     grua_funcionario:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           grua_id:
+ *                             type: string
+ *                           funcionario_id:
+ *                             type: integer
+ *                           data_inicio:
+ *                             type: string
+ *                             format: date
+ *                           data_fim:
+ *                             type: string
+ *                             format: date
+ *                           status:
+ *                             type: string
+ *                           observacoes:
+ *                             type: string
+ *                           funcionario:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: integer
+ *                               nome:
+ *                                 type: string
+ *                               cargo:
+ *                                 type: string
+ *                               status:
+ *                                 type: string
+ *                           grua:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               modelo:
+ *                                 type: string
+ *                               fabricante:
+ *                                 type: string
+ *                               tipo:
+ *                                 type: string
  *       404:
  *         description: Obra não encontrada
  */
@@ -185,6 +464,42 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
           cnpj,
           email,
           telefone
+        ),
+        grua_obra (
+          id,
+          grua_id,
+          data_inicio_locacao,
+          data_fim_locacao,
+          valor_locacao_mensal,
+          status,
+          observacoes,
+          grua:gruas (
+            id,
+            modelo,
+            fabricante,
+            tipo
+          )
+        ),
+        grua_funcionario (
+          id,
+          grua_id,
+          funcionario_id,
+          data_inicio,
+          data_fim,
+          status,
+          observacoes,
+          funcionario:funcionarios (
+            id,
+            nome,
+            cargo,
+            status
+          ),
+          grua:gruas (
+            id,
+            modelo,
+            fabricante,
+            tipo
+          )
         )
       `)
       .eq('id', id)
