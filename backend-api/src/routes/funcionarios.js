@@ -127,8 +127,8 @@ router.get('/', async (req, res) => {
       query = query.eq('turno', req.query.turno)
     }
 
-    // Aplicar paginação e ordenação
-    query = query.order('nome', { ascending: true }).range(offset, offset + limit - 1)
+    // Aplicar paginação e ordenação (ID descendente para mostrar os mais recentes primeiro)
+    query = query.order('id', { ascending: false }).range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
 

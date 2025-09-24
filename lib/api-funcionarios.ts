@@ -1,50 +1,47 @@
 // API client para funcionários
 import { buildApiUrl, API_ENDPOINTS } from './api'
 
-// Interfaces baseadas no backend
+// Interfaces baseadas no backend funcionarios.js
 export interface FuncionarioBackend {
   id: number
   nome: string
-  cargo: string
-  status: string
+  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico'
   telefone?: string
   email?: string
-  endereco?: string
-  cidade?: string
-  estado?: string
-  cep?: string
+  cpf?: string
+  turno: 'Diurno' | 'Noturno' | 'Sob Demanda'
+  status: 'Ativo' | 'Inativo' | 'Férias'
   data_admissao?: string
   salario?: number
+  observacoes?: string
   created_at: string
   updated_at: string
 }
 
 export interface FuncionarioCreateData {
   nome: string
-  cargo: string
-  status?: string
+  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico'
   telefone?: string
   email?: string
-  endereco?: string
-  cidade?: string
-  estado?: string
-  cep?: string
+  cpf?: string
+  turno?: 'Diurno' | 'Noturno' | 'Sob Demanda'
+  status?: 'Ativo' | 'Inativo' | 'Férias'
   data_admissao?: string
   salario?: number
+  observacoes?: string
 }
 
 export interface FuncionarioUpdateData {
   nome?: string
-  cargo?: string
-  status?: string
+  cargo?: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico'
   telefone?: string
   email?: string
-  endereco?: string
-  cidade?: string
-  estado?: string
-  cep?: string
+  cpf?: string
+  turno?: 'Diurno' | 'Noturno' | 'Sob Demanda'
+  status?: 'Ativo' | 'Inativo' | 'Férias'
   data_admissao?: string
   salario?: number
+  observacoes?: string
 }
 
 export interface FuncionariosResponse {
@@ -121,6 +118,7 @@ export const funcionariosApi = {
     limit?: number
     cargo?: string
     status?: string
+    turno?: string
   }): Promise<FuncionariosResponse> {
     const searchParams = new URLSearchParams()
     
@@ -128,6 +126,7 @@ export const funcionariosApi = {
     if (params?.limit) searchParams.append('limit', params.limit.toString())
     if (params?.cargo) searchParams.append('cargo', params.cargo)
     if (params?.status) searchParams.append('status', params.status)
+    if (params?.turno) searchParams.append('turno', params.turno)
 
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}?${searchParams.toString()}`)
     return apiRequest(url)
@@ -194,12 +193,11 @@ export const converterFuncionarioBackendParaFrontend = (funcionarioBackend: Func
     status: funcionarioBackend.status,
     phone: funcionarioBackend.telefone || '',
     email: funcionarioBackend.email || '',
-    address: funcionarioBackend.endereco || '',
-    city: funcionarioBackend.cidade || '',
-    state: funcionarioBackend.estado || '',
-    zipCode: funcionarioBackend.cep || '',
-    admissionDate: funcionarioBackend.data_admissao || '',
+    cpf: funcionarioBackend.cpf || '',
+    turno: funcionarioBackend.turno,
+    hireDate: funcionarioBackend.data_admissao || '',
     salary: funcionarioBackend.salario || 0,
+    observations: funcionarioBackend.observacoes || '',
     createdAt: funcionarioBackend.created_at,
     updatedAt: funcionarioBackend.updated_at
   }
@@ -212,12 +210,11 @@ export const converterFuncionarioFrontendParaBackend = (funcionarioFrontend: any
     status: funcionarioFrontend.status || 'Ativo',
     telefone: funcionarioFrontend.phone,
     email: funcionarioFrontend.email,
-    endereco: funcionarioFrontend.address,
-    cidade: funcionarioFrontend.city,
-    estado: funcionarioFrontend.state,
-    cep: funcionarioFrontend.zipCode,
-    data_admissao: funcionarioFrontend.admissionDate,
-    salario: funcionarioFrontend.salary
+    cpf: funcionarioFrontend.cpf,
+    turno: funcionarioFrontend.turno || 'Diurno',
+    data_admissao: funcionarioFrontend.hireDate,
+    salario: funcionarioFrontend.salary,
+    observacoes: funcionarioFrontend.observations
   }
 }
 
