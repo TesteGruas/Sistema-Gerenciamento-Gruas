@@ -46,6 +46,8 @@ import funcionalidadesAvancadasRoutes from './routes/funcionalidades-avancadas.j
 import arquivosRoutes from './routes/arquivos.js'
 import arquivosTestRoutes from './routes/arquivos-test.js'
 import custosMensaisRoutes from './routes/custos-mensais.js'
+import obrasDocumentosRoutes from './routes/obras-documentos.js'
+import obrasArquivosRoutes from './routes/obras-arquivos.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -202,6 +204,8 @@ app.use('/api/funcionalidades-avancadas', funcionalidadesAvancadasRoutes)
 app.use('/api/arquivos', arquivosRoutes)
 app.use('/api/arquivos-test', arquivosTestRoutes)
 app.use('/api/custos-mensais', custosMensaisRoutes)
+app.use('/api/obras', obrasDocumentosRoutes)
+app.use('/api/obras', obrasArquivosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

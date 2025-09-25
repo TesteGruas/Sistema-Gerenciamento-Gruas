@@ -44,6 +44,8 @@ import {
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis, criarCustosParaNovoMes, CustoMensal, Obra } from "@/lib/mock-data"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalCreate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
+import { obrasDocumentosApi, DocumentoObra, DocumentoCreate } from "@/lib/api-obras-documentos"
+import { obrasArquivosApi, ArquivoObra, ArquivoCreate } from "@/lib/api-obras-arquivos"
 import LivroGruaForm from "@/components/livro-grua-form"
 import LivroGruaList from "@/components/livro-grua-list"
 import { Progress } from "@/components/ui/progress"
@@ -61,6 +63,12 @@ export default function ObraDetailsPage() {
   const [error, setError] = useState<string | null>(null)
   const [gruasReais, setGruasReais] = useState<any[]>([])
   const [loadingGruas, setLoadingGruas] = useState(false)
+  
+  // Estados para documentos e arquivos
+  const [documentos, setDocumentos] = useState<DocumentoObra[]>([])
+  const [arquivos, setArquivos] = useState<ArquivoObra[]>([])
+  const [loadingDocumentos, setLoadingDocumentos] = useState(false)
+  const [loadingArquivos, setLoadingArquivos] = useState(false)
   
   // Estados para livro da grua
   const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
@@ -178,7 +186,7 @@ export default function ObraDetailsPage() {
     window.print()
   }
 
-  const handleNovoArquivo = (e: React.FormEvent) => {
+  const handleNovoArquivo = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!obra) return
     if (!novoArquivoData.arquivo) {
@@ -186,31 +194,43 @@ export default function ObraDetailsPage() {
       return
     }
 
-    const novoArquivo = {
-      id: Date.now().toString(),
-      nome: novoArquivoData.nome,
-      descricao: novoArquivoData.descricao,
-      categoria: novoArquivoData.categoria,
-      nomeArquivo: novoArquivoData.arquivo.name,
-      tamanho: novoArquivoData.arquivo.size,
-      tipo: novoArquivoData.arquivo.type,
-      dataUpload: new Date().toISOString(),
-      obraId: obra.id
-    }
+    try {
+      const dadosArquivo: ArquivoCreate = {
+        obra_id: parseInt(obra.id),
+        nome_original: novoArquivoData.arquivo.name,
+        descricao: novoArquivoData.descricao,
+        categoria: novoArquivoData.categoria as any,
+        arquivo: novoArquivoData.arquivo
+      }
 
-    setArquivosAdicionais([...arquivosAdicionais, novoArquivo])
-    setNovoArquivoData({
-      nome: '',
-      descricao: '',
-      categoria: 'geral',
-      arquivo: null
-    })
-    setIsNovoArquivoOpen(false)
-    alert('Arquivo adicionado com sucesso!')
+      await obrasArquivosApi.upload(dadosArquivo)
+      await carregarArquivos()
+      
+      setNovoArquivoData({
+        nome: '',
+        descricao: '',
+        categoria: 'geral',
+        arquivo: null
+      })
+      setIsNovoArquivoOpen(false)
+      alert('Arquivo adicionado com sucesso!')
+    } catch (error: any) {
+      console.error('Erro ao adicionar arquivo:', error)
+      alert(`Erro ao adicionar arquivo: ${error.message}`)
+    }
   }
 
-  const handleRemoverArquivo = (arquivoId: string) => {
-    setArquivosAdicionais(arquivosAdicionais.filter(arq => arq.id !== arquivoId))
+  const handleRemoverArquivo = async (arquivoId: number) => {
+    if (!confirm('Tem certeza que deseja excluir este arquivo?')) return
+
+    try {
+      await obrasArquivosApi.excluir(arquivoId)
+      await carregarArquivos()
+      alert('Arquivo excluído com sucesso!')
+    } catch (error: any) {
+      console.error('Erro ao excluir arquivo:', error)
+      alert(`Erro ao excluir arquivo: ${error.message}`)
+    }
   }
 
   const formatarTamanhoArquivo = (bytes: number) => {
@@ -769,6 +789,98 @@ export default function ObraDetailsPage() {
     }
   }
 
+  // Carregar documentos da obra
+  const carregarDocumentos = async () => {
+    if (!obra) return
+    
+    try {
+      setLoadingDocumentos(true)
+      const response = await obrasDocumentosApi.listarPorObra(parseInt(obra.id))
+      setDocumentos(Array.isArray(response.data) ? response.data : [response.data])
+    } catch (error: any) {
+      console.error('Erro ao carregar documentos:', error)
+      // Fallback para dados mockados
+      const documentosMockados = getDocumentosByObra(obra.id)
+      setDocumentos(documentosMockados.map(doc => ({
+        id: parseInt(doc.id),
+        obra_id: parseInt(obra.id),
+        obra_nome: obra.name,
+        titulo: doc.titulo,
+        descricao: doc.descricao,
+        arquivo_original: doc.arquivoOriginal,
+        arquivo_assinado: doc.arquivo,
+        caminho_arquivo: doc.arquivo,
+        docu_sign_link: doc.docuSignLink,
+        docu_sign_envelope_id: '',
+        status: doc.status as any,
+        proximo_assinante_id: undefined,
+        proximo_assinante_nome: doc.proximoAssinante,
+        created_by: 1,
+        created_by_nome: 'Usuário',
+        created_at: doc.createdAt,
+        updated_at: doc.updatedAt,
+        total_assinantes: doc.ordemAssinatura.length,
+        assinaturas_concluidas: doc.ordemAssinatura.filter(a => a.status === 'assinado').length,
+        progresso_percentual: Math.round((doc.ordemAssinatura.filter(a => a.status === 'assinado').length / doc.ordemAssinatura.length) * 100),
+        assinaturas: doc.ordemAssinatura.map(ass => ({
+          id: 1,
+          documento_id: parseInt(doc.id),
+          user_id: parseInt(ass.userId),
+          ordem: ass.ordem,
+          status: ass.status as any,
+          docu_sign_link: ass.docuSignLink,
+          docu_sign_envelope_id: '',
+          data_envio: undefined,
+          data_assinatura: undefined,
+          arquivo_assinado: ass.arquivoAssinado,
+          observacoes: '',
+          email_enviado: false,
+          data_email_enviado: undefined,
+          created_at: doc.createdAt,
+          updated_at: doc.updatedAt,
+          usuario: {
+            id: parseInt(ass.userId),
+            nome: ass.userName,
+            email: '',
+            role: ass.role
+          }
+        })),
+        historico: doc.historicoAssinaturas.map(h => ({
+          id: 1,
+          documento_id: parseInt(doc.id),
+          user_id: 1,
+          acao: 'criado' as any,
+          data_acao: doc.createdAt,
+          arquivo_gerado: '',
+          observacoes: '',
+          ip_address: undefined,
+          user_agent: '',
+          user_nome: h.userName,
+          user_email: '',
+          user_role: h.role
+        }))
+      })))
+    } finally {
+      setLoadingDocumentos(false)
+    }
+  }
+
+  // Carregar arquivos da obra
+  const carregarArquivos = async () => {
+    if (!obra) return
+    
+    try {
+      setLoadingArquivos(true)
+      const response = await obrasArquivosApi.listarPorObra(parseInt(obra.id))
+      setArquivos(Array.isArray(response.data) ? response.data : [response.data])
+    } catch (error: any) {
+      console.error('Erro ao carregar arquivos:', error)
+      setArquivos([])
+    } finally {
+      setLoadingArquivos(false)
+    }
+  }
+
   // Handlers para livro da grua
   const handleEditarEntrada = (entrada: EntradaLivroGruaCompleta) => {
     setEntradaSelecionada(entrada)
@@ -805,6 +917,14 @@ export default function ObraDetailsPage() {
   useEffect(() => {
     if (obra) {
       carregarCustosMensais()
+    }
+  }, [obra?.id])
+
+  // Carregar documentos e arquivos quando a obra mudar
+  useEffect(() => {
+    if (obra) {
+      carregarDocumentos()
+      carregarArquivos()
     }
   }, [obra?.id])
 
@@ -903,7 +1023,6 @@ export default function ObraDetailsPage() {
   // Definir variáveis que dependem de obra
   const gruasVinculadas = gruasReais.length > 0 ? gruasReais : getGruasByObra(obra.id)
   const custos = getCustosByObra(obra.id)
-  const documentos = getDocumentosByObra(obra.id)
   
 
   return (
@@ -1475,7 +1594,12 @@ export default function ObraDetailsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {documentos.length > 0 ? (
+              {loadingDocumentos ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  <span>Carregando documentos...</span>
+                </div>
+              ) : documentos.length > 0 ? (
                 <div className="space-y-4">
                   {documentos.map((documento) => (
                     <Card key={documento.id} className="border-l-4 border-l-blue-500">
@@ -1510,81 +1634,85 @@ export default function ObraDetailsPage() {
                             <div className="flex items-center gap-2">
                               <Calendar className="w-4 h-4 text-gray-500" />
                               <span className="text-gray-600">Criado em:</span>
-                              <span>{new Date(documento.createdAt).toLocaleDateString('pt-BR')}</span>
+                              <span>{new Date(documento.created_at).toLocaleDateString('pt-BR')}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Users className="w-4 h-4 text-gray-500" />
                               <span className="text-gray-600">Assinantes:</span>
-                              <span>{documento.ordemAssinatura.length}</span>
+                              <span>{documento.assinaturas.length}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <CheckCircle className="w-4 h-4 text-gray-500" />
                               <span className="text-gray-600">Progresso:</span>
-                              <span>{Math.round((documento.ordemAssinatura.filter(a => a.status === 'assinado').length / documento.ordemAssinatura.length) * 100)}%</span>
+                              <span>{documento.assinaturas.length > 0 ? Math.round((documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100) : 0}%</span>
                             </div>
                           </div>
 
                           {/* Barra de progresso */}
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span>Progresso das Assinaturas</span>
-                              <span>{Math.round((documento.ordemAssinatura.filter(a => a.status === 'assinado').length / documento.ordemAssinatura.length) * 100)}%</span>
+                          {documento.assinaturas.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span>Progresso das Assinaturas</span>
+                                <span>{Math.round((documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100)}%</span>
+                              </div>
+                              <Progress 
+                                value={(documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100} 
+                                className="h-2"
+                              />
                             </div>
-                            <Progress 
-                              value={(documento.ordemAssinatura.filter(a => a.status === 'assinado').length / documento.ordemAssinatura.length) * 100} 
-                              className="h-2"
-                            />
-                          </div>
+                          )}
 
                           {/* Lista de assinaturas */}
-                          <div className="space-y-2">
-                            <h4 className="font-medium text-sm text-gray-700">Ordem de Assinaturas</h4>
+                          {documento.assinaturas.length > 0 && (
                             <div className="space-y-2">
-                              {documento.ordemAssinatura
-                                .sort((a, b) => a.ordem - b.ordem)
-                                .map((assinatura, index) => (
-                                <div key={assinatura.userId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">
-                                      {assinatura.ordem}
+                              <h4 className="font-medium text-sm text-gray-700">Ordem de Assinaturas</h4>
+                              <div className="space-y-2">
+                                {documento.assinaturas
+                                  .sort((a, b) => a.ordem - b.ordem)
+                                  .map((assinatura, index) => (
+                                  <div key={assinatura.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">
+                                        {assinatura.ordem}
+                                      </div>
+                                      <div>
+                                        <p className="font-medium text-sm">{assinatura.usuario?.nome || 'Usuário'}</p>
+                                        <p className="text-xs text-gray-600">{assinatura.usuario?.role || 'N/A'}</p>
+                                      </div>
                                     </div>
-                                    <div>
-                                      <p className="font-medium text-sm">{assinatura.userName}</p>
-                                      <p className="text-xs text-gray-600">{assinatura.role}</p>
+                                    <div className="flex items-center gap-2">
+                                      <Badge className={getSignatureStatusColor(assinatura.status)}>
+                                        {assinatura.status}
+                                      </Badge>
+                                      {assinatura.arquivo_assinado && (
+                                        <Button size="sm" variant="outline">
+                                          <Download className="w-3 h-3 mr-1" />
+                                          Baixar
+                                        </Button>
+                                      )}
+                                      {assinatura.docu_sign_link && (
+                                        <Button 
+                                          size="sm" 
+                                          variant="outline"
+                                          onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
+                                        >
+                                          <ExternalLink className="w-3 h-3 mr-1" />
+                                          DocuSign
+                                        </Button>
+                                      )}
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge className={getSignatureStatusColor(assinatura.status)}>
-                                      {assinatura.status}
-                                    </Badge>
-                                    {assinatura.arquivoAssinado && (
-                                      <Button size="sm" variant="outline">
-                                        <Download className="w-3 h-3 mr-1" />
-                                        Baixar
-                                      </Button>
-                                    )}
-                                    {assinatura.docuSignLink && (
-                                      <Button 
-                                        size="sm" 
-                                        variant="outline"
-                                        onClick={() => window.open(assinatura.docuSignLink, '_blank')}
-                                      >
-                                        <ExternalLink className="w-3 h-3 mr-1" />
-                                        DocuSign
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
+                          )}
 
                           {/* Próximo assinante */}
-                          {documento.proximoAssinante && (
+                          {documento.proximo_assinante_id && (
                             <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
                               <Clock className="w-4 h-4 text-blue-600" />
                               <span className="text-sm text-blue-800">
-                                Próximo a assinar: <strong>{documento.ordemAssinatura.find(a => a.userId === documento.proximoAssinante)?.userName}</strong>
+                                Próximo a assinar: <strong>{documento.assinaturas.find(a => a.user_id === documento.proximo_assinante_id)?.usuario?.nome || 'Usuário'}</strong>
                               </span>
                             </div>
                           )}
@@ -1629,16 +1757,21 @@ export default function ObraDetailsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {arquivosAdicionais.length > 0 ? (
+              {loadingArquivos ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  <span>Carregando arquivos...</span>
+                </div>
+              ) : arquivos.length > 0 ? (
                 <div className="space-y-4">
-                  {arquivosAdicionais.map((arquivo) => (
+                  {arquivos.map((arquivo) => (
                     <Card key={arquivo.id} className="border-l-4 border-l-green-500">
                       <CardHeader className="pb-3">
                         <div className="flex justify-between items-start">
                           <div className="flex items-center gap-3">
                             <File className="w-5 h-5 text-green-600" />
                             <div>
-                              <CardTitle className="text-lg">{arquivo.nome}</CardTitle>
+                              <CardTitle className="text-lg">{arquivo.nome_original}</CardTitle>
                               <CardDescription className="mt-1">{arquivo.descricao}</CardDescription>
                             </div>
                           </div>
@@ -1649,10 +1782,13 @@ export default function ObraDetailsPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => {
-                                // Simular download
-                                console.log('Download arquivo:', arquivo.nomeArquivo)
-                                alert('Download iniciado!')
+                              onClick={async () => {
+                                try {
+                                  await obrasArquivosApi.baixar(parseInt(obra.id), arquivo.id)
+                                } catch (error: any) {
+                                  console.error('Erro ao baixar arquivo:', error)
+                                  alert(`Erro ao baixar arquivo: ${error.message}`)
+                                }
                               }}
                             >
                               <Download className="w-4 h-4 mr-1" />
@@ -1674,12 +1810,12 @@ export default function ObraDetailsPage() {
                           <div className="flex items-center gap-2">
                             <Paperclip className="w-4 h-4 text-gray-500" />
                             <span className="text-gray-600">Arquivo:</span>
-                            <span className="font-medium">{arquivo.nomeArquivo}</span>
+                            <span className="font-medium">{arquivo.nome_arquivo}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-gray-500" />
                             <span className="text-gray-600">Upload:</span>
-                            <span>{new Date(arquivo.dataUpload).toLocaleDateString('pt-BR')}</span>
+                            <span>{new Date(arquivo.created_at).toLocaleDateString('pt-BR')}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <FileText className="w-4 h-4 text-gray-500" />
@@ -1689,9 +1825,19 @@ export default function ObraDetailsPage() {
                           <div className="flex items-center gap-2">
                             <File className="w-4 h-4 text-gray-500" />
                             <span className="text-gray-600">Tipo:</span>
-                            <span>{arquivo.tipo}</span>
+                            <span>{arquivo.tipo_mime}</span>
                           </div>
                         </div>
+                        {arquivo.download_count > 0 && (
+                          <div className="mt-3 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                            <span>Downloads: {arquivo.download_count}</span>
+                            {arquivo.last_download_at && (
+                              <span className="ml-4">
+                                Último download: {new Date(arquivo.last_download_at).toLocaleDateString('pt-BR')}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -3120,3 +3266,4 @@ export default function ObraDetailsPage() {
     </div>
   )
 }
+
