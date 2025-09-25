@@ -75,6 +75,11 @@ const funcionarioUpdateSchema = funcionarioSchema.fork(
  *           type: string
  *           enum: [Diurno, Noturno, Sob Demanda]
  *         description: Filtrar por turno
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar por nome ou email (LIKE)
  *     responses:
  *       200:
  *         description: Lista de funcionários
@@ -125,6 +130,10 @@ router.get('/', async (req, res) => {
     }
     if (req.query.turno) {
       query = query.eq('turno', req.query.turno)
+    }
+    if (req.query.search) {
+      const searchTerm = `%${req.query.search}%`
+      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm}`)
     }
 
     // Aplicar paginação e ordenação (ID descendente para mostrar os mais recentes primeiro)

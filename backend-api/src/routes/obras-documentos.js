@@ -40,10 +40,208 @@ const documentoSchema = Joi.object({
   descricao: Joi.string().allow('').optional(),
   ordem_assinatura: Joi.array().items(
     Joi.object({
-      user_id: Joi.number().integer().positive().required(),
-      ordem: Joi.number().integer().positive().required()
+      user_id: Joi.alternatives().try(
+        Joi.string().uuid(), // UUID do Supabase Auth
+        Joi.string().pattern(/^\d+$/) // ID numérico como string (funcionários/clientes)
+      ).required(),
+      ordem: Joi.number().integer().positive().required(),
+      tipo: Joi.string().valid('interno', 'cliente').default('interno'),
+      docu_sign_link: Joi.string().allow('').optional(), // Removido .uri() para permitir strings vazias
+      status: Joi.string().valid('pendente', 'aguardando', 'assinado', 'rejeitado').default('pendente')
     })
   ).min(1).required()
+})
+
+/**
+ * @swagger
+ * /api/obras/documentos/todos:
+ *   get:
+ *     summary: Listar todos os documentos
+ *     tags: [Obras Documentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [rascunho, aguardando_assinatura, em_assinatura, assinado, rejeitado]
+ *         description: Filtrar por status
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por obra específica
+ *     responses:
+ *       200:
+ *         description: Lista de todos os documentos
+ */
+router.get('/documentos/todos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+  try {
+    const { status, obra_id } = req.query
+
+    let query = supabaseAdmin
+      .from('v_obras_documentos_completo')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    if (obra_id) {
+      query = query.eq('obra_id', obra_id)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Erro ao buscar documentos:', error)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar documentos',
+        error: error.message
+      })
+    }
+
+    // Buscar assinaturas para cada documento
+    const documentosComAssinaturas = await Promise.all(
+      (data || []).map(async (documento) => {
+        const { data: assinaturas, error: assinaturasError } = await supabaseAdmin
+          .from('obras_documento_assinaturas')
+          .select('*')
+          .eq('documento_id', documento.id)
+          .order('ordem', { ascending: true })
+
+        if (assinaturasError) {
+          console.error('Erro ao buscar assinaturas:', assinaturasError)
+        }
+
+        // Buscar histórico
+        const { data: historico, error: historicoError } = await supabaseAdmin
+          .from('obras_documento_historico')
+          .select('*')
+          .eq('documento_id', documento.id)
+          .order('data_acao', { ascending: false })
+
+        if (historicoError) {
+          console.error('Erro ao buscar histórico:', historicoError)
+        }
+
+        // Buscar dados dos usuários para as assinaturas
+        const assinaturasComUsuario = await Promise.all((assinaturas || []).map(async (ass) => {
+          console.log(`🔍 PROCESSANDO ASSINATURA:`, {
+            user_id: ass.user_id,
+            tipo: ass.tipo,
+            ordem: ass.ordem
+          })
+          
+          let userInfo = {
+            user_nome: 'Usuário ID: ' + ass.user_id,
+            user_email: '',
+            user_cargo: ''
+          }
+
+          // Verificar se é UUID (usuário do Supabase Auth)
+          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          
+          if (uuidPattern.test(ass.user_id)) {
+            // Buscar no auth.users
+            try {
+              const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(ass.user_id)
+              if (authUser?.user) {
+                userInfo = {
+                  user_nome: authUser.user.user_metadata?.nome || authUser.user.email || 'Usuário Auth',
+                  user_email: authUser.user.email || '',
+                  user_cargo: authUser.user.user_metadata?.cargo || 'Usuário'
+                }
+              }
+            } catch (error) {
+              console.log('Erro ao buscar usuário auth:', error.message)
+            }
+          } else {
+            // Buscar em funcionários ou clientes baseado no tipo
+            console.log(`🔍 Buscando usuário: ID=${ass.user_id}, Tipo=${ass.tipo}`)
+            try {
+              if (ass.tipo === 'cliente') {
+                // Buscar cliente
+                console.log(`📋 Buscando CLIENTE com ID: ${ass.user_id}`)
+                const { data: cliente } = await supabaseAdmin
+                  .from('clientes')
+                  .select('nome, email')
+                  .eq('id', ass.user_id)
+                  .single()
+
+                if (cliente) {
+                  console.log(`✅ Cliente encontrado: ${cliente.nome}`)
+                  userInfo = {
+                    user_nome: cliente.nome || 'Cliente',
+                    user_email: cliente.email || '',
+                    user_cargo: 'Cliente'
+                  }
+                } else {
+                  console.log(`❌ Cliente não encontrado com ID: ${ass.user_id}`)
+                }
+              } else {
+                // Buscar funcionário (tipo 'interno' ou padrão)
+                console.log(`👷 Buscando FUNCIONÁRIO com ID: ${ass.user_id}`)
+                const { data: funcionario } = await supabaseAdmin
+                  .from('funcionarios')
+                  .select('nome, email, cargo')
+                  .eq('id', ass.user_id)
+                  .single()
+
+                if (funcionario) {
+                  console.log(`✅ Funcionário encontrado: ${funcionario.nome}`)
+                  userInfo = {
+                    user_nome: funcionario.nome || 'Funcionário',
+                    user_email: funcionario.email || '',
+                    user_cargo: funcionario.cargo || 'Funcionário'
+                  }
+                } else {
+                  console.log(`❌ Funcionário não encontrado com ID: ${ass.user_id}`)
+                }
+              }
+            } catch (error) {
+              console.log('❌ Erro ao buscar usuário local:', error.message)
+            }
+          }
+
+          const resultado = {
+            ...ass,
+            ...userInfo
+          }
+          
+          console.log(`✅ RESULTADO FINAL:`, {
+            user_id: resultado.user_id,
+            tipo: resultado.tipo,
+            user_nome: resultado.user_nome,
+            user_cargo: resultado.user_cargo
+          })
+          
+          return resultado
+        }))
+
+        return {
+          ...documento,
+          assinaturas: assinaturasComUsuario,
+          historico: historico || []
+        }
+      })
+    )
+
+    res.json({
+      success: true,
+      data: documentosComAssinaturas
+    })
+  } catch (error) {
+    console.error('Erro ao listar documentos:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
 })
 
 /**
@@ -102,15 +300,7 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('visualiz
       data.map(async (documento) => {
         const { data: assinaturas, error: assinaturasError } = await supabaseAdmin
           .from('obras_documento_assinaturas')
-          .select(`
-            *,
-            usuarios (
-              id,
-              nome,
-              email,
-              role
-            )
-          `)
+          .select('*')
           .eq('documento_id', documento.id)
           .order('ordem', { ascending: true })
 
@@ -119,9 +309,103 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('visualiz
           return { ...documento, assinaturas: [] }
         }
 
+        // Buscar dados dos usuários para as assinaturas
+        const assinaturasComUsuario = await Promise.all((assinaturas || []).map(async (ass) => {
+          console.log(`🔍 PROCESSANDO ASSINATURA:`, {
+            user_id: ass.user_id,
+            tipo: ass.tipo,
+            ordem: ass.ordem
+          })
+          
+          let userInfo = {
+            user_nome: 'Usuário ID: ' + ass.user_id,
+            user_email: '',
+            user_cargo: ''
+          }
+
+          // Verificar se é UUID (usuário do Supabase Auth)
+          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          
+          if (uuidPattern.test(ass.user_id)) {
+            // Buscar no auth.users
+            try {
+              const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(ass.user_id)
+              if (authUser?.user) {
+                userInfo = {
+                  user_nome: authUser.user.user_metadata?.nome || authUser.user.email || 'Usuário Auth',
+                  user_email: authUser.user.email || '',
+                  user_cargo: authUser.user.user_metadata?.cargo || 'Usuário'
+                }
+              }
+            } catch (error) {
+              console.log('Erro ao buscar usuário auth:', error.message)
+            }
+          } else {
+            // Buscar em funcionários ou clientes baseado no tipo
+            console.log(`🔍 Buscando usuário: ID=${ass.user_id}, Tipo=${ass.tipo}`)
+            try {
+              if (ass.tipo === 'cliente') {
+                // Buscar cliente
+                console.log(`📋 Buscando CLIENTE com ID: ${ass.user_id}`)
+                const { data: cliente } = await supabaseAdmin
+                  .from('clientes')
+                  .select('nome, email')
+                  .eq('id', ass.user_id)
+                  .single()
+
+                if (cliente) {
+                  console.log(`✅ Cliente encontrado: ${cliente.nome}`)
+                  userInfo = {
+                    user_nome: cliente.nome || 'Cliente',
+                    user_email: cliente.email || '',
+                    user_cargo: 'Cliente'
+                  }
+                } else {
+                  console.log(`❌ Cliente não encontrado com ID: ${ass.user_id}`)
+                }
+              } else {
+                // Buscar funcionário (tipo 'interno' ou padrão)
+                console.log(`👷 Buscando FUNCIONÁRIO com ID: ${ass.user_id}`)
+                const { data: funcionario } = await supabaseAdmin
+                  .from('funcionarios')
+                  .select('nome, email, cargo')
+                  .eq('id', ass.user_id)
+                  .single()
+
+                if (funcionario) {
+                  console.log(`✅ Funcionário encontrado: ${funcionario.nome}`)
+                  userInfo = {
+                    user_nome: funcionario.nome || 'Funcionário',
+                    user_email: funcionario.email || '',
+                    user_cargo: funcionario.cargo || 'Funcionário'
+                  }
+                } else {
+                  console.log(`❌ Funcionário não encontrado com ID: ${ass.user_id}`)
+                }
+              }
+            } catch (error) {
+              console.log('❌ Erro ao buscar usuário local:', error.message)
+            }
+          }
+
+          const resultado = {
+            ...ass,
+            ...userInfo
+          }
+          
+          console.log(`✅ RESULTADO FINAL:`, {
+            user_id: resultado.user_id,
+            tipo: resultado.tipo,
+            user_nome: resultado.user_nome,
+            user_cargo: resultado.user_cargo
+          })
+          
+          return resultado
+        }))
+
         return {
           ...documento,
-          ordemAssinatura: assinaturas
+          ordemAssinatura: assinaturasComUsuario
         }
       })
     )
@@ -196,12 +480,21 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_o
     }
 
     // Validar dados
+    console.log('=== DEBUG PARSING ===')
+    console.log('ordem_assinatura raw:', ordem_assinatura)
+    console.log('typeof ordem_assinatura:', typeof ordem_assinatura)
+    
     const ordemAssinaturaArray = JSON.parse(ordem_assinatura)
+    console.log('ordemAssinaturaArray parsed:', JSON.stringify(ordemAssinaturaArray, null, 2))
+    
     const { error: validationError } = documentoSchema.validate({
       titulo,
       descricao,
       ordem_assinatura: ordemAssinaturaArray
     })
+    
+    console.log('validationError:', validationError)
+    console.log('=== FIM DEBUG PARSING ===')
 
     if (validationError) {
       return res.status(400).json({
@@ -247,6 +540,79 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_o
       })
     }
 
+    // Verificar se os usuários das assinaturas existem (auth.users para UUIDs, funcionários/clientes para IDs numéricos)
+    const userIds = ordemAssinaturaArray.map(item => item.user_id)
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    
+    // Separar UUIDs e IDs numéricos
+    const uuids = userIds.filter(id => uuidPattern.test(id))
+    const numericIds = userIds.filter(id => !uuidPattern.test(id))
+    
+    // Verificar UUIDs no auth.users
+    const usuariosInexistentes = []
+    
+    if (uuids.length > 0) {
+      const { data: usuariosAuth, error: usuariosError } = await supabaseAdmin.auth.admin.listUsers()
+      
+      if (usuariosError) {
+        console.error('Erro ao verificar usuários auth:', usuariosError)
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao verificar usuários auth',
+          error: usuariosError.message
+        })
+      }
+      
+      const usuariosAuthIds = usuariosAuth.users.map(u => u.id)
+      const uuidsInexistentes = uuids.filter(id => !usuariosAuthIds.includes(id))
+      usuariosInexistentes.push(...uuidsInexistentes)
+    }
+    
+    // Verificar IDs numéricos nas tabelas funcionários/clientes
+    if (numericIds.length > 0) {
+      for (const id of numericIds) {
+        const { data: funcionario } = await supabaseAdmin
+          .from('funcionarios')
+          .select('id')
+          .eq('id', id)
+          .single()
+          
+        const { data: cliente } = await supabaseAdmin
+          .from('clientes')
+          .select('id')
+          .eq('id', id)
+          .single()
+          
+        if (!funcionario && !cliente) {
+          usuariosInexistentes.push(id)
+        }
+      }
+    }
+    
+    if (usuariosInexistentes.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Usuários não encontrados',
+        error: `IDs de usuários não encontrados: ${usuariosInexistentes.join(', ')}`
+      })
+    }
+
+    // Converter primeiro user_id para UUID se necessário
+    const primeiroUserId = ordemAssinaturaArray[0]?.user_id
+    let proximoAssinanteId = null
+    
+    if (primeiroUserId) {
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidPattern.test(primeiroUserId)) {
+        const numericId = parseInt(primeiroUserId)
+        if (!isNaN(numericId)) {
+          proximoAssinanteId = `00000000-0000-0000-0000-${numericId.toString().padStart(12, '0')}`
+        }
+      } else {
+        proximoAssinanteId = primeiroUserId
+      }
+    }
+
     // Salvar documento no banco
     const documentoData = {
       obra_id: parseInt(obraId),
@@ -256,7 +622,7 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_o
       caminho_arquivo: filePath,
       status: 'rascunho',
       created_by: req.user.id,
-      proximo_assinante_id: ordemAssinaturaArray[0]?.user_id || null
+      proximo_assinante_id: proximoAssinanteId
     }
 
     const { data: documento, error: documentoError } = await supabaseAdmin
@@ -280,21 +646,37 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_o
     }
 
     // Salvar ordem de assinaturas
+    console.log('=== DEBUG ASSINATURAS ===')
+    console.log('ordemAssinaturaArray:', JSON.stringify(ordemAssinaturaArray, null, 2))
+    console.log('documento.id:', documento.id)
+    
     const assinaturasData = ordemAssinaturaArray.map(item => ({
       documento_id: documento.id,
-      user_id: item.user_id,
+      user_id: item.user_id, // Usar o ID original (string)
       ordem: item.ordem,
-      status: item.ordem === 1 ? 'aguardando' : 'pendente'
+      status: item.status || (item.ordem === 1 ? 'aguardando' : 'pendente'),
+      tipo: item.tipo || 'interno', // Default para 'interno' se não especificado
+      docu_sign_link: item.docu_sign_link || null
     }))
 
-    const { error: assinaturasError } = await supabaseAdmin
+    console.log('assinaturasData preparado:', JSON.stringify(assinaturasData, null, 2))
+
+    const { data: assinaturasInseridas, error: assinaturasError } = await supabaseAdmin
       .from('obras_documento_assinaturas')
       .insert(assinaturasData)
+      .select()
 
     if (assinaturasError) {
       console.error('Erro ao salvar assinaturas:', assinaturasError)
-      // Não falhar a operação, apenas logar o erro
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar assinaturas',
+        error: assinaturasError.message
+      })
     }
+
+    console.log('Assinaturas inseridas com sucesso:', assinaturasInseridas)
+    console.log('=== FIM DEBUG ASSINATURAS ===')
 
     // Registrar no histórico
     await supabaseAdmin
@@ -379,15 +761,7 @@ router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermiss
     // Buscar assinaturas
     const { data: assinaturas, error: assinaturasError } = await supabaseAdmin
       .from('obras_documento_assinaturas')
-      .select(`
-        *,
-        usuarios (
-          id,
-          nome,
-          email,
-          role
-        )
-      `)
+      .select('*')
       .eq('documento_id', documentoId)
       .order('ordem', { ascending: true })
 
@@ -595,6 +969,43 @@ router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requi
 /**
  * @swagger
  * /api/obras/{obraId}/documentos/{documentoId}:
+ *   put:
+ *     summary: Atualizar documento
+ *     tags: [Obras Documentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: obraId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da obra
+ *       - in: path
+ *         name: documentoId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do documento
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               titulo:
+ *                 type: string
+ *               descricao:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [rascunho, aguardando_assinatura, em_assinatura, assinado, rejeitado]
+ *     responses:
+ *       200:
+ *         description: Documento atualizado com sucesso
+ *       404:
+ *         description: Documento não encontrado
  *   delete:
  *     summary: Excluir documento
  *     tags: [Obras Documentos]
@@ -619,6 +1030,92 @@ router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requi
  *       404:
  *         description: Documento não encontrado
  */
+router.put('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+  try {
+    const { obraId, documentoId } = req.params
+    const { titulo, descricao, status } = req.body
+
+    // Validar dados
+    const updateSchema = Joi.object({
+      titulo: Joi.string().min(2).max(255).optional(),
+      descricao: Joi.string().allow('').optional(),
+      status: Joi.string().valid('rascunho', 'aguardando_assinatura', 'em_assinatura', 'assinado', 'rejeitado').optional()
+    })
+
+    const { error: validationError } = updateSchema.validate({ titulo, descricao, status })
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        error: validationError.details[0].message
+      })
+    }
+
+    // Verificar se o documento existe
+    const { data: documentoExistente, error: documentoError } = await supabaseAdmin
+      .from('obras_documentos')
+      .select('*')
+      .eq('id', documentoId)
+      .eq('obra_id', obraId)
+      .single()
+
+    if (documentoError || !documentoExistente) {
+      return res.status(404).json({
+        success: false,
+        message: 'Documento não encontrado'
+      })
+    }
+
+    // Preparar dados para atualização
+    const updateData = {}
+    if (titulo !== undefined) updateData.titulo = titulo
+    if (descricao !== undefined) updateData.descricao = descricao
+    if (status !== undefined) updateData.status = status
+    updateData.updated_at = new Date().toISOString()
+
+    // Atualizar documento
+    const { data: documentoAtualizado, error: updateError } = await supabaseAdmin
+      .from('obras_documentos')
+      .update(updateData)
+      .eq('id', documentoId)
+      .eq('obra_id', obraId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error('Erro ao atualizar documento:', updateError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao atualizar documento',
+        error: updateError.message
+      })
+    }
+
+    // Registrar no histórico
+    await supabaseAdmin
+      .from('obras_documento_historico')
+      .insert({
+        documento_id: documentoId,
+        user_id: req.user.id,
+        acao: 'atualizado',
+        observacoes: `Documento atualizado: ${Object.keys(updateData).join(', ')}`
+      })
+
+    res.json({
+      success: true,
+      message: 'Documento atualizado com sucesso',
+      data: documentoAtualizado
+    })
+  } catch (error) {
+    console.error('Erro ao atualizar documento:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
 router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
     const { obraId, documentoId } = req.params
@@ -672,6 +1169,488 @@ router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePerm
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/obras/documentos/{documentoId}:
+ *   get:
+ *     summary: Obter documento específico
+ *     tags: [Obras Documentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentoId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do documento
+ *     responses:
+ *       200:
+ *         description: Documento encontrado
+ *       404:
+ *         description: Documento não encontrado
+ */
+router.get('/documentos/:documentoId', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+  try {
+    const { documentoId } = req.params
+
+    // Buscar documento específico
+    const { data: documento, error: documentoError } = await supabaseAdmin
+      .from('v_obras_documentos_completo')
+      .select('*')
+      .eq('id', documentoId)
+      .single()
+
+    if (documentoError || !documento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Documento não encontrado'
+      })
+    }
+
+    // Buscar assinaturas do documento
+    const { data: assinaturas, error: assinaturasError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*')
+      .eq('documento_id', documento.id)
+      .order('ordem', { ascending: true })
+
+    if (assinaturasError) {
+      console.error('Erro ao buscar assinaturas:', assinaturasError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar assinaturas',
+        error: assinaturasError.message
+      })
+    }
+
+    // Buscar histórico do documento
+    const { data: historico, error: historicoError } = await supabaseAdmin
+      .from('obras_documento_historico')
+      .select('*')
+      .eq('documento_id', documento.id)
+      .order('data_acao', { ascending: false })
+
+    if (historicoError) {
+      console.error('Erro ao buscar histórico:', historicoError)
+    }
+
+    // Buscar dados dos usuários para as assinaturas
+    const assinaturasComUsuario = await Promise.all((assinaturas || []).map(async (ass) => {
+      console.log(`🔍 PROCESSANDO ASSINATURA:`, {
+        user_id: ass.user_id,
+        tipo: ass.tipo,
+        ordem: ass.ordem
+      })
+      
+      let userInfo = {
+        user_nome: 'Usuário ID: ' + ass.user_id,
+        user_email: '',
+        user_cargo: ''
+      }
+
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+      if (uuidPattern.test(ass.user_id)) {
+        // Buscar no auth.users
+        try {
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(ass.user_id)
+          if (authUser?.user) {
+            userInfo = {
+              user_nome: authUser.user.user_metadata?.nome || authUser.user.email || 'Usuário Auth',
+              user_email: authUser.user.email || '',
+              user_cargo: authUser.user.user_metadata?.cargo || 'Usuário'
+            }
+          }
+        } catch (error) {
+          console.log('Erro ao buscar usuário auth:', error.message)
+        }
+      } else {
+        // Buscar em funcionários ou clientes baseado no tipo
+        console.log(`🔍 Buscando usuário: ID=${ass.user_id}, Tipo=${ass.tipo}`)
+        try {
+          if (ass.tipo === 'cliente') {
+            console.log(`📋 Buscando CLIENTE com ID: ${ass.user_id}`)
+            const { data: cliente } = await supabaseAdmin
+              .from('clientes')
+              .select('nome, email')
+              .eq('id', ass.user_id)
+              .single()
+
+            if (cliente) {
+              console.log(`✅ Cliente encontrado: ${cliente.nome}`)
+              userInfo = {
+                user_nome: cliente.nome || 'Cliente',
+                user_email: cliente.email || '',
+                user_cargo: 'Cliente'
+              }
+            } else {
+              console.log(`❌ Cliente não encontrado com ID: ${ass.user_id}`)
+            }
+          } else {
+            console.log(`👷 Buscando FUNCIONÁRIO com ID: ${ass.user_id}`)
+            const { data: funcionario } = await supabaseAdmin
+              .from('funcionarios')
+              .select('nome, email, cargo')
+              .eq('id', ass.user_id)
+              .single()
+
+            if (funcionario) {
+              console.log(`✅ Funcionário encontrado: ${funcionario.nome}`)
+              userInfo = {
+                user_nome: funcionario.nome || 'Funcionário',
+                user_email: funcionario.email || '',
+                user_cargo: funcionario.cargo || 'Funcionário'
+              }
+            } else {
+              console.log(`❌ Funcionário não encontrado com ID: ${ass.user_id}`)
+            }
+          }
+        } catch (error) {
+          console.log('❌ Erro ao buscar usuário local:', error.message)
+        }
+      }
+
+      const resultado = {
+        ...ass,
+        ...userInfo
+      }
+      
+      console.log(`✅ RESULTADO FINAL:`, {
+        user_id: resultado.user_id,
+        tipo: resultado.tipo,
+        user_nome: resultado.user_nome,
+        user_cargo: resultado.user_cargo
+      })
+      
+      return resultado
+    }))
+
+    const documentoCompleto = {
+      ...documento,
+      assinaturas: assinaturasComUsuario,
+      historico: historico || []
+    }
+
+    res.json({
+      success: true,
+      data: documentoCompleto
+    })
+
+  } catch (error) {
+    console.error('Erro ao buscar documento:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+// Endpoint de teste para criar documento sem arquivo
+router.post('/test/create-document', async (req, res) => {
+  try {
+    const { titulo, descricao, ordem_assinatura } = req.body
+    
+    console.log('=== TESTE CRIAÇÃO DOCUMENTO ===')
+    console.log('titulo:', titulo)
+    console.log('descricao:', descricao)
+    console.log('ordem_assinatura:', ordem_assinatura)
+    
+    // Parse da ordem de assinatura
+    const ordemAssinaturaArray = JSON.parse(ordem_assinatura)
+    console.log('ordemAssinaturaArray:', JSON.stringify(ordemAssinaturaArray, null, 2))
+    
+    // Validar com Joi
+    const { error: validationError } = documentoSchema.validate({
+      titulo,
+      descricao,
+      ordem_assinatura: ordemAssinaturaArray
+    })
+    
+    if (validationError) {
+      console.error('Erro de validação:', validationError)
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        error: validationError.details[0].message
+      })
+    }
+    
+    // Verificar se os usuários existem (auth.users para UUIDs, funcionários/clientes para IDs numéricos)
+    const userIds = ordemAssinaturaArray.map(item => item.user_id)
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    
+    // Separar UUIDs e IDs numéricos
+    const uuids = userIds.filter(id => uuidPattern.test(id))
+    const numericIds = userIds.filter(id => !uuidPattern.test(id))
+    
+    // Verificar UUIDs no auth.users
+    const usuariosInexistentes = []
+    
+    if (uuids.length > 0) {
+      const { data: usuariosAuth, error: usuariosError } = await supabaseAdmin.auth.admin.listUsers()
+      
+      if (usuariosError) {
+        console.error('Erro ao verificar usuários auth:', usuariosError)
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao verificar usuários auth',
+          error: usuariosError.message
+        })
+      }
+      
+      const usuariosAuthIds = usuariosAuth.users.map(u => u.id)
+      const uuidsInexistentes = uuids.filter(id => !usuariosAuthIds.includes(id))
+      usuariosInexistentes.push(...uuidsInexistentes)
+    }
+    
+    // Verificar IDs numéricos nas tabelas funcionários/clientes
+    if (numericIds.length > 0) {
+      for (const id of numericIds) {
+        const { data: funcionario } = await supabaseAdmin
+          .from('funcionarios')
+          .select('id')
+          .eq('id', id)
+          .single()
+          
+        const { data: cliente } = await supabaseAdmin
+          .from('clientes')
+          .select('id')
+          .eq('id', id)
+          .single()
+          
+        if (!funcionario && !cliente) {
+          usuariosInexistentes.push(id)
+        }
+      }
+    }
+    
+    if (usuariosInexistentes.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Usuários não encontrados',
+        error: `IDs de usuários não encontrados: ${usuariosInexistentes.join(', ')}`
+      })
+    }
+
+    // Buscar uma obra existente para teste
+    const { data: obraExistente, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id')
+      .limit(1)
+      .single()
+
+    if (obraError || !obraExistente) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhuma obra encontrada para teste'
+      })
+    }
+
+    // Criar documento de teste
+    // Converter primeiro user_id para UUID se necessário
+    const primeiroUserId = ordemAssinaturaArray[0]?.user_id
+    let proximoAssinanteId = null
+    
+    if (primeiroUserId) {
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidPattern.test(primeiroUserId)) {
+        const numericId = parseInt(primeiroUserId)
+        if (!isNaN(numericId)) {
+          proximoAssinanteId = `00000000-0000-0000-0000-${numericId.toString().padStart(12, '0')}`
+        }
+      } else {
+        proximoAssinanteId = primeiroUserId
+      }
+    }
+
+    const documentoData = {
+      obra_id: obraExistente.id,
+      titulo,
+      descricao: descricao || null,
+      arquivo_original: 'teste.pdf',
+      caminho_arquivo: 'teste/teste.pdf',
+      status: 'rascunho',
+      created_by: usuariosExistentesIds[0], // Usar um usuário que existe
+      proximo_assinante_id: proximoAssinanteId
+    }
+    
+    const { data: documento, error: documentoError } = await supabaseAdmin
+      .from('obras_documentos')
+      .insert(documentoData)
+      .select()
+      .single()
+    
+    if (documentoError) {
+      console.error('Erro ao criar documento:', documentoError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao criar documento',
+        error: documentoError.message
+      })
+    }
+    
+    // Salvar assinaturas
+    const assinaturasData = ordemAssinaturaArray.map(item => ({
+      documento_id: documento.id,
+      user_id: item.user_id, // Usar o ID original (string)
+      ordem: item.ordem,
+      status: item.status || (item.ordem === 1 ? 'aguardando' : 'pendente'),
+      tipo: item.tipo || 'interno',
+      docu_sign_link: item.docu_sign_link || null
+    }))
+    
+    console.log('assinaturasData:', JSON.stringify(assinaturasData, null, 2))
+    
+    const { data: assinaturasInseridas, error: assinaturasError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .insert(assinaturasData)
+      .select()
+    
+    if (assinaturasError) {
+      console.error('Erro ao salvar assinaturas:', assinaturasError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar assinaturas',
+        error: assinaturasError.message
+      })
+    }
+    
+    console.log('Assinaturas inseridas:', assinaturasInseridas)
+    console.log('=== FIM TESTE ===')
+    
+    res.json({
+      success: true,
+      message: 'Documento de teste criado com sucesso',
+      data: {
+        documento,
+        assinaturas: assinaturasInseridas
+      }
+    })
+    
+  } catch (error) {
+    console.error('Erro no teste:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro no teste',
+      error: error.message
+    })
+  }
+})
+
+// Endpoint para listar usuários disponíveis
+router.get('/test/users', async (req, res) => {
+  try {
+    const { data: usuarios, error } = await supabaseAdmin.auth.admin.listUsers()
+
+    if (error) {
+      console.error('Erro ao buscar usuários:', error)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar usuários',
+        error: error.message
+      })
+    }
+
+    // Mapear dados dos usuários para formato mais simples
+    const usuariosFormatados = usuarios.users.map(user => ({
+      id: user.id,
+      email: user.email,
+      nome: user.user_metadata?.nome || user.email,
+      role: user.user_metadata?.role || 'user'
+    }))
+
+    res.json({
+      success: true,
+      data: usuariosFormatados
+    })
+
+  } catch (error) {
+    console.error('Erro no teste:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro no teste',
+      error: error.message
+    })
+  }
+})
+
+// Endpoint de teste para verificar estrutura da tabela
+router.get('/test/table-structure', async (req, res) => {
+  try {
+    // Verificar estrutura da tabela obras_documento_assinaturas
+    const { data, error } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*')
+      .limit(1)
+
+    if (error) {
+      console.error('Erro ao verificar tabela:', error)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao verificar tabela',
+        error: error.message
+      })
+    }
+
+    // Buscar um usuário válido para teste
+    const { data: usuarios, error: usuariosError } = await supabaseAdmin.auth.admin.listUsers()
+    
+    if (usuariosError || !usuarios.users.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum usuário encontrado para teste'
+      })
+    }
+
+    // Tentar inserir um registro de teste
+    const testData = {
+      documento_id: 999999, // ID que não existe
+      user_id: usuarios.users[0].id, // Usar ID de usuário válido
+      ordem: 1,
+      status: 'pendente',
+      tipo: 'interno',
+      docu_sign_link: 'test'
+    }
+
+    const { data: insertData, error: insertError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .insert(testData)
+      .select()
+
+    if (insertError) {
+      console.error('Erro ao inserir teste:', insertError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao inserir teste',
+        error: insertError.message,
+        testData
+      })
+    }
+
+    // Remover o registro de teste
+    await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .delete()
+      .eq('documento_id', 999999)
+
+    res.json({
+      success: true,
+      message: 'Tabela funcionando corretamente',
+      testInsert: insertData
+    })
+
+  } catch (error) {
+    console.error('Erro no teste:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro no teste',
       error: error.message
     })
   }

@@ -33,6 +33,7 @@ export interface AssinaturaDocumento {
   user_id: number
   ordem: number
   status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado'
+  tipo: 'interno' | 'cliente'
   docu_sign_link?: string
   docu_sign_envelope_id?: string
   data_envio?: string
@@ -43,6 +44,9 @@ export interface AssinaturaDocumento {
   data_email_enviado?: string
   created_at: string
   updated_at: string
+  user_nome?: string
+  user_email?: string
+  user_cargo?: string
   usuario?: {
     id: number
     nome: string
@@ -79,6 +83,9 @@ export interface DocumentoCreate {
   ordem_assinatura: Array<{
     user_id: number
     ordem: number
+    tipo: 'interno' | 'cliente'
+    docu_sign_link?: string
+    status?: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado'
   }>
 }
 
@@ -104,9 +111,29 @@ export const obrasDocumentosApi = {
     return response.data
   },
 
-  // Obter documento específico
+  // Listar todos os documentos
+  async listarTodos(params?: {
+    status?: string
+    obra_id?: number
+  }): Promise<DocumentoResponse> {
+    const queryParams = new URLSearchParams()
+    if (params?.status) queryParams.append('status', params.status)
+    if (params?.obra_id) queryParams.append('obra_id', params.obra_id.toString())
+    
+    const url = `/obras/documentos/todos${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+    const response = await api.get(url)
+    return response.data
+  },
+
+  // Obter documento específico por obra
   async obter(obraId: number, documentoId: number): Promise<DocumentoResponse> {
     const response = await api.get(`/obras/${obraId}/documentos/${documentoId}`)
+    return response.data
+  },
+
+  // Obter documento específico (geral)
+  async obterPorId(documentoId: number): Promise<DocumentoResponse> {
+    const response = await api.get(`/obras/documentos/${documentoId}`)
     return response.data
   },
 
@@ -154,6 +181,16 @@ export const obrasDocumentosApi = {
   async obterUrlDownload(obraId: number, documentoId: number): Promise<string> {
     const dados = await this.download(obraId, documentoId)
     return dados.download_url
+  },
+
+  // Atualizar documento
+  async atualizar(obraId: number, documentoId: number, dados: {
+    titulo?: string
+    descricao?: string
+    status?: 'rascunho' | 'aguardando_assinatura' | 'em_assinatura' | 'assinado' | 'rejeitado'
+  }): Promise<DocumentoResponse> {
+    const response = await api.put(`/obras/${obraId}/documentos/${documentoId}`, dados)
+    return response.data
   }
 }
 

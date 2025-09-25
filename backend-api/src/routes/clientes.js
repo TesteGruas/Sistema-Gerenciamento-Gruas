@@ -40,6 +40,11 @@ const clienteSchema = Joi.object({
  *           minimum: 1
  *           maximum: 100
  *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar por nome ou email (LIKE)
  *     responses:
  *       200:
  *         description: Lista de clientes
@@ -52,6 +57,12 @@ router.get('/', authenticateToken, requirePermission('visualizar_clientes'), asy
     let query = supabaseAdmin
       .from('clientes')
       .select('*', { count: 'exact' })
+
+    // Aplicar filtro de busca
+    if (req.query.search) {
+      const searchTerm = `%${req.query.search}%`
+      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm}`)
+    }
 
     query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
 

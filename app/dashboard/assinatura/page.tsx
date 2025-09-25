@@ -32,6 +32,9 @@ import {
   RefreshCw
 } from "lucide-react"
 import { mockDocumentos, mockObras, mockUsers } from "@/lib/mock-data"
+import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
+import { obrasApi } from "@/lib/api-obras"
+import api from "@/lib/api"
 
 export default function AssinaturaPage() {
   const router = useRouter()
@@ -41,6 +44,97 @@ export default function AssinaturaPage() {
   const [selectedObra, setSelectedObra] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
+  
+  // Estados para integração com backend
+  const [documentos, setDocumentos] = useState<DocumentoObra[]>([])
+  const [obras, setObras] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Função para carregar documentos do backend
+  const carregarDocumentos = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Carregar todas as obras primeiro
+      const obrasResponse = await obrasApi.listarObras()
+      setObras(obrasResponse.data)
+      
+      // Carregar todos os documentos de uma vez
+      const response = await obrasDocumentosApi.listarTodos()
+      const todosDocumentos = Array.isArray(response.data) ? response.data : [response.data]
+      
+      setDocumentos(todosDocumentos)
+    } catch (error: any) {
+      console.error('Erro ao carregar documentos:', error)
+      setError(error.message || 'Erro ao carregar documentos')
+      // Fallback para dados mockados
+      setDocumentos(mockDocumentos.map(doc => ({
+        id: parseInt(doc.id),
+        obra_id: parseInt(doc.obraId),
+        obra_nome: mockObras.find(o => o.id === doc.obraId)?.name || 'Obra',
+        titulo: doc.titulo,
+        descricao: doc.descricao,
+        arquivo_original: doc.arquivoOriginal,
+        arquivo_assinado: doc.arquivo,
+        caminho_arquivo: doc.arquivo,
+        docu_sign_link: doc.docuSignLink,
+        docu_sign_envelope_id: '',
+        status: doc.status as any,
+        proximo_assinante_id: undefined,
+        proximo_assinante_nome: doc.proximoAssinante,
+        created_by: 1,
+        created_by_nome: 'Usuário',
+        created_at: doc.createdAt,
+        updated_at: doc.updatedAt,
+        total_assinantes: doc.ordemAssinatura.length,
+        assinaturas_concluidas: doc.ordemAssinatura.filter(a => a.status === 'assinado').length,
+        progresso_percentual: Math.round((doc.ordemAssinatura.filter(a => a.status === 'assinado').length / doc.ordemAssinatura.length) * 100),
+        assinaturas: doc.ordemAssinatura.map(ass => ({
+          id: 1,
+          documento_id: parseInt(doc.id),
+          user_id: ass.userId, // Manter como string (UUID)
+          ordem: ass.ordem,
+          status: ass.status as any,
+          tipo: 'interno' as 'interno' | 'cliente', // Default para mockados
+          docu_sign_link: ass.docuSignLink,
+          docu_sign_envelope_id: '',
+          data_envio: undefined,
+          data_assinatura: undefined,
+          arquivo_assinado: ass.arquivoAssinado,
+          observacoes: '',
+          email_enviado: false,
+          data_email_enviado: undefined,
+          created_at: doc.createdAt,
+          updated_at: doc.updatedAt,
+          usuario: {
+            id: parseInt(ass.userId),
+            nome: ass.userName,
+            email: '',
+            role: ass.role
+          }
+        })),
+        historico: doc.historicoAssinaturas.map(h => ({
+          id: 1,
+          documento_id: parseInt(doc.id),
+          user_id: 1,
+          acao: 'criado' as any,
+          data_acao: doc.createdAt,
+          arquivo_gerado: '',
+          observacoes: '',
+          ip_address: undefined,
+          user_agent: '',
+          user_nome: h.userName,
+          user_email: '',
+          user_role: h.role
+        }))
+      })))
+      setObras(mockObras)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Função para verificar se o usuário pode ver o documento
   const canViewDocument = (doc: any) => {
@@ -50,7 +144,8 @@ export default function AssinaturaPage() {
     if (currentUser.role === 'admin') return true
     
     // Outros usuários só podem ver documentos onde são assinantes
-    return doc.ordemAssinatura.some((assinatura: any) => assinatura.userId === currentUser.id)
+    return doc.assinaturas?.some((assinatura: any) => assinatura.user_id === currentUser.id) ||
+           doc.ordemAssinatura?.some((assinatura: any) => assinatura.userId === currentUser.id)
   }
 
   // Função para verificar se o usuário pode criar documentos
@@ -63,18 +158,24 @@ export default function AssinaturaPage() {
     if (!currentUser) return false
     
     // Encontrar a assinatura do usuário atual
-    const userAssinatura = doc.ordemAssinatura.find((assinatura: any) => assinatura.userId === currentUser.id)
+    const userAssinatura = doc.assinaturas?.find((assinatura: any) => assinatura.user_id === currentUser.id) ||
+                          doc.ordemAssinatura?.find((assinatura: any) => assinatura.userId === currentUser.id)
     if (!userAssinatura) return false
     
     // Só pode assinar se estiver aguardando
     return userAssinatura.status === 'aguardando'
   }
 
-  const filteredDocumentos = mockDocumentos.filter(doc => {
+  // Carregar dados na inicialização
+  useEffect(() => {
+    carregarDocumentos()
+  }, [])
+
+  const filteredDocumentos = documentos.filter(doc => {
     const matchesSearch = (doc.titulo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (doc.descricao || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = selectedStatus === "all" || doc.status === selectedStatus
-    const matchesObra = selectedObra === "all" || doc.obraId === selectedObra
+    const matchesObra = selectedObra === "all" || doc.obra_id.toString() === selectedObra
     const canView = canViewDocument(doc)
     
     return matchesSearch && matchesStatus && matchesObra && canView
@@ -103,17 +204,21 @@ export default function AssinaturaPage() {
   }
 
   const getProgressPercentage = (documento: any) => {
-    const totalAssinaturas = documento.ordemAssinatura.length
-    const assinaturasConcluidas = documento.ordemAssinatura.filter((a: any) => a.status === 'assinado').length
+    const assinaturas = documento.assinaturas || documento.ordemAssinatura || []
+    const totalAssinaturas = assinaturas.length
+    if (totalAssinaturas === 0) return 0
+    const assinaturasConcluidas = assinaturas.filter((a: any) => a.status === 'assinado').length
     return (assinaturasConcluidas / totalAssinaturas) * 100
   }
 
   const getNextSigner = (documento: any) => {
-    return documento.ordemAssinatura.find((a: any) => a.status === 'aguardando')
+    const assinaturas = documento.assinaturas || documento.ordemAssinatura || []
+    return assinaturas.find((a: any) => a.status === 'aguardando')
   }
 
   const getCurrentSigner = (documento: any) => {
-    return documento.ordemAssinatura.find((a: any) => a.status === 'aguardando')
+    const assinaturas = documento.assinaturas || documento.ordemAssinatura || []
+    return assinaturas.find((a: any) => a.status === 'aguardando')
   }
 
 
@@ -138,25 +243,25 @@ export default function AssinaturaPage() {
   const stats = [
     { 
       title: "Total de Documentos", 
-      value: mockDocumentos.length, 
+      value: documentos.length, 
       icon: FileText, 
       color: "bg-blue-500" 
     },
     { 
       title: "Em Assinatura", 
-      value: mockDocumentos.filter(d => d.status === 'em_assinatura').length, 
+      value: documentos.filter(d => d.status === 'em_assinatura').length, 
       icon: RefreshCw, 
       color: "bg-yellow-500" 
     },
     { 
       title: "Assinados", 
-      value: mockDocumentos.filter(d => d.status === 'assinado').length, 
+      value: documentos.filter(d => d.status === 'assinado').length, 
       icon: CheckCircle, 
       color: "bg-green-500" 
     },
     { 
       title: "Aguardando", 
-      value: mockDocumentos.filter(d => d.status === 'aguardando_assinatura').length, 
+      value: documentos.filter(d => d.status === 'aguardando_assinatura').length, 
       icon: Clock, 
       color: "bg-orange-500" 
     },
@@ -247,8 +352,8 @@ export default function AssinaturaPage() {
               <div>
                 <h3 className="font-medium text-blue-900">Acesso Administrativo</h3>
                 <p className="text-sm text-blue-700">
-                  Como administrador, você pode ver todos os {mockDocumentos.length} documentos do sistema.
-                  {filteredDocumentos.length !== mockDocumentos.length && 
+                  Como administrador, você pode ver todos os {documentos.length} documentos do sistema.
+                  {filteredDocumentos.length !== documentos.length && 
                     ` ${filteredDocumentos.length} documentos visíveis com os filtros aplicados.`
                   }
                 </p>
@@ -299,8 +404,8 @@ export default function AssinaturaPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as obras</SelectItem>
-                  {mockObras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
+                  {obras.map(obra => (
+                    <SelectItem key={obra.id} value={obra.id.toString()}>
                       {obra.name}
                     </SelectItem>
                   ))}
@@ -324,8 +429,43 @@ export default function AssinaturaPage() {
         </CardContent>
       </Card>
 
+      {/* Loading State */}
+      {loading && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <RefreshCw className="w-8 h-8 mx-auto mb-4 text-blue-600 animate-spin" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Carregando documentos...</h3>
+            <p className="text-gray-600">Aguarde enquanto buscamos os documentos do sistema.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+              <div>
+                <h3 className="font-medium text-red-900">Erro ao carregar documentos</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={carregarDocumentos}
+                  className="mt-2 text-red-600 border-red-300 hover:bg-red-100"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Tentar Novamente
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lista de Documentos */}
-      {filteredDocumentos.length === 0 ? (
+      {!loading && !error && filteredDocumentos.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <FileSignature className="w-16 h-16 mx-auto mb-4 text-gray-400" />
@@ -346,12 +486,13 @@ export default function AssinaturaPage() {
             )}
           </CardContent>
         </Card>
-      ) : (
+      ) : !loading && !error ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredDocumentos.map((documento) => {
           const progress = getProgressPercentage(documento)
           const nextSigner = getNextSigner(documento)
           const currentSigner = getCurrentSigner(documento)
+          const assinaturas = documento.assinaturas || documento.ordemAssinatura || []
           
           return (
             <Card key={documento.id} className="hover:shadow-lg transition-shadow">
@@ -372,7 +513,7 @@ export default function AssinaturaPage() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Calendar className="w-4 h-4" />
-                    <span>Criado em {new Date(documento.createdAt).toLocaleDateString('pt-BR')}</span>
+                    <span>Criado em {new Date(documento.created_at).toLocaleDateString('pt-BR')}</span>
                   </div>
                   
                   <div className="space-y-2">
@@ -386,18 +527,18 @@ export default function AssinaturaPage() {
                   {currentSigner && (
                     <div className="flex items-center gap-2 text-sm text-blue-600">
                       <Users className="w-4 h-4" />
-                      <span>Próximo: {currentSigner.userName}</span>
+                      <span>Próximo: {currentSigner.usuario?.nome || currentSigner.userName}</span>
                     </div>
                   )}
 
-                  {documento.docuSignLink && (
+                  {documento.docu_sign_link && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-sm text-green-600">
                         <ExternalLink className="w-4 h-4" />
                         <span>Links DocuSign Ativos</span>
                       </div>
                       <div className="text-xs text-gray-600">
-                        {documento.ordemAssinatura.filter((a: any) => a.docuSignLink).length} de {documento.ordemAssinatura.length} links gerados
+                        {assinaturas.filter((a: any) => a.docu_sign_link).length} de {assinaturas.length} links gerados
                       </div>
                     </div>
                   )}
@@ -429,12 +570,14 @@ export default function AssinaturaPage() {
           )
         })}
         </div>
-      )}
+      ) : null}
 
       {/* Dialog de Criação */}
       {isCreateDialogOpen && (
         <CreateDocumentDialog 
-          onClose={() => setIsCreateDialogOpen(false)} 
+          onClose={() => setIsCreateDialogOpen(false)}
+          obras={obras}
+          onDocumentCreated={carregarDocumentos}
         />
       )}
 
@@ -453,6 +596,18 @@ function DocumentoDetails({ documento, onClose }: { documento: any; onClose: () 
   const obra = mockObras.find(o => o.id === documento.obraId)
   const progress = getProgressPercentage(documento)
   const currentSigner = documento.ordemAssinatura.find((a: any) => a.status === 'aguardando')
+
+  const handleGenerateDocuSignLinks = (documento: any) => {
+    // Simular geração de todos os links
+    console.log('Gerando links DocuSign para todos os assinantes:', documento.id)
+    alert('Links do DocuSign gerados com sucesso! Emails serão enviados automaticamente.')
+  }
+
+  const handleSendIndividualLink = (documento: any, assinante: any) => {
+    // Simular envio de link individual
+    console.log('Enviando link individual:', { documentoId: documento.id, assinanteId: assinante.userId })
+    alert(`Link do DocuSign enviado por email para ${assinante.userName}!`)
+  }
 
   return (
     <div className="fixed inset-0 z-50">
@@ -844,7 +999,11 @@ function getStatusColor(status: string) {
   }
 }
 
-function CreateDocumentDialog({ onClose }: { onClose: () => void }) {
+function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: { 
+  onClose: () => void
+  obras: any[]
+  onDocumentCreated: () => void
+}) {
   const [formData, setFormData] = useState({
     titulo: '',
     descricao: '',
@@ -855,41 +1014,175 @@ function CreateDocumentDialog({ onClose }: { onClose: () => void }) {
     userId: string, 
     ordem: number, 
     docuSignLink: string, 
-    status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado'
+    status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado',
+    tipo: 'interno' | 'cliente',
+    userInfo?: {
+      id: number,
+      nome: string,
+      email: string,
+      cargo?: string,
+      role?: string
+    }
   }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [obraFilter, setObraFilter] = useState('')
+  
+  // Estados para filtros de assinantes
+  const [tipoAssinante, setTipoAssinante] = useState<'interno' | 'cliente' | ''>('')
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
+  const [clientes, setClientes] = useState<any[]>([])
+  const [assinanteFilter, setAssinanteFilter] = useState('')
+
+  // Carregar funcionários e clientes
+  useEffect(() => {
+    const carregarDados = async () => {
+      try {
+        // Verificar se há token de autenticação
+        const token = localStorage.getItem('access_token')
+        console.log('Token disponível:', !!token)
+        
+        // Carregar funcionários (usuários internos) usando api com autenticação
+        try {
+          const funcionariosResponse = await api.get('/funcionarios?limit=100')
+          setFuncionarios(funcionariosResponse.data.data || [])
+        } catch (funcionariosError) {
+          console.warn('Erro ao carregar funcionários:', funcionariosError)
+          setFuncionarios(mockUsers.filter(u => u.role !== 'cliente'))
+        }
+        
+        // Carregar clientes - tentar API primeiro, depois usar dados das obras
+        try {
+          const clientesResponse = await api.get('/clientes?limit=100')
+          setClientes(clientesResponse.data.data || [])
+        } catch (clientesError) {
+          console.warn('Erro ao carregar clientes via API, usando dados das obras:', clientesError)
+          // Extrair clientes únicos das obras
+          console.log('Extraindo clientes das obras:', obras)
+          const clientesUnicos = obras.reduce((acc, obra) => {
+            console.log('Processando obra:', obra.nome, 'cliente:', obra.clientes)
+            if (obra.clientes && !acc.find((c: any) => c.id === obra.clientes.id)) {
+              acc.push(obra.clientes)
+            }
+            return acc
+          }, [] as any[])
+          console.log('Clientes extraídos:', clientesUnicos)
+          setClientes(clientesUnicos)
+        }
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error)
+        // Fallback para dados mockados
+        setFuncionarios(mockUsers.filter(u => u.role !== 'cliente'))
+        setClientes(mockUsers.filter(u => u.role === 'cliente'))
+      }
+    }
+    
+    carregarDados()
+  }, [obras]) // Adicionar obras como dependência
+
+  // Estado para assinantes filtrados dinamicamente
+  const [assinantesFiltrados, setAssinantesFiltrados] = useState<any[]>([])
+
+  // Função para buscar assinantes dinamicamente
+  const buscarAssinantes = async (termo: string) => {
+    if (!tipoAssinante || !termo.trim()) {
+      setAssinantesFiltrados([])
+      return
+    }
+
+    try {
+      let response
+      if (tipoAssinante === 'interno') {
+        response = await api.get(`/funcionarios?search=${encodeURIComponent(termo)}&limit=50`)
+      } else if (tipoAssinante === 'cliente') {
+        response = await api.get(`/clientes?search=${encodeURIComponent(termo)}&limit=50`)
+      }
+      
+      if (response?.data?.data) {
+        setAssinantesFiltrados(response.data.data)
+        console.log(`Busca ${tipoAssinante} por "${termo}":`, response.data.data.length, 'resultados')
+      }
+    } catch (error) {
+      console.error('Erro na busca de assinantes:', error)
+      setAssinantesFiltrados([])
+    }
+  }
+
+  // Debounce para evitar muitas requisições
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      buscarAssinantes(assinanteFilter)
+    }, 300) // 300ms de delay
+
+    return () => clearTimeout(timeoutId)
+  }, [assinanteFilter, tipoAssinante])
+
+  // Filtrar obras baseado no termo de busca
+  const obrasFiltradas = (obras || []).filter(obra => {
+    if (!obra || !obra.nome) {
+      console.log('Obra inválida:', obra)
+      return false
+    }
+    
+    // Se não há filtro, mostrar todas as obras
+    if (!obraFilter.trim()) return true
+    
+    const searchTerm = obraFilter.toLowerCase()
+    const nomeMatch = obra.nome.toLowerCase().includes(searchTerm)
+    const enderecoMatch = obra.endereco && obra.endereco.toLowerCase().includes(searchTerm)
+    const cidadeMatch = obra.cidade && obra.cidade.toLowerCase().includes(searchTerm)
+    
+    const matches = nomeMatch || enderecoMatch || cidadeMatch
+    
+    if (matches) {
+      console.log('Obra encontrada:', obra.nome, 'por termo:', searchTerm)
+    }
+    
+    return matches
+  })
+
+  // Debug: verificar se as obras estão sendo passadas
+  console.log('CreateDocumentDialog - obras recebidas:', obras)
+  console.log('CreateDocumentDialog - obraFilter:', obraFilter)
+  console.log('CreateDocumentDialog - obrasFiltradas:', obrasFiltradas)
+  console.log('Nomes das obras:', obras.map(o => o.nome))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
     
-    // Simular criação do documento
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    // Validar se todos os assinantes têm links preenchidos
-    const assinantesCompletos = assinantes.map((assinante) => {
-      const user = mockUsers.find(u => u.id === assinante.userId)
-      return {
-        ...assinante,
-        userName: user?.name || 'Usuário',
-        role: user?.role || 'funcionario',
-        docuSignEnvelopeId: assinante.docuSignLink.split('/').pop() || '',
-        dataEnvio: assinante.status === 'aguardando' ? new Date().toISOString() : undefined,
-        emailEnviado: assinante.status === 'aguardando',
-        dataEmailEnviado: assinante.status === 'aguardando' ? new Date().toISOString() : undefined
+    try {
+      console.log('Dados do formulário:', formData)
+      console.log('Assinantes:', assinantes)
+      
+      // Criar o documento via API
+      const documentoData = {
+        titulo: formData.titulo,
+        descricao: formData.descricao,
+        arquivo: formData.arquivo!,
+        ordem_assinatura: assinantes.map(ass => ({
+          user_id: ass.userId, // Manter como string (UUID)
+          ordem: ass.ordem,
+          tipo: ass.tipo,
+          docu_sign_link: ass.docuSignLink,
+          status: ass.status
+        }))
       }
-    })
-    
-    const documentoCompleto = {
-      ...formData,
-      assinantes: assinantesCompletos
+      
+      console.log('Dados para criação:', documentoData)
+      const response = await obrasDocumentosApi.criar(parseInt(formData.obraId), documentoData)
+      
+      // As assinaturas serão adicionadas via ordem_assinatura no DocumentoCreate
+      // Por enquanto, vamos apenas criar o documento básico
+      
+      alert('Documento criado com sucesso!')
+      onDocumentCreated()
+      onClose()
+    } catch (error: any) {
+      console.error('Erro ao criar documento:', error)
+      alert(`Erro ao criar documento: ${error.message}`)
+    } finally {
+      setIsSubmitting(false)
     }
-    
-    console.log('Criando documento com links preenchidos:', documentoCompleto)
-    alert('Documento criado com sucesso! Links do DocuSign configurados conforme preenchido.')
-    
-    setIsSubmitting(false)
-    onClose()
   }
 
   const addAssinante = () => {
@@ -897,7 +1190,8 @@ function CreateDocumentDialog({ onClose }: { onClose: () => void }) {
       userId: '', 
       ordem: assinantes.length + 1, 
       docuSignLink: '', 
-      status: 'pendente' 
+      status: 'pendente',
+      tipo: 'interno' as 'interno' | 'cliente'
     }])
   }
 
@@ -975,18 +1269,51 @@ function CreateDocumentDialog({ onClose }: { onClose: () => void }) {
                 
                 <div>
                   <Label htmlFor="obra">Obra *</Label>
-                  <Select value={formData.obraId} onValueChange={(value) => setFormData({...formData, obraId: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a obra" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockObras.map(obra => (
-                        <SelectItem key={obra.id} value={obra.id}>
-                          {obra.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Buscar obra por nome, endereço ou cidade..."
+                      value={obraFilter}
+                      onChange={(e) => setObraFilter(e.target.value)}
+                      className="text-sm"
+                    />
+                    <Select value={formData.obraId} onValueChange={(value) => setFormData({...formData, obraId: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a obra" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {!obras || obras.length === 0 ? (
+                          <div className="p-2 text-sm text-gray-500 text-center">
+                            Carregando obras...
+                          </div>
+                        ) : obrasFiltradas.length > 0 ? (
+                          obrasFiltradas.map(obra => (
+                            <SelectItem key={obra.id} value={obra.id.toString()}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{obra.nome || 'Obra sem nome'}</span>
+                                <span className="text-xs text-gray-500">
+                                  {obra.endereco && obra.cidade ? `${obra.endereco}, ${obra.cidade}` : obra.endereco || obra.cidade || 'Sem localização'}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-sm text-gray-500 text-center">
+                            Nenhuma obra encontrada
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {obraFilter.trim() && (
+                      <div className="text-xs text-gray-500">
+                        {obrasFiltradas.length} obra(s) encontrada(s)
+                      </div>
+                    )}
+                    {!obraFilter.trim() && obras && obras.length > 0 && (
+                      <div className="text-xs text-gray-500">
+                        {obras.length} obra(s) disponível(is)
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1024,129 +1351,240 @@ function CreateDocumentDialog({ onClose }: { onClose: () => void }) {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <Label>Ordem de Assinatura</Label>
-                  <Button type="button" onClick={addAssinante} variant="outline" size="sm">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar Assinante
-                  </Button>
+                  <div className="text-sm text-gray-500">
+                    Use os filtros abaixo para adicionar assinantes
+                  </div>
+                </div>
+
+                {/* Pré-filtros para seleção de assinantes */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-3">Filtros para Seleção de Assinantes</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Tipo de Assinante */}
+                    <div>
+                      <Label htmlFor="tipo-assinante">Tipo de Assinante *</Label>
+                      <Select value={tipoAssinante} onValueChange={(value) => setTipoAssinante(value as 'interno' | 'cliente' | '')}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="interno">Interno (Funcionários/Usuários)</SelectItem>
+                          <SelectItem value="cliente">Cliente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Filtro de Busca */}
+                    {tipoAssinante && (
+                      <div>
+                        <Label htmlFor="filtro-assinante">
+                          Buscar {tipoAssinante === 'interno' ? 'Funcionário' : 'Cliente'}
+                        </Label>
+                        <Input
+                          id="filtro-assinante"
+                          placeholder={`Buscar por nome, email ou função...`}
+                          value={assinanteFilter}
+                          onChange={(e) => setAssinanteFilter(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+           {/* Contador */}
+           {tipoAssinante && assinanteFilter && (
+             <div className="flex items-end">
+               <div className="text-sm text-gray-600">
+                 {assinantesFiltrados.length} {tipoAssinante === 'interno' ? 'funcionário(s)' : 'cliente(s)'} encontrado(s)
+               </div>
+             </div>
+           )}
+                  </div>
+
+         {/* Lista de Assinantes Disponíveis */}
+         {tipoAssinante && assinanteFilter && (
+           <div className="mt-4">
+             <Label className="text-sm font-medium text-gray-700">
+               {tipoAssinante === 'interno' ? 'Funcionários' : 'Clientes'} Encontrados:
+             </Label>
+             {assinantesFiltrados.length > 0 ? (
+               <div className="mt-2 max-h-40 overflow-y-auto border rounded-lg">
+                 {assinantesFiltrados.map((item) => (
+                   <div key={item.id} className="p-3 border-b last:border-b-0 hover:bg-gray-50">
+                     <div className="flex items-center justify-between">
+                       <div>
+                         <div className="font-medium text-sm">{item.nome || item.name}</div>
+                         <div className="text-xs text-gray-500">{item.email}</div>
+                         <div className="text-xs text-gray-400">{item.cargo || item.role}</div>
+                       </div>
+                       <Button
+                         type="button"
+                         size="sm"
+                         variant="outline"
+                         onClick={() => {
+                           console.log('Adicionando assinante:', item)
+                           console.log('Assinantes atuais:', assinantes)
+                           
+                           const novoAssinante = {
+                             userId: item.id.toString(),
+                             ordem: assinantes.length + 1,
+                             docuSignLink: '',
+                             status: 'pendente' as const,
+                             tipo: tipoAssinante as 'interno' | 'cliente',
+                             userInfo: {
+                               id: item.id,
+                               nome: item.nome || item.name,
+                               email: item.email,
+                               cargo: item.cargo,
+                               role: item.role
+                             }
+                           }
+                           
+                           console.log('Novo assinante:', novoAssinante)
+                           setAssinantes([...assinantes, novoAssinante])
+                           console.log('Assinantes após adição:', [...assinantes, novoAssinante])
+                         }}
+                         disabled={(() => {
+                           const jaAdicionado = assinantes.some(a => a.userId === item.id.toString())
+                           console.log(`Verificando se ${item.id} já foi adicionado:`, jaAdicionado, 'Assinantes:', assinantes.map(a => a.userId))
+                           return jaAdicionado
+                         })()}
+                       >
+                         {assinantes.some(a => a.userId === item.id.toString()) ? 'Adicionado' : 'Adicionar'}
+                       </Button>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             ) : (
+               <div className="mt-2 p-3 text-center text-gray-500 text-sm border rounded-lg">
+                 Nenhum {tipoAssinante === 'interno' ? 'funcionário' : 'cliente'} encontrado para "{assinanteFilter}"
+               </div>
+             )}
+           </div>
+         )}
+
+         {tipoAssinante && !assinanteFilter && (
+           <div className="mt-4 p-3 text-center text-gray-500 text-sm border rounded-lg">
+             Digite um termo de busca para encontrar {tipoAssinante === 'interno' ? 'funcionários' : 'clientes'}
+           </div>
+         )}
+
+         {/* Lista de Assinantes Adicionados */}
+         {assinantes.length > 0 && (
+           <div className="mt-4">
+             <Label className="text-sm font-medium text-gray-700 mb-3 block">
+               Assinantes Adicionados ({assinantes.length}):
+             </Label>
+             <div className="space-y-3">
+               {assinantes.map((assinante, index) => {
+                 return (
+                   <div key={index} className="p-4 border rounded-lg bg-white">
+                     <div className="flex items-center justify-between mb-3">
+                       <div className="flex items-center gap-2">
+                         <Badge variant="outline">{assinante.ordem}</Badge>
+                         <span className="text-sm font-medium text-gray-700">
+                           {assinante.userInfo?.nome || `Usuário ${assinante.userId}`}
+                         </span>
+                         <Badge variant="secondary" className="text-xs">
+                           {assinante.tipo === 'interno' ? 'Interno' : 'Cliente'}
+                         </Badge>
+                       </div>
+                       <div className="flex items-center gap-1">
+                         <Button
+                           type="button"
+                           variant="outline"
+                           size="sm"
+                           onClick={() => moveAssinante(index, 'up')}
+                           disabled={index === 0}
+                           title="Mover para cima"
+                         >
+                           ↑
+                         </Button>
+                         <Button
+                           type="button"
+                           variant="outline"
+                           size="sm"
+                           onClick={() => moveAssinante(index, 'down')}
+                           disabled={index === assinantes.length - 1}
+                           title="Mover para baixo"
+                         >
+                           ↓
+                         </Button>
+                         <Button
+                           type="button"
+                           variant="outline"
+                           size="sm"
+                           onClick={() => removeAssinante(index)}
+                           className="text-red-600 hover:text-red-700"
+                           title="Remover assinante"
+                         >
+                           ✕
+                         </Button>
+                       </div>
+                     </div>
+                     
+                     <div className="text-xs text-gray-500 mb-3">
+                       {assinante.userInfo?.email || 'Email não disponível'}
+                     </div>
+
+                     {/* Campo DocuSign Link */}
+                     <div className="mb-3">
+                       <Label htmlFor={`link-${index}`} className="text-sm font-medium">
+                         Link DocuSign *
+                       </Label>
+                       <Input
+                         id={`link-${index}`}
+                         value={assinante.docuSignLink}
+                         onChange={(e) => {
+                           const novosAssinantes = [...assinantes]
+                           novosAssinantes[index].docuSignLink = e.target.value
+                           setAssinantes(novosAssinantes)
+                         }}
+                         placeholder="https://demo.docusign.net/signing/documents/..."
+                         className="font-mono text-sm mt-1"
+                       />
+                       <p className="text-xs text-gray-500 mt-1">
+                         Cole aqui o link completo do envelope no DocuSign
+                       </p>
+                     </div>
+
+                     {/* Status */}
+                     <div>
+                       <Label htmlFor={`status-${index}`} className="text-sm font-medium">
+                         Status *
+                       </Label>
+                       <Select 
+                         value={assinante.status} 
+                         onValueChange={(value) => {
+                           const novosAssinantes = [...assinantes]
+                           novosAssinantes[index].status = value as any
+                           setAssinantes(novosAssinantes)
+                         }}
+                       >
+                         <SelectTrigger className="mt-1">
+                           <SelectValue placeholder="Selecione o status" />
+                         </SelectTrigger>
+                         <SelectContent>
+                           <SelectItem value="pendente">Pendente</SelectItem>
+                           <SelectItem value="aguardando">Aguardando</SelectItem>
+                           <SelectItem value="assinado">Assinado</SelectItem>
+                           <SelectItem value="rejeitado">Rejeitado</SelectItem>
+                         </SelectContent>
+                       </Select>
+                     </div>
+                   </div>
+                 )
+               })}
+             </div>
+           </div>
+         )}
                 </div>
                 
-                
-                {assinantes.length === 0 ? (
+                {assinantes.length === 0 && (
                   <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
                     <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                     <p>Nenhum assinante adicionado</p>
-                    <p className="text-sm">Clique em "Adicionar Assinante" para começar</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {assinantes.map((assinante, index) => {
-                      const user = mockUsers.find(u => u.id === assinante.userId)
-                      return (
-                        <div key={index} className="p-4 border rounded-lg bg-gray-50">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline">{assinante.ordem}</Badge>
-                              <span className="text-sm font-medium text-gray-700">Ordem de Assinatura</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => moveAssinante(index, 'up')}
-                                disabled={index === 0}
-                                title="Mover para cima"
-                              >
-                                ↑
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => moveAssinante(index, 'down')}
-                                disabled={index === assinantes.length - 1}
-                                title="Mover para baixo"
-                              >
-                                ↓
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeAssinante(index)}
-                                className="text-red-600 hover:text-red-700"
-                                title="Remover assinante"
-                              >
-                                ✕
-                              </Button>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <Label htmlFor={`assinante-${index}`}>Assinante *</Label>
-                              <Select 
-                                value={assinante.userId} 
-                                onValueChange={(value) => updateAssinante(index, 'userId', value)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione o assinante" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {mockUsers.filter(u => u.status === 'ativo').map(user => (
-                                    <SelectItem key={user.id} value={user.id}>
-                                      {user.name} ({user.role})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            
-                            <div>
-                              <Label htmlFor={`status-${index}`}>Status *</Label>
-                              <Select 
-                                value={assinante.status} 
-                                onValueChange={(value) => updateAssinante(index, 'status', value)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione o status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pendente">Pendente</SelectItem>
-                                  <SelectItem value="aguardando">Aguardando</SelectItem>
-                                  <SelectItem value="assinado">Assinado</SelectItem>
-                                  <SelectItem value="rejeitado">Rejeitado</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-4">
-                            <Label htmlFor={`link-${index}`}>Link DocuSign *</Label>
-                            <Input
-                              id={`link-${index}`}
-                              value={assinante.docuSignLink}
-                              onChange={(e) => updateAssinante(index, 'docuSignLink', e.target.value)}
-                              placeholder="https://demo.docusign.net/signing/documents/..."
-                              className="font-mono text-sm"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                              Cole aqui o link completo do envelope no DocuSign
-                            </p>
-                          </div>
-                          
-                          {user && (
-                            <div className="mt-3 p-2 bg-white rounded border">
-                              <div className="flex items-center gap-2 text-sm">
-                                <Users className="w-4 h-4 text-gray-500" />
-                                <span className="text-gray-600">Email:</span>
-                                <span className="font-medium">{user.email}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                    <p className="text-sm">Use os filtros acima para encontrar e adicionar assinantes</p>
                   </div>
                 )}
               </div>
@@ -1157,7 +1595,7 @@ function CreateDocumentDialog({ onClose }: { onClose: () => void }) {
                 </Button>
                 <Button 
                   type="submit" 
-                  disabled={isSubmitting || assinantes.length === 0 || assinantes.some(a => !a.userId || !a.docuSignLink)}
+                  disabled={isSubmitting || assinantes.length === 0 || assinantes.some(a => !a.userId || !a.docuSignLink.trim())}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   {isSubmitting ? (

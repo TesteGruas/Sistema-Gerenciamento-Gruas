@@ -26,43 +26,149 @@ import {
   Eye,
   ChevronDown,
   ChevronRight,
-  FileText
+  FileText,
+  Edit,
+  Save,
+  X
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { mockDocumentos, mockUsers, Documento, AssinaturaOrdem } from '@/lib/mock-data'
 import { useUser } from '@/lib/user-context'
+import { obrasDocumentosApi, DocumentoObra, AssinaturaDocumento } from '@/lib/api-obras-documentos'
+import { obrasApi } from '@/lib/api-obras'
 
 export default function AssinaturaDocumentoPage() {
   const params = useParams()
   const router = useRouter()
   const { currentUser } = useUser()
-  const [documento, setDocumento] = useState<Documento | null>(mockDocumentos[0] || null)
-  const [assinaturaAtual, setAssinaturaAtual] = useState<AssinaturaOrdem | null>(mockDocumentos[0]?.ordemAssinatura[0] || null)
+  const [documento, setDocumento] = useState<DocumentoObra | null>(null)
+  const [assinaturaAtual, setAssinaturaAtual] = useState<AssinaturaDocumento | null>(null)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [arquivoAssinado, setArquivoAssinado] = useState<File | null>(null)
   const [observacoes, setObservacoes] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [expandedAssinatura, setExpandedAssinatura] = useState<string | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editData, setEditData] = useState({
+    titulo: '',
+    descricao: '',
+    status: ''
+  })
 
   const documentoId = params.id as string
 
   useEffect(() => {
-    // Verificar se estamos no cliente
     if (typeof window === 'undefined') return
     
-    // Simular carregamento
-    const timer = setTimeout(() => {
-      if (mockDocumentos.length > 0) {
-        console.log('Definindo primeiro documento para teste')
-        setDocumento(mockDocumentos[0])
-        setAssinaturaAtual(mockDocumentos[0].ordemAssinatura[0] || null)
+    const carregarDocumento = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        
+        // Buscar documento específico
+        const response = await obrasDocumentosApi.obterPorId(parseInt(documentoId))
+        const docEncontrado = Array.isArray(response.data) ? response.data[0] : response.data
+        
+        if (docEncontrado) {
+          setDocumento(docEncontrado)
+          
+          // Encontrar a assinatura do usuário atual
+          const assinaturaUsuario = docEncontrado.assinaturas?.find(
+            (ass: AssinaturaDocumento) => ass.user_id === parseInt(currentUser?.id?.toString() || '0')
+          )
+          setAssinaturaAtual(assinaturaUsuario || null)
+        } else {
+          setError('Documento não encontrado')
+        }
+      } catch (error: any) {
+        console.error('Erro ao carregar documento:', error)
+        setError(error.message || 'Erro ao carregar documento')
+        
+        // Fallback para mock data
+        const mockDoc = mockDocumentos.find(doc => doc.id === documentoId)
+        if (mockDoc) {
+          setDocumento({
+            id: parseInt(mockDoc.id),
+            obra_id: parseInt(mockDoc.obraId),
+            titulo: mockDoc.titulo,
+            descricao: mockDoc.descricao,
+            arquivo_original: mockDoc.arquivoOriginal,
+            arquivo_assinado: mockDoc.arquivo,
+            caminho_arquivo: mockDoc.arquivo,
+            docu_sign_link: mockDoc.docuSignLink,
+            docu_sign_envelope_id: undefined,
+            status: mockDoc.status as any,
+            proximo_assinante_id: undefined,
+            created_by: 1,
+            created_at: mockDoc.createdAt,
+            updated_at: mockDoc.updatedAt,
+            obra_nome: mockDoc.obraName,
+            created_by_nome: 'Sistema',
+            total_assinantes: mockDoc.ordemAssinatura.length,
+            assinaturas_concluidas: mockDoc.ordemAssinatura.filter(a => a.status === 'assinado').length,
+            progresso_percentual: Math.round((mockDoc.ordemAssinatura.filter(a => a.status === 'assinado').length / mockDoc.ordemAssinatura.length) * 100),
+            assinaturas: mockDoc.ordemAssinatura.map(ass => ({
+              id: parseInt(ass.userId),
+              documento_id: parseInt(mockDoc.id),
+              user_id: parseInt(ass.userId),
+              ordem: ass.ordem,
+              status: ass.status as any,
+              tipo: 'interno' as 'interno' | 'cliente',
+              docu_sign_link: ass.docuSignLink,
+              docu_sign_envelope_id: undefined,
+              data_envio: ass.dataEnvio ? new Date(ass.dataEnvio).toISOString() : undefined,
+              data_assinatura: ass.dataAssinatura ? new Date(ass.dataAssinatura).toISOString() : undefined,
+              arquivo_assinado: ass.arquivoAssinado,
+              observacoes: ass.observacoes,
+              email_enviado: ass.emailEnviado || false,
+              data_email_enviado: ass.dataEmailEnviado ? new Date(ass.dataEmailEnviado).toISOString() : undefined,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              user_nome: mockUsers.find(u => u.id === ass.userId)?.name || 'Usuário',
+              user_email: mockUsers.find(u => u.id === ass.userId)?.email || '',
+              user_cargo: mockUsers.find(u => u.id === ass.userId)?.role || ''
+            })),
+            historico: []
+          })
+          
+          const assinaturaUsuario = mockDoc.ordemAssinatura.find(
+            ass => ass.userId === currentUser?.id
+          )
+          if (assinaturaUsuario) {
+            setAssinaturaAtual({
+              id: parseInt(assinaturaUsuario.userId),
+              documento_id: parseInt(mockDoc.id),
+              user_id: parseInt(assinaturaUsuario.userId),
+              ordem: assinaturaUsuario.ordem,
+              status: assinaturaUsuario.status as any,
+              tipo: 'interno' as 'interno' | 'cliente',
+              docu_sign_link: assinaturaUsuario.docuSignLink,
+              docu_sign_envelope_id: undefined,
+              data_envio: assinaturaUsuario.dataEnvio ? new Date(assinaturaUsuario.dataEnvio).toISOString() : undefined,
+              data_assinatura: assinaturaUsuario.dataAssinatura ? new Date(assinaturaUsuario.dataAssinatura).toISOString() : undefined,
+              arquivo_assinado: assinaturaUsuario.arquivoAssinado,
+              observacoes: assinaturaUsuario.observacoes,
+              email_enviado: assinaturaUsuario.emailEnviado || false,
+              data_email_enviado: assinaturaUsuario.dataEmailEnviado ? new Date(assinaturaUsuario.dataEmailEnviado).toISOString() : undefined,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              user_nome: mockUsers.find(u => u.id === assinaturaUsuario.userId)?.name || 'Usuário',
+              user_email: mockUsers.find(u => u.id === assinaturaUsuario.userId)?.email || '',
+              user_cargo: mockUsers.find(u => u.id === assinaturaUsuario.userId)?.role || ''
+            })
+          }
+        }
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
-    }, 100)
+    }
 
-    return () => clearTimeout(timer)
-  }, [])
+    if (documentoId && currentUser) {
+      carregarDocumento()
+    }
+  }, [documentoId, currentUser])
 
   if (isLoading) {
     return (
@@ -76,13 +182,17 @@ export default function AssinaturaDocumentoPage() {
     )
   }
 
-  if (!documento) {
+  if (error || !documento) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <AlertCircle className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Documento não encontrado</h3>
-          <p className="text-gray-600 mb-4">O documento solicitado não existe ou você não tem acesso a ele.</p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            {error ? 'Erro ao carregar documento' : 'Documento não encontrado'}
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {error || 'O documento solicitado não existe ou você não tem acesso a ele.'}
+          </p>
           <Button onClick={() => router.back()}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
@@ -108,30 +218,31 @@ export default function AssinaturaDocumentoPage() {
     )
   }
 
-  const canSign = assinaturaAtual?.status === 'aguardando' && assinaturaAtual.userId === currentUser.id
+  const canSign = assinaturaAtual?.status === 'aguardando' && assinaturaAtual.user_id === parseInt(currentUser.id?.toString() || '0')
   const isAdmin = currentUser.role === 'admin'
   const progress = getProgressPercentage(documento)
   const nextSigner = getNextSigner(documento)
   const currentSigner = getCurrentSigner(documento)
 
   const handleUploadSignedDocument = async () => {
-    if (!arquivoAssinado) return
+    if (!arquivoAssinado || !documento || !assinaturaAtual) return
 
     setIsLoading(true)
     try {
-      // Simular upload do documento assinado
+      // TODO: Implementar upload do documento assinado via API
+      // Por enquanto, simular o upload
       await new Promise(resolve => setTimeout(resolve, 2000))
       
-      // Atualizar status da assinatura
+      // Atualizar status da assinatura localmente
       if (assinaturaAtual) {
         assinaturaAtual.status = 'assinado'
-        assinaturaAtual.dataAssinatura = new Date().toISOString()
-        assinaturaAtual.arquivoAssinado = arquivoAssinado.name
+        assinaturaAtual.data_assinatura = new Date().toISOString()
+        assinaturaAtual.arquivo_assinado = arquivoAssinado.name
         assinaturaAtual.observacoes = observacoes
       }
 
       // Ativar próximo assinante se houver
-      const nextAssinatura = documento.ordemAssinatura.find(a => a.ordem === (assinaturaAtual?.ordem || 0) + 1)
+      const nextAssinatura = documento.assinaturas?.find(a => a.ordem === (assinaturaAtual?.ordem || 0) + 1)
       if (nextAssinatura) {
         nextAssinatura.status = 'aguardando'
       }
@@ -144,6 +255,7 @@ export default function AssinaturaDocumentoPage() {
       // Mostrar sucesso
       alert('Documento assinado e enviado com sucesso!')
     } catch (error) {
+      console.error('Erro ao enviar documento assinado:', error)
       alert('Erro ao enviar documento assinado')
     } finally {
       setIsLoading(false)
@@ -158,12 +270,77 @@ export default function AssinaturaDocumentoPage() {
 
     setIsLoading(true)
     try {
+      // TODO: Implementar rejeição via API
       assinaturaAtual.status = 'rejeitado'
       assinaturaAtual.observacoes = reason
       setDocumento({ ...documento })
       alert('Assinatura rejeitada')
     } catch (error) {
+      console.error('Erro ao rejeitar assinatura:', error)
       alert('Erro ao rejeitar assinatura')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDownloadDocument = async () => {
+    if (!documento) return
+
+    try {
+      setIsLoading(true)
+      const { download_url, nome_arquivo } = await obrasDocumentosApi.download(documento.obra_id, documento.id)
+      
+      // Abrir documento em nova aba
+      window.open(download_url, '_blank')
+    } catch (error) {
+      console.error('Erro ao abrir documento:', error)
+      alert('Erro ao abrir documento')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleStartEdit = () => {
+    if (!documento) return
+    
+    setEditData({
+      titulo: documento.titulo,
+      descricao: documento.descricao || '',
+      status: documento.status
+    })
+    setIsEditing(true)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditData({
+      titulo: '',
+      descricao: '',
+      status: ''
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!documento) return
+
+    try {
+      setIsLoading(true)
+      const response = await obrasDocumentosApi.atualizar(documento.obra_id, documento.id, editData)
+      
+      // Atualizar documento local
+      setDocumento({
+        ...documento,
+        titulo: editData.titulo,
+        descricao: editData.descricao,
+        status: editData.status as any,
+        updated_at: new Date().toISOString()
+      })
+      
+      setIsEditing(false)
+      alert('Documento atualizado com sucesso!')
+    } catch (error) {
+      console.error('Erro ao atualizar documento:', error)
+      alert('Erro ao atualizar documento')
     } finally {
       setIsLoading(false)
     }
@@ -182,20 +359,80 @@ export default function AssinaturaDocumentoPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{documento.titulo}</h1>
-            <p className="text-gray-600">{documento.descricao}</p>
+          <div className="flex-1">
+            {isEditing ? (
+              <div className="space-y-2">
+                <Input
+                  value={editData.titulo}
+                  onChange={(e) => setEditData({...editData, titulo: e.target.value})}
+                  className="text-2xl font-bold border-0 p-0 h-auto"
+                  placeholder="Título do documento"
+                />
+                <Textarea
+                  value={editData.descricao}
+                  onChange={(e) => setEditData({...editData, descricao: e.target.value})}
+                  className="text-gray-600 border-0 p-0 h-auto resize-none"
+                  placeholder="Descrição do documento"
+                  rows={2}
+                />
+              </div>
+            ) : (
+              <>
+                <h1 className="text-3xl font-bold text-gray-900">{documento.titulo}</h1>
+                <p className="text-gray-600">{documento.descricao}</p>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={getStatusVariant(documento.status)}>
             {documento.status}
           </Badge>
+          
+          {/* Botão de Download */}
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleDownloadDocument}
+            disabled={isLoading}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Ver Documento
+          </Button>
+          
+          {/* Botões de Edição (apenas para admin) */}
           {isAdmin && (
-            <Button variant="outline" size="sm">
-              <Eye className="w-4 h-4 mr-2" />
-              Ver Detalhes
-            </Button>
+            <>
+              {!isEditing ? (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleStartEdit}
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Editar
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm"
+                    onClick={handleSaveEdit}
+                    disabled={isLoading}
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Salvar
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleCancelEdit}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -212,17 +449,35 @@ export default function AssinaturaDocumentoPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label className="text-sm font-medium text-gray-600">Obra</Label>
-              <p className="text-sm text-gray-900">{documento.obraName}</p>
+              <p className="text-sm text-gray-900">{documento.obra_nome}</p>
             </div>
             <div>
               <Label className="text-sm font-medium text-gray-600">Criado em</Label>
               <p className="text-sm text-gray-900">
-                {format(new Date(documento.createdAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                {format(new Date(documento.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
               </p>
             </div>
             <div>
               <Label className="text-sm font-medium text-gray-600">Status Atual</Label>
-              <p className="text-sm text-gray-900">{documento.status}</p>
+              {isEditing ? (
+                <Select 
+                  value={editData.status} 
+                  onValueChange={(value) => setEditData({...editData, status: value})}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rascunho">Rascunho</SelectItem>
+                    <SelectItem value="aguardando_assinatura">Aguardando Assinatura</SelectItem>
+                    <SelectItem value="em_assinatura">Em Assinatura</SelectItem>
+                    <SelectItem value="assinado">Assinado</SelectItem>
+                    <SelectItem value="rejeitado">Rejeitado</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-gray-900">{documento.status}</p>
+              )}
             </div>
             <div>
               <Label className="text-sm font-medium text-gray-600">Progresso</Label>
@@ -263,9 +518,9 @@ export default function AssinaturaDocumentoPage() {
               <div>
                 <Label className="text-sm font-medium text-gray-600">Link DocuSign</Label>
                 <p className="text-sm text-gray-900">
-                  {assinaturaAtual.docuSignLink ? (
+                  {assinaturaAtual.docu_sign_link ? (
                     <a 
-                      href={assinaturaAtual.docuSignLink} 
+                      href={assinaturaAtual.docu_sign_link} 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:underline flex items-center gap-1"
@@ -281,18 +536,18 @@ export default function AssinaturaDocumentoPage() {
               <div>
                 <Label className="text-sm font-medium text-gray-600">Data de Envio</Label>
                 <p className="text-sm text-gray-900">
-                  {assinaturaAtual.dataEnvio ? 
-                    format(new Date(assinaturaAtual.dataEnvio), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : 
+                  {assinaturaAtual.data_envio ? 
+                    format(new Date(assinaturaAtual.data_envio), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : 
                     'Não enviado'
                   }
                 </p>
               </div>
             </div>
 
-            {assinaturaAtual.arquivoAssinado && (
+            {assinaturaAtual.arquivo_assinado && (
               <div>
                 <Label className="text-sm font-medium text-gray-600">Arquivo Assinado</Label>
-                <p className="text-sm text-gray-900">{assinaturaAtual.arquivoAssinado}</p>
+                <p className="text-sm text-gray-900">{assinaturaAtual.arquivo_assinado}</p>
               </div>
             )}
 
@@ -400,16 +655,15 @@ export default function AssinaturaDocumentoPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {documento.ordemAssinatura
-              .sort((a, b) => a.ordem - b.ordem)
+            {documento.assinaturas
+              ?.sort((a, b) => a.ordem - b.ordem)
               .map((assinatura, index) => {
-                const user = mockUsers.find(u => u.id === assinatura.userId)
-                const isCurrentUser = assinatura.userId === currentUser.id
-                const isExpanded = expandedAssinatura === assinatura.userId
+                const isCurrentUser = assinatura.user_id === parseInt(currentUser.id?.toString() || '0')
+                const isExpanded = expandedAssinatura === assinatura.user_id.toString()
                 
                 return (
                   <div 
-                    key={assinatura.userId}
+                    key={assinatura.user_id}
                     className={`rounded-lg border ${
                       isCurrentUser ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'
                     }`}
@@ -417,7 +671,7 @@ export default function AssinaturaDocumentoPage() {
                     {/* Cabeçalho da assinatura */}
                     <div 
                       className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 transition-colors"
-                      onClick={() => setExpandedAssinatura(isExpanded ? null : assinatura.userId)}
+                      onClick={() => setExpandedAssinatura(isExpanded ? null : assinatura.user_id.toString())}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
@@ -427,9 +681,9 @@ export default function AssinaturaDocumentoPage() {
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">
-                            {user?.name || 'Usuário não encontrado'}
+                            {assinatura.user_nome || 'Usuário não encontrado'}
                           </p>
-                          <p className="text-sm text-gray-600">{user?.role}</p>
+                          <p className="text-sm text-gray-600">{assinatura.user_cargo}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -459,19 +713,21 @@ export default function AssinaturaDocumentoPage() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <Label className="text-sm font-medium text-gray-700">Nome Completo</Label>
-                              <p className="text-sm text-gray-900">{user?.name || 'N/A'}</p>
+                              <p className="text-sm text-gray-900">{assinatura.user_nome || 'N/A'}</p>
                             </div>
                             <div>
                               <Label className="text-sm font-medium text-gray-700">Cargo</Label>
-                              <p className="text-sm text-gray-900">{user?.role || 'N/A'}</p>
+                              <p className="text-sm text-gray-900">{assinatura.user_cargo || 'N/A'}</p>
                             </div>
                             <div>
                               <Label className="text-sm font-medium text-gray-700">Email</Label>
-                              <p className="text-sm text-gray-900">{user?.email || 'N/A'}</p>
+                              <p className="text-sm text-gray-900">{assinatura.user_email || 'N/A'}</p>
                             </div>
                             <div>
-                              <Label className="text-sm font-medium text-gray-700">Obra Vinculada</Label>
-                              <p className="text-sm text-gray-900">{user?.obraName || 'N/A'}</p>
+                              <Label className="text-sm font-medium text-gray-700">Tipo</Label>
+                              <Badge variant="outline" className="capitalize">
+                                {assinatura.tipo}
+                              </Badge>
                             </div>
                           </div>
 
@@ -482,33 +738,33 @@ export default function AssinaturaDocumentoPage() {
                               <Badge variant={getStatusVariant(assinatura.status)}>
                                 {assinatura.status}
                               </Badge>
-                              {assinatura.dataEnvio && (
+                              {assinatura.data_envio && (
                                 <span className="text-xs text-gray-500">
-                                  Enviado em: {format(new Date(assinatura.dataEnvio), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                  Enviado em: {format(new Date(assinatura.data_envio), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                 </span>
                               )}
-                              {assinatura.dataAssinatura && (
+                              {assinatura.data_assinatura && (
                                 <span className="text-xs text-gray-500">
-                                  Assinado em: {format(new Date(assinatura.dataAssinatura), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                  Assinado em: {format(new Date(assinatura.data_assinatura), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                 </span>
                               )}
                             </div>
                           </div>
 
                           {/* Link DocuSign */}
-                          {assinatura.docuSignLink && (
+                          {assinatura.docu_sign_link && (
                             <div>
                               <Label className="text-sm font-medium text-gray-700">Link DocuSign</Label>
                               <div className="mt-1 flex items-center gap-2">
                                 <Input
-                                  value={assinatura.docuSignLink}
+                                  value={assinatura.docu_sign_link}
                                   readOnly
                                   className="text-xs font-mono"
                                 />
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => window.open(assinatura.docuSignLink, '_blank')}
+                                  onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
                                 >
                                   <ExternalLink className="w-4 h-4" />
                                 </Button>
@@ -531,7 +787,7 @@ export default function AssinaturaDocumentoPage() {
                                   <div className="flex gap-2">
                                     <Button
                                       size="sm"
-                                      onClick={() => window.open(assinatura.docuSignLink, '_blank')}
+                                      onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
                                       className="flex-1"
                                     >
                                       <ExternalLink className="w-4 h-4 mr-2" />
@@ -579,7 +835,7 @@ export default function AssinaturaDocumentoPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => window.open(assinatura.docuSignLink, '_blank')}
+                                    onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
                                   >
                                     <ExternalLink className="w-4 h-4 mr-2" />
                                     Ver no DocuSign
@@ -590,12 +846,12 @@ export default function AssinaturaDocumentoPage() {
                           )}
 
                           {/* Arquivo assinado */}
-                          {assinatura.arquivoAssinado && (
+                          {assinatura.arquivo_assinado && (
                             <div>
                               <Label className="text-sm font-medium text-gray-700">Arquivo Assinado</Label>
                               <div className="mt-1 flex items-center gap-2">
                                 <FileText className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm text-gray-900">{assinatura.arquivoAssinado}</span>
+                                <span className="text-sm text-gray-900">{assinatura.arquivo_assinado}</span>
                                 <Button size="sm" variant="outline">
                                   <Download className="w-4 h-4" />
                                 </Button>
@@ -627,7 +883,7 @@ export default function AssinaturaDocumentoPage() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => window.open(assinatura.docuSignLink, '_blank')}
+                                      onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
                                     >
                                       <ExternalLink className="w-4 h-4 mr-2" />
                                       Ver no DocuSign
@@ -649,15 +905,15 @@ export default function AssinaturaDocumentoPage() {
                           )}
 
                           {/* Histórico de emails */}
-                          {assinatura.emailEnviado && (
+                          {assinatura.email_enviado && (
                             <div>
                               <Label className="text-sm font-medium text-gray-700">Notificação por Email</Label>
                               <div className="mt-1 flex items-center gap-2">
                                 <CheckCircle className="w-4 h-4 text-green-500" />
                                 <span className="text-sm text-gray-900">Email enviado</span>
-                                {assinatura.dataEmailEnviado && (
+                                {assinatura.data_email_enviado && (
                                   <span className="text-xs text-gray-500">
-                                    em {format(new Date(assinatura.dataEmailEnviado), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                    em {format(new Date(assinatura.data_email_enviado), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                   </span>
                                 )}
                               </div>
@@ -677,18 +933,18 @@ export default function AssinaturaDocumentoPage() {
 }
 
 // Funções auxiliares
-function getProgressPercentage(documento: Documento): number {
-  const total = documento.ordemAssinatura.length
-  const assinados = documento.ordemAssinatura.filter(a => a.status === 'assinado').length
+function getProgressPercentage(documento: DocumentoObra): number {
+  const total = documento.assinaturas?.length || 0
+  const assinados = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
   return total > 0 ? Math.round((assinados / total) * 100) : 0
 }
 
-function getNextSigner(documento: Documento): AssinaturaOrdem | null {
-  return documento.ordemAssinatura.find(a => a.status === 'aguardando') || null
+function getNextSigner(documento: DocumentoObra): AssinaturaDocumento | null {
+  return documento.assinaturas?.find(a => a.status === 'aguardando') || null
 }
 
-function getCurrentSigner(documento: Documento): AssinaturaOrdem | null {
-  return documento.ordemAssinatura.find(a => a.status === 'aguardando') || null
+function getCurrentSigner(documento: DocumentoObra): AssinaturaDocumento | null {
+  return documento.assinaturas?.find(a => a.status === 'aguardando') || null
 }
 
 function getStatusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
