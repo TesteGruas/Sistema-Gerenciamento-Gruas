@@ -831,7 +831,8 @@ export const criarCustosParaNovoMes = (obraId: string, mes: string): CustoMensal
   const custosAnteriores = getCustosMensaisByObraAndMes(obraId, mesAnteriorStr)
   
   if (custosAnteriores.length === 0) {
-    return []
+    // Se não há custos anteriores, cria custos iniciais padrão
+    return criarCustosIniciaisParaObra(obraId, mes)
   }
   
   // Cria novos custos para o mês atual baseados nos anteriores
@@ -850,6 +851,80 @@ export const criarCustosParaNovoMes = (obraId: string, mes: string): CustoMensal
   }))
   
   return novosCustos
+}
+
+// Função para criar custos iniciais para uma obra
+export const criarCustosIniciaisParaObra = (obraId: string, mes: string): CustoMensal[] => {
+  const obra = getObraById(obraId)
+  if (!obra) {
+    return []
+  }
+
+  // Custos iniciais padrão para uma obra
+  const custosIniciais: CustoMensal[] = [
+    {
+      id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      obraId: obraId,
+      item: '01.01',
+      descricao: 'Locação de grua torre PINGON BR47',
+      unidade: 'mês',
+      quantidadeOrcamento: 17,
+      valorUnitario: 30900,
+      totalOrcamento: 525300,
+      mes: mes,
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: 0,
+      valorAcumulado: 0,
+      quantidadeSaldo: 17,
+      valorSaldo: 525300,
+      tipo: 'contrato',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      obraId: obraId,
+      item: '01.02',
+      descricao: 'Chumbador',
+      unidade: 'und',
+      quantidadeOrcamento: 1,
+      valorUnitario: 18600,
+      totalOrcamento: 18600,
+      mes: mes,
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: 0,
+      valorAcumulado: 0,
+      quantidadeSaldo: 1,
+      valorSaldo: 18600,
+      tipo: 'contrato',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      obraId: obraId,
+      item: '01.04',
+      descricao: 'Custos de Operação',
+      unidade: 'mês',
+      quantidadeOrcamento: 17,
+      valorUnitario: 6800,
+      totalOrcamento: 115600,
+      mes: mes,
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: 0,
+      valorAcumulado: 0,
+      quantidadeSaldo: 17,
+      valorSaldo: 115600,
+      tipo: 'contrato',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ]
+
+  return custosIniciais
 }
 
 export const getHistoricoByGrua = (gruaId: string): HistoricoGrua[] => {

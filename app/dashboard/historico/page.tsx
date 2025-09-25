@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { mockGruas, mockUsers, getHistoricoByGrua, getHistoricoByMonth } from "@/lib/mock-data"
 
-export default function HistoricoPage() {
+function HistoricoPageContent() {
   const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedGrua, setSelectedGrua] = useState("all")
@@ -331,6 +331,14 @@ export default function HistoricoPage() {
       </Card>
 
     </div>
+  )
+}
+
+export default function HistoricoPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <HistoricoPageContent />
+    </Suspense>
   )
 }
 

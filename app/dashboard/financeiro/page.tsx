@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -25,612 +26,635 @@ import {
   Edit,
   Trash2,
   PieChart,
-  BarChart3
+  BarChart3,
+  CreditCard,
+  ArrowUpRight,
+  ArrowDownLeft,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Banknote,
+  Receipt,
+  ShoppingCart,
+  Truck,
+  Calculator,
+  FileSpreadsheet,
+  Printer,
+  Mail,
+  MessageSquare,
+  Users,
+  Package,
+  Settings,
+  FileBarChart,
+  ArrowRight,
+  ArrowLeft,
+  RefreshCw,
+  Filter,
+  MoreHorizontal
 } from "lucide-react"
-import { mockCustos, mockObras, getCustosByObra, mockCustosMensais, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis } from "@/lib/mock-data"
+
+// Interfaces para os dados financeiros
+interface FluxoCaixa {
+  mes: string
+  entrada: number
+  saida: number
+}
+
+interface Transferencia {
+  id: number
+  data: string
+  valor: number
+  tipo: 'entrada' | 'saida'
+  descricao: string
+  status: 'confirmada' | 'pendente'
+}
+
+interface FinancialData {
+  receberHoje: number
+  pagarHoje: number
+  recebimentosAtraso: number
+  pagamentosAtraso: number
+  saldoAtual: number
+  fluxoCaixa: FluxoCaixa[]
+  transferencias: Transferencia[]
+}
+
+// Dados financeiros serão carregados da API
+
+const financeiroModules = [
+  {
+    id: 'vendas',
+    title: 'Vendas',
+    icon: Receipt,
+    color: 'bg-green-500',
+    description: 'Gestão de vendas, contratos e orçamentos',
+    submodules: [
+      { name: 'Ordem de Serviço', href: '/dashboard/financeiro/vendas/ordem-servico' },
+      { name: 'Contratos', href: '/dashboard/financeiro/vendas/contratos' },
+      { name: 'Vendas e Orçamentos', href: '/dashboard/financeiro/vendas/vendas-orcamentos' },
+      { name: 'NF Equipamentos', href: '/dashboard/financeiro/vendas/nf-equipamentos' },
+      { name: 'NF Serviços', href: '/dashboard/financeiro/vendas/nf-servicos' }
+    ]
+  },
+  {
+    id: 'compras',
+    title: 'Compras',
+    icon: ShoppingCart,
+    color: 'bg-blue-500',
+    description: 'Gestão de compras e fornecedores',
+    submodules: [
+      { name: 'Pedidos de Compra', href: '/dashboard/financeiro/compras/pedidos' },
+      { name: 'Fornecedores', href: '/dashboard/financeiro/compras/fornecedores' },
+      { name: 'Produtos e Serviços', href: '/dashboard/financeiro/compras/produtos' },
+      { name: 'Contas a Pagar', href: '/dashboard/financeiro/compras/contas-pagar' },
+      { name: 'Notas Fiscais', href: '/dashboard/financeiro/compras/notas-fiscais' }
+    ]
+  },
+  {
+    id: 'locacoes',
+    title: 'Locações',
+    icon: Truck,
+    color: 'bg-purple-500',
+    description: 'Gestão de locações de gruas e plataformas',
+    submodules: [
+      { name: 'Gruas Locadas', href: '/dashboard/financeiro/locacoes/gruas' },
+      { name: 'Plataformas Locadas', href: '/dashboard/financeiro/locacoes/plataformas' },
+      { name: 'Medições Finalizadas', href: '/dashboard/financeiro/locacoes/medicoes' },
+      { name: 'Orçamentos', href: '/dashboard/financeiro/locacoes/orcamentos' },
+      { name: 'NFe Entrada/Saída', href: '/dashboard/financeiro/locacoes/nfe' },
+      { name: 'Notas de Débito', href: '/dashboard/financeiro/locacoes/notas-debito' },
+      { name: 'NF Serviços', href: '/dashboard/financeiro/locacoes/nf-servicos' },
+      { name: 'Relatório Detalhado', href: '/dashboard/financeiro/locacoes/relatorio' }
+    ]
+  },
+  {
+    id: 'impostos',
+    title: 'Impostos',
+    icon: Calculator,
+    color: 'bg-orange-500',
+    description: 'Gestão de impostos e tributos',
+    submodules: [
+      { name: 'Pagamentos de Impostos', href: '/dashboard/financeiro/impostos/pagamentos' },
+      { name: 'Relatório de Impostos', href: '/dashboard/financeiro/impostos/relatorio' }
+    ]
+  },
+  {
+    id: 'logistica',
+    title: 'Logística de Equipamentos',
+    icon: Package,
+    color: 'bg-indigo-500',
+    description: 'Gestão logística e transporte',
+    submodules: [
+      { name: 'Manifestos', href: '/dashboard/financeiro/logistica/manifestos' },
+      { name: 'CT-e e MDF-e', href: '/dashboard/financeiro/logistica/cte-mdfe' },
+      { name: 'Motoristas', href: '/dashboard/financeiro/logistica/motoristas' },
+      { name: 'Histórico de Viagens', href: '/dashboard/financeiro/logistica/viagens' }
+    ]
+  },
+  {
+    id: 'cadastro',
+    title: 'Cadastro',
+    icon: Users,
+    color: 'bg-teal-500',
+    description: 'Cadastros gerais do sistema',
+    submodules: [
+      { name: 'Clientes', href: '/dashboard/financeiro/cadastro/clientes' },
+      { name: 'Fornecedores', href: '/dashboard/financeiro/cadastro/fornecedores' },
+      { name: 'Produtos e Equipamentos', href: '/dashboard/financeiro/cadastro/produtos' },
+      { name: 'Funcionários', href: '/dashboard/financeiro/cadastro/funcionarios' }
+    ]
+  },
+  {
+    id: 'relatorios',
+    title: 'Relatórios',
+    icon: FileBarChart,
+    color: 'bg-red-500',
+    description: 'Relatórios e análises financeiras',
+    submodules: [
+      { name: 'Relatório Financeiro', href: '/dashboard/financeiro/relatorios/financeiro' },
+      { name: 'Relatório de Vendas', href: '/dashboard/financeiro/relatorios/vendas' },
+      { name: 'Relatório de Contratos', href: '/dashboard/financeiro/relatorios/contratos' },
+      { name: 'Relatório de Faturamento', href: '/dashboard/financeiro/relatorios/faturamento' },
+      { name: 'Relatório de Locações', href: '/dashboard/financeiro/relatorios/locacoes' },
+      { name: 'Relatório de Estoque', href: '/dashboard/financeiro/relatorios/estoque' }
+    ]
+  }
+]
 
 export default function FinanceiroPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedObra, setSelectedObra] = useState("all")
-  const [selectedTipo, setSelectedTipo] = useState("all")
-  const [selectedCategoria, setSelectedCategoria] = useState("all")
-  const [selectedCusto, setSelectedCusto] = useState<any>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
-  const [mesSelecionado, setMesSelecionado] = useState("todos")
-  const [custosMensais, setCustosMensais] = useState<any[]>([])
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState('overview')
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
-
-  const filteredCustos = mockCustos.filter(custo => {
-    const matchesSearch = (custo.descricao || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (custo.obraName || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesObra = selectedObra === "all" || custo.obraId === selectedObra
-    const matchesTipo = selectedTipo === "all" || custo.tipo === selectedTipo
-    const matchesCategoria = selectedCategoria === "all" || custo.categoria === selectedCategoria
-    
-    return matchesSearch && matchesObra && matchesTipo && matchesCategoria
+  const [financialData, setFinancialData] = useState<FinancialData>({
+    receberHoje: 0,
+    pagarHoje: 0,
+    recebimentosAtraso: 0,
+    pagamentosAtraso: 0,
+    saldoAtual: 0,
+    fluxoCaixa: [],
+    transferencias: []
   })
 
-  const getTipoColor = (tipo: string) => {
-    switch (tipo) {
-      case 'inicial': return 'bg-blue-100 text-blue-800'
-      case 'adicional': return 'bg-orange-100 text-orange-800'
-      default: return 'bg-gray-100 text-gray-800'
+  // Função para carregar dados financeiros da API
+  const loadFinancialData = async () => {
+    try {
+      // Aqui será implementada a chamada para a API
+      // const response = await fetch('/api/financial-data')
+      // const data = await response.json()
+      // setFinancialData(data)
+    } catch (error) {
+      console.error('Erro ao carregar dados financeiros:', error)
     }
   }
 
-  const getCategoriaColor = (categoria: string) => {
-    switch (categoria) {
-      case 'equipamentos': return 'bg-purple-100 text-purple-800'
-      case 'materiais': return 'bg-green-100 text-green-800'
-      case 'mao_obra': return 'bg-yellow-100 text-yellow-800'
-      case 'outros': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const handleViewDetails = (custo: any) => {
-    setSelectedCusto(custo)
-    setIsDetailsDialogOpen(true)
-  }
-
-  const handleEdit = (custo: any) => {
-    setSelectedCusto(custo)
-    setIsEditDialogOpen(true)
-  }
-
-  const carregarCustosMensais = (obraId: string) => {
-    if (mesSelecionado && mesSelecionado !== 'todos') {
-      const custos = getCustosMensaisByObraAndMes(obraId, mesSelecionado)
-      setCustosMensais(custos)
-    } else {
-      const custos = getCustosMensaisByObra(obraId)
-      setCustosMensais(custos)
-    }
-  }
-
-  const handleExportarCustos = (tipo: 'geral' | 'mes', obraId: string) => {
-    let dadosParaExportar = custosMensais
-    
-    if (tipo === 'mes' && mesSelecionado && mesSelecionado !== 'todos') {
-      dadosParaExportar = getCustosMensaisByObraAndMes(obraId, mesSelecionado)
-    } else if (tipo === 'geral') {
-      dadosParaExportar = getCustosMensaisByObra(obraId)
-    }
-
-    if (dadosParaExportar.length === 0) {
-      alert('Não há dados para exportar!')
-      return
-    }
-
-    // Cabeçalho do CSV
-    const cabecalho = [
-      'Item',
-      'Descrição',
-      'Unidade',
-      'Qtd Orçamento',
-      'Valor Unitário',
-      'Total Orçamento',
-      'Qtd Realizada',
-      'Valor Realizado',
-      'Qtd Acumulada',
-      'Valor Acumulado',
-      'Qtd Saldo',
-      'Valor Saldo',
-      'Mês',
-      'Tipo'
-    ]
-
-    // Dados do CSV
-    const linhas = dadosParaExportar.map(custo => [
-      custo.item,
-      custo.descricao,
-      custo.unidade,
-      custo.quantidadeOrcamento.toFixed(2),
-      custo.valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.totalOrcamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.quantidadeRealizada.toFixed(2),
-      custo.valorRealizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.quantidadeAcumulada.toFixed(2),
-      custo.valorAcumulado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      custo.quantidadeSaldo.toFixed(2),
-      custo.valorSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-      custo.tipo
-    ])
-
-    // Criar CSV
-    const csvContent = [cabecalho, ...linhas]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n')
-
-    // Criar e baixar arquivo
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    
-    const obra = mockObras.find(o => o.id === obraId)
-    const nomeArquivo = tipo === 'geral' 
-      ? `custos_geral_${obra?.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
-      : `custos_${mesSelecionado}_${obra?.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
-    
-    link.setAttribute('download', nomeArquivo)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    alert(`Arquivo ${nomeArquivo} baixado com sucesso!`)
-  }
-
-  // Calcular estatísticas
-  const totalCustos = mockCustos.reduce((sum, custo) => sum + custo.valor, 0)
-  const custosIniciais = mockCustos.filter(c => c.tipo === 'inicial').reduce((sum, custo) => sum + custo.valor, 0)
-  const custosAdicionais = mockCustos.filter(c => c.tipo === 'adicional').reduce((sum, custo) => sum + custo.valor, 0)
-  
-  // Calcular estatísticas dos custos mensais (BMM)
-  const totalCustosMensais = mockCustosMensais.reduce((sum, custo) => sum + custo.valorAcumulado, 0)
-  const totalOrcamento = mockCustosMensais.reduce((sum, custo) => sum + custo.totalOrcamento, 0)
-  const totalRealizado = mockCustosMensais.reduce((sum, custo) => sum + custo.valorRealizado, 0)
-  const totalSaldo = mockCustosMensais.reduce((sum, custo) => sum + custo.valorSaldo, 0)
-  
-  const custosPorObra = mockObras.map(obra => {
-    const custos = getCustosByObra(obra.id)
-    const custosMensaisObra = getCustosMensaisByObra(obra.id)
-    const totalOrcamentoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.totalOrcamento, 0)
-    const totalRealizadoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.valorRealizado, 0)
-    
-    return {
-      obra: obra.name,
-      obraId: obra.id,
-      total: custos.reduce((sum, custo) => sum + custo.valor, 0),
-      inicial: custos.filter(c => c.tipo === 'inicial').reduce((sum, custo) => sum + custo.valor, 0),
-      adicional: custos.filter(c => c.tipo === 'adicional').reduce((sum, custo) => sum + custo.valor, 0),
-      totalOrcamento: totalOrcamentoObra,
-      totalRealizado: totalRealizadoObra,
-      saldo: totalOrcamentoObra - totalRealizadoObra,
-      mesesDisponiveis: getMesesDisponiveis(obra.id).length
-    }
-  })
+  // Carregar dados quando o componente for montado
+  useEffect(() => {
+    loadFinancialData()
+  }, [])
+  const [selectedPeriod, setSelectedPeriod] = useState('hoje')
 
   const stats = [
     { 
-      title: "Total Orçado (BMM)", 
-      value: `R$ ${totalOrcamento.toLocaleString('pt-BR')}`, 
-      icon: DollarSign, 
-      color: "bg-blue-500",
-      change: `${((totalRealizado / totalOrcamento) * 100).toFixed(1)}% realizado`
-    },
-    { 
-      title: "Total Realizado", 
-      value: `R$ ${totalRealizado.toLocaleString('pt-BR')}`, 
-      icon: TrendingUp, 
+      title: "A Receber Hoje", 
+      value: `R$ ${financialData.receberHoje.toLocaleString('pt-BR')}`, 
+      icon: ArrowUpRight, 
       color: "bg-green-500",
-      change: `${((totalRealizado / totalOrcamento) * 100).toFixed(1)}% do orçamento`
+      change: "Carregando..."
     },
     { 
-      title: "Saldo Restante", 
-      value: `R$ ${totalSaldo.toLocaleString('pt-BR')}`, 
-      icon: TrendingDown, 
+      title: "A Pagar Hoje", 
+      value: `R$ ${financialData.pagarHoje.toLocaleString('pt-BR')}`, 
+      icon: ArrowDownLeft, 
+      color: "bg-red-500",
+      change: "Carregando..."
+    },
+    { 
+      title: "Recebimentos em Atraso", 
+      value: `R$ ${financialData.recebimentosAtraso.toLocaleString('pt-BR')}`, 
+      icon: AlertTriangle, 
       color: "bg-orange-500",
-      change: `${((totalSaldo / totalOrcamento) * 100).toFixed(1)}% do orçamento`
+      change: "Carregando..."
     },
     { 
-      title: "Obras Ativas", 
-      value: mockObras.filter(o => o.status === 'ativa').length.toString(), 
-      icon: Building2, 
-      color: "bg-purple-500",
-      change: `${mockObras.filter(o => o.status === 'ativa').length} obras`
+      title: "Pagamentos em Atraso", 
+      value: `R$ ${financialData.pagamentosAtraso.toLocaleString('pt-BR')}`, 
+      icon: Clock, 
+      color: "bg-yellow-500",
+      change: "Carregando..."
     },
+    { 
+      title: "Saldo Atual", 
+      value: `R$ ${financialData.saldoAtual.toLocaleString('pt-BR')}`, 
+      icon: Banknote, 
+      color: "bg-blue-500",
+      change: "Carregando..."
+    }
   ]
+
+  const handleExport = (type: string) => {
+    console.log(`Exportando ${type}`)
+    // Implementar lógica de exportação
+  }
+
+  const handleImport = () => {
+    console.log('Importando planilha')
+    // Implementar lógica de importação
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Financeiro</h1>
-          <p className="text-gray-600">Controle de custos e análise financeira das obras</p>
+          <h1 className="text-3xl font-bold text-gray-900">Sistema Financeiro</h1>
+          <p className="text-gray-600">Gestão completa das finanças da empresa</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Novo Custo
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Novo Custo</DialogTitle>
-              <DialogDescription>
-                Registre um novo custo para uma obra
-              </DialogDescription>
-            </DialogHeader>
-            <CustoForm onClose={() => setIsCreateDialogOpen(false)} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
+            <CreditCard className="w-4 h-4 mr-2" />
+            Transferência Bancária
+          </Button>
+          <Button variant="outline" onClick={() => setIsExportDialogOpen(true)}>
+            <Download className="w-4 h-4 mr-2" />
+            Exportar
+          </Button>
+          <Button variant="outline" onClick={handleImport}>
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Importar
+          </Button>
+          <Button variant="outline" onClick={handlePrint}>
+            <Printer className="w-4 h-4 mr-2" />
+            Imprimir
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  {stat.change && (
-                    <p className="text-xs text-green-600 mt-1">{stat.change} vs mês anterior</p>
+      {/* Tabs Navigation */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+          <TabsTrigger value="modules">Módulos</TabsTrigger>
+          <TabsTrigger value="integration">Integração Bancária</TabsTrigger>
+        </TabsList>
+
+        {/* Visão Geral */}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {stats.map((stat, index) => (
+              <Card key={index}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                      <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                      <p className="text-xs text-gray-500 mt-1">{stat.change}</p>
+                    </div>
+                    <div className={`p-3 rounded-full ${stat.color}`}>
+                      <stat.icon className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Gráficos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Fluxo de Caixa Mensal
+                </CardTitle>
+                <CardDescription>Entradas e saídas por mês</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {financialData.fluxoCaixa.length > 0 ? (
+                    financialData.fluxoCaixa.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{item.mes}</span>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <span className="text-sm">R$ {item.entrada.toLocaleString('pt-BR')}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                            <span className="text-sm">R$ {item.saida.toLocaleString('pt-BR')}</span>
+                          </div>
+                          <span className="text-sm font-bold text-blue-600">
+                            R$ {(item.entrada - item.saida).toLocaleString('pt-BR')}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-gray-500 py-8">
+                      <p>Nenhum dado de fluxo de caixa disponível</p>
+                      <p className="text-sm">Os dados serão carregados quando disponíveis</p>
+                    </div>
                   )}
                 </div>
-                <div className={`p-3 rounded-full ${stat.color}`}>
-                  <stat.icon className="w-6 h-6 text-white" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChart className="w-5 h-5" />
+                  Transferências Bancárias
+                </CardTitle>
+                <CardDescription>Últimas transferências realizadas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {financialData.transferencias.length > 0 ? (
+                    financialData.transferencias.map((transfer) => (
+                      <div key={transfer.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-2 rounded-full ${transfer.tipo === 'entrada' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <div>
+                            <p className="text-sm font-medium">{transfer.descricao}</p>
+                            <p className="text-xs text-gray-500">{new Date(transfer.data).toLocaleDateString('pt-BR')}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${transfer.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
+                            {transfer.tipo === 'entrada' ? '+' : '-'}R$ {transfer.valor.toLocaleString('pt-BR')}
+                          </p>
+                          <Badge variant={transfer.status === 'confirmada' ? 'default' : 'secondary'}>
+                            {transfer.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-gray-500 py-8">
+                      <p>Nenhuma transferência registrada</p>
+                      <p className="text-sm">As transferências aparecerão aqui quando registradas</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Cadastro Rápido */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                Cadastro Rápido
+              </CardTitle>
+              <CardDescription>Registre rapidamente transações financeiras</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+                  <Receipt className="w-6 h-6" />
+                  <span className="text-sm">Orçamento</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+                  <FileText className="w-6 h-6" />
+                  <span className="text-sm">Venda</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+                  <FileText className="w-6 h-6" />
+                  <span className="text-sm">Contrato</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+                  <ShoppingCart className="w-6 h-6" />
+                  <span className="text-sm">Compra</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+                  <DollarSign className="w-6 h-6" />
+                  <span className="text-sm">Receita/Despesa</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Módulos */}
+        <TabsContent value="modules" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {financeiroModules.map((module) => (
+              <Card key={module.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-3 rounded-lg ${module.color}`}>
+                      <module.icon className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">{module.title}</CardTitle>
+                      <CardDescription>{module.description}</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {module.submodules.slice(0, 3).map((submodule, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 cursor-pointer transition-colors"
+                        onClick={() => router.push(submodule.href)}
+                      >
+                        <ArrowRight className="w-3 h-3" />
+                        <span>{submodule.name}</span>
+                      </div>
+                    ))}
+                    {module.submodules.length > 3 && (
+                      <div className="text-sm text-gray-500">
+                        +{module.submodules.length - 3} mais opções
+                      </div>
+                    )}
+                  </div>
+                  <Button 
+                    className="w-full mt-4" 
+                    variant="outline"
+                    onClick={() => {
+                      // Navegação para os módulos específicos usando Next.js Router
+                      if (module.id === 'vendas') {
+                        router.push('/dashboard/financeiro/vendas')
+                      } else if (module.id === 'compras') {
+                        router.push('/dashboard/financeiro/compras')
+                      } else if (module.id === 'locacoes') {
+                        router.push('/dashboard/financeiro/locacoes')
+                      } else if (module.id === 'impostos') {
+                        router.push('/dashboard/financeiro/impostos')
+                      } else if (module.id === 'logistica') {
+                        router.push('/dashboard/financeiro/logistica')
+                      } else if (module.id === 'cadastro') {
+                        router.push('/dashboard/financeiro/cadastro')
+                      } else if (module.id === 'relatorios') {
+                        router.push('/dashboard/financeiro/relatorios')
+                      }
+                    }}
+                  >
+                    Acessar Módulo
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        {/* Integração Bancária */}
+        <TabsContent value="integration" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5" />
+                  Contas Bancárias
+                </CardTitle>
+                <CardDescription>Sincronização com bancos parceiros</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Itaú</p>
+                        <p className="text-sm text-gray-500">Conta Corrente - 12345-6</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold">R$ 25.000,00</p>
+                      <Badge variant="default">Sincronizado</Badge>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Santander</p>
+                        <p className="text-sm text-gray-500">Conta Corrente - 78901-2</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold">R$ 20.000,00</p>
+                      <Badge variant="default">Sincronizado</Badge>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5" />
+                  Sincronização Automática
+                </CardTitle>
+                <CardDescription>Configurações de sincronização</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Sincronização Automática</p>
+                      <p className="text-sm text-gray-500">Atualização a cada 30 minutos</p>
+                    </div>
+                    <Badge variant="default">Ativo</Badge>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Última Sincronização</p>
+                      <p className="text-sm text-gray-500">Há 15 minutos</p>
+                    </div>
+                    <Button size="sm" variant="outline">
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Sincronizar Agora
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Integração E-mail e WhatsApp */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="w-5 h-5" />
+                Integração de Comunicação
+              </CardTitle>
+              <CardDescription>Envio automático de documentos</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <Mail className="w-4 h-4" />
+                    E-mail
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Notas Fiscais</span>
+                      <Badge variant="default">Ativo</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Notas de Débito</span>
+                      <Badge variant="default">Ativo</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Boletos</span>
+                      <Badge variant="default">Ativo</Badge>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    WhatsApp
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Notas Fiscais</span>
+                      <Badge variant="secondary">Inativo</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Notas de Débito</span>
+                      <Badge variant="secondary">Inativo</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Boletos</span>
+                      <Badge variant="secondary">Inativo</Badge>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+        </TabsContent>
+      </Tabs>
 
-      {/* Resumo por Obra */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <PieChart className="w-5 h-5" />
-            Resumo por Obra - BMM
-          </CardTitle>
-          <CardDescription>Distribuição de custos mensais por obra</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Obra</TableHead>
-                <TableHead>Total Orçado</TableHead>
-                <TableHead>Total Realizado</TableHead>
-                <TableHead>Saldo</TableHead>
-                <TableHead>% Realizado</TableHead>
-                <TableHead>Meses</TableHead>
-                <TableHead>Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {custosPorObra.map((obra, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{obra.obra}</TableCell>
-                  <TableCell>R$ {obra.totalOrcamento.toLocaleString('pt-BR')}</TableCell>
-                  <TableCell>R$ {obra.totalRealizado.toLocaleString('pt-BR')}</TableCell>
-                  <TableCell className={`font-semibold ${obra.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    R$ {obra.saldo.toLocaleString('pt-BR')}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full" 
-                          style={{ width: `${(obra.totalRealizado / obra.totalOrcamento) * 100}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm">
-                        {((obra.totalRealizado / obra.totalOrcamento) * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {obra.mesesDisponiveis} meses
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = `/dashboard/obras/${obra.obraId}?tab=custos`}
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        Ver BMM
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          carregarCustosMensais(obra.obraId)
-                          setIsExportDialogOpen(true)
-                        }}
-                      >
-                        <Download className="w-4 h-4 mr-1" />
-                        Exportar
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Boletins Mensais de Medição */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Boletins Mensais de Medição (BMM)
-          </CardTitle>
-          <CardDescription>Controle de medições mensais por obra</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {mockObras.map((obra) => {
-              const custosMensaisObra = getCustosMensaisByObra(obra.id)
-              const totalOrcamentoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.totalOrcamento, 0)
-              const totalRealizadoObra = custosMensaisObra.reduce((sum, custo) => sum + custo.valorRealizado, 0)
-              const mesesDisponiveis = getMesesDisponiveis(obra.id)
-              const ultimoMes = custosMensaisObra.length > 0 ? 
-                custosMensaisObra[custosMensaisObra.length - 1] : null
-              
-              return (
-                <Card key={obra.id} className="border-l-4 border-l-blue-500">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
-                        <Building2 className="w-5 h-5 text-blue-600" />
-                        <div>
-                          <CardTitle className="text-lg">{obra.name}</CardTitle>
-                          <CardDescription className="mt-1">
-                            {obra.description} • {obra.status}
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={obra.status === 'ativa' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
-                          {obra.status}
-                        </Badge>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => window.location.href = `/dashboard/obras/${obra.id}?tab=custos`}
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          Ver BMM
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-500" />
-                        <span className="text-gray-600">Início:</span>
-                        <span>{new Date(obra.startDate).toLocaleDateString('pt-BR')}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-500" />
-                        <span className="text-gray-600">Fim:</span>
-                        <span>{obra.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-500" />
-                        <span className="text-gray-600">Orçado:</span>
-                        <span className="font-medium">R$ {totalOrcamentoObra.toLocaleString('pt-BR')}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-500" />
-                        <span className="text-gray-600">Realizado:</span>
-                        <span className="font-medium">R$ {totalRealizadoObra.toLocaleString('pt-BR')}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Progresso do BMM</p>
-                          <p className="text-xs text-gray-500">
-                            {mesesDisponiveis.length} meses disponíveis • 
-                            {((totalRealizadoObra / totalOrcamentoObra) * 100).toFixed(1)}% realizado
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-green-600">
-                            R$ {(totalOrcamentoObra - totalRealizadoObra).toLocaleString('pt-BR')}
-                          </p>
-                          <p className="text-xs text-gray-500">Saldo restante</p>
-                        </div>
-                      </div>
-                      <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                          style={{ width: `${(totalRealizadoObra / totalOrcamentoObra) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div>
-              <Label htmlFor="search">Buscar custos</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  id="search"
-                  placeholder="Descrição ou obra..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="obra">Obra</Label>
-              <Select value={selectedObra} onValueChange={setSelectedObra}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas as obras" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as obras</SelectItem>
-                  {mockObras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
-                      {obra.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="tipo">Tipo</Label>
-              <Select value={selectedTipo} onValueChange={setSelectedTipo}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os tipos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="inicial">Inicial</SelectItem>
-                  <SelectItem value="adicional">Adicional</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="categoria">Categoria</Label>
-              <Select value={selectedCategoria} onValueChange={setSelectedCategoria}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas as categorias" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as categorias</SelectItem>
-                  <SelectItem value="equipamentos">Equipamentos</SelectItem>
-                  <SelectItem value="materiais">Materiais</SelectItem>
-                  <SelectItem value="mao_obra">Mão de Obra</SelectItem>
-                  <SelectItem value="outros">Outros</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setSearchTerm("")
-                  setSelectedObra("all")
-                  setSelectedTipo("all")
-                  setSelectedCategoria("all")
-                }}
-                className="w-full"
-              >
-                Limpar Filtros
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lista de Custos */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Custos ({filteredCustos.length})</CardTitle>
-          <CardDescription>Registro de todos os custos das obras</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Obra</TableHead>
-                <TableHead>Descrição</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Responsável</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCustos.map((custo) => (
-                <TableRow key={custo.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">
-                        {new Date(custo.data).toLocaleDateString('pt-BR')}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-medium">{custo.obraName}</TableCell>
-                  <TableCell>
-                    <div className="max-w-xs truncate">
-                      {custo.descricao}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getTipoColor(custo.tipo)}>
-                      {custo.tipo}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getCategoriaColor(custo.categoria)}>
-                      {custo.categoria}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-semibold">
-                    R$ {custo.valor.toLocaleString('pt-BR')}
-                  </TableCell>
-                  <TableCell>{custo.responsavelName}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetails(custo)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(custo)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Dialog de Detalhes */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+      {/* Dialog de Transferência Bancária */}
+      <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Detalhes do Custo</DialogTitle>
-            <DialogDescription>Informações completas do custo</DialogDescription>
-          </DialogHeader>
-          {selectedCusto && <CustoDetails custo={selectedCusto} />}
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de Edição */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Editar Custo</DialogTitle>
+            <DialogTitle>Registrar Transferência Bancária</DialogTitle>
             <DialogDescription>
-              Atualize as informações do custo
+              Registre uma nova transferência bancária
             </DialogDescription>
           </DialogHeader>
-          {selectedCusto && <CustoForm custo={selectedCusto} onClose={() => setIsEditDialogOpen(false)} />}
+          <TransferForm onClose={() => setIsTransferDialogOpen(false)} />
         </DialogContent>
       </Dialog>
 
@@ -640,7 +664,7 @@ export default function FinanceiroPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Download className="w-5 h-5" />
-              Exportar Custos Mensais
+              Exportar Dados
             </DialogTitle>
             <DialogDescription>
               Escolha o tipo de exportação desejada
@@ -650,38 +674,39 @@ export default function FinanceiroPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <Button
-                onClick={() => {
-                  const obraId = custosPorObra.find(o => o.obraId)?.obraId || '1'
-                  handleExportarCustos('geral', obraId)
-                  setIsExportDialogOpen(false)
-                }}
+                onClick={() => handleExport('receber')}
                 className="h-20 flex flex-col items-center justify-center gap-2"
               >
-                <Download className="w-6 h-6" />
-                <span>Exportar Geral</span>
-                <span className="text-xs text-gray-500">Todos os meses</span>
+                <ArrowUpRight className="w-6 h-6" />
+                <span>Pagamentos a Receber</span>
               </Button>
               
               <Button
                 variant="outline"
-                onClick={() => {
-                  const obraId = custosPorObra.find(o => o.obraId)?.obraId || '1'
-                  handleExportarCustos('mes', obraId)
-                  setIsExportDialogOpen(false)
-                }}
+                onClick={() => handleExport('pagar')}
                 className="h-20 flex flex-col items-center justify-center gap-2"
-                disabled={mesSelecionado === 'todos' || !mesSelecionado}
               >
-                <Download className="w-6 h-6" />
-                <span>Exportar Mês</span>
-                <span className="text-xs text-gray-500">Mês selecionado</span>
+                <ArrowDownLeft className="w-6 h-6" />
+                <span>Pagamentos a Pagar</span>
               </Button>
-            </div>
-            
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                {custosMensais.length} itens disponíveis para exportação
-              </p>
+              
+              <Button
+                variant="outline"
+                onClick={() => handleExport('completo')}
+                className="h-20 flex flex-col items-center justify-center gap-2"
+              >
+                <FileSpreadsheet className="w-6 h-6" />
+                <span>Relatório Completo</span>
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={() => handleExport('transferencias')}
+                className="h-20 flex flex-col items-center justify-center gap-2"
+              >
+                <CreditCard className="w-6 h-6" />
+                <span>Transferências</span>
+              </Button>
             </div>
           </div>
         </DialogContent>
@@ -690,43 +715,26 @@ export default function FinanceiroPage() {
   )
 }
 
-function CustoForm({ custo, onClose }: { custo?: any; onClose: () => void }) {
+function TransferForm({ onClose }: { onClose: () => void }) {
   const [formData, setFormData] = useState({
-    obraId: custo?.obraId || '',
-    descricao: custo?.descricao || '',
-    valor: custo?.valor || '',
-    tipo: custo?.tipo || 'inicial',
-    categoria: custo?.categoria || 'equipamentos',
-    data: custo?.data || new Date().toISOString().split('T')[0],
-    responsavelId: custo?.responsavelId || '3',
-    comprovante: custo?.comprovante || ''
+    data: new Date().toISOString().split('T')[0],
+    valor: '',
+    tipo: 'entrada',
+    descricao: '',
+    bancoOrigem: '',
+    bancoDestino: '',
+    documento: null as File | null
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Aqui seria a lógica para salvar/atualizar o custo
-    console.log('Salvando custo:', formData)
+    console.log('Salvando transferência:', formData)
     onClose()
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="obra">Obra</Label>
-          <Select value={formData.obraId} onValueChange={(value) => setFormData({ ...formData, obraId: value })}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione a obra" />
-            </SelectTrigger>
-            <SelectContent>
-              {mockObras.map(obra => (
-                <SelectItem key={obra.id} value={obra.id}>
-                  {obra.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         <div>
           <Label htmlFor="data">Data</Label>
           <Input
@@ -737,6 +745,30 @@ function CustoForm({ custo, onClose }: { custo?: any; onClose: () => void }) {
             required
           />
         </div>
+        <div>
+          <Label htmlFor="valor">Valor (R$)</Label>
+          <Input
+            id="valor"
+            type="number"
+            step="0.01"
+            value={formData.valor}
+            onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="tipo">Tipo de Transferência</Label>
+        <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="entrada">Entrada</SelectItem>
+            <SelectItem value="saida">Saída</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div>
@@ -750,54 +782,35 @@ function CustoForm({ custo, onClose }: { custo?: any; onClose: () => void }) {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="valor">Valor (R$)</Label>
+          <Label htmlFor="bancoOrigem">Banco de Origem</Label>
           <Input
-            id="valor"
-            type="number"
-            step="0.01"
-            value={formData.valor}
-            onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) })}
-            required
+            id="bancoOrigem"
+            value={formData.bancoOrigem}
+            onChange={(e) => setFormData({ ...formData, bancoOrigem: e.target.value })}
+            placeholder="Ex: Itaú, Santander..."
           />
         </div>
         <div>
-          <Label htmlFor="tipo">Tipo</Label>
-          <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="inicial">Inicial</SelectItem>
-              <SelectItem value="adicional">Adicional</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="categoria">Categoria</Label>
-          <Select value={formData.categoria} onValueChange={(value) => setFormData({ ...formData, categoria: value })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="equipamentos">Equipamentos</SelectItem>
-              <SelectItem value="materiais">Materiais</SelectItem>
-              <SelectItem value="mao_obra">Mão de Obra</SelectItem>
-              <SelectItem value="outros">Outros</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="bancoDestino">Banco de Destino</Label>
+          <Input
+            id="bancoDestino"
+            value={formData.bancoDestino}
+            onChange={(e) => setFormData({ ...formData, bancoDestino: e.target.value })}
+            placeholder="Ex: Cliente, Fornecedor..."
+          />
         </div>
       </div>
 
       <div>
-        <Label htmlFor="comprovante">Comprovante (opcional)</Label>
+        <Label htmlFor="documento">Documento Comprobatório</Label>
         <div className="flex items-center gap-2">
           <Input
-            id="comprovante"
+            id="documento"
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
-            onChange={(e) => setFormData({ ...formData, comprovante: e.target.files?.[0]?.name || '' })}
+            onChange={(e) => setFormData({ ...formData, documento: e.target.files?.[0] || null })}
           />
           <Button type="button" variant="outline">
             <FileText className="w-4 h-4 mr-2" />
@@ -811,91 +824,9 @@ function CustoForm({ custo, onClose }: { custo?: any; onClose: () => void }) {
           Cancelar
         </Button>
         <Button type="submit">
-          {custo ? 'Atualizar' : 'Registrar'} Custo
+          Registrar Transferência
         </Button>
       </div>
     </form>
-  )
-}
-
-function CustoDetails({ custo }: { custo: any }) {
-  const obra = mockObras.find(o => o.id === custo.obraId)
-  const responsavel = mockUsers.find(u => u.id === custo.responsavelId)
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Informações do Custo</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Obra:</span>
-              <span className="text-sm font-medium">{obra?.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Data:</span>
-              <span className="text-sm">{new Date(custo.data).toLocaleDateString('pt-BR')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Tipo:</span>
-              <Badge className={custo.tipo === 'inicial' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}>
-                {custo.tipo}
-              </Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Categoria:</span>
-              <Badge className={custo.categoria === 'equipamentos' ? 'bg-purple-100 text-purple-800' : 
-                               custo.categoria === 'materiais' ? 'bg-green-100 text-green-800' : 
-                               custo.categoria === 'mao_obra' ? 'bg-yellow-100 text-yellow-800' : 
-                               'bg-gray-100 text-gray-800'}>
-                {custo.categoria}
-              </Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Valor:</span>
-              <span className="text-sm font-bold text-lg">R$ {custo.valor.toLocaleString('pt-BR')}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Responsável e Comprovante</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Responsável:</span>
-              <span className="text-sm font-medium">{responsavel?.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Email:</span>
-              <span className="text-sm">{responsavel?.email}</span>
-            </div>
-            {custo.comprovante && (
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Comprovante:</span>
-                <Button variant="outline" size="sm">
-                  <Download className="w-4 h-4 mr-1" />
-                  Baixar
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Descrição Detalhada</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-700">{custo.descricao}</p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
   )
 }
