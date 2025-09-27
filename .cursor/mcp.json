@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "npx -y @supabase/mcp-server-supabase@latest --project-ref=mghdktkoejobsmdbvssl"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_6c4297928184eba7cf3ff98d6126f8e8e0d0111f"
+      }
+    }
+  }
+}
