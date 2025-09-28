@@ -48,6 +48,7 @@ api.interceptors.response.use(
 )
 
 export default api
+export { api }
 
 // Função para construir URLs completas
 export const buildApiUrl = (endpoint: string): string => {

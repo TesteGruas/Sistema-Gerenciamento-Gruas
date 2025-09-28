@@ -57,6 +57,12 @@ import impostosRoutes from './routes/impostos.js'
 import logisticaRoutes from './routes/logistica.js'
 import financialDataRoutes from './routes/financial-data.js'
 import orcamentosRoutes from './routes/orcamentos.js'
+import locacoesRoutes from './routes/locacoes.js'
+import medicoesRoutes from './routes/medicoes.js'
+import aditivosRoutes from './routes/aditivos.js'
+import orcamentosLocacaoRoutes from './routes/orcamentos-locacao.js'
+import notasDebitoRoutes from './routes/notas-debito.js'
+import notasFiscaisLocacaoRoutes from './routes/notas-fiscais-locacao.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -224,6 +230,12 @@ app.use('/api/impostos', impostosRoutes)
 app.use('/api/logistica', logisticaRoutes)
 app.use('/api/financial-data', financialDataRoutes)
 app.use('/api/orcamentos', orcamentosRoutes)
+app.use('/api/locacoes', locacoesRoutes)
+app.use('/api/medicoes', medicoesRoutes)
+app.use('/api/aditivos', aditivosRoutes)
+app.use('/api/orcamentos-locacao', orcamentosLocacaoRoutes)
+app.use('/api/notas-debito', notasDebitoRoutes)
+app.use('/api/notas-fiscais-locacao', notasFiscaisLocacaoRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {
