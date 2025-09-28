@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { getFinancialData, createTransferencia, type FinancialData, type Transferencia } from "@/lib/api-financial"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -53,31 +54,7 @@ import {
   MoreHorizontal
 } from "lucide-react"
 
-// Interfaces para os dados financeiros
-interface FluxoCaixa {
-  mes: string
-  entrada: number
-  saida: number
-}
-
-interface Transferencia {
-  id: number
-  data: string
-  valor: number
-  tipo: 'entrada' | 'saida'
-  descricao: string
-  status: 'confirmada' | 'pendente'
-}
-
-interface FinancialData {
-  receberHoje: number
-  pagarHoje: number
-  recebimentosAtraso: number
-  pagamentosAtraso: number
-  saldoAtual: number
-  fluxoCaixa: FluxoCaixa[]
-  transferencias: Transferencia[]
-}
+// Interfaces já importadas do api-financial.ts
 
 // Dados financeiros serão carregados da API
 
@@ -89,6 +66,7 @@ const financeiroModules = [
     color: 'bg-green-500',
     description: 'Gestão de vendas, contratos e orçamentos',
     submodules: [
+      { name: 'Orçamentos', href: '/dashboard/financeiro/orcamentos' },
       { name: 'Ordem de Serviço', href: '/dashboard/financeiro/vendas/ordem-servico' },
       { name: 'Contratos', href: '/dashboard/financeiro/vendas/contratos' },
       { name: 'Vendas e Orçamentos', href: '/dashboard/financeiro/vendas/vendas-orcamentos' },
@@ -199,10 +177,8 @@ export default function FinanceiroPage() {
   // Função para carregar dados financeiros da API
   const loadFinancialData = async () => {
     try {
-      // Aqui será implementada a chamada para a API
-      // const response = await fetch('/api/financial-data')
-      // const data = await response.json()
-      // setFinancialData(data)
+      const data = await getFinancialData()
+      setFinancialData(data)
     } catch (error) {
       console.error('Erro ao carregar dados financeiros:', error)
     }
@@ -417,7 +393,11 @@ export default function FinanceiroPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2">
+                <Button 
+                  variant="outline" 
+                  className="h-20 flex flex-col items-center justify-center gap-2"
+                  onClick={() => router.push('/dashboard/financeiro/orcamentos')}
+                >
                   <Receipt className="w-6 h-6" />
                   <span className="text-sm">Orçamento</span>
                 </Button>
@@ -726,10 +706,24 @@ function TransferForm({ onClose }: { onClose: () => void }) {
     documento: null as File | null
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('Salvando transferência:', formData)
-    onClose()
+    try {
+      await createTransferencia({
+        data: formData.data,
+        valor: parseFloat(formData.valor),
+        tipo: formData.tipo as 'entrada' | 'saida',
+        descricao: formData.descricao,
+        banco_origem: formData.bancoOrigem,
+        banco_destino: formData.bancoDestino,
+        documento_comprobatório: formData.documento?.name
+      })
+      onClose()
+      // Recarregar dados financeiros
+      window.location.reload()
+    } catch (error) {
+      console.error('Erro ao salvar transferência:', error)
+    }
   }
 
   return (

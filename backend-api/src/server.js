@@ -48,6 +48,15 @@ import arquivosTestRoutes from './routes/arquivos-test.js'
 import custosMensaisRoutes from './routes/custos-mensais.js'
 import obrasDocumentosRoutes from './routes/obras-documentos.js'
 import obrasArquivosRoutes from './routes/obras-arquivos.js'
+import vendasRoutes from './routes/vendas.js'
+import comprasRoutes from './routes/compras.js'
+import transferenciasRoutes from './routes/transferencias.js'
+import contasBancariasRoutes from './routes/contas-bancarias.js'
+import notasFiscaisRoutes from './routes/notas-fiscais.js'
+import impostosRoutes from './routes/impostos.js'
+import logisticaRoutes from './routes/logistica.js'
+import financialDataRoutes from './routes/financial-data.js'
+import orcamentosRoutes from './routes/orcamentos.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -206,6 +215,15 @@ app.use('/api/arquivos-test', arquivosTestRoutes)
 app.use('/api/custos-mensais', custosMensaisRoutes)
 app.use('/api/obras', obrasDocumentosRoutes)
 app.use('/api/obras', obrasArquivosRoutes)
+app.use('/api/vendas', vendasRoutes)
+app.use('/api/compras', comprasRoutes)
+app.use('/api/transferencias', transferenciasRoutes)
+app.use('/api/contas-bancarias', contasBancariasRoutes)
+app.use('/api/notas-fiscais', notasFiscaisRoutes)
+app.use('/api/impostos', impostosRoutes)
+app.use('/api/logistica', logisticaRoutes)
+app.use('/api/financial-data', financialDataRoutes)
+app.use('/api/orcamentos', orcamentosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

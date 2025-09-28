@@ -1639,17 +1639,17 @@ export default function ObraDetailsPage() {
                             <div className="flex items-center gap-2">
                               <Users className="w-4 h-4 text-gray-500" />
                               <span className="text-gray-600">Assinantes:</span>
-                              <span>{documento.assinaturas.length}</span>
+                              <span>{documento.assinaturas?.length || 0}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <CheckCircle className="w-4 h-4 text-gray-500" />
                               <span className="text-gray-600">Progresso:</span>
-                              <span>{documento.assinaturas.length > 0 ? Math.round((documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100) : 0}%</span>
+                              <span>{documento.assinaturas?.length > 0 ? Math.round((documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100) : 0}%</span>
                             </div>
                           </div>
 
                           {/* Barra de progresso */}
-                          {documento.assinaturas.length > 0 && (
+                          {documento.assinaturas?.length > 0 && (
                             <div className="space-y-2">
                               <div className="flex justify-between text-sm">
                                 <span>Progresso das Assinaturas</span>
@@ -1657,13 +1657,13 @@ export default function ObraDetailsPage() {
                               </div>
                               <Progress 
                                 value={(documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100} 
-                                className="h-2"
+                                className="h-2" 
                               />
                             </div>
                           )}
 
                           {/* Lista de assinaturas */}
-                          {documento.assinaturas.length > 0 && (
+                          {documento.assinaturas?.length > 0 && (
                             <div className="space-y-2">
                               <h4 className="font-medium text-sm text-gray-700">Ordem de Assinaturas</h4>
                               <div className="space-y-2">
@@ -1708,7 +1708,7 @@ export default function ObraDetailsPage() {
                           )}
 
                           {/* Próximo assinante */}
-                          {documento.proximo_assinante_id && (
+                          {documento.proximo_assinante_id && documento.assinaturas && (
                             <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
                               <Clock className="w-4 h-4 text-blue-600" />
                               <span className="text-sm text-blue-800">
