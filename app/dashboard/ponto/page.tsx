@@ -20,269 +20,38 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText } from "lucide-react"
+import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X } from "lucide-react"
+import { 
+  apiFuncionarios, 
+  apiRegistrosPonto, 
+  apiJustificativas,
+  apiRelatorios,
+  utilsPonto,
+  type Funcionario,
+  type RegistroPonto,
+  type Justificativa
+} from "@/lib/api-ponto-eletronico"
 
-// Dados simulados dos funcionários
-const funcionariosData = [
-  { id: "FUNC001", nome: "João Silva", cargo: "Operador de Grua", turno: "Manhã" },
-  { id: "FUNC002", nome: "Maria Santos", cargo: "Operadora de Grua", turno: "Tarde" },
-  { id: "FUNC003", nome: "Carlos Oliveira", cargo: "Mecânico", turno: "Manhã" },
-  { id: "FUNC004", nome: "Ana Costa", cargo: "Auxiliar Administrativo", turno: "Integral" },
-  { id: "FUNC005", nome: "Pedro Lima", cargo: "Supervisor", turno: "Integral" },
-]
-
-// Dados simulados dos registros de ponto
-const registrosPontoData = [
-  {
-    id: "REG001",
-    funcionario: "João Silva",
-    data: "2024-01-22",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "17:00",
-    horasTrabalhadas: 8,
-    horasExtras: 0,
-    status: "Completo",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Jornada normal",
-    localizacao: "Obra Centro-SP",
-  },
-  {
-    id: "REG002",
-    funcionario: "Maria Santos",
-    data: "2024-01-22",
-    entrada: "13:00",
-    saidaAlmoco: "18:00",
-    voltaAlmoco: "19:00",
-    saida: "22:00",
-    horasTrabalhadas: 8,
-    horasExtras: 0,
-    status: "Completo",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Turno noturno",
-    localizacao: "Obra Zona Sul",
-  },
-  {
-    id: "REG003",
-    funcionario: "Carlos Oliveira",
-    data: "2024-01-22",
-    entrada: "07:15",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "17:00",
-    horasTrabalhadas: 7.75,
-    horasExtras: 0,
-    status: "Atraso",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Atraso de 15 minutos",
-    localizacao: "Obra Centro-SP",
-  },
-  {
-    id: "REG004",
-    funcionario: "Ana Costa",
-    data: "2024-01-22",
-    entrada: "08:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "20:00",
-    horasTrabalhadas: 10,
-    horasExtras: 2,
-    status: "Pendente Aprovação",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Horas extras para finalizar relatório urgente",
-    localizacao: "Escritório Central",
-  },
-  {
-    id: "REG005",
-    funcionario: "Pedro Lima",
-    data: "2024-01-21",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "19:00",
-    horasTrabalhadas: 10,
-    horasExtras: 2,
-    status: "Aprovado",
-    aprovadoPor: "Carlos Supervisor",
-    dataAprovacao: "2024-01-21T20:30:00",
-    observacoes: "Supervisão de obra emergencial",
-    localizacao: "Obra Zona Norte",
-  },
-  {
-    id: "REG006",
-    funcionario: "João Silva",
-    data: "2024-01-20",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "21:00",
-    horasTrabalhadas: 12,
-    horasExtras: 4,
-    status: "Aprovado",
-    aprovadoPor: "Pedro Lima",
-    dataAprovacao: "2024-01-20T21:15:00",
-    observacoes: "Operação especial - montagem de grua",
-    localizacao: "Obra Centro-SP",
-  },
-  {
-    id: "REG007",
-    funcionario: "Maria Santos",
-    data: "2024-01-19",
-    entrada: "13:00",
-    saidaAlmoco: "18:00",
-    voltaAlmoco: "19:00",
-    saida: "23:00",
-    horasTrabalhadas: 10,
-    horasExtras: 2,
-    status: "Rejeitado",
-    aprovadoPor: "Pedro Lima",
-    dataAprovacao: "2024-01-19T23:30:00",
-    observacoes: "Horas extras não justificadas adequadamente",
-    localizacao: "Obra Zona Sul",
-  },
-  {
-    id: "REG008",
-    funcionario: "Carlos Oliveira",
-    data: "2024-01-18",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "18:00",
-    horasTrabalhadas: 9,
-    horasExtras: 1,
-    status: "Aprovado",
-    aprovadoPor: "Pedro Lima",
-    dataAprovacao: "2024-01-18T18:30:00",
-    observacoes: "Manutenção preventiva emergencial",
-    localizacao: "Obra Centro-SP",
-  },
-  {
-    id: "REG009",
-    funcionario: "Ana Costa",
-    data: "2024-01-17",
-    entrada: "08:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "17:00",
-    horasTrabalhadas: 8,
-    horasExtras: 0,
-    status: "Completo",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Jornada normal",
-    localizacao: "Escritório Central",
-  },
-  {
-    id: "REG010",
-    funcionario: "Pedro Lima",
-    data: "2024-01-16",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "20:00",
-    horasTrabalhadas: 11,
-    horasExtras: 3,
-    status: "Aprovado",
-    aprovadoPor: "Carlos Supervisor",
-    dataAprovacao: "2024-01-16T20:15:00",
-    observacoes: "Supervisão de obra com prazo apertado",
-    localizacao: "Obra Zona Norte",
-  },
-  {
-    id: "REG011",
-    funcionario: "Maria Santos",
-    data: "2024-01-15",
-    entrada: "13:00",
-    saidaAlmoco: "18:00",
-    voltaAlmoco: "19:00",
-    saida: "21:00",
-    horasTrabalhadas: 8,
-    horasExtras: 0,
-    status: "Completo",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Turno noturno normal",
-    localizacao: "Obra Zona Sul",
-  },
-  {
-    id: "REG012",
-    funcionario: "João Silva",
-    data: "2024-01-14",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "19:00",
-    horasTrabalhadas: 10,
-    horasExtras: 2,
-    status: "Pendente Aprovação",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Operação de descarga de equipamentos",
-    localizacao: "Obra Centro-SP",
-  },
-  {
-    id: "REG013",
-    funcionario: "Carlos Oliveira",
-    data: "2024-01-13",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "17:00",
-    horasTrabalhadas: 8,
-    horasExtras: 0,
-    status: "Completo",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Jornada normal",
-    localizacao: "Obra Centro-SP",
-  },
-  {
-    id: "REG014",
-    funcionario: "Ana Costa",
-    data: "2024-01-12",
-    entrada: "08:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "22:00",
-    horasTrabalhadas: 12,
-    horasExtras: 4,
-    status: "Aprovado",
-    aprovadoPor: "Pedro Lima",
-    dataAprovacao: "2024-01-12T22:30:00",
-    observacoes: "Relatório mensal urgente - finalização",
-    localizacao: "Escritório Central",
-  },
-  {
-    id: "REG015",
-    funcionario: "Pedro Lima",
-    data: "2024-01-11",
-    entrada: "07:00",
-    saidaAlmoco: "12:00",
-    voltaAlmoco: "13:00",
-    saida: "17:00",
-    horasTrabalhadas: 8,
-    horasExtras: 0,
-    status: "Completo",
-    aprovadoPor: null,
-    dataAprovacao: null,
-    observacoes: "Jornada normal",
-    localizacao: "Obra Zona Norte",
-  },
-]
+// Estado inicial dos dados
+const estadoInicial = {
+  funcionarios: [] as Funcionario[],
+  registrosPonto: [] as RegistroPonto[],
+  justificativas: [] as Justificativa[],
+  loading: false,
+  error: null as string | null,
+  isAdmin: false,
+  usuarioAtual: null as { id: number, nome: string } | null
+}
 
 export default function PontoPage() {
-  const [currentTime, setCurrentTime] = useState(new Date())
+  const [currentTime, setCurrentTime] = useState<Date | null>(null)
+  const [isClient, setIsClient] = useState(false)
   const [selectedFuncionario, setSelectedFuncionario] = useState("")
-  const [registrosPonto, setRegistrosPonto] = useState(registrosPontoData)
+  const [data, setData] = useState(estadoInicial)
   const [searchTerm, setSearchTerm] = useState("")
   const [isJustificativaOpen, setIsJustificativaOpen] = useState(false)
   const [justificativaData, setJustificativaData] = useState({
-    funcionario: "",
+    funcionario_id: "",
     data: "",
     tipo: "",
     motivo: "",
@@ -297,25 +66,115 @@ export default function PontoPage() {
   
   // Estados para edição de registros
   const [isEditarOpen, setIsEditarOpen] = useState(false)
-  const [registroEditando, setRegistroEditando] = useState<any>(null)
+  const [registroEditando, setRegistroEditando] = useState<RegistroPonto | null>(null)
   const [dadosEdicao, setDadosEdicao] = useState({
     entrada: "",
-    saidaAlmoco: "",
-    voltaAlmoco: "",
+    saida_almoco: "",
+    volta_almoco: "",
     saida: "",
     observacoes: "",
-    justificativa: "",
+    justificativa_alteracao: "",
   })
 
-  // Atualizar relógio a cada segundo
+  // Atualizar relógio a cada segundo (apenas no cliente)
   useEffect(() => {
+    setIsClient(true)
+    setCurrentTime(new Date())
+    
     const timer = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(timer)
   }, [])
 
-  const registrarPonto = (tipo: string) => {
+  // Carregar dados iniciais
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  // Função para carregar dados da API
+  const carregarDados = async () => {
+    setData(prev => ({ ...prev, loading: true, error: null }))
+    
+    try {
+      // ID do usuário atual (em um sistema real, isso viria do contexto de autenticação)
+      const usuarioId = 2 // Hardcoded para exemplo - usuário admin
+      
+      // Carregar funcionários com verificação de admin e outros dados em paralelo
+      const [funcionariosResponse, registrosResponse, justificativasResponse] = await Promise.all([
+        apiFuncionarios.listarParaPonto(usuarioId),
+        apiRegistrosPonto.listar({ limit: 100 }),
+        apiJustificativas.listar({})
+      ])
+
+      // Verificar se a resposta tem a estrutura esperada
+      const isAdmin = funcionariosResponse?.isAdmin || false
+      const funcionarios = funcionariosResponse?.funcionarios || []
+
+      // Definir usuário atual (primeiro funcionário da lista se não for admin)
+      const usuarioAtual = isAdmin 
+        ? null 
+        : funcionarios[0] || null
+
+      setData(prev => ({
+        ...prev,
+        funcionarios: funcionarios,
+        registrosPonto: registrosResponse.data || [],
+        justificativas: justificativasResponse.data || [],
+        isAdmin: isAdmin,
+        usuarioAtual,
+        loading: false
+      }))
+
+      // Se não for admin, selecionar automaticamente o próprio usuário
+      if (!isAdmin && usuarioAtual) {
+        setSelectedFuncionario(usuarioAtual.id.toString())
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      setData(prev => ({
+        ...prev,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Erro ao carregar dados'
+      }))
+    }
+  }
+
+  // Função para mapear tipos de registro para campos da API
+  const mapearTipoParaCampo = (tipo: string) => {
+    const mapeamento: { [key: string]: string } = {
+      'Entrada': 'entrada',
+      'Saída': 'saida',
+      'Saída Almoço': 'saida_almoco',
+      'Volta Almoço': 'volta_almoco'
+    }
+    return mapeamento[tipo] || tipo.toLowerCase().replace(' ', '_')
+  }
+
+  // Função para verificar o status do registro atual
+  const getStatusRegistroAtual = () => {
+    if (!selectedFuncionario) return null
+
+    const agora = new Date()
+    const dataAtual = agora.toISOString().split("T")[0]
+
+    const registrosHoje = data.registrosPonto.filter(
+      r => r.funcionario_id === parseInt(selectedFuncionario) && r.data === dataAtual
+    )
+
+    if (registrosHoje.length === 0) return null
+
+    const registro = registrosHoje[0]
+    return {
+      temEntrada: !!registro.entrada,
+      temSaida: !!registro.saida,
+      temSaidaAlmoco: !!registro.saida_almoco,
+      temVoltaAlmoco: !!registro.volta_almoco,
+      registro
+    }
+  }
+
+  const registrarPonto = async (tipo: string) => {
     if (!selectedFuncionario) {
       alert("Selecione um funcionário")
       return
@@ -325,25 +184,64 @@ export default function PontoPage() {
     const horaAtual = agora.toTimeString().slice(0, 5)
     const dataAtual = agora.toISOString().split("T")[0]
 
-    // Simular registro de ponto
-    alert(`Ponto registrado: ${tipo} às ${horaAtual} para ${selectedFuncionario}`)
+    try {
+      // Buscar registro existente para hoje
+      const registrosHoje = data.registrosPonto.filter(
+        r => r.funcionario_id === parseInt(selectedFuncionario) && r.data === dataAtual
+      )
 
-    // Aqui seria feita a integração com o backend
-    console.log(`Registrando ponto: ${tipo} - ${selectedFuncionario} - ${horaAtual}`)
+      let registroAtual = registrosHoje[0]
+
+      if (!registroAtual) {
+        // Criar novo registro
+        const novoRegistro = await apiRegistrosPonto.criar({
+          funcionario_id: parseInt(selectedFuncionario),
+          data: dataAtual,
+          [mapearTipoParaCampo(tipo)]: horaAtual,
+          localizacao: "Sistema Web"
+        })
+        
+        registroAtual = novoRegistro
+        setData(prev => ({
+          ...prev,
+          registrosPonto: [novoRegistro, ...prev.registrosPonto]
+        }))
+      } else {
+        // Atualizar registro existente
+        const dadosAtualizacao: any = {
+          [mapearTipoParaCampo(tipo)]: horaAtual,
+          justificativa_alteracao: `Registro automático de ${tipo}`
+        }
+
+        const registroAtualizado = await apiRegistrosPonto.atualizar(registroAtual.id, dadosAtualizacao)
+        
+        setData(prev => ({
+          ...prev,
+          registrosPonto: prev.registrosPonto.map(r => 
+            r.id === registroAtualizado.id ? registroAtualizado : r
+          )
+        }))
+      }
+
+      alert(`Ponto registrado: ${tipo} às ${horaAtual}`)
+    } catch (error) {
+      console.error('Erro ao registrar ponto:', error)
+      alert('Erro ao registrar ponto. Tente novamente.')
+    }
   }
 
-  const filteredRegistros = registrosPonto
+  const filteredRegistros = data.registrosPonto
     .filter((registro) => {
       // Filtro por termo de busca
       const matchesSearch = 
-        (registro.funcionario || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (registro.funcionario?.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         registro.data.includes(searchTerm) ||
         (registro.status || '').toLowerCase().includes(searchTerm.toLowerCase())
       
       // Filtro por funcionário
       const matchesFuncionario = 
         filtroFuncionario === "todos" || 
-        registro.funcionario === filtroFuncionario
+        registro.funcionario_id === parseInt(filtroFuncionario)
       
       // Filtro por data
       const registroData = new Date(registro.data)
@@ -364,9 +262,9 @@ export default function PontoPage() {
     .sort((a, b) => {
       // Ordenação por horas extras
       if (ordenacaoHorasExtras === "maior") {
-        return (b.horasExtras || 0) - (a.horasExtras || 0)
+        return (b.horas_extras || 0) - (a.horas_extras || 0)
       } else if (ordenacaoHorasExtras === "menor") {
-        return (a.horasExtras || 0) - (b.horasExtras || 0)
+        return (a.horas_extras || 0) - (b.horas_extras || 0)
       } else {
         // Ordenação por data (mais recente primeiro)
         return new Date(b.data).getTime() - new Date(a.data).getTime()
@@ -374,142 +272,142 @@ export default function PontoPage() {
     })
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Completo":
-        return <Badge className="bg-green-100 text-green-800">Completo</Badge>
-      case "Em Andamento":
-        return <Badge className="bg-blue-100 text-blue-800">Em Andamento</Badge>
-      case "Atraso":
-        return <Badge className="bg-yellow-100 text-yellow-800">Atraso</Badge>
-      case "Falta":
-        return <Badge className="bg-red-100 text-red-800">Falta</Badge>
-      case "Pendente Aprovação":
-        return <Badge className="bg-orange-100 text-orange-800">Pendente Aprovação</Badge>
-      case "Aprovado":
-        return <Badge className="bg-green-100 text-green-800">Aprovado</Badge>
-      case "Rejeitado":
-        return <Badge className="bg-red-100 text-red-800">Rejeitado</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
+    const badge = utilsPonto.obterBadgeStatus(status)
+    return <Badge className={badge.className}>{badge.text}</Badge>
+  }
+
+  const handleJustificativa = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      await apiJustificativas.criar({
+        funcionario_id: parseInt(justificativaData.funcionario_id),
+        data: justificativaData.data,
+        tipo: justificativaData.tipo,
+        motivo: justificativaData.motivo
+      })
+
+      alert("Justificativa enviada com sucesso!")
+      setJustificativaData({
+        funcionario_id: "",
+        data: "",
+        tipo: "",
+        motivo: "",
+      })
+      setIsJustificativaOpen(false)
+      
+      // Recarregar dados
+      carregarDados()
+    } catch (error) {
+      console.error('Erro ao criar justificativa:', error)
+      alert('Erro ao enviar justificativa. Tente novamente.')
     }
   }
 
-  const handleJustificativa = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Simular envio de justificativa
-    alert("Justificativa enviada com sucesso!")
-    setJustificativaData({
-      funcionario: "",
-      data: "",
-      tipo: "",
-      motivo: "",
-    })
-    setIsJustificativaOpen(false)
+  const handleAprovarJustificativa = async (id: string) => {
+    try {
+      await apiJustificativas.aprovar(id)
+      alert("Justificativa aprovada com sucesso!")
+      carregarDados()
+    } catch (error) {
+      console.error("Erro ao aprovar justificativa:", error)
+      alert("Erro ao aprovar justificativa. Tente novamente.")
+    }
+  }
+
+  const handleRejeitarJustificativa = async (id: string) => {
+    const motivoRejeicao = prompt("Digite o motivo da rejeição:")
+    if (!motivoRejeicao) return
+
+    try {
+      await apiJustificativas.rejeitar(id, motivoRejeicao)
+      alert("Justificativa rejeitada com sucesso!")
+      carregarDados()
+    } catch (error) {
+      console.error("Erro ao rejeitar justificativa:", error)
+      alert("Erro ao rejeitar justificativa. Tente novamente.")
+    }
   }
 
   // Função para abrir modal de edição
-  const abrirEdicao = (registro: any) => {
+  const abrirEdicao = (registro: RegistroPonto) => {
     setRegistroEditando(registro)
     setDadosEdicao({
-      entrada: registro.entrada,
-      saidaAlmoco: registro.saidaAlmoco,
-      voltaAlmoco: registro.voltaAlmoco,
-      saida: registro.saida,
-      observacoes: registro.observacoes,
-      justificativa: "",
+      entrada: registro.entrada || "",
+      saida_almoco: registro.saida_almoco || "",
+      volta_almoco: registro.volta_almoco || "",
+      saida: registro.saida || "",
+      observacoes: registro.observacoes || "",
+      justificativa_alteracao: "",
     })
     setIsEditarOpen(true)
   }
 
-  // Função para calcular horas trabalhadas
-  const calcularHorasTrabalhadas = (entrada: string, saida: string, saidaAlmoco: string, voltaAlmoco: string) => {
-    if (!entrada || !saida || !saidaAlmoco || !voltaAlmoco) return 0
-    
-    const entradaTime = new Date(`2000-01-01T${entrada}:00`)
-    const saidaTime = new Date(`2000-01-01T${saida}:00`)
-    const saidaAlmocoTime = new Date(`2000-01-01T${saidaAlmoco}:00`)
-    const voltaAlmocoTime = new Date(`2000-01-01T${voltaAlmoco}:00`)
-    
-    const manha = (saidaAlmocoTime.getTime() - entradaTime.getTime()) / (1000 * 60 * 60)
-    const tarde = (saidaTime.getTime() - voltaAlmocoTime.getTime()) / (1000 * 60 * 60)
-    
-    return Math.max(0, manha + tarde)
-  }
-
   // Função para salvar edição
-  const salvarEdicao = (e: React.FormEvent) => {
+  const salvarEdicao = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!registroEditando) return
 
-    const horasTrabalhadas = calcularHorasTrabalhadas(
-      dadosEdicao.entrada,
-      dadosEdicao.saida,
-      dadosEdicao.saidaAlmoco,
-      dadosEdicao.voltaAlmoco
-    )
-    
-    const horasExtras = Math.max(0, horasTrabalhadas - 8)
-    
-    // Atualizar o registro
-    const registrosAtualizados = registrosPonto.map((registro) => {
-      if (registro.id === registroEditando.id) {
-        return {
-          ...registro,
-          entrada: dadosEdicao.entrada,
-          saidaAlmoco: dadosEdicao.saidaAlmoco,
-          voltaAlmoco: dadosEdicao.voltaAlmoco,
-          saida: dadosEdicao.saida,
-          horasTrabalhadas: Math.round(horasTrabalhadas * 100) / 100,
-          horasExtras: horasExtras,
-          observacoes: dadosEdicao.observacoes,
-          status: horasExtras > 0 ? "Pendente Aprovação" : "Completo",
-          aprovadoPor: horasExtras > 0 ? null : (registro.aprovadoPor || null),
-          dataAprovacao: horasExtras > 0 ? null : (registro.dataAprovacao || null),
-        }
-      }
-      return registro
-    })
-    
-    setRegistrosPonto(registrosAtualizados as any)
-    
-    // Fechar modal e limpar dados
-    setIsEditarOpen(false)
-    setRegistroEditando(null)
-    setDadosEdicao({
-      entrada: "",
-      saidaAlmoco: "",
-      voltaAlmoco: "",
-      saida: "",
-      observacoes: "",
-      justificativa: "",
-    })
-    
-    alert("Registro atualizado com sucesso!")
+    try {
+      const registroAtualizado = await apiRegistrosPonto.atualizar(registroEditando.id, {
+        entrada: dadosEdicao.entrada,
+        saida_almoco: dadosEdicao.saida_almoco,
+        volta_almoco: dadosEdicao.volta_almoco,
+        saida: dadosEdicao.saida,
+        observacoes: dadosEdicao.observacoes,
+        justificativa_alteracao: dadosEdicao.justificativa_alteracao
+      })
+      
+      // Atualizar estado local
+      setData(prev => ({
+        ...prev,
+        registrosPonto: prev.registrosPonto.map(r => 
+          r.id === registroAtualizado.id ? registroAtualizado : r
+        )
+      }))
+      
+      // Fechar modal e limpar dados
+      setIsEditarOpen(false)
+      setRegistroEditando(null)
+      setDadosEdicao({
+        entrada: "",
+        saida_almoco: "",
+        volta_almoco: "",
+        saida: "",
+        observacoes: "",
+        justificativa_alteracao: "",
+      })
+      
+      alert("Registro atualizado com sucesso!")
+    } catch (error) {
+      console.error('Erro ao atualizar registro:', error)
+      alert('Erro ao atualizar registro. Tente novamente.')
+    }
   }
 
   const stats = [
     {
       title: "Funcionários Presentes",
-      value: registrosPonto.filter((r) => r.status === "Em Andamento" || r.status === "Completo").length,
+      value: data.registrosPonto.filter((r) => r.status === "Em Andamento" || r.status === "Completo").length,
       icon: CheckCircle,
       color: "bg-green-500",
     },
     {
       title: "Atrasos Hoje",
-      value: registrosPonto.filter((r) => r.status === "Atraso").length,
+      value: data.registrosPonto.filter((r) => r.status === "Atraso").length,
       icon: AlertCircle,
       color: "bg-yellow-500",
     },
     {
       title: "Horas Extras Pendentes",
-      value: registrosPonto.filter((r) => r.status === "Pendente Aprovação").length,
+      value: data.registrosPonto.filter((r) => r.status === "Pendente Aprovação").length,
       icon: Clock,
       color: "bg-orange-500",
     },
     {
       title: "Total Horas Extras",
-      value: registrosPonto.reduce((total, r) => total + (r.horasExtras || 0), 0),
+      value: data.registrosPonto.reduce((total, r) => total + (r.horas_extras || 0), 0),
       icon: Clock,
       color: "bg-purple-500",
     },
@@ -538,19 +436,19 @@ export default function PontoPage() {
               <div className="space-y-2">
                 <Label htmlFor="funcionario">Funcionário</Label>
                 <Select
-                  value={justificativaData.funcionario}
-                  onValueChange={(value) => setJustificativaData({ ...justificativaData, funcionario: value })}
+                  value={justificativaData.funcionario_id}
+                  onValueChange={(value) => setJustificativaData({ ...justificativaData, funcionario_id: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um funcionário" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {funcionariosData.map((func) => (
-                      <SelectItem key={func.id} value={func.nome}>
-                        {func.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                <SelectContent>
+                  {data.funcionarios.map((func) => (
+                    <SelectItem key={func.id} value={func.id.toString()}>
+                      {func.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
                 </Select>
               </div>
 
@@ -620,7 +518,7 @@ export default function PontoPage() {
               {/* Informações do funcionário */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-gray-800 mb-2">Funcionário</h3>
-                <p className="text-lg font-medium">{registroEditando?.funcionario}</p>
+                <p className="text-lg font-medium">{registroEditando?.funcionario?.nome || 'Funcionário não encontrado'}</p>
                 <p className="text-sm text-gray-600">
                   Data: {registroEditando?.data && new Date(registroEditando.data).toLocaleDateString("pt-BR")}
                 </p>
@@ -653,8 +551,8 @@ export default function PontoPage() {
                   <Input
                     id="saidaAlmoco"
                     type="time"
-                    value={dadosEdicao.saidaAlmoco}
-                    onChange={(e) => setDadosEdicao({ ...dadosEdicao, saidaAlmoco: e.target.value })}
+                    value={dadosEdicao.saida_almoco}
+                    onChange={(e) => setDadosEdicao({ ...dadosEdicao, saida_almoco: e.target.value })}
                     required
                   />
                 </div>
@@ -663,8 +561,8 @@ export default function PontoPage() {
                   <Input
                     id="voltaAlmoco"
                     type="time"
-                    value={dadosEdicao.voltaAlmoco}
-                    onChange={(e) => setDadosEdicao({ ...dadosEdicao, voltaAlmoco: e.target.value })}
+                    value={dadosEdicao.volta_almoco}
+                    onChange={(e) => setDadosEdicao({ ...dadosEdicao, volta_almoco: e.target.value })}
                     required
                   />
                 </div>
@@ -677,22 +575,22 @@ export default function PontoPage() {
                   <div>
                     <span className="text-gray-600">Horas Trabalhadas:</span>
                     <span className="ml-2 font-medium">
-                      {calcularHorasTrabalhadas(
+                      {utilsPonto.calcularHorasTrabalhadas(
                         dadosEdicao.entrada,
                         dadosEdicao.saida,
-                        dadosEdicao.saidaAlmoco,
-                        dadosEdicao.voltaAlmoco
+                        dadosEdicao.saida_almoco,
+                        dadosEdicao.volta_almoco
                       ).toFixed(2)}h
                     </span>
                   </div>
                   <div>
                     <span className="text-gray-600">Horas Extras:</span>
                     <span className="ml-2 font-medium text-orange-600">
-                      +{Math.max(0, calcularHorasTrabalhadas(
+                      +{Math.max(0, utilsPonto.calcularHorasTrabalhadas(
                         dadosEdicao.entrada,
                         dadosEdicao.saida,
-                        dadosEdicao.saidaAlmoco,
-                        dadosEdicao.voltaAlmoco
+                        dadosEdicao.saida_almoco,
+                        dadosEdicao.volta_almoco
                       ) - 8).toFixed(2)}h
                     </span>
                   </div>
@@ -716,8 +614,8 @@ export default function PontoPage() {
                 <Label htmlFor="justificativa">Justificativa da Alteração</Label>
                 <Textarea
                   id="justificativa"
-                  value={dadosEdicao.justificativa}
-                  onChange={(e) => setDadosEdicao({ ...dadosEdicao, justificativa: e.target.value })}
+                  value={dadosEdicao.justificativa_alteracao}
+                  onChange={(e) => setDadosEdicao({ ...dadosEdicao, justificativa_alteracao: e.target.value })}
                   placeholder="Explique o motivo da alteração nos horários..."
                   rows={3}
                   required
@@ -769,66 +667,145 @@ export default function PontoPage() {
           <CardContent className="space-y-6">
             {/* Relógio Digital */}
             <div className="text-center">
-              <div className="text-4xl font-mono font-bold text-blue-600">{currentTime.toTimeString().slice(0, 8)}</div>
+              <div className="text-4xl font-mono font-bold text-blue-600">
+                {isClient && currentTime ? currentTime.toTimeString().slice(0, 8) : '--:--:--'}
+              </div>
               <div className="text-sm text-gray-500 mt-1">
-                {currentTime.toLocaleDateString("pt-BR", {
+                {isClient && currentTime ? currentTime.toLocaleDateString("pt-BR", {
                   weekday: "long",
                   year: "numeric",
                   month: "long",
                   day: "numeric",
-                })}
+                }) : 'Carregando...'}
               </div>
             </div>
+
+            {/* Status do Registro Atual */}
+            {(() => {
+              const status = getStatusRegistroAtual()
+              if (!status) return null
+
+              return (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-900 mb-2">Status do Registro de Hoje</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${status.temEntrada ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temEntrada ? 'text-green-700' : 'text-gray-500'}>
+                        Entrada: {status.temEntrada ? status.registro.entrada : 'Não registrada'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${status.temSaida ? 'bg-red-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temSaida ? 'text-red-700' : 'text-gray-500'}>
+                        Saída: {status.temSaida ? status.registro.saida : 'Não registrada'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${status.temSaidaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temSaidaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
+                        Saída Almoço: {status.temSaidaAlmoco ? status.registro.saida_almoco : 'Não registrada'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${status.temVoltaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temVoltaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
+                        Volta Almoço: {status.temVoltaAlmoco ? status.registro.volta_almoco : 'Não registrada'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Seleção de Funcionário */}
             <div className="space-y-2">
               <Label htmlFor="funcionario">Funcionário</Label>
-              <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione seu nome" />
-                </SelectTrigger>
-                <SelectContent>
-                  {funcionariosData.map((func) => (
-                    <SelectItem key={func.id} value={func.nome}>
-                      {func.nome} - {func.cargo}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {data.isAdmin ? (
+                <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um funcionário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {data.funcionarios.map((func) => (
+                      <SelectItem key={func.id} value={func.id.toString()}>
+                        {func.nome} - {func.cargo || 'Sem cargo'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="p-3 bg-gray-50 rounded-md border">
+                  <p className="font-medium">{data.usuarioAtual?.nome || 'Carregando...'}</p>
+                  <p className="text-sm text-gray-500">Seu registro de ponto</p>
+                </div>
+              )}
             </div>
 
             {/* Botões de Registro */}
             <div className="grid grid-cols-2 gap-3">
-              <Button
-                onClick={() => registrarPonto("Entrada")}
-                className="bg-green-600 hover:bg-green-700 flex items-center gap-2"
-              >
-                <Play className="w-4 h-4" />
-                Entrada
-              </Button>
-              <Button
-                onClick={() => registrarPonto("Saída")}
-                className="bg-red-600 hover:bg-red-700 flex items-center gap-2"
-              >
-                <Square className="w-4 h-4" />
-                Saída
-              </Button>
-              <Button
-                onClick={() => registrarPonto("Saída Almoço")}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <Coffee className="w-4 h-4" />
-                Saída Almoço
-              </Button>
-              <Button
-                onClick={() => registrarPonto("Volta Almoço")}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <Coffee className="w-4 h-4" />
-                Volta Almoço
-              </Button>
+              {(() => {
+                const status = getStatusRegistroAtual()
+                const podeEntrada = !status || (!status.temEntrada || status.temSaida)
+                const podeSaida = status && status.temEntrada && !status.temSaida
+                const podeSaidaAlmoco = status && status.temEntrada && !status.temSaidaAlmoco
+                const podeVoltaAlmoco = status && status.temSaidaAlmoco && !status.temVoltaAlmoco
+
+                return (
+                  <>
+                    <Button
+                      onClick={() => registrarPonto("Entrada")}
+                      disabled={!podeEntrada}
+                      className={`flex items-center gap-2 ${
+                        podeEntrada 
+                          ? "bg-green-600 hover:bg-green-700" 
+                          : "bg-gray-400 cursor-not-allowed"
+                      }`}
+                      title={!podeEntrada ? "Já existe uma entrada sem saída registrada" : ""}
+                    >
+                      <Play className="w-4 h-4" />
+                      Entrada
+                    </Button>
+                    <Button
+                      onClick={() => registrarPonto("Saída")}
+                      disabled={!podeSaida}
+                      className={`flex items-center gap-2 ${
+                        podeSaida 
+                          ? "bg-red-600 hover:bg-red-700" 
+                          : "bg-gray-400 cursor-not-allowed"
+                      }`}
+                      title={!podeSaida ? "Registre a entrada primeiro" : ""}
+                    >
+                      <Square className="w-4 h-4" />
+                      Saída
+                    </Button>
+                    <Button
+                      onClick={() => registrarPonto("Saída Almoço")}
+                      disabled={!podeSaidaAlmoco}
+                      variant="outline"
+                      className={`flex items-center gap-2 ${
+                        !podeSaidaAlmoco ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
+                      title={!podeSaidaAlmoco ? "Registre a entrada primeiro" : ""}
+                    >
+                      <Coffee className="w-4 h-4" />
+                      Saída Almoço
+                    </Button>
+                    <Button
+                      onClick={() => registrarPonto("Volta Almoço")}
+                      disabled={!podeVoltaAlmoco}
+                      variant="outline"
+                      className={`flex items-center gap-2 ${
+                        !podeVoltaAlmoco ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
+                      title={!podeVoltaAlmoco ? "Registre a saída para almoço primeiro" : ""}
+                    >
+                      <Coffee className="w-4 h-4" />
+                      Volta Almoço
+                    </Button>
+                  </>
+                )
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -841,22 +818,22 @@ export default function PontoPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {registrosPonto.slice(0, 4).map((registro) => (
+              {data.registrosPonto.slice(0, 4).map((registro) => (
                 <div key={registro.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                       <User className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="font-medium">{registro.funcionario}</p>
+                      <p className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</p>
                       <p className="text-sm text-gray-500">
-                        Entrada: {registro.entrada} | Saída: {registro.saida || "Em andamento"}
+                        Entrada: {registro.entrada || 'Não registrada'} | Saída: {registro.saida || "Em andamento"}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     {getStatusBadge(registro.status)}
-                    <p className="text-sm text-gray-500 mt-1">Horas: {registro.horasTrabalhadas || "Calculando..."}</p>
+                    <p className="text-sm text-gray-500 mt-1">Horas: {registro.horas_trabalhadas || "Calculando..."}</p>
                   </div>
                 </div>
               ))}
@@ -869,6 +846,7 @@ export default function PontoPage() {
         <TabsList>
           <TabsTrigger value="registros">Registros de Ponto</TabsTrigger>
           <TabsTrigger value="horas-extras">Controle de Horas Extras</TabsTrigger>
+          <TabsTrigger value="justificativas">Justificativas</TabsTrigger>
           <TabsTrigger value="relatorio">Relatório Mensal</TabsTrigger>
         </TabsList>
 
@@ -907,8 +885,8 @@ export default function PontoPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="todos">Todos os funcionários</SelectItem>
-                        {funcionariosData.map((func) => (
-                          <SelectItem key={func.id} value={func.nome}>
+                        {data.funcionarios.map((func) => (
+                          <SelectItem key={func.id} value={func.id.toString()}>
                             {func.nome}
                           </SelectItem>
                         ))}
@@ -1039,40 +1017,40 @@ export default function PontoPage() {
                   <TableBody>
                     {filteredRegistros.map((registro) => (
                       <TableRow key={registro.id}>
-                        <TableCell className="font-medium">{registro.funcionario}</TableCell>
-                        <TableCell>{new Date(registro.data).toLocaleDateString("pt-BR")}</TableCell>
-                        <TableCell>{registro.entrada}</TableCell>
-                        <TableCell>{registro.saidaAlmoco}</TableCell>
-                        <TableCell>{registro.voltaAlmoco}</TableCell>
-                        <TableCell>{registro.saida}</TableCell>
+                        <TableCell className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</TableCell>
+                        <TableCell>{utilsPonto.formatarData(registro.data)}</TableCell>
+                        <TableCell>{registro.entrada || '-'}</TableCell>
+                        <TableCell>{registro.saida_almoco || '-'}</TableCell>
+                        <TableCell>{registro.volta_almoco || '-'}</TableCell>
+                        <TableCell>{registro.saida || '-'}</TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {registro.horasTrabalhadas}h
+                            {registro.horas_trabalhadas}h
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {registro.horasExtras > 0 ? (
+                          {registro.horas_extras > 0 ? (
                             <Badge className="bg-orange-100 text-orange-800">
-                              +{registro.horasExtras}h
+                              +{registro.horas_extras}h
                             </Badge>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="max-w-xs truncate">{registro.localizacao}</TableCell>
+                        <TableCell className="max-w-xs truncate">{registro.localizacao || '-'}</TableCell>
                         <TableCell>{getStatusBadge(registro.status)}</TableCell>
                         <TableCell>
-                          {registro.aprovadoPor ? (
-                            <span className="text-sm font-medium">{registro.aprovadoPor}</span>
+                          {registro.aprovador?.nome ? (
+                            <span className="text-sm font-medium">{registro.aprovador.nome}</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {registro.dataAprovacao ? (
+                          {registro.data_aprovacao ? (
                             <span className="text-sm">
-                              {new Date(registro.dataAprovacao).toLocaleDateString("pt-BR")} às{" "}
-                              {new Date(registro.dataAprovacao).toLocaleTimeString("pt-BR", {
+                              {utilsPonto.formatarData(registro.data_aprovacao)} às{" "}
+                              {new Date(registro.data_aprovacao).toLocaleTimeString("pt-BR", {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
@@ -1081,7 +1059,7 @@ export default function PontoPage() {
                             <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="max-w-xs truncate">{registro.observacoes}</TableCell>
+                        <TableCell className="max-w-xs truncate">{registro.observacoes || '-'}</TableCell>
                         <TableCell>
                           <Button
                             size="sm"
@@ -1128,8 +1106,8 @@ export default function PontoPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="todos">Todos os funcionários</SelectItem>
-                      {funcionariosData.map((func) => (
-                        <SelectItem key={func.id} value={func.nome}>
+                      {data.funcionarios.map((func) => (
+                        <SelectItem key={func.id} value={func.id.toString()}>
                           {func.nome}
                         </SelectItem>
                       ))}
@@ -1154,36 +1132,36 @@ export default function PontoPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {registrosPonto
-                        .filter((r) => r.horasExtras > 0)
+                      {data.registrosPonto
+                        .filter((r) => r.horas_extras > 0)
                         .map((registro) => (
                           <TableRow key={registro.id}>
-                            <TableCell className="font-medium">{registro.funcionario}</TableCell>
-                            <TableCell>{new Date(registro.data).toLocaleDateString("pt-BR")}</TableCell>
+                            <TableCell className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</TableCell>
+                            <TableCell>{utilsPonto.formatarData(registro.data)}</TableCell>
                             <TableCell>
                               <Badge variant="outline">
-                                {registro.horasTrabalhadas}h
+                                {registro.horas_trabalhadas}h
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <Badge className="bg-orange-100 text-orange-800">
-                                +{registro.horasExtras}h
+                                +{registro.horas_extras}h
                               </Badge>
                             </TableCell>
-                            <TableCell className="max-w-xs truncate">{registro.observacoes}</TableCell>
+                            <TableCell className="max-w-xs truncate">{registro.observacoes || '-'}</TableCell>
                             <TableCell>{getStatusBadge(registro.status)}</TableCell>
                             <TableCell>
-                              {registro.aprovadoPor ? (
-                                <span className="text-sm font-medium">{registro.aprovadoPor}</span>
+                              {registro.aprovador?.nome ? (
+                                <span className="text-sm font-medium">{registro.aprovador.nome}</span>
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}
                             </TableCell>
                             <TableCell>
-                              {registro.dataAprovacao ? (
+                              {registro.data_aprovacao ? (
                                 <span className="text-sm">
-                                  {new Date(registro.dataAprovacao).toLocaleDateString("pt-BR")} às{" "}
-                                  {new Date(registro.dataAprovacao).toLocaleTimeString("pt-BR", {
+                                  {utilsPonto.formatarData(registro.data_aprovacao)} às{" "}
+                                  {new Date(registro.data_aprovacao).toLocaleTimeString("pt-BR", {
                                     hour: "2-digit",
                                     minute: "2-digit",
                                   })}
@@ -1227,7 +1205,7 @@ export default function PontoPage() {
                         <div>
                           <p className="text-sm text-gray-600">Pendentes</p>
                           <p className="text-2xl font-bold">
-                            {registrosPonto.filter((r) => r.status === "Pendente Aprovação").length}
+                            {data.registrosPonto.filter((r) => r.status === "Pendente Aprovação").length}
                           </p>
                         </div>
                       </div>
@@ -1242,7 +1220,7 @@ export default function PontoPage() {
                         <div>
                           <p className="text-sm text-gray-600">Aprovadas</p>
                           <p className="text-2xl font-bold">
-                            {registrosPonto.filter((r) => r.status === "Aprovado").length}
+                            {data.registrosPonto.filter((r) => r.status === "Aprovado").length}
                           </p>
                         </div>
                       </div>
@@ -1257,13 +1235,83 @@ export default function PontoPage() {
                         <div>
                           <p className="text-sm text-gray-600">Total Horas</p>
                           <p className="text-2xl font-bold">
-                            {registrosPonto.reduce((total, r) => total + (r.horasExtras || 0), 0)}h
+                            {data.registrosPonto.reduce((total, r) => total + (r.horas_extras || 0), 0)}h
                           </p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="justificativas">
+          <Card>
+            <CardHeader>
+              <CardTitle>Justificativas</CardTitle>
+              <CardDescription>Gerencie justificativas de atrasos, faltas e saídas antecipadas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {data.justificativas.map((just) => {
+                  const statusBadge = utilsPonto.obterBadgeStatus(just.status)
+                  return (
+                    <Card key={just.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                              <FileText className="w-5 h-5 text-orange-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{just.funcionario?.nome || 'Funcionário não encontrado'}</p>
+                              <p className="text-sm text-gray-500">{utilsPonto.formatarData(just.data)} - {just.tipo}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge className={statusBadge.className}>
+                              {statusBadge.text}
+                            </Badge>
+                            {just.status === 'Pendente' && (
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="h-8"
+                                  onClick={() => handleAprovarJustificativa(just.id)}
+                                >
+                                  <Check className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="h-8"
+                                  onClick={() => handleRejeitarJustificativa(just.id)}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <p className="mt-3 text-sm text-gray-600">{just.motivo}</p>
+                        {just.aprovador && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            {just.status === 'Aprovada' ? 'Aprovada' : 'Rejeitada'} por: {just.aprovador.nome} em {utilsPonto.formatarData(just.data_aprovacao || '')}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+                {data.justificativas.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>Nenhuma justificativa encontrada</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1277,39 +1325,47 @@ export default function PontoPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {funcionariosData.map((func) => (
-                  <Card key={func.id}>
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-blue-600" />
+                {data.funcionarios.map((func) => {
+                  const registrosFuncionario = data.registrosPonto.filter(r => r.funcionario_id === func.id)
+                  const totalHoras = registrosFuncionario.reduce((total, r) => total + (r.horas_trabalhadas || 0), 0)
+                  const diasPresentes = registrosFuncionario.filter(r => r.status !== 'Falta').length
+                  const atrasos = registrosFuncionario.filter(r => r.status === 'Atraso').length
+                  const faltas = registrosFuncionario.filter(r => r.status === 'Falta').length
+                  
+                  return (
+                    <Card key={func.id}>
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{func.nome}</p>
+                            <p className="text-sm text-gray-500">{func.cargo || 'Sem cargo'}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium">{func.nome}</p>
-                          <p className="text-sm text-gray-500">{func.cargo}</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Horas Trabalhadas:</span>
+                            <span className="font-medium">{totalHoras.toFixed(1)}h</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Dias Presentes:</span>
+                            <span className="font-medium">{diasPresentes} dias</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Atrasos:</span>
+                            <span className="font-medium text-yellow-600">{atrasos}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Faltas:</span>
+                            <span className="font-medium text-red-600">{faltas}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Horas Trabalhadas:</span>
-                          <span className="font-medium">176h 30m</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Dias Presentes:</span>
-                          <span className="font-medium">22 dias</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Atrasos:</span>
-                          <span className="font-medium text-yellow-600">2</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Faltas:</span>
-                          <span className="font-medium text-red-600">0</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>

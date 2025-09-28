@@ -3,7 +3,64 @@ import { supabase } from '../config/supabase.js';
 
 const router = express.Router();
 
-// GET /api/financial-data - Obter dados financeiros para o dashboard
+/**
+ * @swagger
+ * /api/financial-data:
+ *   get:
+ *     summary: Obter dados financeiros para o dashboard
+ *     tags: [Financial Data]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dados financeiros do dashboard
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     receberHoje:
+ *                       type: number
+ *                       description: Valor total a receber hoje
+ *                     pagarHoje:
+ *                       type: number
+ *                       description: Valor total a pagar hoje
+ *                     recebimentosAtraso:
+ *                       type: number
+ *                       description: Valor total de recebimentos em atraso
+ *                     pagamentosAtraso:
+ *                       type: number
+ *                       description: Valor total de pagamentos em atraso
+ *                     saldoAtual:
+ *                       type: number
+ *                       description: Saldo atual das contas bancárias
+ *                     fluxoCaixa:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           mes:
+ *                             type: string
+ *                             description: Mês/ano formatado
+ *                           entrada:
+ *                             type: number
+ *                             description: Total de entradas no mês
+ *                           saida:
+ *                             type: number
+ *                             description: Total de saídas no mês
+ *                     transferencias:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         description: Transferências bancárias recentes
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const hoje = new Date().toISOString().split('T')[0];

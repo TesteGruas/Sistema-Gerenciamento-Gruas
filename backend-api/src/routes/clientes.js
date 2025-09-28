@@ -8,7 +8,7 @@ const router = express.Router()
 // Schema de validação para clientes
 const clienteSchema = Joi.object({
   nome: Joi.string().min(2).required(),
-  cnpj: Joi.string().required(), // CNPJ
+  cnpj: Joi.string().allow('').optional(), // CNPJ
   email: Joi.string().email().allow('').optional(),
   telefone: Joi.string().allow('').optional(),
   endereco: Joi.string().allow('').optional(),

@@ -7,7 +7,146 @@ const router = express.Router();
 // Middleware de autenticação para todas as rotas
 router.use(authenticateToken);
 
-// GET /api/aditivos - Listar aditivos com filtros
+/**
+ * @swagger
+ * /api/aditivos:
+ *   get:
+ *     summary: Lista aditivos com filtros opcionais
+ *     tags: [Aditivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Limite de itens por página
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pendente, aprovado, rejeitado]
+ *         description: Filtrar por status
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *         description: Filtrar por tipo
+ *       - in: query
+ *         name: locacao_id
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por ID da locação
+ *       - in: query
+ *         name: medicao_id
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por ID da medição
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar por descrição
+ *     responses:
+ *       200:
+ *         description: Lista de aditivos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID do aditivo
+ *                       locacao_id:
+ *                         type: integer
+ *                         description: ID da locação
+ *                       medicao_id:
+ *                         type: integer
+ *                         description: ID da medição
+ *                       tipo:
+ *                         type: string
+ *                         description: Tipo do aditivo
+ *                       descricao:
+ *                         type: string
+ *                         description: Descrição do aditivo
+ *                       valor:
+ *                         type: number
+ *                         description: Valor do aditivo
+ *                       data_aplicacao:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de aplicação
+ *                       status:
+ *                         type: string
+ *                         enum: [pendente, aprovado, rejeitado]
+ *                         description: Status do aditivo
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de atualização
+ *                       locacoes:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           numero:
+ *                             type: string
+ *                           cliente_id:
+ *                             type: integer
+ *                           equipamento_id:
+ *                             type: string
+ *                           tipo_equipamento:
+ *                             type: string
+ *                           clientes:
+ *                             type: object
+ *                             properties:
+ *                               nome:
+ *                                 type: string
+ *                       medicoes:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           numero:
+ *                             type: string
+ *                           periodo:
+ *                             type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -99,7 +238,103 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/aditivos/:id - Obter aditivo específico
+/**
+ * @swagger
+ * /api/aditivos/{id}:
+ *   get:
+ *     summary: Obtém um aditivo específico
+ *     tags: [Aditivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do aditivo
+ *     responses:
+ *       200:
+ *         description: Dados do aditivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do aditivo
+ *                     locacao_id:
+ *                       type: integer
+ *                       description: ID da locação
+ *                     medicao_id:
+ *                       type: integer
+ *                       description: ID da medição
+ *                     tipo:
+ *                       type: string
+ *                       description: Tipo do aditivo
+ *                     descricao:
+ *                       type: string
+ *                       description: Descrição do aditivo
+ *                     valor:
+ *                       type: number
+ *                       description: Valor do aditivo
+ *                     data_aplicacao:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de aplicação
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, aprovado, rejeitado]
+ *                       description: Status do aditivo
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *                     locacoes:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         numero:
+ *                           type: string
+ *                         cliente_id:
+ *                           type: integer
+ *                         equipamento_id:
+ *                           type: string
+ *                         tipo_equipamento:
+ *                           type: string
+ *                         clientes:
+ *                           type: object
+ *                           properties:
+ *                             nome:
+ *                               type: string
+ *                     medicoes:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         numero:
+ *                           type: string
+ *                         periodo:
+ *                           type: string
+ *       404:
+ *         description: Aditivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -155,7 +390,74 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/aditivos - Criar novo aditivo
+/**
+ * @swagger
+ * /api/aditivos:
+ *   post:
+ *     summary: Cria um novo aditivo
+ *     tags: [Aditivos]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - locacao_id
+ *               - tipo
+ *               - descricao
+ *               - valor
+ *               - data_aplicacao
+ *             properties:
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação
+ *               medicao_id:
+ *                 type: integer
+ *                 description: ID da medição (opcional)
+ *               tipo:
+ *                 type: string
+ *                 description: Tipo do aditivo
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição do aditivo
+ *               valor:
+ *                 type: number
+ *                 description: Valor do aditivo
+ *               data_aplicacao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de aplicação
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, aprovado, rejeitado]
+ *                 default: pendente
+ *                 description: Status do aditivo
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       201:
+ *         description: Aditivo criado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados do aditivo criado
+ *       400:
+ *         description: Dados inválidos ou locação/medição não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const {
@@ -261,7 +563,74 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/aditivos/:id - Atualizar aditivo
+/**
+ * @swagger
+ * /api/aditivos/{id}:
+ *   put:
+ *     summary: Atualiza um aditivo existente
+ *     tags: [Aditivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do aditivo
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação
+ *               medicao_id:
+ *                 type: integer
+ *                 description: ID da medição
+ *               tipo:
+ *                 type: string
+ *                 description: Tipo do aditivo
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição do aditivo
+ *               valor:
+ *                 type: number
+ *                 description: Valor do aditivo
+ *               data_aplicacao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de aplicação
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, aprovado, rejeitado]
+ *                 description: Status do aditivo
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       200:
+ *         description: Aditivo atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados do aditivo atualizado
+ *       404:
+ *         description: Aditivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -323,7 +692,38 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/aditivos/:id - Excluir aditivo
+/**
+ * @swagger
+ * /api/aditivos/{id}:
+ *   delete:
+ *     summary: Exclui um aditivo
+ *     tags: [Aditivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do aditivo
+ *     responses:
+ *       200:
+ *         description: Aditivo excluído com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Aditivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -377,7 +777,43 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/aditivos/:id/aprovar - Aprovar aditivo
+/**
+ * @swagger
+ * /api/aditivos/{id}/aprovar:
+ *   post:
+ *     summary: Aprova um aditivo
+ *     tags: [Aditivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do aditivo
+ *     responses:
+ *       200:
+ *         description: Aditivo aprovado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados do aditivo aprovado
+ *       400:
+ *         description: Aditivo já está aprovado
+ *       404:
+ *         description: Aditivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/aprovar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -436,7 +872,43 @@ router.post('/:id/aprovar', async (req, res) => {
   }
 });
 
-// POST /api/aditivos/:id/rejeitar - Rejeitar aditivo
+/**
+ * @swagger
+ * /api/aditivos/{id}/rejeitar:
+ *   post:
+ *     summary: Rejeita um aditivo
+ *     tags: [Aditivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do aditivo
+ *     responses:
+ *       200:
+ *         description: Aditivo rejeitado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados do aditivo rejeitado
+ *       400:
+ *         description: Aditivo já está rejeitado
+ *       404:
+ *         description: Aditivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/rejeitar', async (req, res) => {
   try {
     const { id } = req.params;

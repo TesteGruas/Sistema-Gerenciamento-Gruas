@@ -26,7 +26,84 @@ const vendaItemSchema = Joi.object({
   valor_unitario: Joi.number().min(0).required()
 });
 
-// GET /api/vendas - Listar vendas
+/**
+ * @swagger
+ * /api/vendas:
+ *   get:
+ *     summary: Lista todas as vendas
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de vendas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da venda
+ *                       cliente_id:
+ *                         type: integer
+ *                         description: ID do cliente
+ *                       obra_id:
+ *                         type: integer
+ *                         description: ID da obra
+ *                       numero_venda:
+ *                         type: string
+ *                         description: Número da venda
+ *                       data_venda:
+ *                         type: string
+ *                         format: date
+ *                         description: Data da venda
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total da venda
+ *                       status:
+ *                         type: string
+ *                         enum: [pendente, confirmada, cancelada, finalizada]
+ *                         description: Status da venda
+ *                       tipo_venda:
+ *                         type: string
+ *                         enum: [equipamento, servico, locacao]
+ *                         description: Tipo da venda
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de atualização
+ *                       clientes:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           cnpj:
+ *                             type: string
+ *                       obras:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           endereco:
+ *                             type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -54,7 +131,112 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/vendas - Criar venda
+/**
+ * @swagger
+ * /api/vendas:
+ *   post:
+ *     summary: Cria uma nova venda
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cliente_id
+ *               - numero_venda
+ *               - data_venda
+ *               - valor_total
+ *               - tipo_venda
+ *             properties:
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               obra_id:
+ *                 type: integer
+ *                 description: ID da obra
+ *               numero_venda:
+ *                 type: string
+ *                 maxLength: 50
+ *                 description: Número da venda
+ *               data_venda:
+ *                 type: string
+ *                 format: date
+ *                 description: Data da venda
+ *               valor_total:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Valor total da venda
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, confirmada, cancelada, finalizada]
+ *                 default: pendente
+ *                 description: Status da venda
+ *               tipo_venda:
+ *                 type: string
+ *                 enum: [equipamento, servico, locacao]
+ *                 description: Tipo da venda
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       201:
+ *         description: Venda criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da venda criada
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     obra_id:
+ *                       type: integer
+ *                       description: ID da obra
+ *                     numero_venda:
+ *                       type: string
+ *                       description: Número da venda
+ *                     data_venda:
+ *                       type: string
+ *                       format: date
+ *                       description: Data da venda
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da venda
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, confirmada, cancelada, finalizada]
+ *                       description: Status da venda
+ *                     tipo_venda:
+ *                       type: string
+ *                       enum: [equipamento, servico, locacao]
+ *                       description: Tipo da venda
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const { error: validationError, value } = vendaSchema.validate(req.body);
@@ -108,7 +290,99 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/vendas/:id - Obter venda específica
+/**
+ * @swagger
+ * /api/vendas/{id}:
+ *   get:
+ *     summary: Obtém uma venda específica
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da venda
+ *     responses:
+ *       200:
+ *         description: Dados da venda
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da venda
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     obra_id:
+ *                       type: integer
+ *                       description: ID da obra
+ *                     numero_venda:
+ *                       type: string
+ *                       description: Número da venda
+ *                     data_venda:
+ *                       type: string
+ *                       format: date
+ *                       description: Data da venda
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da venda
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, confirmada, cancelada, finalizada]
+ *                       description: Status da venda
+ *                     tipo_venda:
+ *                       type: string
+ *                       enum: [equipamento, servico, locacao]
+ *                       description: Tipo da venda
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *                     clientes:
+ *                       type: object
+ *                       properties:
+ *                         nome:
+ *                           type: string
+ *                         cnpj:
+ *                           type: string
+ *                         telefone:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                     obras:
+ *                       type: object
+ *                       properties:
+ *                         nome:
+ *                           type: string
+ *                         endereco:
+ *                           type: string
+ *                         cidade:
+ *                           type: string
+ *                         estado:
+ *                           type: string
+ *       404:
+ *         description: Venda não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -146,7 +420,76 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/vendas/:id - Atualizar venda
+/**
+ * @swagger
+ * /api/vendas/{id}:
+ *   put:
+ *     summary: Atualiza uma venda existente
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da venda
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               obra_id:
+ *                 type: integer
+ *                 description: ID da obra
+ *               numero_venda:
+ *                 type: string
+ *                 description: Número da venda
+ *               data_venda:
+ *                 type: string
+ *                 format: date
+ *                 description: Data da venda
+ *               valor_total:
+ *                 type: number
+ *                 description: Valor total da venda
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, confirmada, cancelada, finalizada]
+ *                 description: Status da venda
+ *               tipo_venda:
+ *                 type: string
+ *                 enum: [equipamento, servico, locacao]
+ *                 description: Tipo da venda
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       200:
+ *         description: Venda atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Venda não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -191,7 +534,38 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/vendas/:id - Excluir venda
+/**
+ * @swagger
+ * /api/vendas/{id}:
+ *   delete:
+ *     summary: Exclui uma venda
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da venda
+ *     responses:
+ *       200:
+ *         description: Venda excluída com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Venda não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -217,7 +591,93 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET /api/vendas/:id/itens - Listar itens da venda
+/**
+ * @swagger
+ * /api/vendas/{id}/itens:
+ *   get:
+ *     summary: Lista os itens de uma venda
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da venda
+ *     responses:
+ *       200:
+ *         description: Lista de itens da venda
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID do item
+ *                       venda_id:
+ *                         type: integer
+ *                         description: ID da venda
+ *                       produto_id:
+ *                         type: integer
+ *                         description: ID do produto
+ *                       grua_id:
+ *                         type: integer
+ *                         description: ID da grua
+ *                       quantidade:
+ *                         type: number
+ *                         description: Quantidade
+ *                       valor_unitario:
+ *                         type: number
+ *                         description: Valor unitário
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de atualização
+ *                       produtos:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           descricao:
+ *                             type: string
+ *                           categoria:
+ *                             type: string
+ *                           unidade:
+ *                             type: string
+ *                       gruas:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           modelo:
+ *                             type: string
+ *                           capacidade:
+ *                             type: number
+ *       404:
+ *         description: Venda não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id/itens', async (req, res) => {
   try {
     const { id } = req.params;
@@ -248,7 +708,64 @@ router.get('/:id/itens', async (req, res) => {
   }
 });
 
-// POST /api/vendas/:id/itens - Adicionar item à venda
+/**
+ * @swagger
+ * /api/vendas/{id}/itens:
+ *   post:
+ *     summary: Adiciona um item a uma venda
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da venda
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               produto_id:
+ *                 type: integer
+ *                 description: ID do produto
+ *               grua_id:
+ *                 type: integer
+ *                 description: ID da grua
+ *               quantidade:
+ *                 type: number
+ *                 description: Quantidade
+ *               valor_unitario:
+ *                 type: number
+ *                 description: Valor unitário
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       201:
+ *         description: Item adicionado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Venda não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/itens', async (req, res) => {
   try {
     const { id } = req.params;
@@ -290,7 +807,42 @@ router.post('/:id/itens', async (req, res) => {
   }
 });
 
-// POST /api/vendas/:id/confirmar - Confirmar venda e criar movimentações de estoque
+/**
+ * @swagger
+ * /api/vendas/{id}/confirmar:
+ *   post:
+ *     summary: Confirma uma venda e cria movimentações de estoque
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da venda
+ *     responses:
+ *       200:
+ *         description: Venda confirmada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Venda já confirmada
+ *       404:
+ *         description: Venda não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/confirmar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -368,7 +920,49 @@ router.post('/:id/confirmar', async (req, res) => {
   }
 });
 
-// POST /api/vendas/from-orcamento/:orcamentoId - Criar venda a partir de orçamento aprovado
+/**
+ * @swagger
+ * /api/vendas/from-orcamento/{orcamentoId}:
+ *   post:
+ *     summary: Cria uma venda a partir de um orçamento aprovado
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orcamentoId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     responses:
+ *       201:
+ *         description: Venda criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     venda:
+ *                       type: object
+ *                       description: Dados da venda criada
+ *                     itens_criados:
+ *                       type: integer
+ *                       description: Número de itens criados
+ *       400:
+ *         description: Orçamento não está aprovado
+ *       404:
+ *         description: Orçamento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/from-orcamento/:orcamentoId', async (req, res) => {
   try {
     const { orcamentoId } = req.params;

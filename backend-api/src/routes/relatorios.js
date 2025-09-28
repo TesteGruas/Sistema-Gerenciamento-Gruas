@@ -24,7 +24,7 @@ router.use(authenticateToken)
 const relatorioUtilizacaoSchema = Joi.object({
   data_inicio: Joi.date().required(),
   data_fim: Joi.date().required(),
-  tipo_grua: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').optional(),
+  tipo_grua: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').optional(),
   ordenar_por: Joi.string().valid('utilizacao', 'receita', 'dias_locacao', 'obras_visitadas').default('utilizacao'),
   limite: Joi.number().integer().min(1).max(100).default(20)
 })

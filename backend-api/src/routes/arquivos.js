@@ -53,7 +53,86 @@ const getFileType = (mimetype) => {
   return 'outro'
 }
 
-// Upload de arquivo para grua
+/**
+ * @swagger
+ * /api/arquivos/upload/grua/{gruaId}:
+ *   post:
+ *     summary: Upload de arquivo para uma grua específica
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gruaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID da grua
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - arquivo
+ *             properties:
+ *               arquivo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo a ser enviado (PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, TXT)
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição do arquivo
+ *               categoria:
+ *                 type: string
+ *                 description: Categoria do arquivo
+ *     responses:
+ *       200:
+ *         description: Arquivo enviado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do arquivo no banco
+ *                     nome_original:
+ *                       type: string
+ *                       description: Nome original do arquivo
+ *                     tamanho:
+ *                       type: integer
+ *                       description: Tamanho do arquivo em bytes
+ *                     tipo_mime:
+ *                       type: string
+ *                       description: Tipo MIME do arquivo
+ *                     categoria:
+ *                       type: string
+ *                       description: Categoria do arquivo
+ *                     obra_id:
+ *                       type: integer
+ *                       description: ID da obra associada
+ *                     grua_id:
+ *                       type: string
+ *                       description: ID da grua
+ *                     url:
+ *                       type: string
+ *                       description: Caminho do arquivo no storage
+ *       400:
+ *         description: Nenhum arquivo enviado
+ *       404:
+ *         description: Grua não encontrada ou não está ativa em nenhuma obra
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/upload/grua/:gruaId', authenticateToken, upload.single('arquivo'), async (req, res) => {
   try {
     const { gruaId } = req.params
@@ -186,7 +265,62 @@ router.post('/upload/grua/:gruaId', authenticateToken, upload.single('arquivo'),
   }
 })
 
-// Upload de arquivo para obra
+/**
+ * @swagger
+ * /api/arquivos/upload/{obraId}:
+ *   post:
+ *     summary: Upload de arquivo para uma obra específica
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: obraId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID da obra
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - arquivo
+ *             properties:
+ *               arquivo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo a ser enviado (PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, TXT)
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição do arquivo
+ *               categoria:
+ *                 type: string
+ *                 description: Categoria do arquivo
+ *     responses:
+ *       200:
+ *         description: Arquivo enviado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados do arquivo criado
+ *       400:
+ *         description: Nenhum arquivo enviado
+ *       404:
+ *         description: Obra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/upload/:obraId', authenticateToken, upload.single('arquivo'), async (req, res) => {
   try {
     const { obraId } = req.params
@@ -287,7 +421,77 @@ router.post('/upload/:obraId', authenticateToken, upload.single('arquivo'), asyn
   }
 })
 
-// Upload múltiplo de arquivos
+/**
+ * @swagger
+ * /api/arquivos/upload-multiple/{obraId}:
+ *   post:
+ *     summary: Upload múltiplo de arquivos para uma obra
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: obraId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID da obra
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - arquivos
+ *             properties:
+ *               arquivos:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Arquivos a serem enviados (máximo 10)
+ *               categoria:
+ *                 type: string
+ *                 description: Categoria dos arquivos
+ *     responses:
+ *       200:
+ *         description: Upload múltiplo processado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     sucessos:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         description: Arquivos enviados com sucesso
+ *                     erros:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           arquivo:
+ *                             type: string
+ *                             description: Nome do arquivo que falhou
+ *                           erro:
+ *                             type: string
+ *                             description: Mensagem de erro
+ *       400:
+ *         description: Nenhum arquivo enviado
+ *       404:
+ *         description: Obra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/upload-multiple/:obraId', authenticateToken, upload.array('arquivos', 10), async (req, res) => {
   try {
     const { obraId } = req.params
@@ -403,7 +607,81 @@ router.post('/upload-multiple/:obraId', authenticateToken, upload.array('arquivo
   }
 })
 
-// Listar arquivos de uma grua
+/**
+ * @swagger
+ * /api/arquivos/grua/{gruaId}:
+ *   get:
+ *     summary: Lista arquivos de uma grua específica
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gruaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID da grua
+ *     responses:
+ *       200:
+ *         description: Lista de arquivos da grua
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID do arquivo
+ *                       obra_id:
+ *                         type: integer
+ *                         description: ID da obra
+ *                       grua_id:
+ *                         type: string
+ *                         description: ID da grua
+ *                       nome_original:
+ *                         type: string
+ *                         description: Nome original do arquivo
+ *                       nome_arquivo:
+ *                         type: string
+ *                         description: Nome do arquivo no storage
+ *                       caminho:
+ *                         type: string
+ *                         description: Caminho do arquivo
+ *                       tamanho:
+ *                         type: integer
+ *                         description: Tamanho do arquivo em bytes
+ *                       tipo_mime:
+ *                         type: string
+ *                         description: Tipo MIME do arquivo
+ *                       tipo_arquivo:
+ *                         type: string
+ *                         description: Tipo do arquivo
+ *                       descricao:
+ *                         type: string
+ *                         description: Descrição do arquivo
+ *                       categoria:
+ *                         type: string
+ *                         description: Categoria do arquivo
+ *                       uploaded_by:
+ *                         type: integer
+ *                         description: ID do usuário que fez upload
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *       404:
+ *         description: Grua não encontrada ou não está ativa em nenhuma obra
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/grua/:gruaId', authenticateToken, async (req, res) => {
   try {
     const { gruaId } = req.params
@@ -472,7 +750,99 @@ router.get('/grua/:gruaId', authenticateToken, async (req, res) => {
   }
 })
 
-// Listar arquivos de uma obra
+/**
+ * @swagger
+ * /api/arquivos/obra/{obraId}:
+ *   get:
+ *     summary: Lista arquivos de uma obra com filtros opcionais
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: obraId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID da obra
+ *       - in: query
+ *         name: categoria
+ *         schema:
+ *           type: string
+ *         description: Filtrar por categoria
+ *       - in: query
+ *         name: tipo_arquivo
+ *         schema:
+ *           type: string
+ *           enum: [imagem, pdf, documento, planilha, texto, outro]
+ *         description: Filtrar por tipo de arquivo
+ *     responses:
+ *       200:
+ *         description: Lista de arquivos da obra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID do arquivo
+ *                       obra_id:
+ *                         type: integer
+ *                         description: ID da obra
+ *                       grua_id:
+ *                         type: string
+ *                         description: ID da grua (se aplicável)
+ *                       nome_original:
+ *                         type: string
+ *                         description: Nome original do arquivo
+ *                       nome_arquivo:
+ *                         type: string
+ *                         description: Nome do arquivo no storage
+ *                       caminho:
+ *                         type: string
+ *                         description: Caminho do arquivo
+ *                       tamanho:
+ *                         type: integer
+ *                         description: Tamanho do arquivo em bytes
+ *                       tipo_mime:
+ *                         type: string
+ *                         description: Tipo MIME do arquivo
+ *                       tipo_arquivo:
+ *                         type: string
+ *                         description: Tipo do arquivo
+ *                       descricao:
+ *                         type: string
+ *                         description: Descrição do arquivo
+ *                       categoria:
+ *                         type: string
+ *                         description: Categoria do arquivo
+ *                       uploaded_by:
+ *                         type: integer
+ *                         description: ID do usuário que fez upload
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       uploaded_by_user:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           nome:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/obra/:obraId', authenticateToken, async (req, res) => {
   try {
     const { obraId } = req.params
@@ -525,7 +895,54 @@ router.get('/obra/:obraId', authenticateToken, async (req, res) => {
   }
 })
 
-// Obter URL de download de um arquivo
+/**
+ * @swagger
+ * /api/arquivos/download/{arquivoId}:
+ *   get:
+ *     summary: Obtém URL de download de um arquivo
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: arquivoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do arquivo
+ *     responses:
+ *       200:
+ *         description: URL de download gerada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     url:
+ *                       type: string
+ *                       description: URL assinada para download (válida por 1 hora)
+ *                     arquivo:
+ *                       type: object
+ *                       properties:
+ *                         nome_original:
+ *                           type: string
+ *                           description: Nome original do arquivo
+ *                         tamanho:
+ *                           type: integer
+ *                           description: Tamanho do arquivo em bytes
+ *                         tipo_mime:
+ *                           type: string
+ *                           description: Tipo MIME do arquivo
+ *       404:
+ *         description: Arquivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/download/:arquivoId', authenticateToken, async (req, res) => {
   try {
     const { arquivoId } = req.params
@@ -580,7 +997,52 @@ router.get('/download/:arquivoId', authenticateToken, async (req, res) => {
   }
 })
 
-// Atualizar metadados de um arquivo
+/**
+ * @swagger
+ * /api/arquivos/{arquivoId}:
+ *   put:
+ *     summary: Atualiza metadados de um arquivo
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: arquivoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do arquivo
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               descricao:
+ *                 type: string
+ *                 description: Nova descrição do arquivo
+ *               categoria:
+ *                 type: string
+ *                 description: Nova categoria do arquivo
+ *     responses:
+ *       200:
+ *         description: Arquivo atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados atualizados do arquivo
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:arquivoId', authenticateToken, async (req, res) => {
   try {
     const { arquivoId } = req.params
@@ -622,7 +1084,38 @@ router.put('/:arquivoId', authenticateToken, async (req, res) => {
   }
 })
 
-// Deletar arquivo
+/**
+ * @swagger
+ * /api/arquivos/{arquivoId}:
+ *   delete:
+ *     summary: Deleta um arquivo
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: arquivoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do arquivo
+ *     responses:
+ *       200:
+ *         description: Arquivo removido com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Arquivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:arquivoId', authenticateToken, async (req, res) => {
   try {
     const { arquivoId } = req.params
@@ -681,7 +1174,53 @@ router.delete('/:arquivoId', authenticateToken, async (req, res) => {
   }
 })
 
-// Obter estatísticas de arquivos de uma obra
+/**
+ * @swagger
+ * /api/arquivos/stats/{obraId}:
+ *   get:
+ *     summary: Obtém estatísticas de arquivos de uma obra
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: obraId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID da obra
+ *     responses:
+ *       200:
+ *         description: Estatísticas dos arquivos da obra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total_arquivos:
+ *                       type: integer
+ *                       description: Total de arquivos na obra
+ *                     tamanho_total:
+ *                       type: integer
+ *                       description: Tamanho total dos arquivos em bytes
+ *                     por_tipo:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: integer
+ *                       description: Contagem de arquivos por tipo
+ *                     por_categoria:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: integer
+ *                       description: Contagem de arquivos por categoria
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/stats/:obraId', authenticateToken, async (req, res) => {
   try {
     const { obraId } = req.params

@@ -24,7 +24,78 @@ const compraItemSchema = Joi.object({
   valor_unitario: Joi.number().min(0).required()
 });
 
-// GET /api/compras - Listar compras
+/**
+ * @swagger
+ * /api/compras:
+ *   get:
+ *     summary: Lista todas as compras
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de compras
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da compra
+ *                       fornecedor_id:
+ *                         type: integer
+ *                         description: ID do fornecedor
+ *                       numero_pedido:
+ *                         type: string
+ *                         description: Número do pedido
+ *                       data_pedido:
+ *                         type: string
+ *                         format: date
+ *                         description: Data do pedido
+ *                       data_entrega:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de entrega
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total da compra
+ *                       status:
+ *                         type: string
+ *                         enum: [pendente, aprovado, enviado, recebido, cancelado]
+ *                         description: Status da compra
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de atualização
+ *                       fornecedores:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           cnpj:
+ *                             type: string
+ *                           telefone:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -51,7 +122,105 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/compras - Criar compra
+/**
+ * @swagger
+ * /api/compras:
+ *   post:
+ *     summary: Cria uma nova compra
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fornecedor_id
+ *               - numero_pedido
+ *               - data_pedido
+ *               - valor_total
+ *             properties:
+ *               fornecedor_id:
+ *                 type: integer
+ *                 description: ID do fornecedor
+ *               numero_pedido:
+ *                 type: string
+ *                 maxLength: 50
+ *                 description: Número do pedido
+ *               data_pedido:
+ *                 type: string
+ *                 format: date
+ *                 description: Data do pedido
+ *               data_entrega:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de entrega
+ *               valor_total:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Valor total da compra
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, aprovado, enviado, recebido, cancelado]
+ *                 default: pendente
+ *                 description: Status da compra
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       201:
+ *         description: Compra criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da compra criada
+ *                     fornecedor_id:
+ *                       type: integer
+ *                       description: ID do fornecedor
+ *                     numero_pedido:
+ *                       type: string
+ *                       description: Número do pedido
+ *                     data_pedido:
+ *                       type: string
+ *                       format: date
+ *                       description: Data do pedido
+ *                     data_entrega:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de entrega
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da compra
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, aprovado, enviado, recebido, cancelado]
+ *                       description: Status da compra
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const { error: validationError, value } = compraSchema.validate(req.body);
@@ -105,7 +274,91 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/compras/:id - Obter compra específica
+/**
+ * @swagger
+ * /api/compras/{id}:
+ *   get:
+ *     summary: Obtém uma compra específica
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da compra
+ *     responses:
+ *       200:
+ *         description: Dados da compra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da compra
+ *                     fornecedor_id:
+ *                       type: integer
+ *                       description: ID do fornecedor
+ *                     numero_pedido:
+ *                       type: string
+ *                       description: Número do pedido
+ *                     data_pedido:
+ *                       type: string
+ *                       format: date
+ *                       description: Data do pedido
+ *                     data_entrega:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de entrega
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da compra
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, aprovado, enviado, recebido, cancelado]
+ *                       description: Status da compra
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *                     fornecedores:
+ *                       type: object
+ *                       properties:
+ *                         nome:
+ *                           type: string
+ *                         cnpj:
+ *                           type: string
+ *                         telefone:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         endereco:
+ *                           type: string
+ *                         cidade:
+ *                           type: string
+ *                         estado:
+ *                           type: string
+ *       404:
+ *         description: Compra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -142,7 +395,108 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/compras/:id - Atualizar compra
+/**
+ * @swagger
+ * /api/compras/{id}:
+ *   put:
+ *     summary: Atualiza uma compra existente
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da compra
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fornecedor_id:
+ *                 type: integer
+ *                 description: ID do fornecedor
+ *               numero_pedido:
+ *                 type: string
+ *                 maxLength: 50
+ *                 description: Número do pedido
+ *               data_pedido:
+ *                 type: string
+ *                 format: date
+ *                 description: Data do pedido
+ *               data_entrega:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de entrega
+ *               valor_total:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Valor total da compra
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, aprovado, enviado, recebido, cancelado]
+ *                 description: Status da compra
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       200:
+ *         description: Compra atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da compra
+ *                     fornecedor_id:
+ *                       type: integer
+ *                       description: ID do fornecedor
+ *                     numero_pedido:
+ *                       type: string
+ *                       description: Número do pedido
+ *                     data_pedido:
+ *                       type: string
+ *                       format: date
+ *                       description: Data do pedido
+ *                     data_entrega:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de entrega
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da compra
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, aprovado, enviado, recebido, cancelado]
+ *                       description: Status da compra
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Compra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -187,7 +541,37 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/compras/:id - Excluir compra
+/**
+ * @swagger
+ * /api/compras/{id}:
+ *   delete:
+ *     summary: Exclui uma compra
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da compra
+ *     responses:
+ *       200:
+ *         description: Compra excluída com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -213,7 +597,73 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET /api/compras/:id/itens - Listar itens da compra
+/**
+ * @swagger
+ * /api/compras/{id}/itens:
+ *   get:
+ *     summary: Lista itens de uma compra
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da compra
+ *     responses:
+ *       200:
+ *         description: Lista de itens da compra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID do item
+ *                       compra_id:
+ *                         type: integer
+ *                         description: ID da compra
+ *                       produto_id:
+ *                         type: string
+ *                         description: ID do produto
+ *                       descricao:
+ *                         type: string
+ *                         description: Descrição do item
+ *                       quantidade:
+ *                         type: number
+ *                         description: Quantidade
+ *                       valor_unitario:
+ *                         type: number
+ *                         description: Valor unitário
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total do item
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       produtos:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           descricao:
+ *                             type: string
+ *                           unidade_medida:
+ *                             type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id/itens', async (req, res) => {
   try {
     const { id } = req.params;
@@ -243,7 +693,92 @@ router.get('/:id/itens', async (req, res) => {
   }
 });
 
-// POST /api/compras/:id/itens - Adicionar item à compra
+/**
+ * @swagger
+ * /api/compras/{id}/itens:
+ *   post:
+ *     summary: Adiciona um item à compra
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da compra
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - descricao
+ *               - quantidade
+ *               - valor_unitario
+ *             properties:
+ *               produto_id:
+ *                 type: string
+ *                 description: ID do produto
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição do item
+ *               quantidade:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Quantidade
+ *               valor_unitario:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Valor unitário
+ *     responses:
+ *       201:
+ *         description: Item adicionado à compra com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do item criado
+ *                     compra_id:
+ *                       type: integer
+ *                       description: ID da compra
+ *                     produto_id:
+ *                       type: string
+ *                       description: ID do produto
+ *                     descricao:
+ *                       type: string
+ *                       description: Descrição do item
+ *                     quantidade:
+ *                       type: number
+ *                       description: Quantidade
+ *                     valor_unitario:
+ *                       type: number
+ *                       description: Valor unitário
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total do item
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/itens', async (req, res) => {
   try {
     const { id } = req.params;
@@ -285,7 +820,86 @@ router.post('/:id/itens', async (req, res) => {
   }
 });
 
-// POST /api/compras/:id/receber - Marcar compra como recebida e criar movimentações de estoque
+/**
+ * @swagger
+ * /api/compras/{id}/receber:
+ *   post:
+ *     summary: Marca uma compra como recebida e cria movimentações de estoque
+ *     tags: [Compras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da compra
+ *     responses:
+ *       200:
+ *         description: Compra marcada como recebida com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     compra:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           description: ID da compra
+ *                         fornecedor_id:
+ *                           type: integer
+ *                           description: ID do fornecedor
+ *                         numero_pedido:
+ *                           type: string
+ *                           description: Número do pedido
+ *                         data_pedido:
+ *                           type: string
+ *                           format: date
+ *                           description: Data do pedido
+ *                         data_entrega:
+ *                           type: string
+ *                           format: date
+ *                           description: Data de entrega
+ *                         valor_total:
+ *                           type: number
+ *                           description: Valor total da compra
+ *                         status:
+ *                           type: string
+ *                           enum: [recebido]
+ *                           description: Status atualizado
+ *                         observacoes:
+ *                           type: string
+ *                           description: Observações
+ *                         updated_at:
+ *                           type: string
+ *                           format: date-time
+ *                           description: Data de atualização
+ *                     movimentacoes_criadas:
+ *                       type: integer
+ *                       description: Número de movimentações de estoque criadas
+ *                     movimentacoes:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         description: Movimentações de estoque criadas
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Compra já está marcada como recebida
+ *       404:
+ *         description: Compra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/receber', async (req, res) => {
   try {
     const { id } = req.params;

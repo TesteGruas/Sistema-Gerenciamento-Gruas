@@ -63,6 +63,7 @@ import aditivosRoutes from './routes/aditivos.js'
 import orcamentosLocacaoRoutes from './routes/orcamentos-locacao.js'
 import notasDebitoRoutes from './routes/notas-debito.js'
 import notasFiscaisLocacaoRoutes from './routes/notas-fiscais-locacao.js'
+import pontoEletronicoRoutes from './routes/ponto-eletronico.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -236,6 +237,7 @@ app.use('/api/aditivos', aditivosRoutes)
 app.use('/api/orcamentos-locacao', orcamentosLocacaoRoutes)
 app.use('/api/notas-debito', notasDebitoRoutes)
 app.use('/api/notas-fiscais-locacao', notasFiscaisLocacaoRoutes)
+app.use('/api/ponto-eletronico', pontoEletronicoRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

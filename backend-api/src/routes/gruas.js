@@ -213,7 +213,7 @@ const gruaSchema = Joi.object({
   name: Joi.string().min(2).required(), // Nome da grua (ex: "Grua 001")
   model: Joi.string().min(2).required(), // Modelo da grua
   capacity: Joi.string().required(), // Capacidade da grua
-  status: Joi.string().valid('disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
   
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
@@ -221,7 +221,7 @@ const gruaSchema = Joi.object({
   
   // Campos opcionais adicionais (para compatibilidade com banco)
   fabricante: Joi.string().allow(null, '').optional(),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').allow(null, '').optional(),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').allow(null, '').optional(),
   capacidade_ponta: Joi.string().allow(null, '').optional(),
   lanca: Joi.string().allow(null, '').optional(),
   altura_trabalho: Joi.string().allow(null, '').optional(),
@@ -247,7 +247,7 @@ const gruaInputSchema = Joi.object({
   name: Joi.string().min(2).required(), // Nome da grua (ex: "Grua 001")
   model: Joi.string().min(2).required(), // Modelo da grua
   capacity: Joi.string().required(), // Capacidade da grua
-  status: Joi.string().valid('disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
   
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
@@ -255,7 +255,7 @@ const gruaInputSchema = Joi.object({
   
   // Campos opcionais adicionais (para compatibilidade com banco)
   fabricante: Joi.string().allow(null, '').optional(),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Móvel', 'Guincho', 'Outros').allow(null, '').optional(),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').allow(null, '').optional(),
   capacidade_ponta: Joi.string().allow(null, '').optional(),
   lanca: Joi.string().allow(null, '').optional(),
   altura_trabalho: Joi.string().allow(null, '').optional(),

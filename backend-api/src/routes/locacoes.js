@@ -7,7 +7,128 @@ const router = express.Router();
 // Middleware de autenticação para todas as rotas
 router.use(authenticateToken);
 
-// GET /api/locacoes - Listar locações com filtros
+/**
+ * @swagger
+ * /api/locacoes:
+ *   get:
+ *     summary: Lista locações com filtros
+ *     tags: [Locações]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Limite de itens por página
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [ativa, finalizada, suspensa, cancelada]
+ *         description: Status da locação
+ *       - in: query
+ *         name: tipo_equipamento
+ *         schema:
+ *           type: string
+ *           enum: [grua, plataforma]
+ *         description: Tipo do equipamento
+ *       - in: query
+ *         name: cliente_id
+ *         schema:
+ *           type: integer
+ *         description: ID do cliente
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Busca por número, nome do cliente ou ID do equipamento
+ *     responses:
+ *       200:
+ *         description: Lista de locações
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da locação
+ *                       numero:
+ *                         type: string
+ *                         description: Número da locação
+ *                       cliente_id:
+ *                         type: integer
+ *                         description: ID do cliente
+ *                       equipamento_id:
+ *                         type: string
+ *                         description: ID do equipamento
+ *                       tipo_equipamento:
+ *                         type: string
+ *                         enum: [grua, plataforma]
+ *                         description: Tipo do equipamento
+ *                       contrato_id:
+ *                         type: string
+ *                         description: ID do contrato
+ *                       data_inicio:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de início
+ *                       data_fim:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de fim
+ *                       valor_mensal:
+ *                         type: number
+ *                         description: Valor mensal da locação
+ *                       status:
+ *                         type: string
+ *                         enum: [ativa, finalizada, suspensa, cancelada]
+ *                         description: Status da locação
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       funcionario_responsavel_id:
+ *                         type: integer
+ *                         description: ID do funcionário responsável
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       cliente_nome:
+ *                         type: string
+ *                         description: Nome do cliente
+ *                       funcionario_nome:
+ *                         type: string
+ *                         description: Nome do funcionário responsável
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -90,7 +211,89 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/locacoes/:id - Obter locação específica
+/**
+ * @swagger
+ * /api/locacoes/{id}:
+ *   get:
+ *     summary: Obtém uma locação específica
+ *     tags: [Locações]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da locação
+ *     responses:
+ *       200:
+ *         description: Dados da locação
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da locação
+ *                     numero:
+ *                       type: string
+ *                       description: Número da locação
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     equipamento_id:
+ *                       type: string
+ *                       description: ID do equipamento
+ *                     tipo_equipamento:
+ *                       type: string
+ *                       enum: [grua, plataforma]
+ *                       description: Tipo do equipamento
+ *                     contrato_id:
+ *                       type: string
+ *                       description: ID do contrato
+ *                     data_inicio:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de início
+ *                     data_fim:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de fim
+ *                     valor_mensal:
+ *                       type: number
+ *                       description: Valor mensal da locação
+ *                     status:
+ *                       type: string
+ *                       enum: [ativa, finalizada, suspensa, cancelada]
+ *                       description: Status da locação
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     funcionario_responsavel_id:
+ *                       type: integer
+ *                       description: ID do funcionário responsável
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     cliente_nome:
+ *                       type: string
+ *                       description: Nome do cliente
+ *                     funcionario_nome:
+ *                       type: string
+ *                       description: Nome do funcionário responsável
+ *       404:
+ *         description: Locação não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -142,7 +345,130 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/locacoes - Criar nova locação
+/**
+ * @swagger
+ * /api/locacoes:
+ *   post:
+ *     summary: Cria uma nova locação
+ *     tags: [Locações]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - numero
+ *               - cliente_id
+ *               - equipamento_id
+ *               - tipo_equipamento
+ *               - data_inicio
+ *               - valor_mensal
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da locação
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               equipamento_id:
+ *                 type: string
+ *                 description: ID do equipamento
+ *               tipo_equipamento:
+ *                 type: string
+ *                 enum: [grua, plataforma]
+ *                 description: Tipo do equipamento
+ *               contrato_id:
+ *                 type: string
+ *                 description: ID do contrato
+ *               data_inicio:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de início
+ *               data_fim:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de fim
+ *               valor_mensal:
+ *                 type: number
+ *                 description: Valor mensal da locação
+ *               status:
+ *                 type: string
+ *                 enum: [ativa, finalizada, suspensa, cancelada]
+ *                 default: ativa
+ *                 description: Status da locação
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *               funcionario_responsavel_id:
+ *                 type: integer
+ *                 description: ID do funcionário responsável
+ *     responses:
+ *       201:
+ *         description: Locação criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da locação criada
+ *                     numero:
+ *                       type: string
+ *                       description: Número da locação
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     equipamento_id:
+ *                       type: string
+ *                       description: ID do equipamento
+ *                     tipo_equipamento:
+ *                       type: string
+ *                       enum: [grua, plataforma]
+ *                       description: Tipo do equipamento
+ *                     contrato_id:
+ *                       type: string
+ *                       description: ID do contrato
+ *                     data_inicio:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de início
+ *                     data_fim:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de fim
+ *                     valor_mensal:
+ *                       type: number
+ *                       description: Valor mensal da locação
+ *                     status:
+ *                       type: string
+ *                       enum: [ativa, finalizada, suspensa, cancelada]
+ *                       description: Status da locação
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     funcionario_responsavel_id:
+ *                       type: integer
+ *                       description: ID do funcionário responsável
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *       400:
+ *         description: Dados inválidos ou locação já existe
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const {
@@ -196,25 +522,19 @@ router.post('/', async (req, res) => {
     }
 
     // Verificar se o equipamento existe
-    let equipamentoExists = false;
-    if (tipo_equipamento === 'grua') {
-      const { data: grua, error: gruaError } = await supabase
+    if (equipamento_id && tipo_equipamento === 'grua') {
+      const { data: equipamento, error: equipamentoError } = await supabase
         .from('gruas')
-        .select('id, modelo, status')
+        .select('id')
         .eq('id', equipamento_id)
         .single();
-      
-      console.log('Verificando equipamento:', equipamento_id, 'Resultado:', grua, 'Erro:', gruaError);
-      equipamentoExists = !!grua;
-    } else if (tipo_equipamento === 'plataforma') {
-      // Aqui você pode adicionar verificação para plataformas se tiver uma tabela específica
-      equipamentoExists = true; // Por enquanto, assumindo que existe
-    }
 
-    if (!equipamentoExists) {
-      console.warn(`Equipamento não encontrado: ${equipamento_id} (tipo: ${tipo_equipamento}) - Continuando com a criação da locação`);
-      // Por enquanto, vamos permitir a criação mesmo se o equipamento não existir
-      // TODO: Corrigir a validação de equipamentos
+      if (equipamentoError || !equipamento) {
+        return res.status(400).json({
+          success: false,
+          message: 'Equipamento não encontrado'
+        });
+      }
     }
 
     // Criar a locação
@@ -261,7 +581,131 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/locacoes/:id - Atualizar locação
+/**
+ * @swagger
+ * /api/locacoes/{id}:
+ *   put:
+ *     summary: Atualiza uma locação existente
+ *     tags: [Locações]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da locação
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da locação
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               equipamento_id:
+ *                 type: string
+ *                 description: ID do equipamento
+ *               tipo_equipamento:
+ *                 type: string
+ *                 enum: [grua, plataforma]
+ *                 description: Tipo do equipamento
+ *               contrato_id:
+ *                 type: string
+ *                 description: ID do contrato
+ *               data_inicio:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de início
+ *               data_fim:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de fim
+ *               valor_mensal:
+ *                 type: number
+ *                 description: Valor mensal da locação
+ *               status:
+ *                 type: string
+ *                 enum: [ativa, finalizada, suspensa, cancelada]
+ *                 description: Status da locação
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *               funcionario_responsavel_id:
+ *                 type: integer
+ *                 description: ID do funcionário responsável
+ *     responses:
+ *       200:
+ *         description: Locação atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da locação
+ *                     numero:
+ *                       type: string
+ *                       description: Número da locação
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     equipamento_id:
+ *                       type: string
+ *                       description: ID do equipamento
+ *                     tipo_equipamento:
+ *                       type: string
+ *                       enum: [grua, plataforma]
+ *                       description: Tipo do equipamento
+ *                     contrato_id:
+ *                       type: string
+ *                       description: ID do contrato
+ *                     data_inicio:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de início
+ *                     data_fim:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de fim
+ *                     valor_mensal:
+ *                       type: number
+ *                       description: Valor mensal da locação
+ *                     status:
+ *                       type: string
+ *                       enum: [ativa, finalizada, suspensa, cancelada]
+ *                       description: Status da locação
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     funcionario_responsavel_id:
+ *                       type: integer
+ *                       description: ID do funcionário responsável
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *       400:
+ *         description: Dados inválidos ou número já existe
+ *       404:
+ *         description: Locação não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -335,7 +779,41 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/locacoes/:id - Excluir locação
+/**
+ * @swagger
+ * /api/locacoes/{id}:
+ *   delete:
+ *     summary: Exclui uma locação
+ *     tags: [Locações]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da locação
+ *     responses:
+ *       200:
+ *         description: Locação excluída com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Não é possível excluir locação com medições finalizadas
+ *       404:
+ *         description: Locação não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -398,7 +876,53 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET /api/locacoes/stats - Estatísticas das locações
+/**
+ * @swagger
+ * /api/locacoes/stats/overview:
+ *   get:
+ *     summary: Obtém estatísticas das locações
+ *     tags: [Locações]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estatísticas das locações
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total_locacoes_ativas:
+ *                       type: integer
+ *                       description: Total de locações ativas
+ *                     gruas_locadas:
+ *                       type: integer
+ *                       description: Quantidade de gruas locadas
+ *                     plataformas_locadas:
+ *                       type: integer
+ *                       description: Quantidade de plataformas locadas
+ *                     receita_mensal_atual:
+ *                       type: number
+ *                       description: Receita mensal atual
+ *                     receita_por_periodo:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           periodo:
+ *                             type: string
+ *                             description: Período (mês/ano)
+ *                           receita_total:
+ *                             type: number
+ *                             description: Receita total do período
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/stats/overview', async (req, res) => {
   try {
     // Buscar estatísticas das locações ativas

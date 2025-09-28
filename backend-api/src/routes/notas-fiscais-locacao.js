@@ -3,7 +3,124 @@ import { supabase } from '../config/supabase.js'
 
 const router = express.Router()
 
-// Listar notas fiscais de locação
+/**
+ * @swagger
+ * /api/notas-fiscais-locacao:
+ *   get:
+ *     summary: Lista notas fiscais de locação com filtros opcionais
+ *     tags: [Notas Fiscais Locação]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Limite de registros por página
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Busca por número ou série
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pendente, emitida, cancelada]
+ *         description: Status da nota fiscal
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *         description: Tipo da nota fiscal
+ *       - in: query
+ *         name: cliente_id
+ *         schema:
+ *           type: integer
+ *         description: ID do cliente
+ *       - in: query
+ *         name: locacao_id
+ *         schema:
+ *           type: integer
+ *         description: ID da locação
+ *     responses:
+ *       200:
+ *         description: Lista de notas fiscais de locação
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da nota fiscal
+ *                       numero:
+ *                         type: string
+ *                         description: Número da nota fiscal
+ *                       serie:
+ *                         type: string
+ *                         description: Série da nota fiscal
+ *                       cliente_id:
+ *                         type: integer
+ *                         description: ID do cliente
+ *                       locacao_id:
+ *                         type: integer
+ *                         description: ID da locação
+ *                       data_emissao:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de emissão
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total da nota fiscal
+ *                       status:
+ *                         type: string
+ *                         description: Status da nota fiscal
+ *                       tipo:
+ *                         type: string
+ *                         description: Tipo da nota fiscal
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       clientes:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                       locacoes:
+ *                         type: object
+ *                         properties:
+ *                           numero:
+ *                             type: string
+ *                           equipamento_id:
+ *                             type: integer
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status, tipo, cliente_id, locacao_id } = req.query
@@ -62,7 +179,81 @@ router.get('/', async (req, res) => {
   }
 })
 
-// Buscar nota fiscal por ID
+/**
+ * @swagger
+ * /api/notas-fiscais-locacao/{id}:
+ *   get:
+ *     summary: Obtém uma nota fiscal de locação específica por ID
+ *     tags: [Notas Fiscais Locação]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     responses:
+ *       200:
+ *         description: Dados da nota fiscal de locação
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da nota fiscal
+ *                     numero:
+ *                       type: string
+ *                       description: Número da nota fiscal
+ *                     serie:
+ *                       type: string
+ *                       description: Série da nota fiscal
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     locacao_id:
+ *                       type: integer
+ *                       description: ID da locação
+ *                     data_emissao:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de emissão
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da nota fiscal
+ *                     status:
+ *                       type: string
+ *                       description: Status da nota fiscal
+ *                     tipo:
+ *                       type: string
+ *                       description: Tipo da nota fiscal
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     clientes:
+ *                       type: object
+ *                       properties:
+ *                         nome:
+ *                           type: string
+ *                     locacoes:
+ *                       type: object
+ *                       properties:
+ *                         numero:
+ *                           type: string
+ *                         equipamento_id:
+ *                           type: integer
+ *       404:
+ *         description: Nota fiscal não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
@@ -94,7 +285,71 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// Criar nova nota fiscal
+/**
+ * @swagger
+ * /api/notas-fiscais-locacao:
+ *   post:
+ *     summary: Cria uma nova nota fiscal de locação
+ *     tags: [Notas Fiscais Locação]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - numero
+ *               - cliente_id
+ *               - locacao_id
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da nota fiscal
+ *               serie:
+ *                 type: string
+ *                 description: Série da nota fiscal
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação
+ *               data_emissao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de emissão (YYYY-MM-DD)
+ *               valor_total:
+ *                 type: number
+ *                 description: Valor total da nota fiscal
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, emitida, cancelada]
+ *                 default: pendente
+ *                 description: Status da nota fiscal
+ *               tipo:
+ *                 type: string
+ *                 description: Tipo da nota fiscal
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações da nota fiscal
+ *     responses:
+ *       201:
+ *         description: Nota fiscal criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   description: Dados da nota fiscal criada
+ *       400:
+ *         description: Dados inválidos ou campos obrigatórios
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const notaData = req.body
@@ -126,7 +381,73 @@ router.post('/', async (req, res) => {
   }
 })
 
-// Atualizar nota fiscal
+/**
+ * @swagger
+ * /api/notas-fiscais-locacao/{id}:
+ *   put:
+ *     summary: Atualiza uma nota fiscal de locação existente
+ *     tags: [Notas Fiscais Locação]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da nota fiscal
+ *               serie:
+ *                 type: string
+ *                 description: Série da nota fiscal
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação
+ *               data_emissao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de emissão (YYYY-MM-DD)
+ *               valor_total:
+ *                 type: number
+ *                 description: Valor total da nota fiscal
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, emitida, cancelada]
+ *                 description: Status da nota fiscal
+ *               tipo:
+ *                 type: string
+ *                 description: Tipo da nota fiscal
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações da nota fiscal
+ *     responses:
+ *       200:
+ *         description: Nota fiscal atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   description: Dados atualizados da nota fiscal
+ *       404:
+ *         description: Nota fiscal não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
@@ -159,7 +480,34 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// Excluir nota fiscal
+/**
+ * @swagger
+ * /api/notas-fiscais-locacao/{id}:
+ *   delete:
+ *     summary: Exclui uma nota fiscal de locação
+ *     tags: [Notas Fiscais Locação]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     responses:
+ *       200:
+ *         description: Nota fiscal excluída com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
@@ -181,7 +529,40 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-// Estatísticas de notas fiscais
+/**
+ * @swagger
+ * /api/notas-fiscais-locacao/stats:
+ *   get:
+ *     summary: Obtém estatísticas das notas fiscais de locação
+ *     tags: [Notas Fiscais Locação]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Estatísticas das notas fiscais de locação
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total_notas:
+ *                       type: integer
+ *                       description: Total de notas fiscais
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total das notas fiscais
+ *                     notas_pendentes:
+ *                       type: integer
+ *                       description: Número de notas pendentes
+ *                     notas_emitidas:
+ *                       type: integer
+ *                       description: Número de notas emitidas
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/stats', async (req, res) => {
   try {
     const { data: stats, error } = await supabase
@@ -213,7 +594,37 @@ router.get('/stats', async (req, res) => {
   }
 })
 
-// Upload de arquivo
+/**
+ * @swagger
+ * /api/notas-fiscais-locacao/{id}/upload:
+ *   post:
+ *     summary: Upload de arquivo para uma nota fiscal de locação
+ *     tags: [Notas Fiscais Locação]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     responses:
+ *       200:
+ *         description: Upload de arquivo processado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 file_url:
+ *                   type: string
+ *                   description: URL do arquivo enviado
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/upload', async (req, res) => {
   try {
     const { id } = req.params

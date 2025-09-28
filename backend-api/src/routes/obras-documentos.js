@@ -75,6 +75,92 @@ const documentoSchema = Joi.object({
  *     responses:
  *       200:
  *         description: Lista de todos os documentos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       obra_id:
+ *                         type: integer
+ *                       titulo:
+ *                         type: string
+ *                       descricao:
+ *                         type: string
+ *                       arquivo_original:
+ *                         type: string
+ *                       caminho_arquivo:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [rascunho, aguardando_assinatura, em_assinatura, assinado, rejeitado]
+ *                       created_by:
+ *                         type: string
+ *                       proximo_assinante_id:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                       assinaturas:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             documento_id:
+ *                               type: integer
+ *                             user_id:
+ *                               type: string
+ *                             ordem:
+ *                               type: integer
+ *                             status:
+ *                               type: string
+ *                             tipo:
+ *                               type: string
+ *                             user_nome:
+ *                               type: string
+ *                             user_email:
+ *                               type: string
+ *                             user_cargo:
+ *                               type: string
+ *                       historico:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             documento_id:
+ *                               type: integer
+ *                             user_id:
+ *                               type: string
+ *                             acao:
+ *                               type: string
+ *                             user_nome:
+ *                               type: string
+ *                             user_email:
+ *                               type: string
+ *                             user_role:
+ *                               type: string
+ *                             observacoes:
+ *                               type: string
+ *                             data_acao:
+ *                               type: string
+ *                               format: date-time
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/documentos/todos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -268,6 +354,68 @@ router.get('/documentos/todos', authenticateToken, requirePermission('visualizar
  *     responses:
  *       200:
  *         description: Lista de documentos da obra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       obra_id:
+ *                         type: integer
+ *                       titulo:
+ *                         type: string
+ *                       descricao:
+ *                         type: string
+ *                       arquivo_original:
+ *                         type: string
+ *                       caminho_arquivo:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [rascunho, aguardando_assinatura, em_assinatura, assinado, rejeitado]
+ *                       created_by:
+ *                         type: string
+ *                       proximo_assinante_id:
+ *                         type: string
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                       ordemAssinatura:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             documento_id:
+ *                               type: integer
+ *                             user_id:
+ *                               type: string
+ *                             ordem:
+ *                               type: integer
+ *                             status:
+ *                               type: string
+ *                             tipo:
+ *                               type: string
+ *                             user_nome:
+ *                               type: string
+ *                             user_email:
+ *                               type: string
+ *                             user_cargo:
+ *                               type: string
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/:obraId/documentos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -452,19 +600,49 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('visualiz
  *             properties:
  *               titulo:
  *                 type: string
+ *                 description: Título do documento
  *               descricao:
  *                 type: string
+ *                 description: Descrição do documento
  *               arquivo:
  *                 type: string
  *                 format: binary
+ *                 description: Arquivo PDF do documento (máximo 50MB)
  *               ordem_assinatura:
  *                 type: string
- *                 description: JSON string com array de objetos {user_id, ordem}
+ *                 description: JSON string com array de objetos de assinatura
+ *                 example: '[{"user_id": "uuid-or-id", "ordem": 1, "tipo": "interno", "status": "pendente"}]'
  *     responses:
  *       201:
  *         description: Documento criado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     titulo:
+ *                       type: string
+ *                     arquivo_original:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     url:
+ *                       type: string
  *       400:
  *         description: Dados inválidos
+ *       404:
+ *         description: Obra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_obras'), upload.single('arquivo'), async (req, res) => {
   try {
@@ -737,8 +915,86 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_o
  *     responses:
  *       200:
  *         description: Dados do documento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     obra_id:
+ *                       type: integer
+ *                     titulo:
+ *                       type: string
+ *                     descricao:
+ *                       type: string
+ *                     arquivo_original:
+ *                       type: string
+ *                     caminho_arquivo:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                       enum: [rascunho, aguardando_assinatura, em_assinatura, assinado, rejeitado]
+ *                     created_by:
+ *                       type: string
+ *                     proximo_assinante_id:
+ *                       type: string
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                     ordemAssinatura:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           documento_id:
+ *                             type: integer
+ *                           user_id:
+ *                             type: string
+ *                           ordem:
+ *                             type: integer
+ *                           status:
+ *                             type: string
+ *                           tipo:
+ *                             type: string
+ *                     historicoAssinaturas:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           documento_id:
+ *                             type: integer
+ *                           user_id:
+ *                             type: string
+ *                           acao:
+ *                             type: string
+ *                           user_nome:
+ *                             type: string
+ *                           user_email:
+ *                             type: string
+ *                           user_role:
+ *                             type: string
+ *                           observacoes:
+ *                             type: string
+ *                           data_acao:
+ *                             type: string
+ *                             format: date-time
  *       404:
  *         description: Documento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -822,8 +1078,19 @@ router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermiss
  *     responses:
  *       200:
  *         description: Documento enviado para assinatura
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
  *       404:
- *         description: Documento não encontrado
+ *         description: Documento não encontrado ou não está em rascunho
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.post('/:obraId/documentos/:documentoId/enviar', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
@@ -913,9 +1180,27 @@ router.post('/:obraId/documentos/:documentoId/enviar', authenticateToken, requir
  *         description: ID do documento
  *     responses:
  *       200:
- *         description: Arquivo do documento
+ *         description: URL de download do arquivo do documento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     download_url:
+ *                       type: string
+ *                       description: URL assinada para download (válida por 1 hora)
+ *                     nome_arquivo:
+ *                       type: string
+ *                       description: Nome original do arquivo
  *       404:
  *         description: Documento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -996,16 +1281,35 @@ router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requi
  *             properties:
  *               titulo:
  *                 type: string
+ *                 description: Novo título do documento
  *               descricao:
  *                 type: string
+ *                 description: Nova descrição do documento
  *               status:
  *                 type: string
  *                 enum: [rascunho, aguardando_assinatura, em_assinatura, assinado, rejeitado]
+ *                 description: Novo status do documento
  *     responses:
  *       200:
  *         description: Documento atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados atualizados do documento
+ *       400:
+ *         description: Dados inválidos
  *       404:
  *         description: Documento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  *   delete:
  *     summary: Excluir documento
  *     tags: [Obras Documentos]
@@ -1027,8 +1331,19 @@ router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requi
  *     responses:
  *       200:
  *         description: Documento excluído com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
  *       404:
  *         description: Documento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.put('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
@@ -1178,7 +1493,7 @@ router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePerm
  * @swagger
  * /api/obras/documentos/{documentoId}:
  *   get:
- *     summary: Obter documento específico
+ *     summary: Obter documento específico por ID
  *     tags: [Obras Documentos]
  *     security:
  *       - bearerAuth: []
@@ -1192,8 +1507,92 @@ router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePerm
  *     responses:
  *       200:
  *         description: Documento encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     obra_id:
+ *                       type: integer
+ *                     titulo:
+ *                       type: string
+ *                     descricao:
+ *                       type: string
+ *                     arquivo_original:
+ *                       type: string
+ *                     caminho_arquivo:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                       enum: [rascunho, aguardando_assinatura, em_assinatura, assinado, rejeitado]
+ *                     created_by:
+ *                       type: string
+ *                     proximo_assinante_id:
+ *                       type: string
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                     assinaturas:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           documento_id:
+ *                             type: integer
+ *                           user_id:
+ *                             type: string
+ *                           ordem:
+ *                             type: integer
+ *                           status:
+ *                             type: string
+ *                           tipo:
+ *                             type: string
+ *                           user_nome:
+ *                             type: string
+ *                           user_email:
+ *                             type: string
+ *                           user_cargo:
+ *                             type: string
+ *                     historico:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           documento_id:
+ *                             type: integer
+ *                           user_id:
+ *                             type: string
+ *                           acao:
+ *                             type: string
+ *                           user_nome:
+ *                             type: string
+ *                           user_email:
+ *                             type: string
+ *                           user_role:
+ *                             type: string
+ *                           observacoes:
+ *                             type: string
+ *                           data_acao:
+ *                             type: string
+ *                             format: date-time
  *       404:
  *         description: Documento não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/documentos/:documentoId', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {

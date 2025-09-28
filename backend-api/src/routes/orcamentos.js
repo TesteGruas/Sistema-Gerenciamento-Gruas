@@ -34,7 +34,7 @@ const criarOrcamentoSchema = Joi.object({
   tipo_orcamento: Joi.string().valid('equipamento', 'servico', 'locacao', 'venda').required(),
   itens: Joi.array().items(
     Joi.object({
-      produto_id: Joi.string().allow(''),
+      produto_id: Joi.string().allow('').optional(),
       produto_servico: Joi.string().required(),
       descricao: Joi.string().allow(''),
       quantidade: Joi.number().precision(2).required(),
@@ -60,7 +60,165 @@ const itemOrcamentoSchema = Joi.object({
   observacoes: Joi.string().allow('')
 });
 
-// GET /api/orcamentos - Listar orçamentos
+/**
+ * @swagger
+ * /api/orcamentos:
+ *   get:
+ *     summary: Lista orçamentos com filtros
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Limite de itens por página
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *         description: Status do orçamento
+ *       - in: query
+ *         name: cliente_id
+ *         schema:
+ *           type: integer
+ *         description: ID do cliente
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de início para filtro
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de fim para filtro
+ *     responses:
+ *       200:
+ *         description: Lista de orçamentos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID do orçamento
+ *                       cliente_id:
+ *                         type: integer
+ *                         description: ID do cliente
+ *                       data_orcamento:
+ *                         type: string
+ *                         format: date
+ *                         description: Data do orçamento
+ *                       data_validade:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de validade
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total do orçamento
+ *                       desconto:
+ *                         type: number
+ *                         description: Valor do desconto
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       status:
+ *                         type: string
+ *                         enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *                         description: Status do orçamento
+ *                       vendedor_id:
+ *                         type: integer
+ *                         description: ID do vendedor
+ *                       condicoes_pagamento:
+ *                         type: string
+ *                         description: Condições de pagamento
+ *                       prazo_entrega:
+ *                         type: string
+ *                         description: Prazo de entrega
+ *                       tipo_orcamento:
+ *                         type: string
+ *                         enum: [equipamento, servico, locacao, venda]
+ *                         description: Tipo do orçamento
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       clientes:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           nome:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           telefone:
+ *                             type: string
+ *                       funcionarios:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           nome:
+ *                             type: string
+ *                       orcamento_itens:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             produto_servico:
+ *                               type: string
+ *                             descricao:
+ *                               type: string
+ *                             quantidade:
+ *                               type: number
+ *                             valor_unitario:
+ *                               type: number
+ *                             valor_total:
+ *                               type: number
+ *                             tipo:
+ *                               type: string
+ *                               enum: [produto, servico, equipamento]
+ *                             unidade:
+ *                               type: string
+ *                             observacoes:
+ *                               type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 10, status, cliente_id, data_inicio, data_fim } = req.query;
@@ -132,7 +290,129 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/orcamentos/:id - Buscar orçamento por ID
+/**
+ * @swagger
+ * /api/orcamentos/{id}:
+ *   get:
+ *     summary: Busca um orçamento por ID
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     responses:
+ *       200:
+ *         description: Dados do orçamento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do orçamento
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     data_orcamento:
+ *                       type: string
+ *                       format: date
+ *                       description: Data do orçamento
+ *                     data_validade:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de validade
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total do orçamento
+ *                     desconto:
+ *                       type: number
+ *                       description: Valor do desconto
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     status:
+ *                       type: string
+ *                       enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *                       description: Status do orçamento
+ *                     vendedor_id:
+ *                       type: integer
+ *                       description: ID do vendedor
+ *                     condicoes_pagamento:
+ *                       type: string
+ *                       description: Condições de pagamento
+ *                     prazo_entrega:
+ *                       type: string
+ *                       description: Prazo de entrega
+ *                     tipo_orcamento:
+ *                       type: string
+ *                       enum: [equipamento, servico, locacao, venda]
+ *                       description: Tipo do orçamento
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     clientes:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         nome:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                         telefone:
+ *                           type: string
+ *                         endereco:
+ *                           type: string
+ *                         cnpj_cpf:
+ *                           type: string
+ *                     funcionarios:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         nome:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                     itens:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           produto_servico:
+ *                             type: string
+ *                           descricao:
+ *                             type: string
+ *                           quantidade:
+ *                             type: number
+ *                           valor_unitario:
+ *                             type: number
+ *                           valor_total:
+ *                             type: number
+ *                           tipo:
+ *                             type: string
+ *                             enum: [produto, servico, equipamento]
+ *                           unidade:
+ *                             type: string
+ *                           observacoes:
+ *                             type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -187,7 +467,172 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/orcamentos - Criar novo orçamento
+/**
+ * @swagger
+ * /api/orcamentos:
+ *   post:
+ *     summary: Cria um novo orçamento
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cliente_id
+ *               - data_orcamento
+ *               - data_validade
+ *               - valor_total
+ *               - tipo_orcamento
+ *               - itens
+ *             properties:
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               data_orcamento:
+ *                 type: string
+ *                 format: date
+ *                 description: Data do orçamento
+ *               data_validade:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de validade
+ *               valor_total:
+ *                 type: number
+ *                 description: Valor total do orçamento
+ *               desconto:
+ *                 type: number
+ *                 default: 0
+ *                 description: Valor do desconto
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *               status:
+ *                 type: string
+ *                 enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *                 default: rascunho
+ *                 description: Status do orçamento
+ *               vendedor_id:
+ *                 type: integer
+ *                 description: ID do vendedor
+ *               condicoes_pagamento:
+ *                 type: string
+ *                 description: Condições de pagamento
+ *               prazo_entrega:
+ *                 type: string
+ *                 description: Prazo de entrega
+ *               tipo_orcamento:
+ *                 type: string
+ *                 enum: [equipamento, servico, locacao, venda]
+ *                 description: Tipo do orçamento
+ *               itens:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - produto_servico
+ *                     - quantidade
+ *                     - valor_unitario
+ *                     - valor_total
+ *                     - tipo
+ *                   properties:
+ *                     produto_id:
+ *                       type: string
+ *                       description: ID do produto
+ *                     produto_servico:
+ *                       type: string
+ *                       description: Nome do produto/serviço
+ *                     descricao:
+ *                       type: string
+ *                       description: Descrição do item
+ *                     quantidade:
+ *                       type: number
+ *                       description: Quantidade
+ *                     valor_unitario:
+ *                       type: number
+ *                       description: Valor unitário
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total do item
+ *                     tipo:
+ *                       type: string
+ *                       enum: [produto, servico, equipamento]
+ *                       description: Tipo do item
+ *                     unidade:
+ *                       type: string
+ *                       description: Unidade de medida
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações do item
+ *     responses:
+ *       201:
+ *         description: Orçamento criado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do orçamento criado
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     data_orcamento:
+ *                       type: string
+ *                       format: date
+ *                       description: Data do orçamento
+ *                     data_validade:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de validade
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total do orçamento
+ *                     desconto:
+ *                       type: number
+ *                       description: Valor do desconto
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     status:
+ *                       type: string
+ *                       enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *                       description: Status do orçamento
+ *                     vendedor_id:
+ *                       type: integer
+ *                       description: ID do vendedor
+ *                     condicoes_pagamento:
+ *                       type: string
+ *                       description: Condições de pagamento
+ *                     prazo_entrega:
+ *                       type: string
+ *                       description: Prazo de entrega
+ *                     tipo_orcamento:
+ *                       type: string
+ *                       enum: [equipamento, servico, locacao, venda]
+ *                       description: Tipo do orçamento
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const { error: validationError, value } = criarOrcamentoSchema.validate(req.body);
@@ -239,7 +684,163 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/orcamentos/:id - Atualizar orçamento
+/**
+ * @swagger
+ * /api/orcamentos/{id}:
+ *   put:
+ *     summary: Atualiza um orçamento existente
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               data_orcamento:
+ *                 type: string
+ *                 format: date
+ *                 description: Data do orçamento
+ *               data_validade:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de validade
+ *               valor_total:
+ *                 type: number
+ *                 description: Valor total do orçamento
+ *               desconto:
+ *                 type: number
+ *                 description: Valor do desconto
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *               status:
+ *                 type: string
+ *                 enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *                 description: Status do orçamento
+ *               vendedor_id:
+ *                 type: integer
+ *                 description: ID do vendedor
+ *               condicoes_pagamento:
+ *                 type: string
+ *                 description: Condições de pagamento
+ *               prazo_entrega:
+ *                 type: string
+ *                 description: Prazo de entrega
+ *               tipo_orcamento:
+ *                 type: string
+ *                 enum: [equipamento, servico, locacao, venda]
+ *                 description: Tipo do orçamento
+ *               itens:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     produto_id:
+ *                       type: string
+ *                       description: ID do produto
+ *                     produto_servico:
+ *                       type: string
+ *                       description: Nome do produto/serviço
+ *                     descricao:
+ *                       type: string
+ *                       description: Descrição do item
+ *                     quantidade:
+ *                       type: number
+ *                       description: Quantidade
+ *                     valor_unitario:
+ *                       type: number
+ *                       description: Valor unitário
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total do item
+ *                     tipo:
+ *                       type: string
+ *                       enum: [produto, servico, equipamento]
+ *                       description: Tipo do item
+ *                     unidade:
+ *                       type: string
+ *                       description: Unidade de medida
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações do item
+ *     responses:
+ *       200:
+ *         description: Orçamento atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do orçamento
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     data_orcamento:
+ *                       type: string
+ *                       format: date
+ *                       description: Data do orçamento
+ *                     data_validade:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de validade
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total do orçamento
+ *                     desconto:
+ *                       type: number
+ *                       description: Valor do desconto
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     status:
+ *                       type: string
+ *                       enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *                       description: Status do orçamento
+ *                     vendedor_id:
+ *                       type: integer
+ *                       description: ID do vendedor
+ *                     condicoes_pagamento:
+ *                       type: string
+ *                       description: Condições de pagamento
+ *                     prazo_entrega:
+ *                       type: string
+ *                       description: Prazo de entrega
+ *                     tipo_orcamento:
+ *                       type: string
+ *                       enum: [equipamento, servico, locacao, venda]
+ *                       description: Tipo do orçamento
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -303,7 +904,39 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/orcamentos/:id - Excluir orçamento
+/**
+ * @swagger
+ * /api/orcamentos/{id}:
+ *   delete:
+ *     summary: Exclui um orçamento
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     responses:
+ *       200:
+ *         description: Orçamento excluído com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Apenas orçamentos em rascunho podem ser excluídos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -352,7 +985,65 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/orcamentos/:id/enviar - Enviar orçamento
+/**
+ * @swagger
+ * /api/orcamentos/{id}/enviar:
+ *   post:
+ *     summary: Envia um orçamento
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Email para envio
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações do envio
+ *     responses:
+ *       200:
+ *         description: Orçamento enviado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do orçamento
+ *                     status:
+ *                       type: string
+ *                       enum: [enviado]
+ *                       description: Status atualizado
+ *                     data_envio:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de envio
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/enviar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -388,7 +1079,51 @@ router.post('/:id/enviar', async (req, res) => {
   }
 });
 
-// POST /api/orcamentos/:id/aprovar - Aprovar orçamento
+/**
+ * @swagger
+ * /api/orcamentos/{id}/aprovar:
+ *   post:
+ *     summary: Aprova um orçamento
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     responses:
+ *       200:
+ *         description: Orçamento aprovado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do orçamento
+ *                     status:
+ *                       type: string
+ *                       enum: [aprovado]
+ *                       description: Status atualizado
+ *                     data_aprovacao:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de aprovação
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/aprovar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -420,7 +1155,64 @@ router.post('/:id/aprovar', async (req, res) => {
   }
 });
 
-// POST /api/orcamentos/:id/rejeitar - Rejeitar orçamento
+/**
+ * @swagger
+ * /api/orcamentos/{id}/rejeitar:
+ *   post:
+ *     summary: Rejeita um orçamento
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               motivo:
+ *                 type: string
+ *                 description: Motivo da rejeição
+ *     responses:
+ *       200:
+ *         description: Orçamento rejeitado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID do orçamento
+ *                     status:
+ *                       type: string
+ *                       enum: [rejeitado]
+ *                       description: Status atualizado
+ *                     data_rejeicao:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de rejeição
+ *                     motivo_rejeicao:
+ *                       type: string
+ *                       description: Motivo da rejeição
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/rejeitar', async (req, res) => {
   try {
     const { id } = req.params;
@@ -454,7 +1246,135 @@ router.post('/:id/rejeitar', async (req, res) => {
   }
 });
 
-// GET /api/orcamentos/:id/pdf - Gerar PDF do orçamento
+/**
+ * @swagger
+ * /api/orcamentos/{id}/pdf:
+ *   get:
+ *     summary: Gera PDF do orçamento
+ *     tags: [Orçamentos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do orçamento
+ *     responses:
+ *       200:
+ *         description: Dados do orçamento para geração de PDF
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     orcamento:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           description: ID do orçamento
+ *                         cliente_id:
+ *                           type: integer
+ *                           description: ID do cliente
+ *                         data_orcamento:
+ *                           type: string
+ *                           format: date
+ *                           description: Data do orçamento
+ *                         data_validade:
+ *                           type: string
+ *                           format: date
+ *                           description: Data de validade
+ *                         valor_total:
+ *                           type: number
+ *                           description: Valor total do orçamento
+ *                         desconto:
+ *                           type: number
+ *                           description: Valor do desconto
+ *                         observacoes:
+ *                           type: string
+ *                           description: Observações
+ *                         status:
+ *                           type: string
+ *                           enum: [rascunho, enviado, aprovado, rejeitado, vencido, convertido]
+ *                           description: Status do orçamento
+ *                         vendedor_id:
+ *                           type: integer
+ *                           description: ID do vendedor
+ *                         condicoes_pagamento:
+ *                           type: string
+ *                           description: Condições de pagamento
+ *                         prazo_entrega:
+ *                           type: string
+ *                           description: Prazo de entrega
+ *                         tipo_orcamento:
+ *                           type: string
+ *                           enum: [equipamento, servico, locacao, venda]
+ *                           description: Tipo do orçamento
+ *                         created_at:
+ *                           type: string
+ *                           format: date-time
+ *                           description: Data de criação
+ *                         clientes:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             nome:
+ *                               type: string
+ *                             email:
+ *                               type: string
+ *                             telefone:
+ *                               type: string
+ *                             endereco:
+ *                               type: string
+ *                             cnpj_cpf:
+ *                               type: string
+ *                         funcionarios:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             nome:
+ *                               type: string
+ *                             email:
+ *                               type: string
+ *                     itens:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           produto_servico:
+ *                             type: string
+ *                           descricao:
+ *                             type: string
+ *                           quantidade:
+ *                             type: number
+ *                           valor_unitario:
+ *                             type: number
+ *                           valor_total:
+ *                             type: number
+ *                           tipo:
+ *                             type: string
+ *                             enum: [produto, servico, equipamento]
+ *                           unidade:
+ *                             type: string
+ *                           observacoes:
+ *                             type: string
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id/pdf', async (req, res) => {
   try {
     const { id } = req.params;

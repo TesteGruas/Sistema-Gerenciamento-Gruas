@@ -7,7 +7,136 @@ const router = express.Router();
 // Middleware de autenticação para todas as rotas
 router.use(authenticateToken);
 
-// GET /api/notas-debito - Listar notas de débito com filtros
+/**
+ * @swagger
+ * /api/notas-debito:
+ *   get:
+ *     summary: Lista notas de débito com filtros opcionais
+ *     tags: [Notas de Débito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Limite de registros por página
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pendente, emitida, paga, cancelada]
+ *         description: Status da nota de débito
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [multa, juros, correcao, outros]
+ *         description: Tipo da nota de débito
+ *       - in: query
+ *         name: cliente_id
+ *         schema:
+ *           type: integer
+ *         description: ID do cliente
+ *       - in: query
+ *         name: locacao_id
+ *         schema:
+ *           type: integer
+ *         description: ID da locação
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Busca por número ou descrição
+ *     responses:
+ *       200:
+ *         description: Lista de notas de débito
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da nota de débito
+ *                       numero:
+ *                         type: string
+ *                         description: Número da nota de débito
+ *                       cliente_id:
+ *                         type: integer
+ *                         description: ID do cliente
+ *                       locacao_id:
+ *                         type: integer
+ *                         description: ID da locação
+ *                       data_emissao:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de emissão
+ *                       valor:
+ *                         type: number
+ *                         description: Valor da nota de débito
+ *                       descricao:
+ *                         type: string
+ *                         description: Descrição da nota de débito
+ *                       tipo:
+ *                         type: string
+ *                         description: Tipo da nota de débito
+ *                       status:
+ *                         type: string
+ *                         description: Status da nota de débito
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       clientes:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           cnpj:
+ *                             type: string
+ *                       locacoes:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           numero:
+ *                             type: string
+ *                           equipamento_id:
+ *                             type: integer
+ *                           tipo_equipamento:
+ *                             type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -93,7 +222,98 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/notas-debito/:id - Obter nota de débito específica
+/**
+ * @swagger
+ * /api/notas-debito/{id}:
+ *   get:
+ *     summary: Obtém uma nota de débito específica por ID
+ *     tags: [Notas de Débito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota de débito
+ *     responses:
+ *       200:
+ *         description: Dados da nota de débito
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da nota de débito
+ *                     numero:
+ *                       type: string
+ *                       description: Número da nota de débito
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     locacao_id:
+ *                       type: integer
+ *                       description: ID da locação
+ *                     data_emissao:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de emissão
+ *                     valor:
+ *                       type: number
+ *                       description: Valor da nota de débito
+ *                     descricao:
+ *                       type: string
+ *                       description: Descrição da nota de débito
+ *                     tipo:
+ *                       type: string
+ *                       description: Tipo da nota de débito
+ *                     status:
+ *                       type: string
+ *                       description: Status da nota de débito
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     clientes:
+ *                       type: object
+ *                       properties:
+ *                         nome:
+ *                           type: string
+ *                         cnpj:
+ *                           type: string
+ *                         contato:
+ *                           type: string
+ *                         telefone:
+ *                           type: string
+ *                         email:
+ *                           type: string
+ *                     locacoes:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         numero:
+ *                           type: string
+ *                         equipamento_id:
+ *                           type: integer
+ *                         tipo_equipamento:
+ *                           type: string
+ *       404:
+ *         description: Nota de débito não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -143,7 +363,79 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/notas-debito - Criar nova nota de débito
+/**
+ * @swagger
+ * /api/notas-debito:
+ *   post:
+ *     summary: Cria uma nova nota de débito
+ *     tags: [Notas de Débito]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - numero
+ *               - cliente_id
+ *               - data_emissao
+ *               - valor
+ *               - descricao
+ *               - tipo
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da nota de débito
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação (opcional)
+ *               data_emissao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de emissão (YYYY-MM-DD)
+ *               valor:
+ *                 type: number
+ *                 description: Valor da nota de débito
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição da nota de débito
+ *               tipo:
+ *                 type: string
+ *                 enum: [multa, juros, correcao, outros]
+ *                 description: Tipo da nota de débito
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, emitida, paga, cancelada]
+ *                 default: pendente
+ *                 description: Status da nota de débito
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações da nota de débito
+ *     responses:
+ *       201:
+ *         description: Nota de débito criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados da nota de débito criada
+ *       400:
+ *         description: Dados inválidos ou nota já existe
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const {
@@ -260,7 +552,80 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/notas-debito/:id - Atualizar nota de débito
+/**
+ * @swagger
+ * /api/notas-debito/{id}:
+ *   put:
+ *     summary: Atualiza uma nota de débito existente
+ *     tags: [Notas de Débito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota de débito
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da nota de débito
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação
+ *               data_emissao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de emissão (YYYY-MM-DD)
+ *               valor:
+ *                 type: number
+ *                 description: Valor da nota de débito
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição da nota de débito
+ *               tipo:
+ *                 type: string
+ *                 enum: [multa, juros, correcao, outros]
+ *                 description: Tipo da nota de débito
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, emitida, paga, cancelada]
+ *                 description: Status da nota de débito
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações da nota de débito
+ *     responses:
+ *       200:
+ *         description: Nota de débito atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados atualizados da nota de débito
+ *       400:
+ *         description: Dados inválidos ou nota paga
+ *       404:
+ *         description: Nota de débito não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -342,7 +707,40 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/notas-debito/:id - Excluir nota de débito
+/**
+ * @swagger
+ * /api/notas-debito/{id}:
+ *   delete:
+ *     summary: Exclui uma nota de débito
+ *     tags: [Notas de Débito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota de débito
+ *     responses:
+ *       200:
+ *         description: Nota de débito excluída com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Não é possível excluir nota paga
+ *       404:
+ *         description: Nota de débito não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -399,7 +797,43 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/notas-debito/:id/emitir - Emitir nota de débito
+/**
+ * @swagger
+ * /api/notas-debito/{id}/emitir:
+ *   post:
+ *     summary: Emite uma nota de débito
+ *     tags: [Notas de Débito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota de débito
+ *     responses:
+ *       200:
+ *         description: Nota de débito emitida com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados da nota de débito emitida
+ *       400:
+ *         description: Nota já está emitida
+ *       404:
+ *         description: Nota de débito não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/emitir', async (req, res) => {
   try {
     const { id } = req.params;
@@ -458,7 +892,43 @@ router.post('/:id/emitir', async (req, res) => {
   }
 });
 
-// POST /api/notas-debito/:id/marcar-paga - Marcar nota de débito como paga
+/**
+ * @swagger
+ * /api/notas-debito/{id}/marcar-paga:
+ *   post:
+ *     summary: Marca uma nota de débito como paga
+ *     tags: [Notas de Débito]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota de débito
+ *     responses:
+ *       200:
+ *         description: Nota de débito marcada como paga com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados da nota de débito marcada como paga
+ *       400:
+ *         description: Nota já está marcada como paga
+ *       404:
+ *         description: Nota de débito não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/marcar-paga', async (req, res) => {
   try {
     const { id } = req.params;

@@ -20,7 +20,103 @@ const notaFiscalSchema = Joi.object({
   observacoes: Joi.string().optional()
 });
 
-// GET /api/notas-fiscais - Listar notas fiscais
+/**
+ * @swagger
+ * /api/notas-fiscais:
+ *   get:
+ *     summary: Lista todas as notas fiscais
+ *     tags: [Notas Fiscais]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de notas fiscais
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da nota fiscal
+ *                       numero_nf:
+ *                         type: string
+ *                         description: Número da nota fiscal
+ *                       serie:
+ *                         type: string
+ *                         description: Série da nota fiscal
+ *                       data_emissao:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de emissão
+ *                       data_vencimento:
+ *                         type: string
+ *                         format: date
+ *                         description: Data de vencimento
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total da nota fiscal
+ *                       tipo:
+ *                         type: string
+ *                         enum: [entrada, saida]
+ *                         description: Tipo da nota fiscal
+ *                       status:
+ *                         type: string
+ *                         enum: [pendente, paga, vencida, cancelada]
+ *                         description: Status da nota fiscal
+ *                       cliente_id:
+ *                         type: integer
+ *                         description: ID do cliente
+ *                       fornecedor_id:
+ *                         type: integer
+ *                         description: ID do fornecedor
+ *                       venda_id:
+ *                         type: integer
+ *                         description: ID da venda
+ *                       compra_id:
+ *                         type: integer
+ *                         description: ID da compra
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       clientes:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           cnpj:
+ *                             type: string
+ *                       fornecedores:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           cnpj:
+ *                             type: string
+ *                       vendas:
+ *                         type: object
+ *                         properties:
+ *                           numero_venda:
+ *                             type: string
+ *                       compras:
+ *                         type: object
+ *                         properties:
+ *                           numero_pedido:
+ *                             type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -50,7 +146,134 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/notas-fiscais - Criar registro de nota fiscal
+/**
+ * @swagger
+ * /api/notas-fiscais:
+ *   post:
+ *     summary: Cria uma nova nota fiscal
+ *     tags: [Notas Fiscais]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - numero_nf
+ *               - serie
+ *               - data_emissao
+ *               - data_vencimento
+ *               - valor_total
+ *               - tipo
+ *               - status
+ *             properties:
+ *               numero_nf:
+ *                 type: string
+ *                 description: Número da nota fiscal
+ *               serie:
+ *                 type: string
+ *                 description: Série da nota fiscal
+ *               data_emissao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de emissão
+ *               data_vencimento:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de vencimento
+ *               valor_total:
+ *                 type: number
+ *                 description: Valor total da nota fiscal
+ *               tipo:
+ *                 type: string
+ *                 enum: [entrada, saida]
+ *                 description: Tipo da nota fiscal
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, paga, vencida, cancelada]
+ *                 description: Status da nota fiscal
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               fornecedor_id:
+ *                 type: integer
+ *                 description: ID do fornecedor
+ *               venda_id:
+ *                 type: integer
+ *                 description: ID da venda
+ *               compra_id:
+ *                 type: integer
+ *                 description: ID da compra
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       201:
+ *         description: Nota fiscal criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da nota fiscal criada
+ *                     numero_nf:
+ *                       type: string
+ *                       description: Número da nota fiscal
+ *                     serie:
+ *                       type: string
+ *                       description: Série da nota fiscal
+ *                     data_emissao:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de emissão
+ *                     data_vencimento:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de vencimento
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da nota fiscal
+ *                     tipo:
+ *                       type: string
+ *                       enum: [entrada, saida]
+ *                       description: Tipo da nota fiscal
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, paga, vencida, cancelada]
+ *                       description: Status da nota fiscal
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     fornecedor_id:
+ *                       type: integer
+ *                       description: ID do fornecedor
+ *                     venda_id:
+ *                       type: integer
+ *                       description: ID da venda
+ *                     compra_id:
+ *                       type: integer
+ *                       description: ID da compra
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const { error: validationError, value } = notaFiscalSchema.validate(req.body);
@@ -85,7 +308,110 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/notas-fiscais/:id - Obter nota fiscal específica
+/**
+ * @swagger
+ * /api/notas-fiscais/{id}:
+ *   get:
+ *     summary: Busca uma nota fiscal por ID
+ *     tags: [Notas Fiscais]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     responses:
+ *       200:
+ *         description: Dados da nota fiscal
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da nota fiscal
+ *                     numero_nf:
+ *                       type: string
+ *                       description: Número da nota fiscal
+ *                     serie:
+ *                       type: string
+ *                       description: Série da nota fiscal
+ *                     data_emissao:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de emissão
+ *                     data_vencimento:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de vencimento
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da nota fiscal
+ *                     tipo:
+ *                       type: string
+ *                       enum: [entrada, saida]
+ *                       description: Tipo da nota fiscal
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, paga, vencida, cancelada]
+ *                       description: Status da nota fiscal
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     fornecedor_id:
+ *                       type: integer
+ *                       description: ID do fornecedor
+ *                     venda_id:
+ *                       type: integer
+ *                       description: ID da venda
+ *                     compra_id:
+ *                       type: integer
+ *                       description: ID da compra
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     clientes:
+ *                       type: object
+ *                       properties:
+ *                         nome:
+ *                           type: string
+ *                         cnpj:
+ *                           type: string
+ *                     fornecedores:
+ *                       type: object
+ *                       properties:
+ *                         nome:
+ *                           type: string
+ *                         cnpj:
+ *                           type: string
+ *                     vendas:
+ *                       type: object
+ *                       properties:
+ *                         numero_venda:
+ *                           type: string
+ *                     compras:
+ *                       type: object
+ *                       properties:
+ *                         numero_pedido:
+ *                           type: string
+ *       404:
+ *         description: Nota fiscal não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -125,7 +451,135 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/notas-fiscais/:id - Atualizar nota fiscal
+/**
+ * @swagger
+ * /api/notas-fiscais/{id}:
+ *   put:
+ *     summary: Atualiza uma nota fiscal existente
+ *     tags: [Notas Fiscais]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               numero_nf:
+ *                 type: string
+ *                 description: Número da nota fiscal
+ *               serie:
+ *                 type: string
+ *                 description: Série da nota fiscal
+ *               data_emissao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de emissão
+ *               data_vencimento:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de vencimento
+ *               valor_total:
+ *                 type: number
+ *                 description: Valor total da nota fiscal
+ *               tipo:
+ *                 type: string
+ *                 enum: [entrada, saida]
+ *                 description: Tipo da nota fiscal
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, paga, vencida, cancelada]
+ *                 description: Status da nota fiscal
+ *               cliente_id:
+ *                 type: integer
+ *                 description: ID do cliente
+ *               fornecedor_id:
+ *                 type: integer
+ *                 description: ID do fornecedor
+ *               venda_id:
+ *                 type: integer
+ *                 description: ID da venda
+ *               compra_id:
+ *                 type: integer
+ *                 description: ID da compra
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações
+ *     responses:
+ *       200:
+ *         description: Nota fiscal atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da nota fiscal
+ *                     numero_nf:
+ *                       type: string
+ *                       description: Número da nota fiscal
+ *                     serie:
+ *                       type: string
+ *                       description: Série da nota fiscal
+ *                     data_emissao:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de emissão
+ *                     data_vencimento:
+ *                       type: string
+ *                       format: date
+ *                       description: Data de vencimento
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da nota fiscal
+ *                     tipo:
+ *                       type: string
+ *                       enum: [entrada, saida]
+ *                       description: Tipo da nota fiscal
+ *                     status:
+ *                       type: string
+ *                       enum: [pendente, paga, vencida, cancelada]
+ *                       description: Status da nota fiscal
+ *                     cliente_id:
+ *                       type: integer
+ *                       description: ID do cliente
+ *                     fornecedor_id:
+ *                       type: integer
+ *                       description: ID do fornecedor
+ *                     venda_id:
+ *                       type: integer
+ *                       description: ID da venda
+ *                     compra_id:
+ *                       type: integer
+ *                       description: ID da compra
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Nota fiscal não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -170,7 +624,39 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/notas-fiscais/:id - Excluir nota fiscal
+/**
+ * @swagger
+ * /api/notas-fiscais/{id}:
+ *   delete:
+ *     summary: Deleta uma nota fiscal
+ *     tags: [Notas Fiscais]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     responses:
+ *       200:
+ *         description: Nota fiscal deletada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       404:
+ *         description: Nota fiscal não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -196,7 +682,62 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/notas-fiscais/:id/upload - Upload de arquivo PDF/XML
+/**
+ * @swagger
+ * /api/notas-fiscais/{id}/upload:
+ *   post:
+ *     summary: Faz upload de arquivo PDF/XML para uma nota fiscal
+ *     tags: [Notas Fiscais]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da nota fiscal
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nome_arquivo
+ *               - tamanho_arquivo
+ *               - tipo_arquivo
+ *             properties:
+ *               nome_arquivo:
+ *                 type: string
+ *                 description: Nome do arquivo
+ *               tamanho_arquivo:
+ *                 type: number
+ *                 description: Tamanho do arquivo em bytes
+ *               tipo_arquivo:
+ *                 type: string
+ *                 enum: [pdf, xml]
+ *                 description: Tipo do arquivo
+ *     responses:
+ *       200:
+ *         description: Arquivo associado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   description: Mensagem de sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Nota fiscal não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/upload', async (req, res) => {
   try {
     const { id } = req.params;
@@ -228,6 +769,21 @@ router.post('/:id/upload', async (req, res) => {
         message: 'Nota fiscal não encontrada'
       });
     }
+
+    // Aqui você implementaria o upload real do arquivo
+    // Por exemplo, usando Supabase Storage:
+    /*
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('notas-fiscais')
+      .upload(`${id}/${nome_arquivo}`, arquivo);
+
+    if (uploadError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao fazer upload do arquivo'
+      });
+    }
+    */
 
     res.json({
       success: true,

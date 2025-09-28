@@ -7,7 +7,130 @@ const router = express.Router();
 // Middleware de autenticação para todas as rotas
 router.use(authenticateToken);
 
-// GET /api/medicoes - Listar medições com filtros
+/**
+ * @swagger
+ * /api/medicoes:
+ *   get:
+ *     summary: Lista medições com filtros opcionais
+ *     tags: [Medições]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Limite de registros por página
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pendente, aprovada, finalizada, cancelada]
+ *         description: Status da medição
+ *       - in: query
+ *         name: locacao_id
+ *         schema:
+ *           type: integer
+ *         description: ID da locação
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *         description: Período da medição
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Busca por número ou período
+ *     responses:
+ *       200:
+ *         description: Lista de medições
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da medição
+ *                       numero:
+ *                         type: string
+ *                         description: Número da medição
+ *                       locacao_id:
+ *                         type: integer
+ *                         description: ID da locação
+ *                       periodo:
+ *                         type: string
+ *                         description: Período da medição
+ *                       data_medicao:
+ *                         type: string
+ *                         format: date
+ *                         description: Data da medição
+ *                       valor_base:
+ *                         type: number
+ *                         description: Valor base da medição
+ *                       valor_aditivos:
+ *                         type: number
+ *                         description: Valor dos aditivos
+ *                       valor_total:
+ *                         type: number
+ *                         description: Valor total da medição
+ *                       status:
+ *                         type: string
+ *                         description: Status da medição
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       locacoes:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           numero:
+ *                             type: string
+ *                           cliente_id:
+ *                             type: integer
+ *                           equipamento_id:
+ *                             type: integer
+ *                           tipo_equipamento:
+ *                             type: string
+ *                           clientes:
+ *                             type: object
+ *                             properties:
+ *                               nome:
+ *                                 type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -89,7 +212,97 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/medicoes/:id - Obter medição específica
+/**
+ * @swagger
+ * /api/medicoes/{id}:
+ *   get:
+ *     summary: Obtém uma medição específica por ID
+ *     tags: [Medições]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da medição
+ *     responses:
+ *       200:
+ *         description: Dados da medição
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da medição
+ *                     numero:
+ *                       type: string
+ *                       description: Número da medição
+ *                     locacao_id:
+ *                       type: integer
+ *                       description: ID da locação
+ *                     periodo:
+ *                       type: string
+ *                       description: Período da medição
+ *                     data_medicao:
+ *                       type: string
+ *                       format: date
+ *                       description: Data da medição
+ *                     valor_base:
+ *                       type: number
+ *                       description: Valor base da medição
+ *                     valor_aditivos:
+ *                       type: number
+ *                       description: Valor dos aditivos
+ *                     valor_total:
+ *                       type: number
+ *                       description: Valor total da medição
+ *                     status:
+ *                       type: string
+ *                       description: Status da medição
+ *                     observacoes:
+ *                       type: string
+ *                       description: Observações
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     locacoes:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         numero:
+ *                           type: string
+ *                         cliente_id:
+ *                           type: integer
+ *                         equipamento_id:
+ *                           type: integer
+ *                         tipo_equipamento:
+ *                           type: string
+ *                         clientes:
+ *                           type: object
+ *                           properties:
+ *                             nome:
+ *                               type: string
+ *                     aditivos:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         description: Aditivos associados à medição
+ *       404:
+ *         description: Medição não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -141,7 +354,75 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/medicoes - Criar nova medição
+/**
+ * @swagger
+ * /api/medicoes:
+ *   post:
+ *     summary: Cria uma nova medição
+ *     tags: [Medições]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - numero
+ *               - locacao_id
+ *               - periodo
+ *               - data_medicao
+ *               - valor_base
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da medição
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação
+ *               periodo:
+ *                 type: string
+ *                 description: Período da medição
+ *               data_medicao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data da medição (YYYY-MM-DD)
+ *               valor_base:
+ *                 type: number
+ *                 description: Valor base da medição
+ *               valor_aditivos:
+ *                 type: number
+ *                 default: 0
+ *                 description: Valor dos aditivos
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, aprovada, finalizada, cancelada]
+ *                 default: pendente
+ *                 description: Status da medição
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações da medição
+ *     responses:
+ *       201:
+ *         description: Medição criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados da medição criada
+ *       400:
+ *         description: Dados inválidos ou medição já existe
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const {
@@ -251,7 +532,76 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/medicoes/:id - Atualizar medição
+/**
+ * @swagger
+ * /api/medicoes/{id}:
+ *   put:
+ *     summary: Atualiza uma medição existente
+ *     tags: [Medições]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da medição
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               numero:
+ *                 type: string
+ *                 description: Número da medição
+ *               locacao_id:
+ *                 type: integer
+ *                 description: ID da locação
+ *               periodo:
+ *                 type: string
+ *                 description: Período da medição
+ *               data_medicao:
+ *                 type: string
+ *                 format: date
+ *                 description: Data da medição (YYYY-MM-DD)
+ *               valor_base:
+ *                 type: number
+ *                 description: Valor base da medição
+ *               valor_aditivos:
+ *                 type: number
+ *                 description: Valor dos aditivos
+ *               status:
+ *                 type: string
+ *                 enum: [pendente, aprovada, finalizada, cancelada]
+ *                 description: Status da medição
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações da medição
+ *     responses:
+ *       200:
+ *         description: Medição atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados atualizados da medição
+ *       400:
+ *         description: Dados inválidos ou medição finalizada
+ *       404:
+ *         description: Medição não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -340,7 +690,40 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/medicoes/:id - Excluir medição
+/**
+ * @swagger
+ * /api/medicoes/{id}:
+ *   delete:
+ *     summary: Exclui uma medição
+ *     tags: [Medições]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da medição
+ *     responses:
+ *       200:
+ *         description: Medição excluída com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Não é possível excluir medição finalizada
+ *       404:
+ *         description: Medição não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -397,7 +780,43 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/medicoes/:id/finalizar - Finalizar medição
+/**
+ * @swagger
+ * /api/medicoes/{id}/finalizar:
+ *   post:
+ *     summary: Finaliza uma medição
+ *     tags: [Medições]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da medição
+ *     responses:
+ *       200:
+ *         description: Medição finalizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados da medição finalizada
+ *       400:
+ *         description: Medição já está finalizada
+ *       404:
+ *         description: Medição não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/:id/finalizar', async (req, res) => {
   try {
     const { id } = req.params;

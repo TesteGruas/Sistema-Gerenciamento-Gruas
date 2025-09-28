@@ -14,7 +14,63 @@ const contaBancariaSchema = Joi.object({
   status: Joi.string().valid('ativa', 'inativa', 'bloqueada').default('ativa')
 });
 
-// GET /api/contas-bancarias - Listar contas
+/**
+ * @swagger
+ * /api/contas-bancarias:
+ *   get:
+ *     summary: Lista todas as contas bancárias
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de contas bancárias
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID da conta bancária
+ *                       banco:
+ *                         type: string
+ *                         description: Nome do banco
+ *                       agencia:
+ *                         type: string
+ *                         description: Número da agência
+ *                       conta:
+ *                         type: string
+ *                         description: Número da conta
+ *                       tipo_conta:
+ *                         type: string
+ *                         enum: [corrente, poupanca, investimento]
+ *                         description: Tipo da conta
+ *                       saldo_atual:
+ *                         type: number
+ *                         description: Saldo atual da conta
+ *                       status:
+ *                         type: string
+ *                         enum: [ativa, inativa, bloqueada]
+ *                         description: Status da conta
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de criação
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Data de atualização
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -38,7 +94,75 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/contas-bancarias - Criar conta
+/**
+ * @swagger
+ * /api/contas-bancarias:
+ *   post:
+ *     summary: Cria uma nova conta bancária
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - banco
+ *               - agencia
+ *               - conta
+ *               - tipo_conta
+ *             properties:
+ *               banco:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 100
+ *                 description: Nome do banco
+ *               agencia:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 10
+ *                 description: Número da agência
+ *               conta:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 20
+ *                 description: Número da conta
+ *               tipo_conta:
+ *                 type: string
+ *                 enum: [corrente, poupanca, investimento]
+ *                 description: Tipo da conta
+ *               saldo_atual:
+ *                 type: number
+ *                 minimum: 0
+ *                 default: 0
+ *                 description: Saldo atual da conta
+ *               status:
+ *                 type: string
+ *                 enum: [ativa, inativa, bloqueada]
+ *                 default: ativa
+ *                 description: Status da conta
+ *     responses:
+ *       201:
+ *         description: Conta bancária criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Dados da conta bancária criada
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Dados inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.post('/', async (req, res) => {
   try {
     const { error: validationError, value } = contaBancariaSchema.validate(req.body);
@@ -73,7 +197,70 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/contas-bancarias/:id - Obter conta específica
+/**
+ * @swagger
+ * /api/contas-bancarias/{id}:
+ *   get:
+ *     summary: Obtém uma conta bancária específica
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da conta bancária
+ *     responses:
+ *       200:
+ *         description: Dados da conta bancária
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       description: ID da conta bancária
+ *                     banco:
+ *                       type: string
+ *                       description: Nome do banco
+ *                     agencia:
+ *                       type: string
+ *                       description: Número da agência
+ *                     conta:
+ *                       type: string
+ *                       description: Número da conta
+ *                     tipo_conta:
+ *                       type: string
+ *                       enum: [corrente, poupanca, investimento]
+ *                       description: Tipo da conta
+ *                     saldo_atual:
+ *                       type: number
+ *                       description: Saldo atual da conta
+ *                     status:
+ *                       type: string
+ *                       enum: [ativa, inativa, bloqueada]
+ *                       description: Status da conta
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de criação
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Data de atualização
+ *       404:
+ *         description: Conta bancária não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -107,7 +294,82 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/contas-bancarias/:id - Atualizar conta
+/**
+ * @swagger
+ * /api/contas-bancarias/{id}:
+ *   put:
+ *     summary: Atualiza uma conta bancária existente
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da conta bancária
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - banco
+ *               - agencia
+ *               - conta
+ *               - tipo_conta
+ *             properties:
+ *               banco:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 100
+ *                 description: Nome do banco
+ *               agencia:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 10
+ *                 description: Número da agência
+ *               conta:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 20
+ *                 description: Número da conta
+ *               tipo_conta:
+ *                 type: string
+ *                 enum: [corrente, poupanca, investimento]
+ *                 description: Tipo da conta
+ *               saldo_atual:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Saldo atual da conta
+ *               status:
+ *                 type: string
+ *                 enum: [ativa, inativa, bloqueada]
+ *                 description: Status da conta
+ *     responses:
+ *       200:
+ *         description: Conta bancária atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Dados da conta bancária atualizada
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Conta bancária não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -152,7 +414,36 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/contas-bancarias/:id - Excluir conta
+/**
+ * @swagger
+ * /api/contas-bancarias/{id}:
+ *   delete:
+ *     summary: Exclui uma conta bancária
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da conta bancária
+ *     responses:
+ *       200:
+ *         description: Conta bancária excluída com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -178,7 +469,56 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/contas-bancarias/:id/saldo - Atualizar saldo manualmente
+/**
+ * @swagger
+ * /api/contas-bancarias/{id}/saldo:
+ *   put:
+ *     summary: Atualiza o saldo de uma conta bancária manualmente
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da conta bancária
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - saldo_atual
+ *             properties:
+ *               saldo_atual:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Novo saldo da conta
+ *     responses:
+ *       200:
+ *         description: Saldo atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Dados da conta bancária com saldo atualizado
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Saldo deve ser um número positivo
+ *       404:
+ *         description: Conta bancária não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
 router.put('/:id/saldo', async (req, res) => {
   try {
     const { id } = req.params;

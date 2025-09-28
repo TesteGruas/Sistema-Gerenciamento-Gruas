@@ -104,6 +104,54 @@ const arquivoSchema = Joi.object({
  *     responses:
  *       200:
  *         description: Lista de arquivos da obra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       obra_id:
+ *                         type: integer
+ *                       grua_id:
+ *                         type: string
+ *                       nome_original:
+ *                         type: string
+ *                       nome_arquivo:
+ *                         type: string
+ *                       caminho:
+ *                         type: string
+ *                       tamanho:
+ *                         type: integer
+ *                       tipo_mime:
+ *                         type: string
+ *                       tipo_arquivo:
+ *                         type: string
+ *                       descricao:
+ *                         type: string
+ *                       categoria:
+ *                         type: string
+ *                       uploaded_by:
+ *                         type: string
+ *                       is_public:
+ *                         type: boolean
+ *                       download_count:
+ *                         type: integer
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/:obraId/arquivos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -178,20 +226,57 @@ router.get('/:obraId/arquivos', authenticateToken, requirePermission('visualizar
  *               arquivo:
  *                 type: string
  *                 format: binary
+ *                 description: Arquivo para upload (máximo 100MB)
  *               descricao:
  *                 type: string
+ *                 description: Descrição do arquivo
  *               categoria:
  *                 type: string
  *                 enum: [geral, manual, certificado, licenca, contrato, relatorio, foto, outro]
+ *                 description: Categoria do arquivo
  *               grua_id:
  *                 type: string
+ *                 description: ID da grua relacionada (opcional)
  *               is_public:
  *                 type: boolean
+ *                 description: Se o arquivo é público
  *     responses:
  *       201:
  *         description: Arquivo enviado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     nome_original:
+ *                       type: string
+ *                     tamanho:
+ *                       type: integer
+ *                     tipo_mime:
+ *                       type: string
+ *                     categoria:
+ *                       type: string
+ *                     obra_id:
+ *                       type: integer
+ *                     grua_id:
+ *                       type: string
+ *                     url:
+ *                       type: string
  *       400:
  *         description: Dados inválidos
+ *       404:
+ *         description: Obra ou grua não encontrada
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.post('/:obraId/arquivos', authenticateToken, requirePermission('editar_obras'), upload.single('arquivo'), async (req, res) => {
   try {
@@ -359,8 +444,54 @@ router.post('/:obraId/arquivos', authenticateToken, requirePermission('editar_ob
  *     responses:
  *       200:
  *         description: Dados do arquivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     obra_id:
+ *                       type: integer
+ *                     grua_id:
+ *                       type: string
+ *                     nome_original:
+ *                       type: string
+ *                     nome_arquivo:
+ *                       type: string
+ *                     caminho:
+ *                       type: string
+ *                     tamanho:
+ *                       type: integer
+ *                     tipo_mime:
+ *                       type: string
+ *                     tipo_arquivo:
+ *                       type: string
+ *                     descricao:
+ *                       type: string
+ *                     categoria:
+ *                       type: string
+ *                     uploaded_by:
+ *                       type: string
+ *                     is_public:
+ *                       type: boolean
+ *                     download_count:
+ *                       type: integer
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *                     updated_at:
+ *                       type: string
+ *                       format: date-time
  *       404:
  *         description: Arquivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -417,9 +548,27 @@ router.get('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission(
  *         description: ID do arquivo
  *     responses:
  *       200:
- *         description: Arquivo para download
+ *         description: URL de download do arquivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     download_url:
+ *                       type: string
+ *                       description: URL assinada para download (válida por 1 hora)
+ *                     nome_arquivo:
+ *                       type: string
+ *                       description: Nome original do arquivo
  *       404:
  *         description: Arquivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/:obraId/arquivos/:arquivoId/download', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
@@ -517,16 +666,35 @@ router.get('/:obraId/arquivos/:arquivoId/download', authenticateToken, requirePe
  *             properties:
  *               descricao:
  *                 type: string
+ *                 description: Nova descrição do arquivo
  *               categoria:
  *                 type: string
  *                 enum: [geral, manual, certificado, licenca, contrato, relatorio, foto, outro]
+ *                 description: Nova categoria do arquivo
  *               is_public:
  *                 type: boolean
+ *                 description: Se o arquivo deve ser público
  *     responses:
  *       200:
  *         description: Arquivo atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   description: Dados atualizados do arquivo
+ *       400:
+ *         description: Dados inválidos
  *       404:
  *         description: Arquivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.put('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
@@ -627,8 +795,19 @@ router.put('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission(
  *     responses:
  *       200:
  *         description: Arquivo excluído com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
  *       404:
  *         description: Arquivo não encontrado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.delete('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
@@ -717,14 +896,47 @@ router.delete('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermissi
  *                 items:
  *                   type: string
  *                   format: binary
+ *                 description: Array de arquivos para upload (máximo 10 arquivos, 100MB cada)
  *               categoria:
  *                 type: string
  *                 enum: [geral, manual, certificado, licenca, contrato, relatorio, foto, outro]
+ *                 description: Categoria padrão para todos os arquivos
  *     responses:
  *       201:
  *         description: Arquivos enviados com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     sucessos:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         description: Arquivos enviados com sucesso
+ *                     erros:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           arquivo:
+ *                             type: string
+ *                           erro:
+ *                             type: string
+ *                         description: Arquivos que falharam no upload
  *       400:
  *         description: Dados inválidos
+ *       404:
+ *         description: Obra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.post('/:obraId/arquivos/upload-multiple', authenticateToken, requirePermission('editar_obras'), upload.array('arquivos', 10), async (req, res) => {
   try {
