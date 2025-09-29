@@ -23,7 +23,11 @@ import {
   Wrench,
   Building2,
   Calendar,
-  Trash2
+  Trash2,
+  Package,
+  Settings,
+  Users,
+  ArrowRight
 } from "lucide-react"
 import { mockObras, mockUsers } from "@/lib/mock-data"
 import { gruasApi, converterGruaBackendParaFrontend, converterGruaFrontendParaBackend, GruaBackend } from "@/lib/api-gruas"
@@ -468,32 +472,57 @@ export default function GruasPage() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.location.href = `/dashboard/obras/${grua.currentObraId}?tab=livro`}
-                      className="flex-1"
-                      disabled={!grua.currentObraId}
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Ver na Obra
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditGrua(grua)}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteGrua(grua)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                  <div className="space-y-2">
+                    {/* Ações Principais */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.location.href = `/dashboard/obras/${grua.currentObraId}?tab=livro`}
+                        className="flex-1"
+                        disabled={!grua.currentObraId}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Ver na Obra
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditGrua(grua)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteGrua(grua)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Novas Funcionalidades */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/componentes`}
+                        className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      >
+                        <Package className="w-4 h-4 mr-1" />
+                        Componentes
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/configuracoes`}
+                        className="flex-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      >
+                        <Settings className="w-4 h-4 mr-1" />
+                        Configurações
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>

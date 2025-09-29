@@ -67,11 +67,7 @@ const financeiroModules = [
     description: 'Gestão de vendas, contratos e orçamentos',
     submodules: [
       { name: 'Orçamentos', href: '/dashboard/financeiro/orcamentos' },
-      { name: 'Ordem de Serviço', href: '/dashboard/financeiro/vendas/ordem-servico' },
-      { name: 'Contratos', href: '/dashboard/financeiro/vendas/contratos' },
-      { name: 'Vendas e Orçamentos', href: '/dashboard/financeiro/vendas/vendas-orcamentos' },
-      { name: 'NF Equipamentos', href: '/dashboard/financeiro/vendas/nf-equipamentos' },
-      { name: 'NF Serviços', href: '/dashboard/financeiro/vendas/nf-servicos' }
+      { name: 'Vendas e Orçamentos', href: '/dashboard/financeiro/vendas' }
     ]
   },
   {
@@ -81,11 +77,7 @@ const financeiroModules = [
     color: 'bg-blue-500',
     description: 'Gestão de compras e fornecedores',
     submodules: [
-      { name: 'Pedidos de Compra', href: '/dashboard/financeiro/compras/pedidos' },
-      { name: 'Fornecedores', href: '/dashboard/financeiro/compras/fornecedores' },
-      { name: 'Produtos e Serviços', href: '/dashboard/financeiro/compras/produtos' },
-      { name: 'Contas a Pagar', href: '/dashboard/financeiro/compras/contas-pagar' },
-      { name: 'Notas Fiscais', href: '/dashboard/financeiro/compras/notas-fiscais' }
+      { name: 'Gestão de Compras', href: '/dashboard/financeiro/compras' }
     ]
   },
   {
@@ -95,14 +87,7 @@ const financeiroModules = [
     color: 'bg-purple-500',
     description: 'Gestão de locações de gruas e plataformas',
     submodules: [
-      { name: 'Gruas Locadas', href: '/dashboard/financeiro/locacoes/gruas' },
-      { name: 'Plataformas Locadas', href: '/dashboard/financeiro/locacoes/plataformas' },
-      { name: 'Medições Finalizadas', href: '/dashboard/financeiro/locacoes/medicoes' },
-      { name: 'Orçamentos', href: '/dashboard/financeiro/locacoes/orcamentos' },
-      { name: 'NFe Entrada/Saída', href: '/dashboard/financeiro/locacoes/nfe' },
-      { name: 'Notas de Débito', href: '/dashboard/financeiro/locacoes/notas-debito' },
-      { name: 'NF Serviços', href: '/dashboard/financeiro/locacoes/nf-servicos' },
-      { name: 'Relatório Detalhado', href: '/dashboard/financeiro/locacoes/relatorio' }
+      { name: 'Gestão de Locações', href: '/dashboard/financeiro/locacoes' }
     ]
   },
   {
@@ -112,8 +97,7 @@ const financeiroModules = [
     color: 'bg-orange-500',
     description: 'Gestão de impostos e tributos',
     submodules: [
-      { name: 'Pagamentos de Impostos', href: '/dashboard/financeiro/impostos/pagamentos' },
-      { name: 'Relatório de Impostos', href: '/dashboard/financeiro/impostos/relatorio' }
+      { name: 'Gestão de Impostos', href: '/dashboard/financeiro/impostos' }
     ]
   },
   {
@@ -123,10 +107,7 @@ const financeiroModules = [
     color: 'bg-indigo-500',
     description: 'Gestão logística e transporte',
     submodules: [
-      { name: 'Manifestos', href: '/dashboard/financeiro/logistica/manifestos' },
-      { name: 'CT-e e MDF-e', href: '/dashboard/financeiro/logistica/cte-mdfe' },
-      { name: 'Motoristas', href: '/dashboard/financeiro/logistica/motoristas' },
-      { name: 'Histórico de Viagens', href: '/dashboard/financeiro/logistica/viagens' }
+      { name: 'Gestão Logística', href: '/dashboard/financeiro/logistica' }
     ]
   },
   {
@@ -136,10 +117,7 @@ const financeiroModules = [
     color: 'bg-teal-500',
     description: 'Cadastros gerais do sistema',
     submodules: [
-      { name: 'Clientes', href: '/dashboard/financeiro/cadastro/clientes' },
-      { name: 'Fornecedores', href: '/dashboard/financeiro/cadastro/fornecedores' },
-      { name: 'Produtos e Equipamentos', href: '/dashboard/financeiro/cadastro/produtos' },
-      { name: 'Funcionários', href: '/dashboard/financeiro/cadastro/funcionarios' }
+      { name: 'Cadastros Gerais', href: '/dashboard/financeiro/cadastro' }
     ]
   },
   {
@@ -149,12 +127,7 @@ const financeiroModules = [
     color: 'bg-red-500',
     description: 'Relatórios e análises financeiras',
     submodules: [
-      { name: 'Relatório Financeiro', href: '/dashboard/financeiro/relatorios/financeiro' },
-      { name: 'Relatório de Vendas', href: '/dashboard/financeiro/relatorios/vendas' },
-      { name: 'Relatório de Contratos', href: '/dashboard/financeiro/relatorios/contratos' },
-      { name: 'Relatório de Faturamento', href: '/dashboard/financeiro/relatorios/faturamento' },
-      { name: 'Relatório de Locações', href: '/dashboard/financeiro/relatorios/locacoes' },
-      { name: 'Relatório de Estoque', href: '/dashboard/financeiro/relatorios/estoque' }
+      { name: 'Relatórios Gerais', href: '/dashboard/financeiro/relatorios' }
     ]
   }
 ]
@@ -243,7 +216,7 @@ export default function FinanceiroPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -716,7 +689,8 @@ function TransferForm({ onClose }: { onClose: () => void }) {
         descricao: formData.descricao,
         banco_origem: formData.bancoOrigem,
         banco_destino: formData.bancoDestino,
-        documento_comprobatório: formData.documento?.name
+        documento_comprobatório: formData.documento?.name,
+        status: 'pendente'
       })
       onClose()
       // Recarregar dados financeiros

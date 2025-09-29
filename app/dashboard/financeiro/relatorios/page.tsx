@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -125,6 +125,54 @@ export default function RelatoriosPage() {
   const [selectedCliente, setSelectedCliente] = useState('all')
   const [selectedCategoria, setSelectedCategoria] = useState('all')
   const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
+  
+  // Estados para filtros avançados
+  const [filtrosAvancados, setFiltrosAvancados] = useState({
+    obra: "all",
+    grua: "all",
+    status: "all",
+    periodoInicio: "",
+    periodoFim: "",
+    tipoRelatorio: "all"
+  })
+  
+  const [obras, setObras] = useState<any[]>([])
+  const [gruas, setGruas] = useState<any[]>([])
+  const [colunasSelecionadas, setColunasSelecionadas] = useState<string[]>([])
+  const [formatoExportacao, setFormatoExportacao] = useState("pdf")
+
+  // Carregar dados
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  const carregarDados = async () => {
+    // Simular carregamento de obras e gruas
+    const obrasMock = [
+      { id: "1", nome: "Obra Jardim das Flores", cliente: "Construtora ABC" },
+      { id: "2", nome: "Obra Comercial Centro", cliente: "Empresa XYZ" }
+    ]
+    
+    const gruasMock = [
+      { id: "1", nome: "Grua 001", modelo: "Liebherr 200HC" },
+      { id: "2", nome: "Grua 002", modelo: "Potain MDT 178" }
+    ]
+    
+    setObras(obrasMock)
+    setGruas(gruasMock)
+  }
+
+  const gerarRelatorio = () => {
+    // Simular geração de relatório
+    console.log('Gerando relatório com filtros:', filtrosAvancados)
+    console.log('Colunas selecionadas:', colunasSelecionadas)
+    console.log('Formato:', formatoExportacao)
+  }
+
+  const exportarRelatorio = (formato: string) => {
+    // Simular exportação
+    console.log(`Exportando relatório em formato ${formato}`)
+  }
 
   const stats = [
     { 
@@ -184,7 +232,7 @@ export default function RelatoriosPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -219,6 +267,149 @@ export default function RelatoriosPage() {
           </Dialog>
         </div>
       </div>
+
+      {/* Filtros Avançados */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Filtros Avançados
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="obra">Obra</Label>
+              <Select 
+                value={filtrosAvancados.obra} 
+                onValueChange={(value) => setFiltrosAvancados({...filtrosAvancados, obra: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a obra" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as obras</SelectItem>
+                  {obras.map(obra => (
+                    <SelectItem key={obra.id} value={obra.id}>
+                      {obra.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="grua">Grua</Label>
+              <Select 
+                value={filtrosAvancados.grua} 
+                onValueChange={(value) => setFiltrosAvancados({...filtrosAvancados, grua: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a grua" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as gruas</SelectItem>
+                  {gruas.map(grua => (
+                    <SelectItem key={grua.id} value={grua.id}>
+                      {grua.nome} - {grua.modelo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select 
+                value={filtrosAvancados.status} 
+                onValueChange={(value) => setFiltrosAvancados({...filtrosAvancados, status: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="inativo">Inativo</SelectItem>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="periodoInicio">Período Início</Label>
+              <Input
+                id="periodoInicio"
+                type="date"
+                value={filtrosAvancados.periodoInicio}
+                onChange={(e) => setFiltrosAvancados({...filtrosAvancados, periodoInicio: e.target.value})}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="periodoFim">Período Fim</Label>
+              <Input
+                id="periodoFim"
+                type="date"
+                value={filtrosAvancados.periodoFim}
+                onChange={(e) => setFiltrosAvancados({...filtrosAvancados, periodoFim: e.target.value})}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="tipoRelatorio">Tipo de Relatório</Label>
+              <Select 
+                value={filtrosAvancados.tipoRelatorio} 
+                onValueChange={(value) => setFiltrosAvancados({...filtrosAvancados, tipoRelatorio: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="financeiro">Financeiro</SelectItem>
+                  <SelectItem value="operacional">Operacional</SelectItem>
+                  <SelectItem value="comercial">Comercial</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="flex justify-between items-center mt-4">
+            <div className="flex gap-2">
+              <Button onClick={gerarRelatorio}>
+                <FileBarChart className="w-4 h-4 mr-2" />
+                Gerar Relatório
+              </Button>
+              <Button variant="outline" onClick={() => setFiltrosAvancados({
+                obra: "all",
+                grua: "all", 
+                status: "all",
+                periodoInicio: "",
+                periodoFim: "",
+                tipoRelatorio: "all"
+              })}>
+                <Filter className="w-4 h-4 mr-2" />
+                Limpar Filtros
+              </Button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Label htmlFor="formato">Formato:</Label>
+              <Select value={formatoExportacao} onValueChange={setFormatoExportacao}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                  <SelectItem value="excel">Excel</SelectItem>
+                  <SelectItem value="csv">CSV</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

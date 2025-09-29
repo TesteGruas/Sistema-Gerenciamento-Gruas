@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,7 +29,10 @@ import {
   ConeIcon as Crane,
   X,
   Trash2,
-  Loader2
+  Loader2,
+  Package,
+  Settings,
+  ArrowRight
 } from "lucide-react"
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos } from "@/lib/mock-data"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
@@ -37,6 +41,7 @@ import GruaSearch from "@/components/grua-search"
 import FuncionarioSearch from "@/components/funcionario-search"
 
 export default function ObrasPage() {
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -81,6 +86,19 @@ export default function ObrasPage() {
   const [gruaSelecionada, setGruaSelecionada] = useState<any>(null)
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
   const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
+  
+  // Estados para custos mensais
+  const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
+  const [isCustosDialogOpen, setIsCustosDialogOpen] = useState(false)
+  const [custoForm, setCustoForm] = useState({
+    item: '',
+    descricao: '',
+    unidade: '',
+    quantidadeOrcamento: 0,
+    valorUnitario: 0,
+    totalOrcamento: 0,
+    mes: new Date().toISOString().slice(0, 7)
+  })
 
   // Carregar obras do backend
   const carregarObras = async () => {
@@ -103,6 +121,63 @@ export default function ObrasPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Funções para custos mensais
+  const adicionarCustoMensal = () => {
+    const novoCusto: CustoMensal = {
+      id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      obraId: editingObra?.id || '',
+      item: custoForm.item,
+      descricao: custoForm.descricao,
+      unidade: custoForm.unidade,
+      quantidadeOrcamento: custoForm.quantidadeOrcamento,
+      valorUnitario: custoForm.valorUnitario,
+      totalOrcamento: custoForm.quantidadeOrcamento * custoForm.valorUnitario,
+      mes: custoForm.mes,
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: 0,
+      valorAcumulado: 0,
+      quantidadeSaldo: custoForm.quantidadeOrcamento,
+      valorSaldo: custoForm.quantidadeOrcamento * custoForm.valorUnitario,
+      tipo: 'contrato',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    
+    setCustosMensais([...custosMensais, novoCusto])
+    setCustoForm({
+      item: '',
+      descricao: '',
+      unidade: '',
+      quantidadeOrcamento: 0,
+      valorUnitario: 0,
+      totalOrcamento: 0,
+      mes: new Date().toISOString().slice(0, 7)
+    })
+  }
+
+  const removerCustoMensal = (id: string) => {
+    setCustosMensais(custosMensais.filter(custo => custo.id !== id))
+  }
+
+  const duplicarCustosParaMes = (mes: string) => {
+    const custosDuplicados = custosMensais.map(custo => ({
+      ...custo,
+      id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      mes: mes,
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: custo.quantidadeAcumulada,
+      valorAcumulado: custo.valorAcumulado,
+      quantidadeSaldo: custo.quantidadeOrcamento,
+      valorSaldo: custo.totalOrcamento,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }))
+    
+    setCustosMensais([...custosMensais, ...custosDuplicados])
   }
 
   // Função para lidar com seleção de cliente
@@ -643,7 +718,7 @@ export default function ObrasPage() {
         </div>
         <Button 
           className="flex items-center gap-2"
-          onClick={() => setIsCreateDialogOpen(true)}
+          onClick={() => router.push('/dashboard/obras/nova')}
         >
           <Plus className="w-4 h-4" />
           Nova Obra
@@ -777,80 +852,48 @@ export default function ObrasPage() {
                     </div>
                   )}
                   
-                  {/* Funcionários Vinculados */}
-                  {obraComRelacionamentos.funcionariosVinculados && obraComRelacionamentos.funcionariosVinculados.length > 0 && (
-                    <div className="border-t pt-3">
-                      <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                        <User className="w-4 h-4 text-green-600" />
-                        Funcionários ({obraComRelacionamentos.funcionariosVinculados.length})
-                      </h4>
-                      <div className="space-y-2">
-                        {obraComRelacionamentos.funcionariosVinculados.slice(0, 2).map((funcionario: any) => {
-                          // Extrair nome do funcionário das observações
-                          const nomeFuncionario = funcionario.observacoes?.includes('Funcionário') ? 
-                            funcionario.observacoes.split('Funcionário ')[1]?.split(' (')[0] || 'Funcionário' : 
-                            'Funcionário'
-                          
-                          // Extrair cargo do funcionário das observações
-                          const cargoFuncionario = funcionario.observacoes?.includes('(') ? 
-                            funcionario.observacoes.split('(')[1]?.split(')')[0] || 'Funcionário' : 
-                            'Funcionário'
-                          
-                          // Formatar data de início
-                          const dataInicio = funcionario.dataInicio
-                          const dataFormatada = dataInicio ? new Date(dataInicio).toLocaleDateString('pt-BR') : 'Data não informada'
-                          
-                          return (
-                            <div key={funcionario.id} className="text-xs bg-green-50 p-2 rounded border">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium">{nomeFuncionario}</span>
-                                <Badge variant="default" className="text-xs">
-                                  {funcionario.status}
-                                </Badge>
-                              </div>
-                              <div className="mt-1 text-gray-600">
-                                <div>Cargo: {cargoFuncionario}</div>
-                                <div>ID: {funcionario.funcionarioId}</div>
-                                <div>Grua: {funcionario.gruaId}</div>
-                                <div>Início: {dataFormatada}</div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                        {obraComRelacionamentos.funcionariosVinculados.length > 2 && (
-                          <div className="text-xs text-gray-500">
-                            +{obraComRelacionamentos.funcionariosVinculados.length - 2} mais...
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                   
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewDetails(obra)}
-                      className="flex-1"
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      Ver Detalhes
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditObra(obra)}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteObra(obra)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                  <div className="space-y-2">
+                    {/* Ações Principais */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(obra)}
+                        className="flex-1"
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Ver Detalhes
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditObra(obra)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteObra(obra)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Nova Funcionalidade - Múltiplas Gruas */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.location.href = `/dashboard/obras/${obra.id}?tab=gruas`}
+                        className="flex-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 font-medium bg-orange-50 shadow-sm"
+                      >
+                        <Crane className="w-4 h-4 mr-1" />
+                        Gerenciar Gruas
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -886,10 +929,11 @@ export default function ObrasPage() {
           </DialogHeader>
           <form onSubmit={handleCreateObra} className="space-y-6">
             <Tabs defaultValue="obra" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
                 <TabsTrigger value="grua">Grua</TabsTrigger>
                 <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
+                <TabsTrigger value="custos">Custos Mensais</TabsTrigger>
               </TabsList>
 
               {/* Aba: Dados da Obra */}
@@ -1129,6 +1173,160 @@ export default function ObrasPage() {
                 )}
               </TabsContent>
 
+              {/* Aba: Custos Mensais */}
+              <TabsContent value="custos" className="space-y-4">
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="w-5 h-5 text-purple-600" />
+                    <h3 className="font-medium text-purple-900">Custos Mensais da Obra</h3>
+                  </div>
+                  <p className="text-sm text-purple-700">
+                    Configure os custos mensais que serão aplicados a esta obra
+                  </p>
+                </div>
+
+                {/* Formulário para adicionar custo */}
+                <div className="border rounded-lg p-4 space-y-4">
+                  <h4 className="font-medium text-sm">Adicionar Novo Custo</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="custoItem">Item *</Label>
+                      <Input
+                        id="custoItem"
+                        value={custoForm.item}
+                        onChange={(e) => setCustoForm({...custoForm, item: e.target.value})}
+                        placeholder="Ex: 01.01"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="custoDescricao">Descrição *</Label>
+                      <Input
+                        id="custoDescricao"
+                        value={custoForm.descricao}
+                        onChange={(e) => setCustoForm({...custoForm, descricao: e.target.value})}
+                        placeholder="Ex: Locação de grua torre"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="custoUnidade">Unidade *</Label>
+                      <Select value={custoForm.unidade} onValueChange={(value) => setCustoForm({...custoForm, unidade: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mês">Mês</SelectItem>
+                          <SelectItem value="dia">Dia</SelectItem>
+                          <SelectItem value="hora">Hora</SelectItem>
+                          <SelectItem value="un">Unidade</SelectItem>
+                          <SelectItem value="kg">Quilograma</SelectItem>
+                          <SelectItem value="m">Metro</SelectItem>
+                          <SelectItem value="m²">Metro Quadrado</SelectItem>
+                          <SelectItem value="m³">Metro Cúbico</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="custoMes">Mês *</Label>
+                      <Input
+                        id="custoMes"
+                        type="month"
+                        value={custoForm.mes}
+                        onChange={(e) => setCustoForm({...custoForm, mes: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="custoQuantidade">Quantidade Orçada *</Label>
+                      <Input
+                        id="custoQuantidade"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={custoForm.quantidadeOrcamento}
+                        onChange={(e) => setCustoForm({...custoForm, quantidadeOrcamento: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="custoValorUnitario">Valor Unitário (R$) *</Label>
+                      <Input
+                        id="custoValorUnitario"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={custoForm.valorUnitario}
+                        onChange={(e) => setCustoForm({...custoForm, valorUnitario: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="button" onClick={adicionarCustoMensal} disabled={!custoForm.item || !custoForm.descricao || !custoForm.unidade || custoForm.quantidadeOrcamento <= 0 || custoForm.valorUnitario <= 0}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Custo
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Lista de custos mensais */}
+                {custosMensais.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-sm">Custos Mensais Configurados ({custosMensais.length})</h4>
+                    <div className="space-y-2">
+                      {custosMensais.map((custo) => (
+                        <div key={custo.id} className="flex gap-2 p-3 border rounded-lg bg-purple-50">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="w-4 h-4 text-purple-600" />
+                              <div>
+                                <p className="font-medium text-purple-900">{custo.item} - {custo.descricao}</p>
+                                <p className="text-sm text-purple-700">
+                                  {custo.quantidadeOrcamento} {custo.unidade} × R$ {custo.valorUnitario.toLocaleString('pt-BR')} = R$ {custo.totalOrcamento.toLocaleString('pt-BR')}
+                                </p>
+                                <p className="text-xs text-purple-600">Mês: {custo.mes}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removerCustoMensal(custo.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Botões de ação para custos */}
+                {custosMensais.length > 0 && (
+                  <div className="flex gap-2 pt-4 border-t">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => {
+                        const proximoMes = new Date(custoForm.mes + '-01')
+                        proximoMes.setMonth(proximoMes.getMonth() + 1)
+                        const proximoMesStr = proximoMes.toISOString().slice(0, 7)
+                        duplicarCustosParaMes(proximoMesStr)
+                      }}
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Duplicar para Próximo Mês
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setIsCustosDialogOpen(true)}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      Visualizar Todos
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+
             </Tabs>
 
             <div className="flex justify-end gap-2 pt-4 border-t">
@@ -1166,10 +1364,11 @@ export default function ObrasPage() {
           </DialogHeader>
           <form onSubmit={handleUpdateObra} className="space-y-6">
             <Tabs defaultValue="obra" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
                 <TabsTrigger value="grua">Grua</TabsTrigger>
                 <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
+                <TabsTrigger value="custos">Custos Mensais</TabsTrigger>
               </TabsList>
 
               {/* Aba: Dados da Obra */}
@@ -1408,6 +1607,160 @@ export default function ObrasPage() {
                   </div>
                 )}
               </TabsContent>
+
+              {/* Aba: Custos Mensais - Edição */}
+              <TabsContent value="custos" className="space-y-4">
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="w-5 h-5 text-purple-600" />
+                    <h3 className="font-medium text-purple-900">Custos Mensais da Obra</h3>
+                  </div>
+                  <p className="text-sm text-purple-700">
+                    Configure os custos mensais que serão aplicados a esta obra
+                  </p>
+                </div>
+
+                {/* Formulário para adicionar custo */}
+                <div className="border rounded-lg p-4 space-y-4">
+                  <h4 className="font-medium text-sm">Adicionar Novo Custo</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="edit-custoItem">Item *</Label>
+                      <Input
+                        id="edit-custoItem"
+                        value={custoForm.item}
+                        onChange={(e) => setCustoForm({...custoForm, item: e.target.value})}
+                        placeholder="Ex: 01.01"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-custoDescricao">Descrição *</Label>
+                      <Input
+                        id="edit-custoDescricao"
+                        value={custoForm.descricao}
+                        onChange={(e) => setCustoForm({...custoForm, descricao: e.target.value})}
+                        placeholder="Ex: Locação de grua torre"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-custoUnidade">Unidade *</Label>
+                      <Select value={custoForm.unidade} onValueChange={(value) => setCustoForm({...custoForm, unidade: value})}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a unidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mês">Mês</SelectItem>
+                          <SelectItem value="dia">Dia</SelectItem>
+                          <SelectItem value="hora">Hora</SelectItem>
+                          <SelectItem value="un">Unidade</SelectItem>
+                          <SelectItem value="kg">Quilograma</SelectItem>
+                          <SelectItem value="m">Metro</SelectItem>
+                          <SelectItem value="m²">Metro Quadrado</SelectItem>
+                          <SelectItem value="m³">Metro Cúbico</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-custoMes">Mês *</Label>
+                      <Input
+                        id="edit-custoMes"
+                        type="month"
+                        value={custoForm.mes}
+                        onChange={(e) => setCustoForm({...custoForm, mes: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-custoQuantidade">Quantidade Orçada *</Label>
+                      <Input
+                        id="edit-custoQuantidade"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={custoForm.quantidadeOrcamento}
+                        onChange={(e) => setCustoForm({...custoForm, quantidadeOrcamento: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-custoValorUnitario">Valor Unitário (R$) *</Label>
+                      <Input
+                        id="edit-custoValorUnitario"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={custoForm.valorUnitario}
+                        onChange={(e) => setCustoForm({...custoForm, valorUnitario: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="button" onClick={adicionarCustoMensal} disabled={!custoForm.item || !custoForm.descricao || !custoForm.unidade || custoForm.quantidadeOrcamento <= 0 || custoForm.valorUnitario <= 0}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Adicionar Custo
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Lista de custos mensais */}
+                {custosMensais.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-sm">Custos Mensais Configurados ({custosMensais.length})</h4>
+                    <div className="space-y-2">
+                      {custosMensais.map((custo) => (
+                        <div key={custo.id} className="flex gap-2 p-3 border rounded-lg bg-purple-50">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="w-4 h-4 text-purple-600" />
+                              <div>
+                                <p className="font-medium text-purple-900">{custo.item} - {custo.descricao}</p>
+                                <p className="text-sm text-purple-700">
+                                  {custo.quantidadeOrcamento} {custo.unidade} × R$ {custo.valorUnitario.toLocaleString('pt-BR')} = R$ {custo.totalOrcamento.toLocaleString('pt-BR')}
+                                </p>
+                                <p className="text-xs text-purple-600">Mês: {custo.mes}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removerCustoMensal(custo.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Botões de ação para custos */}
+                {custosMensais.length > 0 && (
+                  <div className="flex gap-2 pt-4 border-t">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => {
+                        const proximoMes = new Date(custoForm.mes + '-01')
+                        proximoMes.setMonth(proximoMes.getMonth() + 1)
+                        const proximoMesStr = proximoMes.toISOString().slice(0, 7)
+                        duplicarCustosParaMes(proximoMesStr)
+                      }}
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Duplicar para Próximo Mês
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setIsCustosDialogOpen(true)}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      Visualizar Todos
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
             </Tabs>
 
             <div className="flex justify-end gap-2 pt-4 border-t">
@@ -1480,6 +1833,116 @@ export default function ObrasPage() {
                 </>
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para visualizar custos mensais */}
+      <Dialog open={isCustosDialogOpen} onOpenChange={setIsCustosDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-purple-600" />
+              Custos Mensais da Obra
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {custosMensais.length === 0 ? (
+              <div className="text-center py-8">
+                <DollarSign className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <p className="text-gray-500">Nenhum custo mensal configurado</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Resumo dos custos */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-purple-900">Total de Itens</h4>
+                    <p className="text-2xl font-bold text-purple-600">{custosMensais.length}</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-green-900">Valor Total Orçado</h4>
+                    <p className="text-2xl font-bold text-green-600">
+                      R$ {custosMensais.reduce((total, custo) => total + custo.totalOrcamento, 0).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-blue-900">Meses Configurados</h4>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {[...new Set(custosMensais.map(c => c.mes))].length}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Lista detalhada dos custos */}
+                <div className="space-y-3">
+                  <h4 className="font-medium">Detalhamento dos Custos</h4>
+                  {custosMensais.map((custo) => (
+                    <div key={custo.id} className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <DollarSign className="w-4 h-4 text-purple-600" />
+                            <h5 className="font-medium text-gray-900">{custo.item} - {custo.descricao}</h5>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <span className="text-gray-600">Unidade:</span>
+                              <p className="font-medium">{custo.unidade}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Quantidade:</span>
+                              <p className="font-medium">{custo.quantidadeOrcamento}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Valor Unitário:</span>
+                              <p className="font-medium">R$ {custo.valorUnitario.toLocaleString('pt-BR')}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">Total:</span>
+                              <p className="font-medium text-green-600">R$ {custo.totalOrcamento.toLocaleString('pt-BR')}</p>
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <span className="text-gray-600 text-sm">Mês:</span>
+                            <span className="ml-2 text-sm font-medium text-purple-600">{custo.mes}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Agrupamento por mês */}
+                <div className="space-y-3">
+                  <h4 className="font-medium">Custos por Mês</h4>
+                  {Object.entries(
+                    custosMensais.reduce((acc, custo) => {
+                      if (!acc[custo.mes]) acc[custo.mes] = []
+                      acc[custo.mes].push(custo)
+                      return acc
+                    }, {} as Record<string, CustoMensal[]>)
+                  ).map(([mes, custos]) => (
+                    <div key={mes} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="font-medium text-gray-900">{mes}</h5>
+                        <span className="text-sm text-gray-600">
+                          {custos.length} item(s) - R$ {custos.reduce((total, c) => total + c.totalOrcamento, 0).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {custos.map((custo) => (
+                          <div key={custo.id} className="flex justify-between items-center text-sm bg-white p-2 rounded">
+                            <span>{custo.item} - {custo.descricao}</span>
+                            <span className="font-medium">R$ {custo.totalOrcamento.toLocaleString('pt-BR')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AuthService } from "@/app/lib/auth"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,11 +18,12 @@ import {
   X,
   LogOut,
   Home,
+  Shield,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-const navigation = [
+const baseNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Clientes", href: "/dashboard/clientes", icon: Users },
   { name: "Obras", href: "/dashboard/obras", icon: Building2 },
@@ -35,17 +36,40 @@ const navigation = [
   { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3 },
 ]
 
+const adminNavigation = [
+  { name: "Usuários", href: "/dashboard/usuarios", icon: Shield },
+]
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const pathname = usePathname()
+
+  useEffect(() => {
+    // Verificar se o usuário é admin
+    const userRole = localStorage.getItem('userRole') || 'funcionario_nivel_1'
+    console.log('User role from localStorage:', userRole)
+    console.log('Is admin:', userRole === 'admin')
+    setIsAdmin(userRole === 'admin')
+    
+    // Para teste: forçar como admin se não estiver definido
+    if (!localStorage.getItem('userRole')) {
+      localStorage.setItem('userRole', 'admin')
+      setIsAdmin(true)
+      console.log('Forçando usuário como admin para teste')
+    }
+  }, [])
 
   const handleLogout = () => {
     AuthService.logout()
   }
+
+  // Combinar navegação base com navegação de admin se necessário
+  const navigation = isAdmin ? [...baseNavigation, ...adminNavigation] : baseNavigation
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -75,6 +99,11 @@ export default function DashboardLayout({
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-2">
+          {/* Debug info - remover depois */}
+          <div className="text-xs text-gray-500 mb-2 p-2 bg-gray-100 rounded">
+            Debug: isAdmin = {isAdmin.toString()}, userRole = {localStorage.getItem('userRole') || 'undefined'}
+          </div>
+          
           {navigation.map((item) => {
             const isActive = pathname === item.href
             return (
@@ -93,6 +122,20 @@ export default function DashboardLayout({
         </nav>
 
         <div className="p-4 border-t border-gray-200">
+          {/* Botão temporário para forçar admin - remover depois */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mb-2 text-xs"
+            onClick={() => {
+              localStorage.setItem('userRole', 'admin')
+              setIsAdmin(true)
+              console.log('Forçando admin via botão')
+            }}
+          >
+            🔧 Forçar Admin (Teste)
+          </Button>
+          
           <Button
             variant="ghost"
             className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
