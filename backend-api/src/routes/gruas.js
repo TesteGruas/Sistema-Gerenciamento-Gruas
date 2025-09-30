@@ -66,7 +66,7 @@ router.get('/clientes/buscar', async (req, res) => {
       })
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('clientes')
       .select('id, nome, cnpj, email, telefone, contato')
       .or(`nome.ilike.%${q}%,cnpj.ilike.%${q}%`)
@@ -96,7 +96,7 @@ router.get('/clientes/buscar', async (req, res) => {
 const enriquecerDadosGrua = async (grua) => {
   try {
     // Buscar obra atual da grua
-    const { data: obraAtual, error: obraError } = await supabase
+    const { data: obraAtual, error: obraError } = await supabaseAdmin
       .from('grua_obra')
       .select(`
         obra_id,
@@ -193,7 +193,7 @@ const buscarOuCriarCliente = async (clienteData) => {
     updated_at: new Date().toISOString()
   }
 
-  const { data: clienteCriado, error: createError } = await supabase
+  const { data: clienteCriado, error: createError } = await supabaseAdmin
     .from('clientes')
     .insert(novoCliente)
     .select()
@@ -574,7 +574,7 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params
 
     // Buscar grua com dados relacionados
-    const { data: grua, error: gruaError } = await supabase
+    const { data: grua, error: gruaError } = await supabaseAdmin
       .from('gruas')
       .select(`
         *,
@@ -666,7 +666,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Buscar histórico de manutenções
-    const { data: manutencoes, error: manutencaoError } = await supabase
+    const { data: manutencoes, error: manutencaoError } = await supabaseAdmin
       .from('historico_manutencoes')
       .select('*')
       .eq('grua_id', id)
@@ -674,7 +674,7 @@ router.get('/:id', async (req, res) => {
       .limit(10)
 
     // Buscar funcionários alocados (se existir tabela de alocações)
-    const { data: funcionarios, error: funcionarioError } = await supabase
+    const { data: funcionarios, error: funcionarioError } = await supabaseAdmin
       .from('alocacoes_funcionarios')
       .select(`
         *,
@@ -690,7 +690,7 @@ router.get('/:id', async (req, res) => {
       .eq('status', 'Ativa')
 
     // Buscar equipamentos auxiliares (se existir tabela de alocações de equipamentos)
-    const { data: equipamentos, error: equipamentoError } = await supabase
+    const { data: equipamentos, error: equipamentoError } = await supabaseAdmin
       .from('alocacoes_equipamentos')
       .select(`
         *,

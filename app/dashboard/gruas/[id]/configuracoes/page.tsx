@@ -27,34 +27,9 @@ import {
   Ruler
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-// Tipos para configurações de gruas
-interface ConfiguracaoGrua {
-  id: string
-  grua_id: string
-  nome: string
-  descricao: string
-  componentes: Array<{
-    componente_id: string
-    componente_nome: string
-    quantidade: number
-    unidade: string
-  }>
-  altura_total: number
-  capacidade_total: number
-  valor_total: number
-  created_at: string
-  updated_at: string
-}
-
-interface ComponenteDisponivel {
-  id: string
-  nome: string
-  tipo: string
-  quantidade_disponivel: number
-  unidade: string
-  valor_unitario: number
-}
+import { apiConfiguracoes, ConfiguracaoGrua } from "@/lib/api-configuracoes"
+import { apiComponentes, ComponenteGrua } from "@/lib/api-componentes"
+import apiGruas from "@/lib/api-gruas"
 
 export default function ConfiguracoesGruaPage() {
   const params = useParams()
@@ -64,11 +39,12 @@ export default function ConfiguracoesGruaPage() {
   
   // Estados
   const [configuracoes, setConfiguracoes] = useState<ConfiguracaoGrua[]>([])
-  const [componentesDisponiveis, setComponentesDisponiveis] = useState<ComponenteDisponivel[]>([])
+  const [componentesDisponiveis, setComponentesDisponiveis] = useState<ComponenteGrua[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [editingConfig, setEditingConfig] = useState<ConfiguracaoGrua | null>(null)
   const [gruaInfo, setGruaInfo] = useState<any>(null)
 
@@ -76,10 +52,12 @@ export default function ConfiguracoesGruaPage() {
   const [configForm, setConfigForm] = useState({
     nome: '',
     descricao: '',
-    altura_total: 0,
-    capacidade_total: 0,
+    altura_maxima: 0,
+    capacidade_maxima: 0,
+    valor_configuracao: 0,
+    status: 'Ativa' as 'Ativa' | 'Inativa' | 'Em desenvolvimento',
     componentes_selecionados: [] as Array<{
-      componente_id: string
+      componente_id: number
       quantidade: number
     }>
   })
@@ -93,79 +71,30 @@ export default function ConfiguracoesGruaPage() {
     try {
       setLoading(true)
       
-      // Simular carregamento de dados (substituir por chamadas reais da API)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Carregar informações da grua
+      const gruaResponse = await apiGruas.obterGrua(gruaId)
+      setGruaInfo(gruaResponse.data)
       
-      // Dados mockados para demonstração
-      const mockConfiguracoes: ConfiguracaoGrua[] = [
-        {
-          id: '1',
-          grua_id: gruaId,
-          nome: 'Configuração Padrão',
-          descricao: 'Configuração básica para obras pequenas',
-          componentes: [
-            { componente_id: '1', componente_nome: 'Módulo de Torre 3m', quantidade: 3, unidade: 'un' },
-            { componente_id: '2', componente_nome: 'Escada de Acesso 3m', quantidade: 1, unidade: 'un' }
-          ],
-          altura_total: 9,
-          capacidade_total: 8,
-          valor_total: 8700,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          grua_id: gruaId,
-          nome: 'Configuração Alta',
-          descricao: 'Configuração para obras de grande altura',
-          componentes: [
-            { componente_id: '1', componente_nome: 'Módulo de Torre 3m', quantidade: 5, unidade: 'un' },
-            { componente_id: '3', componente_nome: 'Lança 40m', quantidade: 1, unidade: 'un' }
-          ],
-          altura_total: 15,
-          capacidade_total: 6,
-          valor_total: 27500,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ]
-
-      const mockComponentes: ComponenteDisponivel[] = [
-        {
-          id: '1',
-          nome: 'Módulo de Torre 3m',
-          tipo: 'torre',
-          quantidade_disponivel: 5,
-          unidade: 'un',
-          valor_unitario: 2500
-        },
-        {
-          id: '2',
-          nome: 'Escada de Acesso 3m',
-          tipo: 'escada',
-          quantidade_disponivel: 1,
-          unidade: 'un',
-          valor_unitario: 1200
-        },
-        {
-          id: '3',
-          nome: 'Lança 40m',
-          tipo: 'lanca',
-          quantidade_disponivel: 1,
-          unidade: 'un',
-          valor_unitario: 15000
-        }
-      ]
-
-      setConfiguracoes(mockConfiguracoes)
-      setComponentesDisponiveis(mockComponentes)
-      setGruaInfo({ id: gruaId, nome: 'Grua STT293', modelo: 'Potain MDT 178' })
+      // Carregar configurações da grua
+      const configuracoesResponse = await apiConfiguracoes.buscarPorGrua(gruaId, {
+        page: 1,
+        limit: 100
+      })
+      setConfiguracoes(configuracoesResponse.data)
       
-    } catch (error) {
+      // Carregar componentes disponíveis da grua
+      const componentesResponse = await apiComponentes.buscarPorGrua(gruaId, {
+        page: 1,
+        limit: 1000
+      })
+      console.log('Componentes carregados:', componentesResponse.data)
+      setComponentesDisponiveis(componentesResponse.data)
+      
+    } catch (error: any) {
       console.error('Erro ao carregar dados:', error)
       toast({
         title: "Erro",
-        description: "Erro ao carregar configurações da grua",
+        description: error.response?.data?.message || "Erro ao carregar configurações da grua",
         variant: "destructive"
       })
     } finally {
@@ -176,69 +105,119 @@ export default function ConfiguracoesGruaPage() {
   // Filtrar configurações
   const filteredConfiguracoes = configuracoes.filter(config => 
     config.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    config.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    (config.descricao && config.descricao.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   // Handlers
   const handleCreateConfig = async () => {
     try {
-      // Calcular valor total
-      const valorTotal = configForm.componentes_selecionados.reduce((total, comp) => {
-        const componente = componentesDisponiveis.find(c => c.id === comp.componente_id)
-        return total + (componente ? componente.valor_unitario * comp.quantidade : 0)
-      }, 0)
-
-      const novaConfiguracao: ConfiguracaoGrua = {
-        id: Date.now().toString(),
+      // Criar configuração
+      const response = await apiConfiguracoes.criar({
         grua_id: gruaId,
         nome: configForm.nome,
         descricao: configForm.descricao,
-        componentes: configForm.componentes_selecionados.map(comp => {
-          const componente = componentesDisponiveis.find(c => c.id === comp.componente_id)
-          return {
-            componente_id: comp.componente_id,
-            componente_nome: componente?.nome || '',
-            quantidade: comp.quantidade,
-            unidade: componente?.unidade || ''
-          }
-        }),
-        altura_total: configForm.altura_total,
-        capacidade_total: configForm.capacidade_total,
-        valor_total: valorTotal,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        altura_maxima: configForm.altura_maxima,
+        capacidade_maxima: configForm.capacidade_maxima,
+        valor_configuracao: configForm.valor_configuracao,
+        status: configForm.status
+      })
+
+      // Adicionar componentes à configuração
+      for (const comp of configForm.componentes_selecionados) {
+        await apiConfiguracoes.adicionarComponente(response.data.id, {
+          configuracao_id: response.data.id,
+          componente_id: comp.componente_id,
+          quantidade_necessaria: comp.quantidade
+        })
       }
 
-      setConfiguracoes([...configuracoes, novaConfiguracao])
       setIsCreateDialogOpen(false)
       resetForm()
+      
+      // Recarregar dados
+      await carregarDados()
 
       toast({
         title: "Sucesso",
-        description: "Configuração criada com sucesso"
+        description: response.message || "Configuração criada com sucesso"
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar configuração:', error)
       toast({
         title: "Erro",
-        description: "Erro ao criar configuração",
+        description: error.response?.data?.message || "Erro ao criar configuração",
         variant: "destructive"
       })
     }
   }
 
-  const handleDeleteConfig = async (id: string) => {
+  const handleUpdateConfig = async () => {
+    if (!editingConfig) return
+
     try {
-      setConfiguracoes(configuracoes.filter(c => c.id !== id))
+      // Atualizar configuração
+      const response = await apiConfiguracoes.atualizar(editingConfig.id, {
+        nome: configForm.nome,
+        descricao: configForm.descricao,
+        altura_maxima: configForm.altura_maxima,
+        capacidade_maxima: configForm.capacidade_maxima,
+        valor_configuracao: configForm.valor_configuracao,
+        status: configForm.status
+      })
+
+      // Remover componentes existentes e adicionar novos
+      if (editingConfig.componentes) {
+        for (const comp of editingConfig.componentes) {
+          await apiConfiguracoes.removerComponente(editingConfig.id, comp.componente.id)
+        }
+      }
+
+      // Adicionar novos componentes
+      for (const comp of configForm.componentes_selecionados) {
+        await apiConfiguracoes.adicionarComponente(editingConfig.id, {
+          configuracao_id: editingConfig.id,
+          componente_id: comp.componente_id,
+          quantidade_necessaria: comp.quantidade
+        })
+      }
+
+      setIsEditDialogOpen(false)
+      setEditingConfig(null)
+      resetForm()
+      
+      // Recarregar dados
+      await carregarDados()
+
       toast({
         title: "Sucesso",
-        description: "Configuração removida com sucesso"
+        description: response.message || "Configuração atualizada com sucesso"
       })
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Erro ao atualizar configuração:', error)
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao atualizar configuração",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDeleteConfig = async (id: number) => {
+    try {
+      const response = await apiConfiguracoes.excluir(id)
+      
+      // Recarregar dados
+      await carregarDados()
+      
+      toast({
+        title: "Sucesso",
+        description: response.message || "Configuração removida com sucesso"
+      })
+    } catch (error: any) {
       console.error('Erro ao remover configuração:', error)
       toast({
         title: "Erro",
-        description: "Erro ao remover configuração",
+        description: error.response?.data?.message || "Erro ao remover configuração",
         variant: "destructive"
       })
     }
@@ -248,13 +227,15 @@ export default function ConfiguracoesGruaPage() {
     setConfigForm({
       nome: '',
       descricao: '',
-      altura_total: 0,
-      capacidade_total: 0,
+      altura_maxima: 0,
+      capacidade_maxima: 0,
+      valor_configuracao: 0,
+      status: 'Ativa',
       componentes_selecionados: []
     })
   }
 
-  const toggleComponente = (componenteId: string) => {
+  const toggleComponente = (componenteId: number) => {
     const existe = configForm.componentes_selecionados.find(c => c.componente_id === componenteId)
     if (existe) {
       setConfigForm({
@@ -269,7 +250,7 @@ export default function ConfiguracoesGruaPage() {
     }
   }
 
-  const updateComponenteQuantidade = (componenteId: string, quantidade: number) => {
+  const updateComponenteQuantidade = (componenteId: number, quantidade: number) => {
     setConfigForm({
       ...configForm,
       componentes_selecionados: configForm.componentes_selecionados.map(c => 
@@ -278,11 +259,29 @@ export default function ConfiguracoesGruaPage() {
     })
   }
 
+  const openEditDialog = (config: ConfiguracaoGrua) => {
+    setEditingConfig(config)
+    setConfigForm({
+      nome: config.nome,
+      descricao: config.descricao || '',
+      altura_maxima: config.altura_maxima || 0,
+      capacidade_maxima: config.capacidade_maxima || 0,
+      valor_configuracao: config.valor_configuracao,
+      status: config.status,
+      componentes_selecionados: config.componentes?.map(comp => ({
+        componente_id: comp.componente.id,
+        quantidade: comp.quantidade_necessaria
+      })) || []
+    })
+    setIsEditDialogOpen(true)
+  }
+
   const calcularValorTotal = () => {
-    return configForm.componentes_selecionados.reduce((total, comp) => {
+    const valorComponentes = configForm.componentes_selecionados.reduce((total, comp) => {
       const componente = componentesDisponiveis.find(c => c.id === comp.componente_id)
       return total + (componente ? componente.valor_unitario * comp.quantidade : 0)
     }, 0)
+    return valorComponentes + configForm.valor_configuracao
   }
 
   if (loading) {
@@ -364,22 +363,28 @@ export default function ConfiguracoesGruaPage() {
                   <CardDescription>{config.descricao}</CardDescription>
                 </div>
                 <div className="flex gap-1">
-                  <Button size="sm" variant="outline">
-                    <Eye className="w-4 h-4" />
-                  </Button>
                   <Button 
                     size="sm" 
                     variant="outline"
                     onClick={() => {
                       setEditingConfig(config)
-                      setIsEditDialogOpen(true)
+                      setIsViewDialogOpen(true)
                     }}
+                    title="Visualizar"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => openEditDialog(config)}
+                    title="Editar"
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" title="Excluir">
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </AlertDialogTrigger>
@@ -387,13 +392,14 @@ export default function ConfiguracoesGruaPage() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Excluir Configuração</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Tem certeza que deseja excluir esta configuração? Esta ação não pode ser desfeita.
+                          Tem certeza que deseja excluir a configuração "{config.nome}"? Esta ação não pode ser desfeita.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => handleDeleteConfig(config.id)}
+                          className="bg-red-600 hover:bg-red-700"
                         >
                           Excluir
                         </AlertDialogAction>
@@ -409,30 +415,30 @@ export default function ConfiguracoesGruaPage() {
                   <div className="flex items-center gap-2">
                     <Ruler className="w-4 h-4 text-blue-500" />
                     <span className="font-medium">Altura:</span>
-                    <span>{config.altura_total}m</span>
+                    <span>{config.altura_maxima || 0}m</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Package className="w-4 h-4 text-green-500" />
                     <span className="font-medium">Capacidade:</span>
-                    <span>{config.capacidade_total}t</span>
+                    <span>{config.capacidade_maxima || 0}t</span>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-2 text-sm">
                   <Calculator className="w-4 h-4 text-purple-500" />
-                  <span className="font-medium">Valor Total:</span>
-                  <span className="font-bold text-lg">R$ {config.valor_total.toLocaleString('pt-BR')}</span>
+                  <span className="font-medium">Valor:</span>
+                  <span className="font-bold text-lg">R$ {config.valor_configuracao.toLocaleString('pt-BR')}</span>
                 </div>
 
                 <div>
                   <h4 className="font-medium text-sm mb-2">Componentes:</h4>
                   <div className="space-y-1">
-                    {config.componentes.map((comp, index) => (
+                    {config.componentes?.map((comp, index) => (
                       <div key={index} className="flex justify-between text-xs text-gray-600">
-                        <span>{comp.componente_nome}</span>
-                        <span>{comp.quantidade} {comp.unidade}</span>
+                        <span>{comp.componente.nome}</span>
+                        <span>{comp.quantidade_necessaria} {comp.componente.unidade_medida || 'un'}</span>
                       </div>
-                    ))}
+                    )) || <span className="text-xs text-gray-500">Nenhum componente</span>}
                   </div>
                 </div>
               </div>
@@ -481,77 +487,135 @@ export default function ConfiguracoesGruaPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="altura_total">Altura Total (m) *</Label>
+                <Label htmlFor="altura_maxima">Altura Máxima (m)</Label>
                 <Input
-                  id="altura_total"
+                  id="altura_maxima"
                   type="number"
                   step="0.1"
                   min="0"
-                  value={configForm.altura_total}
-                  onChange={(e) => setConfigForm({ ...configForm, altura_total: parseFloat(e.target.value) || 0 })}
-                  required
+                  value={configForm.altura_maxima}
+                  onChange={(e) => setConfigForm({ ...configForm, altura_maxima: parseFloat(e.target.value) || 0 })}
                 />
               </div>
               <div>
-                <Label htmlFor="capacidade_total">Capacidade Total (t) *</Label>
+                <Label htmlFor="capacidade_maxima">Capacidade Máxima (t)</Label>
                 <Input
-                  id="capacidade_total"
+                  id="capacidade_maxima"
                   type="number"
                   step="0.1"
                   min="0"
-                  value={configForm.capacidade_total}
-                  onChange={(e) => setConfigForm({ ...configForm, capacidade_total: parseFloat(e.target.value) || 0 })}
-                  required
+                  value={configForm.capacidade_maxima}
+                  onChange={(e) => setConfigForm({ ...configForm, capacidade_maxima: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="valor_configuracao">Valor da Configuração (R$)</Label>
+                <Input
+                  id="valor_configuracao"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={configForm.valor_configuracao}
+                  onChange={(e) => setConfigForm({ ...configForm, valor_configuracao: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold mb-4">Selecionar Componentes</h3>
-              <div className="space-y-3">
-                {componentesDisponiveis.map((componente) => {
-                  const selecionado = configForm.componentes_selecionados.find(c => c.componente_id === componente.id)
-                  return (
-                    <div key={componente.id} className="flex items-center space-x-4 p-3 border rounded-lg">
-                      <Checkbox
-                        checked={!!selecionado}
-                        onCheckedChange={() => toggleComponente(componente.id)}
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium">{componente.nome}</div>
-                        <div className="text-sm text-gray-500">
-                          {componente.quantidade_disponivel} {componente.unidade} disponível(is) • 
-                          R$ {componente.valor_unitario.toLocaleString('pt-BR')} cada
+              <Label htmlFor="status">Status</Label>
+              <Select 
+                value={configForm.status} 
+                onValueChange={(value) => setConfigForm({ ...configForm, status: value as 'Ativa' | 'Inativa' | 'Em desenvolvimento' })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Ativa">Ativa</SelectItem>
+                  <SelectItem value="Inativa">Inativa</SelectItem>
+                  <SelectItem value="Em desenvolvimento">Em desenvolvimento</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold mb-4">
+                Selecionar Componentes 
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  ({componentesDisponiveis.length} disponível{componentesDisponiveis.length !== 1 ? 'is' : ''})
+                </span>
+              </h3>
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-4 animate-spin" />
+                  <p>Carregando componentes...</p>
+                </div>
+              ) : componentesDisponiveis.length > 0 ? (
+                <div className="space-y-3">
+                  {componentesDisponiveis.map((componente) => {
+                    const selecionado = configForm.componentes_selecionados.find(c => c.componente_id === componente.id)
+                    return (
+                      <div key={componente.id} className="flex items-center space-x-4 p-3 border rounded-lg hover:bg-gray-50">
+                        <Checkbox
+                          checked={!!selecionado}
+                          onCheckedChange={() => toggleComponente(componente.id)}
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium">{componente.nome}</div>
+                          <div className="text-sm text-gray-500">
+                            {componente.quantidade_disponivel} {componente.unidade_medida || 'un'} disponível(is) • 
+                            R$ {componente.valor_unitario.toLocaleString('pt-BR')} cada
+                          </div>
                         </div>
+                        {selecionado && (
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`qty-${componente.id}`} className="text-sm">Qtd:</Label>
+                            <Input
+                              id={`qty-${componente.id}`}
+                              type="number"
+                              min="1"
+                              max={componente.quantidade_disponivel}
+                              value={selecionado.quantidade}
+                              onChange={(e) => updateComponenteQuantidade(componente.id, parseInt(e.target.value) || 1)}
+                              className="w-20"
+                            />
+                          </div>
+                        )}
                       </div>
-                      {selecionado && (
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`qty-${componente.id}`} className="text-sm">Qtd:</Label>
-                          <Input
-                            id={`qty-${componente.id}`}
-                            type="number"
-                            min="1"
-                            max={componente.quantidade_disponivel}
-                            value={selecionado.quantidade}
-                            onChange={(e) => updateComponenteQuantidade(componente.id, parseInt(e.target.value) || 1)}
-                            className="w-20"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum componente disponível para esta grua</p>
+                  <p className="text-sm">Adicione componentes na aba "Componentes" primeiro</p>
+                </div>
+              )}
             </div>
 
             <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex justify-between items-center">
-                <span className="font-medium">Valor Total da Configuração:</span>
-                <span className="text-xl font-bold text-green-600">
-                  R$ {calcularValorTotal().toLocaleString('pt-BR')}
-                </span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Valor Total da Configuração:</span>
+                  <span className="text-xl font-bold text-green-600">
+                    R$ {calcularValorTotal().toLocaleString('pt-BR')}
+                  </span>
+                </div>
+                {configForm.componentes_selecionados.length > 0 && (
+                  <div className="text-sm text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Valor da Configuração:</span>
+                      <span>R$ {configForm.valor_configuracao.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Valor dos Componentes:</span>
+                      <span>R$ {(calcularValorTotal() - configForm.valor_configuracao).toLocaleString('pt-BR')}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -561,6 +625,274 @@ export default function ConfiguracoesGruaPage() {
               </Button>
               <Button onClick={handleCreateConfig}>
                 Criar Configuração
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Visualização de Configuração */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Configuração</DialogTitle>
+            <DialogDescription>
+              Informações completas da configuração: {editingConfig?.nome}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingConfig && (
+            <div className="space-y-6">
+              {/* Informações Básicas */}
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Informações Básicas</h3>
+                  <div className="space-y-2">
+                    <div><strong>Nome:</strong> {editingConfig.nome}</div>
+                    <div><strong>Descrição:</strong> {editingConfig.descricao || 'Não informado'}</div>
+                    <div><strong>Status:</strong> <Badge variant="outline">{editingConfig.status}</Badge></div>
+                    <div><strong>Altura Máxima:</strong> {editingConfig.altura_maxima || 0}m</div>
+                    <div><strong>Capacidade Máxima:</strong> {editingConfig.capacidade_maxima || 0}t</div>
+                    <div><strong>Valor:</strong> R$ {editingConfig.valor_configuracao.toLocaleString('pt-BR')}</div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">Informações Técnicas</h3>
+                  <div className="space-y-2">
+                    {editingConfig.alcance_maximo && <div><strong>Alcance Máximo:</strong> {editingConfig.alcance_maximo}m</div>}
+                    {editingConfig.capacidade_ponta && <div><strong>Capacidade na Ponta:</strong> {editingConfig.capacidade_ponta}t</div>}
+                    {editingConfig.velocidade_operacao && <div><strong>Velocidade de Operação:</strong> {editingConfig.velocidade_operacao}m/min</div>}
+                    {editingConfig.velocidade_rotacao && <div><strong>Velocidade de Rotação:</strong> {editingConfig.velocidade_rotacao}rpm</div>}
+                    {editingConfig.potencia_motor && <div><strong>Potência do Motor:</strong> {editingConfig.potencia_motor}kW</div>}
+                    {editingConfig.peso_total && <div><strong>Peso Total:</strong> {editingConfig.peso_total}t</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Componentes */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Componentes da Configuração</h3>
+                {editingConfig.componentes && editingConfig.componentes.length > 0 ? (
+                  <div className="space-y-2">
+                    {editingConfig.componentes.map((comp, index) => (
+                      <div key={index} className="flex justify-between items-center p-3 border rounded-lg">
+                        <div>
+                          <div className="font-medium">{comp.componente.nome}</div>
+                          <div className="text-sm text-gray-500">
+                            {comp.componente.tipo} • {comp.componente.modelo || 'Sem modelo'}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium">{comp.quantidade_necessaria} {comp.componente.unidade_medida || 'un'}</div>
+                          <div className="text-sm text-gray-500">
+                            R$ {(comp.componente.valor_unitario * comp.quantidade_necessaria).toLocaleString('pt-BR')}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500">
+                    Nenhum componente associado a esta configuração
+                  </div>
+                )}
+              </div>
+
+              {/* Informações do Sistema */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">Informações do Sistema</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                  <div><strong>Criado em:</strong> {new Date(editingConfig.created_at).toLocaleString('pt-BR')}</div>
+                  <div><strong>Atualizado em:</strong> {new Date(editingConfig.updated_at).toLocaleString('pt-BR')}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Fechar
+            </Button>
+            <Button onClick={() => {
+              setIsViewDialogOpen(false)
+              setIsEditDialogOpen(true)
+            }}>
+              Editar Configuração
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Edição de Configuração */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Configuração</DialogTitle>
+            <DialogDescription>
+              Edite as informações da configuração: {editingConfig?.nome}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_nome">Nome da Configuração *</Label>
+                <Input
+                  id="edit_nome"
+                  value={configForm.nome}
+                  onChange={(e) => setConfigForm({ ...configForm, nome: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_descricao">Descrição</Label>
+                <Input
+                  id="edit_descricao"
+                  value={configForm.descricao}
+                  onChange={(e) => setConfigForm({ ...configForm, descricao: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="edit_altura_maxima">Altura Máxima (m)</Label>
+                <Input
+                  id="edit_altura_maxima"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={configForm.altura_maxima}
+                  onChange={(e) => setConfigForm({ ...configForm, altura_maxima: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_capacidade_maxima">Capacidade Máxima (t)</Label>
+                <Input
+                  id="edit_capacidade_maxima"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={configForm.capacidade_maxima}
+                  onChange={(e) => setConfigForm({ ...configForm, capacidade_maxima: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_valor_configuracao">Valor da Configuração (R$)</Label>
+                <Input
+                  id="edit_valor_configuracao"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={configForm.valor_configuracao}
+                  onChange={(e) => setConfigForm({ ...configForm, valor_configuracao: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit_status">Status</Label>
+              <Select 
+                value={configForm.status} 
+                onValueChange={(value) => setConfigForm({ ...configForm, status: value as 'Ativa' | 'Inativa' | 'Em desenvolvimento' })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Ativa">Ativa</SelectItem>
+                  <SelectItem value="Inativa">Inativa</SelectItem>
+                  <SelectItem value="Em desenvolvimento">Em desenvolvimento</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold mb-4">
+                Selecionar Componentes 
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  ({componentesDisponiveis.length} disponível{componentesDisponiveis.length !== 1 ? 'is' : ''})
+                </span>
+              </h3>
+              {loading ? (
+                <div className="text-center py-8 text-gray-500">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-4 animate-spin" />
+                  <p>Carregando componentes...</p>
+                </div>
+              ) : componentesDisponiveis.length > 0 ? (
+                <div className="space-y-3">
+                  {componentesDisponiveis.map((componente) => {
+                    const selecionado = configForm.componentes_selecionados.find(c => c.componente_id === componente.id)
+                    return (
+                      <div key={componente.id} className="flex items-center space-x-4 p-3 border rounded-lg hover:bg-gray-50">
+                        <Checkbox
+                          checked={!!selecionado}
+                          onCheckedChange={() => toggleComponente(componente.id)}
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium">{componente.nome}</div>
+                          <div className="text-sm text-gray-500">
+                            {componente.quantidade_disponivel} {componente.unidade_medida || 'un'} disponível(is) • 
+                            R$ {componente.valor_unitario.toLocaleString('pt-BR')} cada
+                          </div>
+                        </div>
+                        {selecionado && (
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`edit_qty-${componente.id}`} className="text-sm">Qtd:</Label>
+                            <Input
+                              id={`edit_qty-${componente.id}`}
+                              type="number"
+                              min="1"
+                              max={componente.quantidade_disponivel}
+                              value={selecionado.quantidade}
+                              onChange={(e) => updateComponenteQuantidade(componente.id, parseInt(e.target.value) || 1)}
+                              className="w-20"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum componente disponível para esta grua</p>
+                  <p className="text-sm">Adicione componentes na aba "Componentes" primeiro</p>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Valor Total da Configuração:</span>
+                  <span className="text-xl font-bold text-green-600">
+                    R$ {calcularValorTotal().toLocaleString('pt-BR')}
+                  </span>
+                </div>
+                {configForm.componentes_selecionados.length > 0 && (
+                  <div className="text-sm text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Valor da Configuração:</span>
+                      <span>R$ {configForm.valor_configuracao.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Valor dos Componentes:</span>
+                      <span>R$ {(calcularValorTotal() - configForm.valor_configuracao).toLocaleString('pt-BR')}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleUpdateConfig}>
+                Salvar Alterações
               </Button>
             </div>
           </div>
