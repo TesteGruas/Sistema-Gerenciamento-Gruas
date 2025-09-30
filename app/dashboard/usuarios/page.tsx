@@ -13,6 +13,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { useToast } from "@/hooks/use-toast"
+import { apiPerfis, apiPermissoes, apiPerfilPermissoes, utilsPermissoes, type Perfil, type Permissao, type PerfilPermissao } from "@/lib/api-permissoes"
+import { apiUsuarios, utilsUsuarios, type Usuario } from "@/lib/api-usuarios"
 import { 
   Users, 
   Plus, 
@@ -33,78 +40,30 @@ import {
   Settings,
   Key,
   Lock,
-  Unlock
+  Unlock,
+  ChevronRight,
+  Save,
+  X
 } from "lucide-react"
 
-// Mock data para usuários
-const mockUsuarios = [
-  {
-    id: "1",
-    name: "João Silva",
-    email: "joao.silva@empresa.com",
-    phone: "(11) 99999-9999",
-    role: "admin",
-    status: "active",
-    createdAt: "2024-01-15",
-    lastLogin: "2024-01-20",
-    permissions: ["all"]
-  },
-  {
-    id: "2", 
-    name: "Maria Santos",
-    email: "maria.santos@empresa.com",
-    phone: "(11) 88888-8888",
-    role: "gestor",
-    status: "active",
-    createdAt: "2024-01-16",
-    lastLogin: "2024-01-19",
-    permissions: ["obras", "gruas", "funcionarios", "financeiro"]
-  },
-  {
-    id: "3",
-    name: "Pedro Costa",
-    email: "pedro.costa@empresa.com", 
-    phone: "(11) 77777-7777",
-    role: "funcionario_nivel_1",
-    status: "active",
-    createdAt: "2024-01-17",
-    lastLogin: "2024-01-18",
-    permissions: ["obras_read", "gruas_read"]
-  },
-  {
-    id: "4",
-    name: "Ana Oliveira",
-    email: "ana.oliveira@empresa.com",
-    phone: "(11) 66666-6666", 
-    role: "funcionario_nivel_2",
-    status: "inactive",
-    createdAt: "2024-01-18",
-    lastLogin: "2024-01-15",
-    permissions: ["obras", "gruas", "funcionarios_read"]
-  },
-  {
-    id: "5",
-    name: "Carlos Ferreira",
-    email: "carlos.ferreira@empresa.com",
-    phone: "(11) 55555-5555",
-    role: "funcionario_nivel_3", 
-    status: "active",
-    createdAt: "2024-01-19",
-    lastLogin: "2024-01-20",
-    permissions: ["obras", "gruas", "funcionarios", "financeiro_read"]
-  },
-  {
-    id: "6",
-    name: "Cliente ABC Construtora",
-    email: "contato@abcconstrutora.com",
-    phone: "(11) 44444-4444",
-    role: "cliente",
-    status: "active", 
-    createdAt: "2024-01-20",
-    lastLogin: "2024-01-20",
-    permissions: ["obras_read", "gruas_read"]
-  }
-]
+// Tipos para compatibilidade com o frontend
+interface UsuarioFrontend {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  lastLogin: string | null;
+  permissions: string[];
+  perfil?: {
+    id: number;
+    nome: string;
+    nivel_acesso: number;
+    descricao?: string;
+  };
+}
 
 const roleLabels = {
   admin: "Administrador",
@@ -112,7 +71,13 @@ const roleLabels = {
   cliente: "Cliente", 
   funcionario_nivel_1: "Funcionário Nível 1",
   funcionario_nivel_2: "Funcionário Nível 2",
-  funcionario_nivel_3: "Funcionário Nível 3"
+  funcionario_nivel_3: "Funcionário Nível 3",
+  administrador: "Administrador",
+  gerente: "Gerente",
+  supervisor: "Supervisor",
+  operador: "Operador",
+  visualizador: "Visualizador",
+  user: "Usuário"
 }
 
 const roleColors = {
@@ -121,7 +86,13 @@ const roleColors = {
   cliente: "bg-blue-100 text-blue-800",
   funcionario_nivel_1: "bg-green-100 text-green-800",
   funcionario_nivel_2: "bg-yellow-100 text-yellow-800",
-  funcionario_nivel_3: "bg-orange-100 text-orange-800"
+  funcionario_nivel_3: "bg-orange-100 text-orange-800",
+  administrador: "bg-red-100 text-red-800",
+  gerente: "bg-purple-100 text-purple-800",
+  supervisor: "bg-blue-100 text-blue-800",
+  operador: "bg-green-100 text-green-800",
+  visualizador: "bg-gray-100 text-gray-800",
+  user: "bg-gray-100 text-gray-800"
 }
 
 const statusColors = {
@@ -137,6 +108,7 @@ const statusLabels = {
 }
 
 export default function UsuariosPage() {
+  const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -148,7 +120,18 @@ export default function UsuariosPage() {
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
   
-  const [usuarios, setUsuarios] = useState(mockUsuarios)
+  const [usuarios, setUsuarios] = useState<UsuarioFrontend[]>([])
+  const [usuariosBackend, setUsuariosBackend] = useState<Usuario[]>([])
+
+  // Estados para o sistema de permissões
+  const [isPermissoesSidebarOpen, setIsPermissoesSidebarOpen] = useState(false)
+  const [perfis, setPerfis] = useState<Perfil[]>([])
+  const [permissoes, setPermissoes] = useState<Permissao[]>([])
+  const [perfilSelecionado, setPerfilSelecionado] = useState<Perfil | null>(null)
+  const [permissoesPerfil, setPermissoesPerfil] = useState<PerfilPermissao[]>([])
+  const [permissoesSelecionadas, setPermissoesSelecionadas] = useState<number[]>([])
+  const [loadingPermissoes, setLoadingPermissoes] = useState(false)
+  const [savingPermissoes, setSavingPermissoes] = useState(false)
   
   const [userFormData, setUserFormData] = useState({
     name: '',
@@ -178,6 +161,12 @@ export default function UsuariosPage() {
   }
 
   const rolePermissions = {
+    administrador: ["all"],
+    gerente: ["obras", "gruas", "funcionarios", "financeiro", "estoque", "relatorios"],
+    supervisor: ["obras", "gruas", "funcionarios_read"],
+    operador: ["obras_read", "gruas_read"],
+    visualizador: ["obras_read", "gruas_read"],
+    // Manter compatibilidade com roles antigos
     admin: ["all"],
     gestor: ["obras", "gruas", "funcionarios", "financeiro", "estoque", "relatorios"],
     funcionario_nivel_1: ["obras_read", "gruas_read"],
@@ -185,6 +174,210 @@ export default function UsuariosPage() {
     funcionario_nivel_3: ["obras", "gruas", "funcionarios", "financeiro_read"],
     cliente: ["obras_read", "gruas_read"]
   }
+
+  // Funções para o sistema de permissões
+  const carregarDadosPermissoes = async () => {
+    try {
+      setLoadingPermissoes(true)
+      
+      // Verificar se já temos os dados carregados
+      if (perfis.length > 0 && permissoes.length > 0) {
+        setLoadingPermissoes(false)
+        return
+      }
+      
+      const [perfisData, permissoesData] = await Promise.all([
+        apiPerfis.listar(),
+        apiPermissoes.listar()
+      ])
+      setPerfis(perfisData)
+      setPermissoes(utilsPermissoes.filtrarAtivas(permissoesData))
+    } catch (error: any) {
+      console.error('Erro ao carregar dados de permissões:', error)
+      
+      // Se for erro de autenticação, redirecionar para login
+      if (error.message?.includes('Token de acesso requerido') || 
+          error.message?.includes('401') || 
+          error.message?.includes('403')) {
+        toast({
+          title: "Sessão Expirada",
+          description: "Sua sessão expirou. Faça login novamente.",
+          variant: "destructive"
+        })
+        setTimeout(() => {
+          window.location.href = '/'
+        }, 2000)
+        return
+      }
+      
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados de permissões",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingPermissoes(false)
+    }
+  }
+
+  const carregarPermissoesPerfil = async (perfilId: number) => {
+    try {
+      const permissoesData = await apiPerfilPermissoes.obterPermissoes(perfilId)
+      setPermissoesPerfil(permissoesData)
+      
+      // Mapear permissões selecionadas
+      const selecionadas = permissoesData
+        .filter(pp => pp.status === 'Ativa')
+        .map(pp => pp.permissao_id)
+      setPermissoesSelecionadas(selecionadas)
+    } catch (error) {
+      console.error('Erro ao carregar permissões do perfil:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar permissões do perfil",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handlePerfilChange = async (perfilId: string) => {
+    const perfil = perfis.find(p => p.id === parseInt(perfilId))
+    setPerfilSelecionado(perfil || null)
+    
+    if (perfil) {
+      await carregarPermissoesPerfil(perfil.id)
+    } else {
+      setPermissoesPerfil([])
+      setPermissoesSelecionadas([])
+    }
+  }
+
+  const handlePermissaoToggle = (permissaoId: number, checked: boolean) => {
+    if (checked) {
+      setPermissoesSelecionadas(prev => [...prev, permissaoId])
+    } else {
+      setPermissoesSelecionadas(prev => prev.filter(id => id !== permissaoId))
+    }
+  }
+
+  const salvarPermissoes = async () => {
+    if (!perfilSelecionado) return
+
+    try {
+      setSavingPermissoes(true)
+      await apiPerfilPermissoes.atualizarPermissoes(perfilSelecionado.id, permissoesSelecionadas)
+      
+      toast({
+        title: "Sucesso",
+        description: "Permissões salvas com sucesso"
+      })
+      
+      // Recarregar permissões do perfil
+      await carregarPermissoesPerfil(perfilSelecionado.id)
+    } catch (error) {
+      console.error('Erro ao salvar permissões:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar permissões",
+        variant: "destructive"
+      })
+    } finally {
+      setSavingPermissoes(false)
+    }
+  }
+
+  const abrirSidebarPermissoes = () => {
+    setIsPermissoesSidebarOpen(true)
+    // Só carregar dados se ainda não foram carregados
+    if (perfis.length === 0 || permissoes.length === 0) {
+      carregarDadosPermissoes()
+    }
+  }
+
+  // Funções para carregar dados reais do backend
+  // Função para mapear role para perfil_id
+  const getPerfilIdByRole = (role: string): number | null => {
+    const roleToPerfilMap: { [key: string]: number } = {
+      'admin': 1,        // Administrador
+      'gerente': 2,      // Gerente
+      'supervisor': 3,   // Supervisor
+      'operador': 4,     // Operador
+      'visualizador': 5, // Visualizador
+      'administrador': 1, // Administrador (alternativo)
+      'gestor': 2,       // Gerente (alternativo)
+      'cliente': 5,      // Cliente como Visualizador
+      'funcionario_nivel_1': 4, // Operador
+      'funcionario_nivel_2': 3, // Supervisor
+      'funcionario_nivel_3': 2  // Gerente
+    }
+    console.log('🔍 DEBUG: Mapeando role:', role, '-> perfil_id:', roleToPerfilMap[role] || null)
+    return roleToPerfilMap[role] || null
+  }
+
+  const carregarUsuarios = async () => {
+    try {
+      setLoading(true)
+      const response = await apiUsuarios.listar()
+      setUsuariosBackend(response.data)
+      
+      // Converter dados do backend para formato do frontend
+      const usuariosFrontend = response.data.map(usuario => {
+        // Extrair perfil do usuário (pode ser um array ou objeto único)
+        const usuarioWithPerfil = usuario as any
+        const perfilData = usuarioWithPerfil.usuario_perfis?.[0]?.perfis || usuarioWithPerfil.usuario_perfis?.perfis
+        
+        return {
+          id: usuario.id.toString(),
+          name: usuario.nome,
+          email: usuario.email,
+          phone: usuario.telefone || '',
+          role: perfilData?.nome?.toLowerCase() || 'user',
+          status: usuario.status.toLowerCase(),
+          createdAt: usuario.created_at,
+          lastLogin: usuario.ultimo_acesso || null,
+          permissions: [], // Será carregado do sistema de permissões
+          perfil: perfilData ? {
+            id: perfilData.id,
+            nome: perfilData.nome,
+            nivel_acesso: perfilData.nivel_acesso,
+            descricao: perfilData.descricao
+          } : undefined
+        }
+      })
+      
+      setUsuarios(usuariosFrontend)
+    } catch (error: any) {
+      console.error('Erro ao carregar usuários:', error)
+      
+      // Se for erro de autenticação, redirecionar para login
+      if (error.message?.includes('Token de acesso requerido') || 
+          error.message?.includes('401') || 
+          error.message?.includes('403')) {
+        toast({
+          title: "Sessão Expirada",
+          description: "Sua sessão expirou. Faça login novamente.",
+          variant: "destructive"
+        })
+        setTimeout(() => {
+          window.location.href = '/'
+        }, 2000)
+        return
+      }
+      
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar usuários",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Carregar dados quando o componente montar
+  useEffect(() => {
+    carregarUsuarios()
+  }, [])
 
   const filteredUsuarios = usuarios.filter(usuario =>
     (usuario.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -216,23 +409,38 @@ export default function UsuariosPage() {
     try {
       setCreating(true)
       
-      const newUser = {
-        id: Date.now().toString(),
-        ...userFormData,
-        createdAt: new Date().toISOString().split('T')[0],
-        lastLogin: null,
-        permissions: rolePermissions[userFormData.role as keyof typeof rolePermissions] || []
+      // Converter dados do frontend para formato do backend
+      const perfilId = getPerfilIdByRole(userFormData.role)
+      const dadosBackend = {
+        nome: userFormData.name,
+        email: userFormData.email,
+        telefone: userFormData.phone,
+        status: (userFormData.status === 'active' ? 'Ativo' : 
+                userFormData.status === 'inactive' ? 'Inativo' : 
+                userFormData.status === 'suspended' ? 'Bloqueado' : 'Pendente') as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
+        ...(perfilId && { perfil_id: perfilId })
       }
       
-      setUsuarios([...usuarios, newUser])
+      const novoUsuario = await apiUsuarios.criar(dadosBackend)
+      
+      // Recarregar lista de usuários
+      await carregarUsuarios()
+      
       setIsCreateDialogOpen(false)
       resetForm()
       
-      alert('Usuário criado com sucesso!')
+      toast({
+        title: "Sucesso",
+        description: "Usuário criado com sucesso!"
+      })
       
-    } catch (err) {
-      console.error('Erro ao criar usuário:', err)
-      alert('Erro ao criar usuário')
+    } catch (error: any) {
+      console.error('Erro ao criar usuário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar usuário",
+        variant: "destructive"
+      })
     } finally {
       setCreating(false)
     }
@@ -254,25 +462,49 @@ export default function UsuariosPage() {
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (!editingUser) return
+    
     try {
       setUpdating(true)
       
-      const updatedUser = {
-        ...editingUser,
-        ...userFormData,
-        permissions: rolePermissions[userFormData.role as keyof typeof rolePermissions] || []
+      // Converter dados do frontend para formato do backend
+      const perfilId = getPerfilIdByRole(userFormData.role)
+      console.log('🔍 DEBUG: Role selecionado:', userFormData.role)
+      console.log('🔍 DEBUG: Perfil ID mapeado:', perfilId)
+      
+      const dadosBackend = {
+        nome: userFormData.name,
+        email: userFormData.email,
+        telefone: userFormData.phone,
+        status: (userFormData.status === 'active' ? 'Ativo' : 
+                userFormData.status === 'inactive' ? 'Inativo' : 
+                userFormData.status === 'suspended' ? 'Bloqueado' : 'Pendente') as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
+        ...(perfilId && { perfil_id: perfilId })
       }
       
-      setUsuarios(usuarios.map(u => u.id === editingUser.id ? updatedUser : u))
+      console.log('🔍 DEBUG: Payload enviado:', dadosBackend)
+      
+      await apiUsuarios.atualizar(parseInt(editingUser.id), dadosBackend)
+      
+      // Recarregar lista de usuários
+      await carregarUsuarios()
+      
       setIsEditDialogOpen(false)
       setEditingUser(null)
       resetForm()
       
-      alert('Usuário atualizado com sucesso!')
+      toast({
+        title: "Sucesso",
+        description: "Usuário atualizado com sucesso!"
+      })
       
-    } catch (err) {
-      console.error('Erro ao atualizar usuário:', err)
-      alert('Erro ao atualizar usuário')
+    } catch (error: any) {
+      console.error('Erro ao atualizar usuário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar usuário",
+        variant: "destructive"
+      })
     } finally {
       setUpdating(false)
     }
@@ -289,15 +521,26 @@ export default function UsuariosPage() {
     try {
       setDeleting(true)
       
-      setUsuarios(usuarios.filter(u => u.id !== userToDelete.id))
+      await apiUsuarios.excluir(parseInt(userToDelete.id))
+      
+      // Recarregar lista de usuários
+      await carregarUsuarios()
+      
       setIsDeleteDialogOpen(false)
       setUserToDelete(null)
       
-      alert(`Usuário "${userToDelete.name}" excluído com sucesso!`)
+      toast({
+        title: "Sucesso",
+        description: `Usuário "${userToDelete.name}" excluído com sucesso!`
+      })
       
-    } catch (err) {
-      console.error('Erro ao excluir usuário:', err)
-      alert('Erro ao excluir usuário')
+    } catch (error: any) {
+      console.error('Erro ao excluir usuário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao excluir usuário",
+        variant: "destructive"
+      })
     } finally {
       setDeleting(false)
     }
@@ -316,17 +559,26 @@ export default function UsuariosPage() {
 
   const toggleUserStatus = async (usuario: any) => {
     const newStatus = usuario.status === 'active' ? 'inactive' : 'active'
+    const statusBackend = newStatus === 'active' ? 'Ativo' : 'Inativo'
     
     try {
-      setUsuarios(usuarios.map(u => 
-        u.id === usuario.id ? { ...u, status: newStatus } : u
-      ))
+      await apiUsuarios.atualizarStatus(parseInt(usuario.id), statusBackend)
       
-      alert(`Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`)
+      // Recarregar lista de usuários
+      await carregarUsuarios()
       
-    } catch (err) {
-      console.error('Erro ao alterar status do usuário:', err)
-      alert('Erro ao alterar status do usuário')
+      toast({
+        title: "Sucesso",
+        description: `Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`
+      })
+      
+    } catch (error: any) {
+      console.error('Erro ao alterar status do usuário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao alterar status do usuário",
+        variant: "destructive"
+      })
     }
   }
 
@@ -338,13 +590,23 @@ export default function UsuariosPage() {
           <h1 className="text-3xl font-bold text-gray-900">Gerenciamento de Usuários</h1>
           <p className="text-gray-600">Controle de acesso e permissões do sistema</p>
         </div>
-        <Button 
-          className="flex items-center gap-2"
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          Novo Usuário
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={abrirSidebarPermissoes}
+          >
+            <Shield className="w-4 h-4" />
+            Permissões
+          </Button>
+          <Button 
+            className="flex items-center gap-2"
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Novo Usuário
+          </Button>
+        </div>
       </div>
 
       {/* Estatísticas */}
@@ -430,8 +692,14 @@ export default function UsuariosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              <span>Carregando usuários...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Usuário</TableHead>
@@ -478,17 +746,33 @@ export default function UsuariosPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {usuario.permissions.slice(0, 3).map((permission) => (
-                          <Badge key={permission} variant="outline" className="text-xs">
-                            {availablePermissions[permission as keyof typeof availablePermissions] || permission}
-                          </Badge>
-                        ))}
-                        {usuario.permissions.length > 3 && (
+                      <div className="space-y-2">
+                        {usuario.perfil ? (
+                          <div>
+                            <Badge variant="secondary" className="text-xs">
+                              {usuario.perfil.nome}
+                            </Badge>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Nível: {usuario.perfil.nivel_acesso}
+                            </p>
+                          </div>
+                        ) : (
                           <Badge variant="outline" className="text-xs">
-                            +{usuario.permissions.length - 3} mais
+                            Sem perfil
                           </Badge>
                         )}
+                        <div className="flex flex-wrap gap-1">
+                          {usuario.permissions.slice(0, 2).map((permission) => (
+                            <Badge key={permission} variant="outline" className="text-xs">
+                              {availablePermissions[permission as keyof typeof availablePermissions] || permission}
+                            </Badge>
+                          ))}
+                          {usuario.permissions.length > 2 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{usuario.permissions.length - 2} mais
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -522,7 +806,8 @@ export default function UsuariosPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -607,12 +892,11 @@ export default function UsuariosPage() {
                       <SelectValue placeholder="Selecione a função" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="gestor">Gestor</SelectItem>
-                      <SelectItem value="funcionario_nivel_1">Funcionário Nível 1</SelectItem>
-                      <SelectItem value="funcionario_nivel_2">Funcionário Nível 2</SelectItem>
-                      <SelectItem value="funcionario_nivel_3">Funcionário Nível 3</SelectItem>
-                      <SelectItem value="cliente">Cliente</SelectItem>
+                      <SelectItem value="administrador">Administrador</SelectItem>
+                      <SelectItem value="gerente">Gerente</SelectItem>
+                      <SelectItem value="supervisor">Supervisor</SelectItem>
+                      <SelectItem value="operador">Operador</SelectItem>
+                      <SelectItem value="visualizador">Visualizador</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -740,12 +1024,11 @@ export default function UsuariosPage() {
                       <SelectValue placeholder="Selecione a função" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="gestor">Gestor</SelectItem>
-                      <SelectItem value="funcionario_nivel_1">Funcionário Nível 1</SelectItem>
-                      <SelectItem value="funcionario_nivel_2">Funcionário Nível 2</SelectItem>
-                      <SelectItem value="funcionario_nivel_3">Funcionário Nível 3</SelectItem>
-                      <SelectItem value="cliente">Cliente</SelectItem>
+                      <SelectItem value="administrador">Administrador</SelectItem>
+                      <SelectItem value="gerente">Gerente</SelectItem>
+                      <SelectItem value="supervisor">Supervisor</SelectItem>
+                      <SelectItem value="operador">Operador</SelectItem>
+                      <SelectItem value="visualizador">Visualizador</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -830,6 +1113,156 @@ export default function UsuariosPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Sidebar de Permissões */}
+      <Sheet open={isPermissoesSidebarOpen} onOpenChange={setIsPermissoesSidebarOpen}>
+        <SheetContent className="w-[600px] sm:max-w-[600px]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Gerenciar Permissões
+            </SheetTitle>
+            <SheetDescription>
+              Configure as permissões para cada perfil de usuário
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 mx-6 space-y-6">
+            {/* Seleção de Perfil */}
+            <div className="space-y-2">
+              <Label htmlFor="perfil-select">Selecionar Perfil</Label>
+              <Select onValueChange={handlePerfilChange} disabled={loadingPermissoes}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Escolha um perfil para gerenciar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {perfis.map((perfil) => (
+                    <SelectItem key={perfil.id} value={perfil.id.toString()}>
+                      <div className="flex items-center justify-between w-full">
+                        <span>{perfil.nome}</span>
+                        <Badge variant="outline" className="ml-2">
+                          Nível {perfil.nivel_acesso}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {perfilSelecionado && (
+              <>
+                <Separator />
+                
+                {/* Informações do Perfil */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-semibold text-lg">{perfilSelecionado.nome}</h3>
+                  {perfilSelecionado.descricao && (
+                    <p className="text-sm text-gray-600 mt-1">{perfilSelecionado.descricao}</p>
+                  )}
+                  <div className="flex items-center gap-4 mt-2">
+                    <Badge variant="outline">
+                      Nível {perfilSelecionado.nivel_acesso}
+                    </Badge>
+                    <Badge variant={perfilSelecionado.status === 'Ativo' ? 'default' : 'secondary'}>
+                      {perfilSelecionado.status}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Lista de Permissões */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Permissões</h3>
+                    <Badge variant="outline">
+                      {permissoesSelecionadas.length} selecionadas
+                    </Badge>
+                  </div>
+
+                  <ScrollArea className="h-[400px] pr-4">
+                    <div className="space-y-4">
+                      {(() => {
+                        const permissoesAgrupadas = utilsPermissoes.agruparPorModulo(permissoes)
+                        const modulos = utilsPermissoes.obterModulos(permissoes)
+                        
+                        return modulos.map((modulo) => (
+                          <div key={modulo} className="space-y-2">
+                            <h4 className="font-medium text-sm text-gray-700 uppercase tracking-wide">
+                              {modulo}
+                            </h4>
+                            <div className="space-y-2 pl-4">
+                              {permissoesAgrupadas[modulo].map((permissao) => (
+                                <div key={permissao.id} className="flex items-center space-x-3">
+                                  <Checkbox
+                                    id={`permissao-${permissao.id}`}
+                                    checked={permissoesSelecionadas.includes(permissao.id)}
+                                    onCheckedChange={(checked) => 
+                                      handlePermissaoToggle(permissao.id, checked as boolean)
+                                    }
+                                  />
+                                  <div className="flex-1">
+                                    <Label 
+                                      htmlFor={`permissao-${permissao.id}`}
+                                      className="text-sm font-medium cursor-pointer"
+                                    >
+                                      {permissao.nome}
+                                    </Label>
+                                    {permissao.descricao && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {permissao.descricao}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Botões de Ação */}
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsPermissoesSidebarOpen(false)}
+                    className="flex-1"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={salvarPermissoes}
+                    disabled={savingPermissoes}
+                    className="flex-1"
+                  >
+                    {savingPermissoes ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Salvar Permissões
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {loadingPermissoes && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                <span>Carregando permissões...</span>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
       </div>
     </AdminGuard>
   )

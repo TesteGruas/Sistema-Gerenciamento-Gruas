@@ -67,6 +67,7 @@ import pontoEletronicoRoutes from './routes/ponto-eletronico.js'
 import gruaComponentesRoutes from './routes/grua-componentes.js'
 import gruaConfiguracoesRoutes from './routes/grua-configuracoes.js'
 import gruaObrasRoutes from './routes/grua-obras.js'
+import permissoesRoutes from './routes/permissoes.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -244,6 +245,7 @@ app.use('/api/ponto-eletronico', pontoEletronicoRoutes)
 app.use('/api/grua-componentes', gruaComponentesRoutes)
 app.use('/api/grua-configuracoes', gruaConfiguracoesRoutes)
 app.use('/api/grua-obras', gruaObrasRoutes)
+app.use('/api/permissoes', permissoesRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

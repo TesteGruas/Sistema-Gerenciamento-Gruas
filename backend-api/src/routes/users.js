@@ -17,7 +17,8 @@ const userSchema = Joi.object({
   estado: Joi.string().length(2).optional(),
   cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).optional(),
   foto_perfil: Joi.string().uri().optional(),
-  status: Joi.string().valid('Ativo', 'Inativo', 'Bloqueado', 'Pendente').default('Ativo')
+  status: Joi.string().valid('Ativo', 'Inativo', 'Bloqueado', 'Pendente').default('Ativo'),
+  perfil_id: Joi.number().integer().positive().optional()
 })
 
 /**
@@ -54,13 +55,14 @@ const userSchema = Joi.object({
  *       200:
  *         description: Lista de usuários
  */
-router.get('/', authenticateToken, requirePermission('visualizar_usuarios'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
     const { status } = req.query
 
+    // Primeiro buscar usuários
     let query = supabaseAdmin
       .from('usuarios')
       .select('*', { count: 'exact' })
@@ -71,7 +73,44 @@ router.get('/', authenticateToken, requirePermission('visualizar_usuarios'), asy
 
     query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
 
-    const { data, error, count } = await query
+    const { data: usuarios, error, count } = await query
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao buscar usuários',
+        message: error.message
+      })
+    }
+
+    // Buscar perfis para cada usuário
+    const usuariosComPerfis = await Promise.all(
+      usuarios.map(async (usuario) => {
+        const { data: perfilData } = await supabaseAdmin
+          .from('usuario_perfis')
+          .select(`
+            id,
+            perfil_id,
+            status,
+            data_atribuicao,
+            perfis!inner(
+              id,
+              nome,
+              nivel_acesso,
+              descricao
+            )
+          `)
+          .eq('usuario_id', usuario.id)
+          .eq('status', 'Ativa')
+          .single()
+
+        return {
+          ...usuario,
+          usuario_perfis: perfilData
+        }
+      })
+    )
+
+    const data = usuariosComPerfis
 
     if (error) {
       return res.status(500).json({
@@ -122,18 +161,19 @@ router.get('/', authenticateToken, requirePermission('visualizar_usuarios'), asy
  *       404:
  *         description: Usuário não encontrado
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_usuarios'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('usuarios:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 
-    const { data, error } = await supabaseAdmin
+    // Buscar usuário
+    const { data: usuario, error: usuarioError } = await supabaseAdmin
       .from('usuarios')
       .select('*')
       .eq('id', id)
       .single()
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+    if (usuarioError) {
+      if (usuarioError.code === 'PGRST116') {
         return res.status(404).json({
           error: 'Usuário não encontrado',
           message: 'O usuário com o ID especificado não existe'
@@ -141,8 +181,32 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_usuarios'), 
       }
       return res.status(500).json({
         error: 'Erro ao buscar usuário',
-        message: error.message
+        message: usuarioError.message
       })
+    }
+
+    // Buscar perfil do usuário
+    const { data: perfilData } = await supabaseAdmin
+      .from('usuario_perfis')
+      .select(`
+        id,
+        perfil_id,
+        status,
+        data_atribuicao,
+        perfis!inner(
+          id,
+          nome,
+          nivel_acesso,
+          descricao
+        )
+      `)
+      .eq('usuario_id', id)
+      .eq('status', 'Ativa')
+      .single()
+
+    const data = {
+      ...usuario,
+      usuario_perfis: perfilData
     }
 
     res.json({
@@ -194,7 +258,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_usuarios'), 
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_usuarios'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (req, res) => {
   try {
     const { error, value } = userSchema.validate(req.body)
     if (error) {
@@ -204,15 +268,18 @@ router.post('/', authenticateToken, requirePermission('criar_usuarios'), async (
       })
     }
 
-    const userData = {
-      ...value,
+    // Separar perfil_id dos dados do usuário
+    const { perfil_id, ...userData } = value
+    
+    const finalUserData = {
+      ...userData,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: insertError } = await supabase
+    const { data, error: insertError } = await supabaseAdmin
       .from('usuarios')
-      .insert(userData)
+      .insert(finalUserData)
       .select()
       .single()
 
@@ -221,6 +288,25 @@ router.post('/', authenticateToken, requirePermission('criar_usuarios'), async (
         error: 'Erro ao criar usuário',
         message: insertError.message
       })
+    }
+
+    // Se perfil_id foi fornecido, associar o usuário ao perfil
+    if (perfil_id && data) {
+      const { error: perfilError } = await supabaseAdmin
+        .from('usuario_perfis')
+        .insert({
+          usuario_id: data.id,
+          perfil_id: perfil_id,
+          data_atribuicao: new Date().toISOString(),
+          status: 'Ativa',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+
+      if (perfilError) {
+        console.error('Erro ao associar perfil ao usuário:', perfilError)
+        // Não falha a criação do usuário, apenas loga o erro
+      }
     }
 
     res.status(201).json({
@@ -273,7 +359,7 @@ router.post('/', authenticateToken, requirePermission('criar_usuarios'), async (
  *       404:
  *         description: Usuário não encontrado
  */
-router.put('/:id', authenticateToken, requirePermission('editar_usuarios'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -285,12 +371,15 @@ router.put('/:id', authenticateToken, requirePermission('editar_usuarios'), asyn
       })
     }
 
+    // Separar perfil_id dos dados do usuário
+    const { perfil_id, ...userData } = value
+    
     const updateData = {
-      ...value,
+      ...userData,
       updated_at: new Date().toISOString()
     }
 
-    const { data, error: updateError } = await supabase
+    const { data, error: updateError } = await supabaseAdmin
       .from('usuarios')
       .update(updateData)
       .eq('id', id)
@@ -308,6 +397,51 @@ router.put('/:id', authenticateToken, requirePermission('editar_usuarios'), asyn
         error: 'Erro ao atualizar usuário',
         message: updateError.message
       })
+    }
+
+    // Se perfil_id foi fornecido, atualizar a associação do usuário ao perfil
+    if (perfil_id && data) {
+      // Primeiro, desativar o perfil atual
+      await supabaseAdmin
+        .from('usuario_perfis')
+        .update({ 
+          status: 'Inativa',
+          updated_at: new Date().toISOString()
+        })
+        .eq('usuario_id', id)
+        .eq('status', 'Ativa')
+
+      // Depois, criar nova associação ou ativar existente
+      const { data: existingPerfil } = await supabaseAdmin
+        .from('usuario_perfis')
+        .select('*')
+        .eq('usuario_id', id)
+        .eq('perfil_id', perfil_id)
+        .single()
+
+      if (existingPerfil) {
+        // Ativar perfil existente
+        await supabaseAdmin
+          .from('usuario_perfis')
+          .update({
+            status: 'Ativa',
+            data_atribuicao: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingPerfil.id)
+      } else {
+        // Criar nova associação
+        await supabaseAdmin
+          .from('usuario_perfis')
+          .insert({
+            usuario_id: id,
+            perfil_id: perfil_id,
+            data_atribuicao: new Date().toISOString(),
+            status: 'Ativa',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+      }
     }
 
     res.json({
@@ -345,11 +479,11 @@ router.put('/:id', authenticateToken, requirePermission('editar_usuarios'), asyn
  *       404:
  *         description: Usuário não encontrado
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_usuarios'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('usuarios:deletar'), async (req, res) => {
   try {
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('usuarios')
       .delete()
       .eq('id', id)

@@ -43,6 +43,7 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     try {
+      // Primeiro buscar o usuário
       const { data: userData, error: userError } = await supabaseAdmin
         .from('usuarios')
         .select('*')
@@ -50,9 +51,37 @@ export const authenticateToken = async (req, res, next) => {
         .single()
 
       if (userData && !userError) {
-        userInfo = userData
+        console.log('🔍 DEBUG: Usuário encontrado na tabela usuarios:', userData.id, userData.email)
+        // Depois buscar o perfil do usuário
+        const { data: perfilData, error: perfilError } = await supabaseAdmin
+          .from('usuario_perfis')
+          .select(`
+            perfil_id,
+            status,
+            perfis!inner(nome, nivel_acesso)
+          `)
+          .eq('usuario_id', userData.id)
+          .eq('status', 'Ativa')
+          .single()
+
+        if (perfilData && !perfilError) {
+          userInfo = {
+            ...userData,
+            role: perfilData.perfis?.nome?.toLowerCase() || 'user'
+          }
+          console.log('🔍 DEBUG: Usuário encontrado com perfil:', perfilData.perfis?.nome)
+        } else {
+          console.log('🔍 DEBUG: Perfil não encontrado para o usuário:', userData.email, 'Erro:', perfilError?.message)
+          userInfo = {
+            ...userData,
+            role: 'user'
+          }
+        }
+      } else {
+        console.log('🔍 DEBUG: Usuário não encontrado na tabela usuarios:', userError?.message)
       }
     } catch (dbError) {
+      console.log('🔍 DEBUG: Erro ao buscar usuário:', dbError.message)
       console.log('Usuário não encontrado na tabela usuarios, usando dados do Supabase Auth')
     }
 
@@ -82,21 +111,42 @@ export const requirePermission = (permission) => {
       }
 
       // Sistema de permissões simplificado baseado no role do usuário
-      const userRole =  'admin'
+      const userRole = req.user?.role || 'user'
       console.log('🔍 DEBUG: Role do usuário:', userRole)
       // Mapeamento de permissões por role
       const rolePermissions = {
+        'administrador': [
+          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'excluir_produtos', 'movimentar_estoque',
+          'visualizar_clientes', 'criar_clientes', 'editar_clientes', 'excluir_clientes',
+          'visualizar_obras', 'criar_obras', 'editar_obras', 'excluir_obras',
+          'visualizar_funcionarios', 'criar_funcionarios', 'editar_funcionarios', 'excluir_funcionarios',
+          'visualizar_equipamentos', 'criar_equipamentos', 'editar_equipamentos', 'excluir_equipamentos',
+          'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
+          'usuarios:visualizar', 'usuarios:criar', 'usuarios:editar', 'usuarios:deletar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes'
+        ],
+        'gerente': [
+          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'movimentar_estoque',
+          'visualizar_clientes', 'criar_clientes', 'editar_clientes',
+          'usuarios:visualizar'
+        ],
+        'supervisor': [
+          'visualizar_estoque', 'visualizar_clientes', 'visualizar_obras',
+          'usuarios:visualizar'
+        ],
+        'operador': [
+          'visualizar_estoque', 'visualizar_clientes'
+        ],
+        'visualizador': [
+          'visualizar_estoque', 'visualizar_clientes'
+        ],
         'admin': [
           'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'excluir_produtos', 'movimentar_estoque',
           'visualizar_clientes', 'criar_clientes', 'editar_clientes', 'excluir_clientes',
           'visualizar_obras', 'criar_obras', 'editar_obras', 'excluir_obras',
           'visualizar_funcionarios', 'criar_funcionarios', 'editar_funcionarios', 'excluir_funcionarios',
           'visualizar_equipamentos', 'criar_equipamentos', 'editar_equipamentos', 'excluir_equipamentos',
-          'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos'
-        ],
-        'manager': [
-          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'movimentar_estoque',
-          'visualizar_clientes', 'criar_clientes', 'editar_clientes'
+          'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
+          'usuarios:visualizar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes'
         ],
         'user': [
           'visualizar_estoque', 'visualizar_clientes'
