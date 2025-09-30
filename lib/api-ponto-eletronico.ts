@@ -93,7 +93,7 @@ export interface RelatorioHorasExtras {
 // Helper function to get auth token
 const getAuthToken = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('authToken');
+    return localStorage.getItem('access_token');
   }
   return null;
 };
@@ -102,11 +102,19 @@ const getAuthToken = () => {
 const apiRequest = async (url: string, options: RequestInit = {}) => {
   const token = getAuthToken();
   
+  if (!token) {
+    console.warn('Token não encontrado, redirecionando para login...');
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
+    throw new Error('Token de acesso requerido');
+  }
+  
   const config: RequestInit = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
+      'Authorization': `Bearer ${token}`,
       ...options.headers,
     },
   };
@@ -116,6 +124,15 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      
+      if (response.status === 401 || response.status === 403) {
+        console.warn('Token inválido ou expirado, redirecionando para login...');
+        localStorage.removeItem('access_token');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }
+      
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     }
     
