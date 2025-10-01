@@ -1,5 +1,5 @@
 import express from 'express';
-import { supabase } from '../config/supabase.js';
+import { supabaseAdmin } from '../config/supabase.js';
 
 const router = express.Router();
 
@@ -65,63 +65,54 @@ router.get('/', async (req, res) => {
   try {
     const hoje = new Date().toISOString().split('T')[0];
     
-    // Buscar dados de vendas para hoje
-    const { data: vendasHoje, error: vendasError } = await supabase
-      .from('vendas')
-      .select('valor_total, status')
-      .eq('data_venda', hoje)
+    // Buscar receitas para hoje
+    const { data: receitasHoje, error: receitasError } = await supabaseAdmin
+      .from('receitas')
+      .select('valor, status')
+      .eq('data_receita', hoje)
       .eq('status', 'confirmada');
 
-    if (vendasError) throw vendasError;
+    if (receitasError) {
+      console.warn('Erro ao buscar receitas:', receitasError);
+    }
 
-    // Buscar dados de compras para hoje
-    const { data: comprasHoje, error: comprasError } = await supabase
-      .from('compras')
-      .select('valor_total, status')
-      .eq('data_pedido', hoje)
-      .eq('status', 'aprovado');
+    // Buscar custos para hoje
+    const { data: custosHoje, error: custosError } = await supabaseAdmin
+      .from('custos')
+      .select('valor, status')
+      .eq('data_custo', hoje)
+      .eq('status', 'confirmado');
 
-    if (comprasError) throw comprasError;
+    if (custosError) {
+      console.warn('Erro ao buscar custos:', custosError);
+    }
 
-    // Buscar vendas em atraso (pendentes há mais de 7 dias)
+    // Buscar receitas em atraso (pendentes há mais de 7 dias)
     const dataLimiteAtraso = new Date();
     dataLimiteAtraso.setDate(dataLimiteAtraso.getDate() - 7);
     
-    const { data: vendasAtraso, error: vendasAtrasoError } = await supabase
-      .from('vendas')
-      .select('valor_total')
+    const { data: receitasAtraso, error: receitasAtrasoError } = await supabaseAdmin
+      .from('receitas')
+      .select('valor')
       .eq('status', 'pendente')
-      .lt('data_venda', dataLimiteAtraso.toISOString().split('T')[0]);
+      .lt('data_receita', dataLimiteAtraso.toISOString().split('T')[0]);
 
-    if (vendasAtrasoError) throw vendasAtrasoError;
+    if (receitasAtrasoError) {
+      console.warn('Erro ao buscar receitas em atraso:', receitasAtrasoError);
+    }
 
-    // Buscar compras em atraso
-    const { data: comprasAtraso, error: comprasAtrasoError } = await supabase
-      .from('compras')
-      .select('valor_total')
+    // Buscar custos em atraso
+    const { data: custosAtraso, error: custosAtrasoError } = await supabaseAdmin
+      .from('custos')
+      .select('valor')
       .eq('status', 'pendente')
-      .lt('data_pedido', dataLimiteAtraso.toISOString().split('T')[0]);
+      .lt('data_custo', dataLimiteAtraso.toISOString().split('T')[0]);
 
-    if (comprasAtrasoError) throw comprasAtrasoError;
+    if (custosAtrasoError) {
+      console.warn('Erro ao buscar custos em atraso:', custosAtrasoError);
+    }
 
-    // Calcular saldo atual das contas bancárias
-    const { data: contasBancarias, error: contasError } = await supabase
-      .from('contas_bancarias')
-      .select('saldo_atual')
-      .eq('status', 'ativa');
-
-    if (contasError) throw contasError;
-
-    // Buscar transferências recentes
-    const { data: transferencias, error: transferenciasError } = await supabase
-      .from('transferencias_bancarias')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (transferenciasError) throw transferenciasError;
-
-    // Calcular fluxo de caixa dos últimos 6 meses
+    // Calcular fluxo de caixa dos últimos 6 meses usando receitas e custos
     const fluxoCaixa = [];
     for (let i = 5; i >= 0; i--) {
       const hoje = new Date();
@@ -134,28 +125,32 @@ router.get('/', async (req, res) => {
       
       const mesString = `${anoAjustado}-${String(mesAjustado + 1).padStart(2, '0')}`;
       
-      // Buscar entradas do mês
-      const { data: entradas, error: entradasError } = await supabase
-        .from('transferencias_bancarias')
+      // Buscar receitas do mês (entradas)
+      const { data: receitasMes, error: receitasMesError } = await supabaseAdmin
+        .from('receitas')
         .select('valor')
-        .eq('tipo', 'entrada')
-        .gte('data', `${mesString}-01`)
-        .lt('data', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
+        .eq('status', 'confirmada')
+        .gte('data_receita', `${mesString}-01`)
+        .lt('data_receita', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
 
-      if (entradasError) throw entradasError;
+      if (receitasMesError) {
+        console.warn(`Erro ao buscar receitas do mês ${mesString}:`, receitasMesError);
+      }
 
-      // Buscar saídas do mês
-      const { data: saidas, error: saidasError } = await supabase
-        .from('transferencias_bancarias')
+      // Buscar custos do mês (saídas)
+      const { data: custosMes, error: custosMesError } = await supabaseAdmin
+        .from('custos')
         .select('valor')
-        .eq('tipo', 'saida')
-        .gte('data', `${mesString}-01`)
-        .lt('data', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
+        .eq('status', 'confirmado')
+        .gte('data_custo', `${mesString}-01`)
+        .lt('data_custo', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
 
-      if (saidasError) throw saidasError;
+      if (custosMesError) {
+        console.warn(`Erro ao buscar custos do mês ${mesString}:`, custosMesError);
+      }
 
-      const totalEntradas = entradas?.reduce((sum, item) => sum + parseFloat(item.valor), 0) || 0;
-      const totalSaidas = saidas?.reduce((sum, item) => sum + parseFloat(item.valor), 0) || 0;
+      const totalEntradas = receitasMes?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+      const totalSaidas = custosMes?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
 
       fluxoCaixa.push({
         mes: new Date(anoAjustado, mesAjustado).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
@@ -165,11 +160,13 @@ router.get('/', async (req, res) => {
     }
 
     // Calcular totais
-    const receberHoje = vendasHoje?.reduce((sum, item) => sum + parseFloat(item.valor_total), 0) || 0;
-    const pagarHoje = comprasHoje?.reduce((sum, item) => sum + parseFloat(item.valor_total), 0) || 0;
-    const recebimentosAtraso = vendasAtraso?.reduce((sum, item) => sum + parseFloat(item.valor_total), 0) || 0;
-    const pagamentosAtraso = comprasAtraso?.reduce((sum, item) => sum + parseFloat(item.valor_total), 0) || 0;
-    const saldoAtual = contasBancarias?.reduce((sum, conta) => sum + parseFloat(conta.saldo_atual), 0) || 0;
+    const receberHoje = receitasHoje?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+    const pagarHoje = custosHoje?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+    const recebimentosAtraso = receitasAtraso?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+    const pagamentosAtraso = custosAtraso?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+    
+    // Saldo atual simulado (pode ser implementado com contas bancárias depois)
+    const saldoAtual = 50000; // Valor simulado
 
     const financialData = {
       receberHoje,
@@ -178,7 +175,7 @@ router.get('/', async (req, res) => {
       pagamentosAtraso,
       saldoAtual,
       fluxoCaixa,
-      transferencias: transferencias || []
+      transferencias: [] // Array vazio por enquanto
     };
 
     res.json({
