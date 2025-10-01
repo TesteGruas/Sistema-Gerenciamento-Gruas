@@ -37,34 +37,33 @@ import {
   Briefcase
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { custosApi, useCustos, custosUtils, type Custo, type CustoCreate, type CustoUpdate, type CustoFilters } from "@/lib/api-custos"
+import apiObras from "@/lib/api-obras"
+import { funcionariosApi } from "@/lib/api-funcionarios"
 
-// Tipos para custos
-interface Custo {
-  id: string
-  obra_id: string
-  tipo: 'salario' | 'material' | 'servico' | 'manutencao'
-  descricao: string
-  valor: number
-  data_custo: string
-  funcionario_id?: string
-  status: 'pendente' | 'confirmado' | 'cancelado'
-  observacoes?: string
-  created_at: string
-  updated_at: string
-  obras?: {
-    id: string
+// Tipos para obras e funcionários
+interface Obra {
+  id: number
+  nome: string
+  cliente_id: number
+  endereco?: string
+  cidade?: string
+  clientes?: {
+    id: number
     nome: string
-    cliente_id: string
-    clientes?: {
-      id: string
-      nome: string
-    }
   }
-  funcionarios?: {
-    id: string
-    nome: string
-    cargo: string
-  }
+}
+
+interface Funcionario {
+  id: number
+  nome: string
+  cargo: string
+}
+
+// Estender o tipo Custo para incluir relacionamentos
+interface CustoComRelacionamentos extends Custo {
+  obras?: Obra
+  funcionarios?: Funcionario
 }
 
 export default function CustosPage() {
@@ -72,19 +71,18 @@ export default function CustosPage() {
   const { toast } = useToast()
   
   // Estados
-  const [custos, setCustos] = useState<Custo[]>([])
-  const [obras, setObras] = useState<any[]>([])
-  const [gruas, setGruas] = useState<any[]>([])
+  const [custos, setCustos] = useState<CustoComRelacionamentos[]>([])
+  const [obras, setObras] = useState<Obra[]>([])
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterTipo, setFilterTipo] = useState("all")
   const [filterObra, setFilterObra] = useState("all")
-  const [filterGrua, setFilterGrua] = useState("all")
   const [filterPeriodo, setFilterPeriodo] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [editingCusto, setEditingCusto] = useState<Custo | null>(null)
+  const [editingCusto, setEditingCusto] = useState<CustoComRelacionamentos | null>(null)
   const [resumoFinanceiro, setResumoFinanceiro] = useState<any>(null)
 
   // Formulário
@@ -97,131 +95,47 @@ export default function CustosPage() {
     funcionario_id: '',
     observacoes: ''
   })
+  const [obraFilter, setObraFilter] = useState('')
 
   // Carregar dados
   useEffect(() => {
     carregarDados()
   }, [])
 
+  // Filtrar obras
+  const obrasFiltradas = obras.filter(obra => {
+    if (!obraFilter) return true
+    const searchTerm = obraFilter.toLowerCase()
+    return (
+      obra.nome?.toLowerCase().includes(searchTerm) ||
+      obra.endereco?.toLowerCase().includes(searchTerm) ||
+      obra.cidade?.toLowerCase().includes(searchTerm)
+    )
+  })
+
   const carregarDados = async () => {
     try {
       setLoading(true)
       
-      // Simular carregamento de dados (substituir por chamadas reais da API)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Carregar custos com filtros
+      const filters: CustoFilters = {
+        page: 1,
+        limit: 1000
+      }
       
-      // Dados mockados para demonstração
-      const mockCustos: Custo[] = [
-        {
-          id: '1',
-          obra_id: '1',
-          tipo: 'salario',
-          descricao: 'Salário do operador da grua',
-          valor: 8000,
-          data_custo: '2025-01-15',
-          funcionario_id: '1',
-          status: 'confirmado',
-          observacoes: 'Salário mensal do operador',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          obras: {
-            id: '1',
-            nome: 'Obra Jardim das Flores',
-            cliente_id: '1',
-            clientes: {
-              id: '1',
-              nome: 'Construtora ABC'
-            }
-          },
-          funcionarios: {
-            id: '1',
-            nome: 'João Silva',
-            cargo: 'Operador de Grua'
-          }
-        },
-        {
-          id: '2',
-          obra_id: '1',
-          tipo: 'material',
-          descricao: 'Compra de peças de reposição',
-          valor: 2500,
-          data_custo: '2025-01-18',
-          status: 'confirmado',
-          observacoes: 'Peças para manutenção preventiva',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          obras: {
-            id: '1',
-            nome: 'Obra Jardim das Flores',
-            cliente_id: '1',
-            clientes: {
-              id: '1',
-              nome: 'Construtora ABC'
-            }
-          }
-        },
-        {
-          id: '3',
-          obra_id: '1',
-          tipo: 'servico',
-          descricao: 'Serviço de manutenção externa',
-          valor: 5000,
-          data_custo: '2025-01-20',
-          status: 'pendente',
-          observacoes: 'Manutenção especializada',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          obras: {
-            id: '1',
-            nome: 'Obra Jardim das Flores',
-            cliente_id: '1',
-            clientes: {
-              id: '1',
-              nome: 'Construtora ABC'
-            }
-          }
-        },
-        {
-          id: '4',
-          obra_id: '2',
-          tipo: 'manutencao',
-          descricao: 'Manutenção preventiva da grua',
-          valor: 3000,
-          data_custo: '2025-01-22',
-          status: 'confirmado',
-          observacoes: 'Manutenção programada',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          obras: {
-            id: '2',
-            nome: 'Shopping Center Norte',
-            cliente_id: '2',
-            clientes: {
-              id: '2',
-              nome: 'Empresa XYZ'
-            }
-          }
-        }
-      ]
-
-      setCustos(mockCustos)
+      const custosData = await custosApi.list(filters)
+      setCustos(custosData.custos || [])
       
-      // Carregar obras e gruas para filtros
-      const obrasMock = [
-        { id: "1", nome: "Obra Jardim das Flores", cliente: "Construtora ABC" },
-        { id: "2", nome: "Obra Comercial Centro", cliente: "Empresa XYZ" }
-      ]
+      // Carregar obras para filtros
+      const obrasData = await apiObras.listarObras()
+      setObras(obrasData.data || [])
       
-      const gruasMock = [
-        { id: "1", nome: "Grua 001", modelo: "Liebherr 200HC" },
-        { id: "2", nome: "Grua 002", modelo: "Potain MDT 178" }
-      ]
-      
-      setObras(obrasMock)
-      setGruas(gruasMock)
+      // Carregar funcionários para filtros
+      const funcionariosData = await funcionariosApi.listarFuncionarios()
+      setFuncionarios(funcionariosData.data || [])
       
       // Calcular resumo financeiro
-      calcularResumoFinanceiro(mockCustos)
+      calcularResumoFinanceiro(custosData.custos || [])
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -235,8 +149,8 @@ export default function CustosPage() {
     }
   }
 
-  const calcularResumoFinanceiro = (custosData: Custo[]) => {
-    const totalCustos = custosData.reduce((sum, custo) => sum + custo.valor, 0)
+  const calcularResumoFinanceiro = (custosData: CustoComRelacionamentos[]) => {
+    const totalCustos = custosData.reduce((sum, custo) => sum + (custo.valor || 0), 0)
     const totalReceitas = 25000 // Simular receitas
     const saldo = totalReceitas - totalCustos
     
@@ -246,43 +160,40 @@ export default function CustosPage() {
       saldo,
       custosPorObra: custosData.reduce((acc, custo) => {
         const obraNome = custo.obras?.nome || 'Sem obra'
-        acc[obraNome] = (acc[obraNome] || 0) + custo.valor
+        acc[obraNome] = (acc[obraNome] || 0) + (custo.valor || 0)
         return acc
       }, {} as Record<string, number>)
     })
   }
 
   // Filtrar custos
-  const filteredCustos = custos.filter(custo => {
-    const matchesSearch = custo.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         custo.obras?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         custo.funcionarios?.nome.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredCustos = (custos || []).filter(custo => {
+    const matchesSearch = (custo.descricao || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (custo.obras?.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (custo.funcionarios?.nome || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = filterStatus === 'all' || custo.status === filterStatus
     const matchesTipo = filterTipo === 'all' || custo.tipo === filterTipo
-    const matchesObra = filterObra === 'all' || custo.obra_id === filterObra
-    const matchesGrua = filterGrua === 'all' || custo.obra_id === filterGrua // Simplificado para demo
-    const matchesPeriodo = !filterPeriodo || custo.data_custo.startsWith(filterPeriodo)
-    return matchesSearch && matchesStatus && matchesTipo && matchesObra && matchesGrua && matchesPeriodo
+    const matchesObra = filterObra === 'all' || custo.obra_id?.toString() === filterObra
+    const matchesPeriodo = !filterPeriodo || (custo.data_custo || '').startsWith(filterPeriodo)
+    return matchesSearch && matchesStatus && matchesTipo && matchesObra && matchesPeriodo
   })
 
   // Handlers
   const handleCreateCusto = async () => {
     try {
-      const novoCusto: Custo = {
-        id: Date.now().toString(),
-        obra_id: custoForm.obra_id,
+      const custoData: CustoCreate = {
+        obra_id: parseInt(custoForm.obra_id),
         tipo: custoForm.tipo,
         descricao: custoForm.descricao,
         valor: custoForm.valor,
         data_custo: custoForm.data_custo,
-        funcionario_id: custoForm.funcionario_id || undefined,
+        funcionario_id: custoForm.funcionario_id ? parseInt(custoForm.funcionario_id) : undefined,
         status: 'pendente',
-        observacoes: custoForm.observacoes,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        observacoes: custoForm.observacoes.trim() || undefined
       }
 
-      setCustos([...custos, novoCusto])
+      const novoCusto = await custosApi.create(custoData)
+      setCustos([novoCusto, ...(custos || [])])
       setIsCreateDialogOpen(false)
       resetForm()
 
@@ -300,15 +211,15 @@ export default function CustosPage() {
     }
   }
 
-  const handleEditCusto = (custo: Custo) => {
+  const handleEditCusto = (custo: CustoComRelacionamentos) => {
     setEditingCusto(custo)
     setCustoForm({
-      obra_id: custo.obra_id,
+      obra_id: custo.obra_id.toString(),
       tipo: custo.tipo,
       descricao: custo.descricao,
       valor: custo.valor,
       data_custo: custo.data_custo,
-      funcionario_id: custo.funcionario_id || '',
+      funcionario_id: custo.funcionario_id?.toString() || '',
       observacoes: custo.observacoes || ''
     })
     setIsEditDialogOpen(true)
@@ -318,23 +229,21 @@ export default function CustosPage() {
     try {
       if (!editingCusto) return
 
-      const custosAtualizados = custos.map(custo => 
-        custo.id === editingCusto.id 
-          ? {
-              ...custo,
-              obra_id: custoForm.obra_id,
-              tipo: custoForm.tipo,
-              descricao: custoForm.descricao,
-              valor: custoForm.valor,
-              data_custo: custoForm.data_custo,
-              funcionario_id: custoForm.funcionario_id || undefined,
-              observacoes: custoForm.observacoes,
-              updated_at: new Date().toISOString()
-            }
-          : custo
-      )
+      const custoData: CustoUpdate = {
+        tipo: custoForm.tipo,
+        descricao: custoForm.descricao,
+        valor: custoForm.valor,
+        data_custo: custoForm.data_custo,
+        funcionario_id: custoForm.funcionario_id ? parseInt(custoForm.funcionario_id) : undefined,
+        observacoes: custoForm.observacoes.trim() || undefined
+      }
 
-      setCustos(custosAtualizados)
+      const custoAtualizado = await custosApi.update(editingCusto.id, custoData)
+      
+      setCustos((custos || []).map(custo => 
+        custo.id === editingCusto.id ? custoAtualizado : custo
+      ))
+      
       setIsEditDialogOpen(false)
       setEditingCusto(null)
       resetForm()
@@ -355,7 +264,8 @@ export default function CustosPage() {
 
   const handleDeleteCusto = async (id: string) => {
     try {
-      setCustos(custos.filter(c => c.id !== id))
+      await custosApi.delete(id)
+      setCustos((custos || []).filter(c => c.id !== id))
       toast({
         title: "Sucesso",
         description: "Custo removido com sucesso"
@@ -365,6 +275,46 @@ export default function CustosPage() {
       toast({
         title: "Erro",
         description: "Erro ao remover custo",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleConfirmCusto = async (id: string) => {
+    try {
+      const custoAtualizado = await custosApi.confirm(id)
+      setCustos((custos || []).map(custo => 
+        custo.id === id ? custoAtualizado : custo
+      ))
+      toast({
+        title: "Sucesso",
+        description: "Custo confirmado com sucesso"
+      })
+    } catch (error) {
+      console.error('Erro ao confirmar custo:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao confirmar custo",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleCancelCusto = async (id: string) => {
+    try {
+      const custoAtualizado = await custosApi.cancel(id)
+      setCustos((custos || []).map(custo => 
+        custo.id === id ? custoAtualizado : custo
+      ))
+      toast({
+        title: "Sucesso",
+        description: "Custo cancelado com sucesso"
+      })
+    } catch (error) {
+      console.error('Erro ao cancelar custo:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao cancelar custo",
         variant: "destructive"
       })
     }
@@ -380,15 +330,11 @@ export default function CustosPage() {
       funcionario_id: '',
       observacoes: ''
     })
+    setObraFilter('')
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'confirmado': return 'bg-green-500'
-      case 'pendente': return 'bg-yellow-500'
-      case 'cancelado': return 'bg-red-500'
-      default: return 'bg-gray-500'
-    }
+    return custosUtils.getStatusColor(status)
   }
 
   const getStatusIcon = (status: string) => {
@@ -401,13 +347,7 @@ export default function CustosPage() {
   }
 
   const getTipoColor = (tipo: string) => {
-    switch (tipo) {
-      case 'salario': return 'bg-blue-500'
-      case 'material': return 'bg-purple-500'
-      case 'servico': return 'bg-orange-500'
-      case 'manutencao': return 'bg-red-500'
-      default: return 'bg-gray-500'
-    }
+    return custosUtils.getTipoColor(tipo)
   }
 
   const getTipoIcon = (tipo: string) => {
@@ -431,13 +371,13 @@ export default function CustosPage() {
   }
 
   // Calcular totais
-  const totalCustos = filteredCustos.reduce((total, custo) => total + custo.valor, 0)
+  const totalCustos = filteredCustos.reduce((total, custo) => total + (custo.valor || 0), 0)
   const totalConfirmados = filteredCustos
     .filter(c => c.status === 'confirmado')
-    .reduce((total, custo) => total + custo.valor, 0)
+    .reduce((total, custo) => total + (custo.valor || 0), 0)
   const totalPendentes = filteredCustos
     .filter(c => c.status === 'pendente')
-    .reduce((total, custo) => total + custo.valor, 0)
+    .reduce((total, custo) => total + (custo.valor || 0), 0)
 
   if (loading) {
     return (
@@ -457,6 +397,42 @@ export default function CustosPage() {
           <p className="text-gray-600">Gestão de custos operacionais</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={async () => {
+              try {
+                const filters: CustoFilters = {
+                  obra_id: filterObra !== 'all' ? parseInt(filterObra) : undefined,
+                  tipo: filterTipo !== 'all' ? filterTipo : undefined,
+                  status: filterStatus !== 'all' ? filterStatus : undefined,
+                  data_inicio: filterPeriodo ? `${filterPeriodo}-01` : undefined,
+                  data_fim: filterPeriodo ? `${filterPeriodo}-31` : undefined
+                }
+                const blob = await custosApi.export(filters, 'csv')
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `custos-${new Date().toISOString().split('T')[0]}.csv`
+                document.body.appendChild(a)
+                a.click()
+                window.URL.revokeObjectURL(url)
+                document.body.removeChild(a)
+                toast({
+                  title: "Sucesso",
+                  description: "Arquivo exportado com sucesso"
+                })
+              } catch (error) {
+                toast({
+                  title: "Erro",
+                  description: "Erro ao exportar custos",
+                  variant: "destructive"
+                })
+              }
+            }}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exportar
+          </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Custo
@@ -473,7 +449,7 @@ export default function CustosPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total de Custos</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  R$ {totalCustos.toLocaleString('pt-BR')}
+                  {custosUtils.formatCurrency(totalCustos)}
                 </p>
               </div>
             </div>
@@ -487,7 +463,7 @@ export default function CustosPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Confirmados</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  R$ {totalConfirmados.toLocaleString('pt-BR')}
+                  {custosUtils.formatCurrency(totalConfirmados)}
                 </p>
               </div>
             </div>
@@ -501,7 +477,7 @@ export default function CustosPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Pendentes</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  R$ {totalPendentes.toLocaleString('pt-BR')}
+                  {custosUtils.formatCurrency(totalPendentes)}
                 </p>
               </div>
             </div>
@@ -580,24 +556,8 @@ export default function CustosPage() {
                 <SelectContent>
                   <SelectItem value="all">Todas as obras</SelectItem>
                   {obras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
+                    <SelectItem key={obra.id} value={obra.id.toString()}>
                       {obra.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="grua">Grua</Label>
-              <Select value={filterGrua} onValueChange={setFilterGrua}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as gruas</SelectItem>
-                  {gruas.map(grua => (
-                    <SelectItem key={grua.id} value={grua.id}>
-                      {grua.nome} - {grua.modelo}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -755,13 +715,13 @@ export default function CustosPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
-                        {new Date(custo.data_custo).toLocaleDateString('pt-BR')}
+                        {custosUtils.formatDate(custo.data_custo)}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <DollarSign className="w-4 h-4 text-red-600" />
-                        R$ {custo.valor.toLocaleString('pt-BR')}
+                        {custosUtils.formatCurrency(custo.valor)}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -774,9 +734,6 @@ export default function CustosPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          <Eye className="w-4 h-4" />
-                        </Button>
                         <Button 
                           size="sm" 
                           variant="outline"
@@ -784,6 +741,29 @@ export default function CustosPage() {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
+                        
+                        {custo.status === 'pendente' && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleConfirmCusto(custo.id)}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                        
+                        {custo.status === 'pendente' && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleCancelCusto(custo.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                        
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="sm" variant="outline">
@@ -831,18 +811,44 @@ export default function CustosPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="obra_id">Obra *</Label>
-                <Select 
-                  value={custoForm.obra_id} 
-                  onValueChange={(value) => setCustoForm({ ...custoForm, obra_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a obra" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Obra Jardim das Flores</SelectItem>
-                    <SelectItem value="2">Shopping Center Norte</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Buscar obra por nome, endereço ou cidade..."
+                    value={obraFilter}
+                    onChange={(e) => setObraFilter(e.target.value)}
+                    className="text-sm"
+                  />
+                  <Select 
+                    value={custoForm.obra_id} 
+                    onValueChange={(value) => setCustoForm({ ...custoForm, obra_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a obra" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {!obras || obras.length === 0 ? (
+                        <div className="p-2 text-sm text-gray-500 text-center">
+                          Carregando obras...
+                        </div>
+                      ) : obrasFiltradas.length > 0 ? (
+                        obrasFiltradas.map(obra => (
+                          <SelectItem key={obra.id} value={obra.id.toString()}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{obra.nome || 'Obra sem nome'}</span>
+                              <span className="text-xs text-gray-500">
+                                {obra.endereco && obra.cidade ? `${obra.endereco}, ${obra.cidade}` : obra.endereco || obra.cidade || 'Sem localização'}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-sm text-gray-500 text-center">
+                          Nenhuma obra encontrada
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label htmlFor="tipo">Tipo *</Label>
@@ -908,9 +914,11 @@ export default function CustosPage() {
                   <SelectValue placeholder="Selecione o funcionário" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">João Silva - Operador de Grua</SelectItem>
-                  <SelectItem value="2">Maria Santos - Técnico</SelectItem>
-                  <SelectItem value="3">Pedro Costa - Supervisor</SelectItem>
+                  {funcionarios.map(funcionario => (
+                    <SelectItem key={funcionario.id} value={funcionario.id.toString()}>
+                      {funcionario.nome} - {funcionario.cargo}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -926,7 +934,10 @@ export default function CustosPage() {
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => {
+                setIsCreateDialogOpen(false)
+                resetForm()
+              }}>
                 Cancelar
               </Button>
               <Button type="submit">
@@ -951,18 +962,44 @@ export default function CustosPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit_obra_id">Obra *</Label>
-                <Select 
-                  value={custoForm.obra_id} 
-                  onValueChange={(value) => setCustoForm({ ...custoForm, obra_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a obra" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Obra Jardim das Flores</SelectItem>
-                    <SelectItem value="2">Shopping Center Norte</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Buscar obra por nome, endereço ou cidade..."
+                    value={obraFilter}
+                    onChange={(e) => setObraFilter(e.target.value)}
+                    className="text-sm"
+                  />
+                  <Select 
+                    value={custoForm.obra_id} 
+                    onValueChange={(value) => setCustoForm({ ...custoForm, obra_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a obra" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {!obras || obras.length === 0 ? (
+                        <div className="p-2 text-sm text-gray-500 text-center">
+                          Carregando obras...
+                        </div>
+                      ) : obrasFiltradas.length > 0 ? (
+                        obrasFiltradas.map(obra => (
+                          <SelectItem key={obra.id} value={obra.id.toString()}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{obra.nome || 'Obra sem nome'}</span>
+                              <span className="text-xs text-gray-500">
+                                {obra.endereco && obra.cidade ? `${obra.endereco}, ${obra.cidade}` : obra.endereco || obra.cidade || 'Sem localização'}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-sm text-gray-500 text-center">
+                          Nenhuma obra encontrada
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label htmlFor="edit_tipo">Tipo *</Label>
@@ -1028,9 +1065,11 @@ export default function CustosPage() {
                   <SelectValue placeholder="Selecione o funcionário" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">João Silva - Operador de Grua</SelectItem>
-                  <SelectItem value="2">Maria Santos - Técnico</SelectItem>
-                  <SelectItem value="3">Pedro Costa - Supervisor</SelectItem>
+                  {funcionarios.map(funcionario => (
+                    <SelectItem key={funcionario.id} value={funcionario.id.toString()}>
+                      {funcionario.nome} - {funcionario.cargo}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1046,7 +1085,11 @@ export default function CustosPage() {
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => {
+                setIsEditDialogOpen(false)
+                setEditingCusto(null)
+                resetForm()
+              }}>
                 Cancelar
               </Button>
               <Button type="submit">

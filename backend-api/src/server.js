@@ -68,6 +68,7 @@ import gruaComponentesRoutes from './routes/grua-componentes.js'
 import gruaConfiguracoesRoutes from './routes/grua-configuracoes.js'
 import gruaObrasRoutes from './routes/grua-obras.js'
 import permissoesRoutes from './routes/permissoes.js'
+import custosRoutes from './routes/custos.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -246,6 +247,7 @@ app.use('/api/grua-componentes', gruaComponentesRoutes)
 app.use('/api/grua-configuracoes', gruaConfiguracoesRoutes)
 app.use('/api/grua-obras', gruaObrasRoutes)
 app.use('/api/permissoes', permissoesRoutes)
+app.use('/api/custos', custosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

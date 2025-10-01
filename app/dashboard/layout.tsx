@@ -99,10 +99,6 @@ export default function DashboardLayout({
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-2">
-          {/* Debug info - remover depois */}
-          <div className="text-xs text-gray-500 mb-2 p-2 bg-gray-100 rounded">
-            Debug: isAdmin = {isAdmin.toString()}, userRole = {typeof window !== 'undefined' ? (localStorage.getItem('userRole') || 'undefined') : 'SSR'}
-          </div>
           
           {navigation.map((item) => {
             const isActive = pathname === item.href
