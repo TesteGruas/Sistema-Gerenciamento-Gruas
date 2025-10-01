@@ -586,6 +586,12 @@ router.post('/:id/movimentar', async (req, res) => {
     let novaQuantidadeEmUso = componente.quantidade_em_uso
     let novaQuantidadeDanificada = componente.quantidade_danificada
 
+    console.log('🔍 DEBUG Movimentação - Dados iniciais:')
+    console.log('  - Tipo:', value.tipo_movimentacao)
+    console.log('  - Quantidade movimentada:', value.quantidade_movimentada)
+    console.log('  - Disponível inicial:', novaQuantidadeDisponivel)
+    console.log('  - Em uso inicial:', novaQuantidadeEmUso)
+
     switch (value.tipo_movimentacao) {
       case 'Instalação':
         novaQuantidadeDisponivel -= value.quantidade_movimentada
@@ -603,12 +609,19 @@ router.post('/:id/movimentar', async (req, res) => {
         novaQuantidadeDisponivel += value.quantidade_movimentada
         break
       case 'Transferência':
-        // Lógica específica para transferência
-        if (value.grua_origem_id) {
-          novaQuantidadeEmUso -= value.quantidade_movimentada
-        }
-        if (value.grua_destino_id) {
-          novaQuantidadeEmUso += value.quantidade_movimentada
+        // Lógica específica para transferência entre gruas
+        if (value.grua_origem_id && value.grua_destino_id) {
+          // Transferência entre gruas diferentes
+          if (value.grua_origem_id === componente.grua_id) {
+            // Componente saindo desta grua
+            novaQuantidadeEmUso -= value.quantidade_movimentada
+          } else if (value.grua_destino_id === componente.grua_id) {
+            // Componente chegando nesta grua
+            novaQuantidadeEmUso += value.quantidade_movimentada
+          }
+        } else {
+          // Transferência interna (mesma grua) - não altera quantidades
+          console.log('🔄 Transferência interna - não altera quantidades')
         }
         break
       case 'Ajuste':
@@ -618,6 +631,11 @@ router.post('/:id/movimentar', async (req, res) => {
     }
 
     // Validar se as quantidades não ficam negativas
+    console.log('🔍 DEBUG Movimentação - Após cálculo:')
+    console.log('  - Disponível final:', novaQuantidadeDisponivel)
+    console.log('  - Em uso final:', novaQuantidadeEmUso)
+    console.log('  - Danificada final:', novaQuantidadeDanificada)
+
     if (novaQuantidadeDisponivel < 0 || novaQuantidadeEmUso < 0 || novaQuantidadeDanificada < 0) {
       return res.status(400).json({
         error: 'Quantidade insuficiente',
@@ -636,8 +654,8 @@ router.post('/:id/movimentar', async (req, res) => {
         quantidade_atual: novaQuantidadeDisponivel,
         motivo: value.motivo,
         obra_id: value.obra_id,
-        grua_origem_id: value.grua_origem_id,
-        grua_destino_id: value.grua_destino_id,
+        grua_origem_id: value.grua_origem_id || null,
+        grua_destino_id: value.grua_destino_id || null,
         funcionario_responsavel_id: value.funcionario_responsavel_id,
         observacoes: value.observacoes,
         anexos: value.anexos
@@ -672,10 +690,104 @@ router.post('/:id/movimentar', async (req, res) => {
       })
     }
 
+    console.log('🔍 DEBUG Movimentação - Componente atualizado:')
+    console.log('  - Disponível:', componenteAtualizado.quantidade_disponivel)
+    console.log('  - Em uso:', componenteAtualizado.quantidade_em_uso)
+    console.log('  - Danificada:', componenteAtualizado.quantidade_danificada)
+
+    // Se for transferência entre gruas, atualizar o componente na grua destino
+    let componenteDestino = null
+    
+    console.log('🔍 DEBUG Transferência - Verificando condições:')
+    console.log('  - Tipo movimentação:', value.tipo_movimentacao)
+    console.log('  - Grua origem:', value.grua_origem_id)
+    console.log('  - Grua destino:', value.grua_destino_id)
+    console.log('  - Grua atual:', componente.grua_id)
+    console.log('  - Condição atendida:', value.tipo_movimentacao === 'Transferência' && value.grua_origem_id && value.grua_destino_id && value.grua_origem_id !== value.grua_destino_id)
+    
+    if (value.tipo_movimentacao === 'Transferência' && value.grua_origem_id && value.grua_destino_id && value.grua_origem_id !== value.grua_destino_id) {
+      try {
+        // Buscar componente na grua destino
+        const { data: componenteDestinoData, error: componenteDestinoError } = await supabaseAdmin
+          .from('grua_componentes')
+          .select('*')
+          .eq('grua_id', value.grua_destino_id)
+          .eq('nome', componente.nome)
+          .eq('tipo', componente.tipo)
+          .eq('modelo', componente.modelo)
+          .eq('fabricante', componente.fabricante)
+          .single()
+
+        if (componenteDestinoData && !componenteDestinoError) {
+          // Atualizar quantidade na grua destino
+          const { data: componenteDestinoAtualizado, error: updateDestinoError } = await supabaseAdmin
+            .from('grua_componentes')
+            .update({
+              quantidade_em_uso: componenteDestinoData.quantidade_em_uso + value.quantidade_movimentada,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', componenteDestinoData.id)
+            .select()
+            .single()
+
+          if (!updateDestinoError) {
+            componenteDestino = componenteDestinoAtualizado
+            console.log('✅ Componente atualizado na grua destino:', value.grua_destino_id)
+          } else {
+            console.error('❌ Erro ao atualizar componente na grua destino:', updateDestinoError)
+          }
+        } else {
+          console.log('ℹ️ Componente não encontrado na grua destino, criando novo registro...')
+          
+          // Criar novo componente na grua destino
+          const novoComponenteData = {
+            grua_id: value.grua_destino_id,
+            nome: componente.nome,
+            tipo: componente.tipo,
+            modelo: componente.modelo,
+            fabricante: componente.fabricante,
+            numero_serie: componente.numero_serie,
+            capacidade: componente.capacidade,
+            unidade_medida: componente.unidade_medida,
+            quantidade_total: value.quantidade_movimentada,
+            quantidade_disponivel: 0,
+            quantidade_em_uso: value.quantidade_movimentada,
+            quantidade_danificada: 0,
+            status: 'Em uso',
+            localizacao: componente.localizacao,
+            valor_unitario: componente.valor_unitario,
+            data_instalacao: new Date().toISOString(),
+            data_ultima_manutencao: componente.data_ultima_manutencao,
+            data_proxima_manutencao: componente.data_proxima_manutencao,
+            observacoes: `Transferido da grua ${value.grua_origem_id} em ${new Date().toISOString()}`,
+            anexos: componente.anexos,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+
+          const { data: novoComponente, error: createError } = await supabaseAdmin
+            .from('grua_componentes')
+            .insert(novoComponenteData)
+            .select()
+            .single()
+
+          if (!createError && novoComponente) {
+            componenteDestino = novoComponente
+            console.log('✅ Novo componente criado na grua destino:', value.grua_destino_id)
+          } else {
+            console.error('❌ Erro ao criar componente na grua destino:', createError)
+          }
+        }
+      } catch (error) {
+        console.error('❌ Erro ao processar transferência para grua destino:', error)
+      }
+    }
+
     res.json({
       success: true,
       data: {
         componente: componenteAtualizado,
+        componenteDestino: componenteDestino,
         movimentacao: historicoData
       },
       message: 'Movimentação registrada com sucesso'

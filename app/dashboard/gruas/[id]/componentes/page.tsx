@@ -215,7 +215,9 @@ export default function ComponentesGruaPage() {
       const movimentacaoData = {
         ...movimentacaoForm,
         obra_id: movimentacaoForm.obra_id ? parseInt(movimentacaoForm.obra_id) : undefined,
-        funcionario_responsavel_id: movimentacaoForm.funcionario_responsavel_id ? parseInt(movimentacaoForm.funcionario_responsavel_id) : undefined
+        funcionario_responsavel_id: movimentacaoForm.funcionario_responsavel_id ? parseInt(movimentacaoForm.funcionario_responsavel_id) : undefined,
+        grua_origem_id: movimentacaoForm.grua_origem_id || undefined,
+        grua_destino_id: movimentacaoForm.grua_destino_id || undefined
       }
 
       const response = await apiComponentes.movimentar(editingComponente.id, movimentacaoData)
