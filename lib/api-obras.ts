@@ -140,6 +140,9 @@ export interface ObraResponse {
   data: ObraBackend
 }
 
+// Tipo para o frontend
+export type Obra = ObraBackend
+
 // Função para obter token de autenticação
 const getAuthToken = (): string | null => {
   if (typeof window !== 'undefined') {

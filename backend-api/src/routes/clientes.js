@@ -15,7 +15,11 @@ const clienteSchema = Joi.object({
   cidade: Joi.string().allow('').optional(),
   estado: Joi.string().length(2).allow('').optional(),
   cep: Joi.string().pattern(/^[\d]{2}\.?[\d]{3}-?[\d]{3}$/).allow('').optional(),
-  contato: Joi.string().allow('').optional() // Era 'contato_responsavel'
+  contato: Joi.string().allow('').optional(), // Nome do representante
+  contato_email: Joi.string().email().allow('').optional(), // Email do representante
+  contato_cpf: Joi.string().allow('').optional(), // CPF do representante
+  contato_telefone: Joi.string().allow('').optional(), // Telefone do representante
+  status: Joi.string().valid('ativo', 'inativo', 'bloqueado', 'pendente').default('ativo').optional()
 })
 
 /**
@@ -45,6 +49,12 @@ const clienteSchema = Joi.object({
  *         schema:
  *           type: string
  *         description: Buscar por nome ou email (LIKE)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [ativo, inativo, bloqueado, pendente]
+ *         description: Filtrar por status do cliente
  *     responses:
  *       200:
  *         description: Lista de clientes
@@ -62,6 +72,11 @@ router.get('/', authenticateToken, requirePermission('visualizar_clientes'), asy
     if (req.query.search) {
       const searchTerm = `%${req.query.search}%`
       query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm}`)
+    }
+
+    // Aplicar filtro de status
+    if (req.query.status) {
+      query = query.eq('status', req.query.status)
     }
 
     query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
@@ -260,7 +275,7 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
  *                 type: string
  *               status:
  *                 type: string
- *                 enum: [Ativo, Inativo, Bloqueado]
+ *                 enum: [Ativo, Inativo, Bloqueado, Pendente]
  *     responses:
  *       200:
  *         description: Cliente atualizado com sucesso

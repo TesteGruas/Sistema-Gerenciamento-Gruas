@@ -38,7 +38,6 @@ import { obrasApi, Obra } from "@/lib/api-obras"
 export default function ClientesPage() {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
@@ -54,7 +53,10 @@ export default function ClientesPage() {
     cidade: '',
     estado: '',
     cep: '',
-    contato: ''
+    contato: '',
+    contato_email: '',
+    contato_cpf: '',
+    contato_telefone: ''
   })
   
   // Estados para gerenciar dados da API
@@ -64,7 +66,7 @@ export default function ClientesPage() {
   const [error, setError] = useState<string | null>(null)
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 10,
+    limit: 9,
     total: 0,
     pages: 0
   })
@@ -95,13 +97,22 @@ export default function ClientesPage() {
     }
   }, [searchTerm])
 
+
   const carregarClientes = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await clientesApi.listarClientes(pagination.page, pagination.limit)
+      const response = await clientesApi.listarClientes({
+        page: pagination.page,
+        limit: pagination.limit
+      })
       setClientes(response.data)
-      setPagination(response.pagination)
+      setPagination(response.pagination || {
+        page: 1,
+        limit: 9,
+        total: 0,
+        pages: 0
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar clientes')
       console.error('Erro ao carregar clientes:', err)
@@ -113,7 +124,7 @@ export default function ClientesPage() {
   const carregarObras = async () => {
     try {
       // Carregar todas as obras (sem paginação para ter acesso completo)
-      const response = await obrasApi.listarObras(1, 1000)
+      const response = await obrasApi.listarObras({ page: 1, limit: 1000 })
       setObras(response.data)
     } catch (err) {
       console.error('Erro ao carregar obras:', err)
@@ -125,9 +136,18 @@ export default function ClientesPage() {
     try {
       setLoading(true)
       setError(null)
-      const response = await clientesApi.buscarClientes(searchTerm, pagination.page, pagination.limit)
+      const response = await clientesApi.buscarClientes(
+        searchTerm, 
+        pagination.page, 
+        pagination.limit
+      )
       setClientes(response.data)
-      setPagination(response.pagination)
+      setPagination(response.pagination || {
+        page: 1,
+        limit: 9,
+        total: 0,
+        pages: 0
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao buscar clientes')
       console.error('Erro ao buscar clientes:', err)
@@ -157,26 +177,9 @@ export default function ClientesPage() {
     return obras.filter(obra => obra.cliente_id === clienteId)
   }
 
-  const filteredClientes = clientes.filter(cliente => {
-    const matchesStatus = selectedStatus === "all" || true // Como o backend não tem status, sempre retorna true
-    return matchesStatus
-  })
+  // Os clientes já vêm filtrados do backend, não precisamos filtrar novamente
+  const filteredClientes = clientes
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ativo': return 'bg-green-100 text-green-800'
-      case 'inativo': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'ativo': return <CheckCircle className="w-4 h-4" />
-      case 'inativo': return <XCircle className="w-4 h-4" />
-      default: return <XCircle className="w-4 h-4" />
-    }
-  }
 
   const handleViewDetails = (cliente: Cliente) => {
     setSelectedCliente(cliente)
@@ -194,7 +197,10 @@ export default function ClientesPage() {
       cidade: cliente.cidade || '',
       estado: cliente.estado || '',
       cep: cliente.cep || '',
-      contato: cliente.contato || ''
+      contato: cliente.contato || '',
+      contato_email: cliente.contato_email || '',
+      contato_cpf: cliente.contato_cpf || '',
+      contato_telefone: cliente.contato_telefone || ''
     })
     setIsEditDialogOpen(true)
   }
@@ -205,10 +211,14 @@ export default function ClientesPage() {
     try {
       setIsSubmitting(true)
       
-      // Formatar CEP antes de enviar
+      // Remover máscaras antes de enviar
       const dadosFormatados = {
         ...clienteFormData,
-        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : ''
+        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
+        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
+        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
+        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : ''
       }
       
       await clientesApi.criarCliente(dadosFormatados)
@@ -226,7 +236,10 @@ export default function ClientesPage() {
         cidade: '',
         estado: '',
         cep: '',
-        contato: ''
+        contato: '',
+        contato_email: '',
+        contato_cpf: '',
+        contato_telefone: ''
       })
       setIsCreateDialogOpen(false)
       
@@ -255,10 +268,14 @@ export default function ClientesPage() {
     try {
       setIsSubmitting(true)
       
-      // Formatar CEP antes de enviar
+      // Remover máscaras antes de enviar
       const dadosFormatados = {
         ...clienteFormData,
-        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : ''
+        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
+        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
+        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
+        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : ''
       }
       
       await clientesApi.atualizarCliente(selectedCliente.id, dadosFormatados)
@@ -376,7 +393,7 @@ export default function ClientesPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
           <Card key={index}>
             <CardContent className="p-6">
@@ -397,7 +414,7 @@ export default function ClientesPage() {
       {/* Filtros */}
       <Card>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="search">Buscar clientes</Label>
               <div className="relative">
@@ -411,25 +428,11 @@ export default function ClientesPage() {
                 />
               </div>
             </div>
-            <div>
-              <Label htmlFor="status">Status</Label>
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="ativo">Ativo</SelectItem>
-                  <SelectItem value="inativo">Inativo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="flex items-end">
               <Button 
                 variant="outline" 
                 onClick={() => {
                   setSearchTerm("")
-                  setSelectedStatus("all")
                 }}
                 className="w-full"
               >
@@ -500,10 +503,6 @@ export default function ClientesPage() {
                       <Building2 className="w-5 h-5 text-blue-600" />
                       <CardTitle className="text-lg">{cliente.nome}</CardTitle>
                     </div>
-                    <Badge className="bg-green-100 text-green-800">
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="ml-1">Ativo</span>
-                    </Badge>
                   </div>
                   <CardDescription>{cliente.cnpj}</CardDescription>
                 </CardHeader>
@@ -628,10 +627,14 @@ export default function ClientesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="5">5</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="9">9</SelectItem>
+                      <SelectItem value="12">12</SelectItem>
+                      <SelectItem value="15">15</SelectItem>
+                      <SelectItem value="18">18</SelectItem>
+                      <SelectItem value="21">21</SelectItem>
+                      <SelectItem value="24">24</SelectItem>
+                      <SelectItem value="27">27</SelectItem>
+                      <SelectItem value="30">30</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -780,7 +783,10 @@ export default function ClientesPage() {
               Detalhes do Cliente
             </DialogTitle>
           </DialogHeader>
-          {selectedCliente && <ClienteDetails cliente={selectedCliente} getObrasByCliente={getObrasByCliente} />}
+          {selectedCliente && <ClienteDetails 
+            cliente={selectedCliente} 
+            getObrasByCliente={getObrasByCliente}
+          />}
         </DialogContent>
       </Dialog>
 
@@ -859,8 +865,24 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
             <Input
               id="cnpj"
               value={formData.cnpj}
-              onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '')
+                if (value.length >= 2) {
+                  value = value.substring(0, 2) + '.' + value.substring(2)
+                }
+                if (value.length >= 6) {
+                  value = value.substring(0, 6) + '.' + value.substring(6)
+                }
+                if (value.length >= 10) {
+                  value = value.substring(0, 10) + '/' + value.substring(10)
+                }
+                if (value.length >= 15) {
+                  value = value.substring(0, 15) + '-' + value.substring(15, 17)
+                }
+                setFormData({ ...formData, cnpj: value })
+              }}
               placeholder="00.000.000/0000-00"
+              maxLength={18}
               required
             />
           </div>
@@ -882,11 +904,22 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
             <Input
               id="telefone"
               value={formData.telefone || ''}
-              onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '')
+                if (value.length >= 2) {
+                  value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
+                }
+                if (value.length >= 10) {
+                  value = value.substring(0, 10) + '-' + value.substring(10, 14)
+                }
+                setFormData({ ...formData, telefone: value })
+              }}
               placeholder="(11) 99999-9999"
+              maxLength={15}
             />
           </div>
         </div>
+        
       </div>
 
       {/* Endereço */}
@@ -932,27 +965,132 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
           </div>
           <div>
             <Label htmlFor="estado">Estado</Label>
-            <Input
-              id="estado"
-              value={formData.estado || ''}
-              onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-              placeholder="SP"
-            />
+            <Select
+              value={formData.estado || undefined}
+              onValueChange={(value) => setFormData({ ...formData, estado: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AC">Acre (AC)</SelectItem>
+                <SelectItem value="AL">Alagoas (AL)</SelectItem>
+                <SelectItem value="AP">Amapá (AP)</SelectItem>
+                <SelectItem value="AM">Amazonas (AM)</SelectItem>
+                <SelectItem value="BA">Bahia (BA)</SelectItem>
+                <SelectItem value="CE">Ceará (CE)</SelectItem>
+                <SelectItem value="DF">Distrito Federal (DF)</SelectItem>
+                <SelectItem value="ES">Espírito Santo (ES)</SelectItem>
+                <SelectItem value="GO">Goiás (GO)</SelectItem>
+                <SelectItem value="MA">Maranhão (MA)</SelectItem>
+                <SelectItem value="MT">Mato Grosso (MT)</SelectItem>
+                <SelectItem value="MS">Mato Grosso do Sul (MS)</SelectItem>
+                <SelectItem value="MG">Minas Gerais (MG)</SelectItem>
+                <SelectItem value="PA">Pará (PA)</SelectItem>
+                <SelectItem value="PB">Paraíba (PB)</SelectItem>
+                <SelectItem value="PR">Paraná (PR)</SelectItem>
+                <SelectItem value="PE">Pernambuco (PE)</SelectItem>
+                <SelectItem value="PI">Piauí (PI)</SelectItem>
+                <SelectItem value="RJ">Rio de Janeiro (RJ)</SelectItem>
+                <SelectItem value="RN">Rio Grande do Norte (RN)</SelectItem>
+                <SelectItem value="RS">Rio Grande do Sul (RS)</SelectItem>
+                <SelectItem value="RO">Rondônia (RO)</SelectItem>
+                <SelectItem value="RR">Roraima (RR)</SelectItem>
+                <SelectItem value="SC">Santa Catarina (SC)</SelectItem>
+                <SelectItem value="SP">São Paulo (SP)</SelectItem>
+                <SelectItem value="SE">Sergipe (SE)</SelectItem>
+                <SelectItem value="TO">Tocantins (TO)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Informação sobre Email */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <Mail className="w-5 h-5 text-blue-600 mt-0.5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-medium text-blue-900 mb-1">
+              Confirmação por Email
+            </h4>
+            <p className="text-sm text-blue-700">
+              Após a criação da conta, o cliente receberá um email de confirmação com um link para definir sua senha de acesso ao sistema.
+            </p>
           </div>
         </div>
       </div>
 
       {/* Contato */}
       <div className="space-y-4">
-        <h3 className="text-lg font-medium">Pessoa de Contato</h3>
-        <div>
-          <Label htmlFor="contato">Nome do Contato</Label>
-          <Input
-            id="contato"
-            value={formData.contato || ''}
-            onChange={(e) => setFormData({ ...formData, contato: e.target.value })}
-            placeholder="João Silva - Gerente de Projetos"
-          />
+        <h3 className="text-lg font-medium">Pessoa de Contato (Representante)</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="contato">Nome do Representante *</Label>
+            <Input
+              id="contato"
+              value={formData.contato || ''}
+              onChange={(e) => setFormData({ ...formData, contato: e.target.value })}
+              placeholder="João Silva"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="contato_cpf">CPF do Representante</Label>
+            <Input
+              id="contato_cpf"
+              value={formData.contato_cpf || ''}
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '')
+                if (value.length >= 3) {
+                  value = value.substring(0, 3) + '.' + value.substring(3)
+                }
+                if (value.length >= 7) {
+                  value = value.substring(0, 7) + '.' + value.substring(7)
+                }
+                if (value.length >= 11) {
+                  value = value.substring(0, 11) + '-' + value.substring(11, 13)
+                }
+                setFormData({ ...formData, contato_cpf: value })
+              }}
+              placeholder="000.000.000-00"
+              maxLength={14}
+            />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="contato_email">Email do Representante</Label>
+            <Input
+              id="contato_email"
+              type="email"
+              value={formData.contato_email || ''}
+              onChange={(e) => setFormData({ ...formData, contato_email: e.target.value })}
+              placeholder="joao.silva@empresa.com"
+            />
+          </div>
+          <div>
+            <Label htmlFor="contato_telefone">Telefone do Representante</Label>
+            <Input
+              id="contato_telefone"
+              value={formData.contato_telefone || ''}
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '')
+                if (value.length >= 2) {
+                  value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
+                }
+                if (value.length >= 10) {
+                  value = value.substring(0, 10) + '-' + value.substring(10, 14)
+                }
+                setFormData({ ...formData, contato_telefone: value })
+              }}
+              placeholder="(11) 99999-9999"
+              maxLength={15}
+            />
+          </div>
         </div>
       </div>
 
@@ -970,7 +1108,13 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
   )
 }
 
-function ClienteDetails({ cliente, getObrasByCliente }: { cliente: Cliente; getObrasByCliente: (id: number) => Obra[] }) {
+function ClienteDetails({ 
+  cliente, 
+  getObrasByCliente
+}: { 
+  cliente: Cliente; 
+  getObrasByCliente: (id: number) => Obra[];
+}) {
   const obras = getObrasByCliente(cliente.id)
   
   return (
@@ -1002,12 +1146,6 @@ function ClienteDetails({ cliente, getObrasByCliente }: { cliente: Cliente; getO
                 <span className="text-sm">{cliente.telefone}</span>
               </div>
             )}
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Status:</span>
-              <Badge className="bg-green-100 text-green-800">
-                Ativo
-              </Badge>
-            </div>
           </CardContent>
         </Card>
 
@@ -1032,16 +1170,36 @@ function ClienteDetails({ cliente, getObrasByCliente }: { cliente: Cliente; getO
       </div>
 
       {/* Pessoa de Contato */}
-      {cliente.contato && (
+      {(cliente.contato || cliente.contato_email || cliente.contato_cpf || cliente.contato_telefone) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Pessoa de Contato</CardTitle>
+            <CardTitle className="text-sm">Pessoa de Contato (Representante)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Contato:</span>
-              <span className="text-sm font-medium">{cliente.contato}</span>
-            </div>
+            {cliente.contato && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Nome:</span>
+                <span className="text-sm font-medium">{cliente.contato}</span>
+              </div>
+            )}
+            {cliente.contato_cpf && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">CPF:</span>
+                <span className="text-sm">{cliente.contato_cpf}</span>
+              </div>
+            )}
+            {cliente.contato_email && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Email:</span>
+                <span className="text-sm">{cliente.contato_email}</span>
+              </div>
+            )}
+            {cliente.contato_telefone && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Telefone:</span>
+                <span className="text-sm">{cliente.contato_telefone}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

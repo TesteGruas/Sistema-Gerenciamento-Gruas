@@ -13,6 +13,10 @@ export interface ClienteBackend {
   estado?: string
   cep?: string
   contato?: string
+  contato_email?: string
+  contato_cpf?: string
+  contato_telefone?: string
+  status?: string
   created_at: string
   updated_at: string
 }
@@ -27,6 +31,10 @@ export interface ClienteCreateData {
   estado?: string
   cep?: string
   contato?: string
+  contato_email?: string
+  contato_cpf?: string
+  contato_telefone?: string
+  status?: string
 }
 
 export interface ClienteUpdateData {
@@ -39,6 +47,28 @@ export interface ClienteUpdateData {
   estado?: string
   cep?: string
   contato?: string
+  contato_email?: string
+  contato_cpf?: string
+  contato_telefone?: string
+}
+
+// Tipo para o frontend (sem status)
+export type Cliente = Omit<ClienteBackend, 'status'>
+
+// Interface para formulários (sem status)
+export interface ClienteFormData {
+  nome: string
+  cnpj: string
+  email?: string
+  telefone?: string
+  endereco?: string
+  cidade?: string
+  estado?: string
+  cep?: string
+  contato?: string
+  contato_email?: string
+  contato_cpf?: string
+  contato_telefone?: string
 }
 
 export interface ClientesResponse {
@@ -113,23 +143,40 @@ export const clientesApi = {
   async listarClientes(params?: {
     page?: number
     limit?: number
+    status?: string
   }): Promise<ClientesResponse> {
     const searchParams = new URLSearchParams()
     
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
+    if (params?.status) searchParams.append('status', params.status)
 
     const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}?${searchParams.toString()}`)
     return apiRequest(url)
   },
 
   // Buscar clientes por nome ou CNPJ
-  async buscarClientes(termo: string): Promise<{ success: boolean; data: ClienteBackend[] }> {
+  async buscarClientes(termo: string, page: number = 1, limit: number = 10, status?: string): Promise<ClientesResponse> {
     if (!termo || termo.length < 2) {
-      return { success: true, data: [] }
+      return { 
+        success: true, 
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 0,
+          pages: 0
+        }
+      }
     }
 
-    const url = buildApiUrl(`gruas/clientes/buscar?q=${encodeURIComponent(termo)}`)
+    const searchParams = new URLSearchParams()
+    searchParams.append('search', termo)
+    searchParams.append('page', page.toString())
+    searchParams.append('limit', limit.toString())
+    if (status) searchParams.append('status', status)
+
+    const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}?${searchParams.toString()}`)
     return apiRequest(url)
   },
 
