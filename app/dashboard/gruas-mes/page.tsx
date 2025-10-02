@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -177,6 +178,7 @@ interface GruaMes {
 }
 
 export default function GruasMesPage() {
+  const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedMes, setSelectedMes] = useState("2025-01")
   const [selectedStatus, setSelectedStatus] = useState("all")
@@ -359,10 +361,18 @@ export default function GruasMesPage() {
       })
       setIsCreateDialogOpen(false)
       
-      alert('Grua alocada para o mês com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Grua alocada para o mês com sucesso!",
+        variant: "default"
+      })
     } catch (err) {
       console.error('Erro ao criar grua por mês:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao criar grua por mês')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao criar grua por mês',
+        variant: "destructive"
+      })
     }
   }
 
@@ -404,10 +414,18 @@ export default function GruasMesPage() {
       setIsEditDialogOpen(false)
       setEditingGruaMes(null)
       
-      alert('Grua por mês atualizada com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Grua por mês atualizada com sucesso!",
+        variant: "default"
+      })
     } catch (err) {
       console.error('Erro ao atualizar grua por mês:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao atualizar grua por mês')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao atualizar grua por mês',
+        variant: "destructive"
+      })
     }
   }
 
@@ -425,10 +443,18 @@ export default function GruasMesPage() {
       setIsDeleteDialogOpen(false)
       setGruaMesToDelete(null)
       
-      alert(`Grua "${gruaMesToDelete.gruaName}" removida do mês com sucesso!`)
+      toast({
+        title: "Informação",
+        description: `Grua "${gruaMesToDelete.gruaName}" removida do mês com sucesso!`,
+        variant: "default"
+      })
     } catch (err) {
       console.error('Erro ao excluir grua por mês:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao excluir grua por mês')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao excluir grua por mês',
+        variant: "destructive"
+      })
     }
   }
 
@@ -452,10 +478,18 @@ export default function GruasMesPage() {
       })
       setIsNovoMesDialogOpen(false)
       
-      alert(`Custos iniciais criados para ${formatarMes(novoMesData.mes)} com sucesso!`)
+      toast({
+        title: "Informação",
+        description: "Custos iniciais criados para ${formatarMes(novoMesData.mes)} com sucesso!",
+        variant: "default"
+      })
     } catch (err) {
       console.error('Erro ao criar novo mês:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao criar novo mês')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao criar novo mês',
+        variant: "destructive"
+      })
     }
   }
 

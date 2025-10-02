@@ -5,7 +5,7 @@ import { buildApiUrl, API_ENDPOINTS } from './api'
 export interface FuncionarioBackend {
   id: number
   nome: string
-  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico'
+  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras'
   telefone?: string
   email?: string
   cpf?: string
@@ -20,7 +20,7 @@ export interface FuncionarioBackend {
 
 export interface FuncionarioCreateData {
   nome: string
-  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico'
+  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras'
   telefone?: string
   email?: string
   cpf?: string
@@ -33,7 +33,7 @@ export interface FuncionarioCreateData {
 
 export interface FuncionarioUpdateData {
   nome?: string
-  cargo?: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico'
+  cargo?: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras'
   telefone?: string
   email?: string
   cpf?: string

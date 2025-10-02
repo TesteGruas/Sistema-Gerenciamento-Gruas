@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
-import { AlertCircle, Shield, Loader2 } from "lucide-react"
+import { AlertCircle, Shield } from "lucide-react"
+import { CardLoader } from "@/components/ui/loader"
 
 interface AdminGuardProps {
   children: React.ReactNode
@@ -47,10 +48,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
       <div className="flex items-center justify-center min-h-[400px]">
         <Card className="w-96">
           <CardContent className="p-6">
-            <div className="flex items-center justify-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Verificando permissões...</span>
-            </div>
+            <CardLoader text="Verificando permissões..." />
           </CardContent>
         </Card>
       </div>

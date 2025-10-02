@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -95,6 +96,7 @@ const statusLabels = {
 }
 
 export default function UsuarioDetalhesPage() {
+  const { toast } = useToast()
   const params = useParams()
   const router = useRouter()
   const [usuario, setUsuario] = useState(mockUsuario)
@@ -139,7 +141,11 @@ export default function UsuarioDetalhesPage() {
   const toggleUserStatus = () => {
     const newStatus = usuario.status === 'active' ? 'inactive' : 'active'
     setUsuario({ ...usuario, status: newStatus })
-    alert(`Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`)
+    toast({
+        title: "Informação",
+        description: `Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`,
+        variant: "default"
+      })
   }
 
   if (loading) {

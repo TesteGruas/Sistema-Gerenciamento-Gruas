@@ -9,12 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Building2, Lock, User } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
+  const { toast } = useToast()
 
   // Verificar se já está logado
   useEffect(() => {
@@ -29,6 +31,8 @@ export default function LoginPage() {
     setLoading(true)
     
     try {
+      console.log('Tentando fazer login com:', { email, password })
+      
       // Fazer login com as credenciais do formulário
       const response = await fetch('http://localhost:3001/api/auth/login', {
         method: 'POST',
@@ -41,21 +45,36 @@ export default function LoginPage() {
         })
       })
 
+      console.log('Resposta recebida:', response.status, response.statusText)
+
       if (!response.ok) {
-        throw new Error('Erro no login')
+        const errorData = await response.json()
+        console.error('Erro na resposta:', errorData)
+        throw new Error(`Erro ${response.status}: ${errorData.message || 'Erro no login'}`)
       }
 
       const data = await response.json()
+      console.log('Dados da resposta:', data)
+      
       const token = data.data.access_token
+      
+      if (!token) {
+        throw new Error('Token não recebido na resposta')
+      }
       
       // Salvar token no localStorage
       localStorage.setItem('access_token', token)
+      console.log('Token salvo no localStorage')
       
       // Redirecionar para dashboard
       window.location.href = '/dashboard'
     } catch (error) {
       console.error('Erro no login:', error)
-      alert('Erro no login. Verifique suas credenciais.')
+      toast({
+        title: "Erro no login",
+        description: error.message,
+        variant: "destructive"
+      })
     } finally {
       setLoading(false)
     }
@@ -107,7 +126,7 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-            <Button 
+            <Button
               type="submit" 
               className="w-full bg-blue-600 hover:bg-blue-700"
               disabled={loading}

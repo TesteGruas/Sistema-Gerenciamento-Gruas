@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, Search, User, X, CheckCircle, AlertCircle, Clock } from "lucide-react"
+import { Search, User, X, CheckCircle, AlertCircle, Clock } from "lucide-react"
 import { funcionariosApi, converterFuncionarioBackendParaFrontend, FuncionarioBackend } from "@/lib/api-funcionarios"
+import { InlineLoader } from "@/components/ui/loader"
 
 interface FuncionarioSearchProps {
   onFuncionarioSelect: (funcionario: any) => void
@@ -52,18 +53,23 @@ export default function FuncionarioSearch({
         })
         
         if (response.success) {
+          console.log('🔍 Funcionários recebidos da API:', response.data)
           let funcionariosConvertidos = response.data.map(converterFuncionarioBackendParaFrontend)
+          console.log('🔄 Funcionários convertidos:', funcionariosConvertidos)
           
           // Filtrar por cargos permitidos
           if (allowedRoles.length > 0) {
+            console.log('🎯 Cargos permitidos:', allowedRoles)
             funcionariosConvertidos = funcionariosConvertidos.filter(funcionario => 
               allowedRoles.includes(funcionario.role)
             )
+            console.log('✅ Funcionários após filtro:', funcionariosConvertidos)
           }
           
           setFuncionarios(funcionariosConvertidos)
           setShowResults(true)
         } else {
+          console.log('❌ Erro na resposta da API:', response)
           setFuncionarios([])
           setShowResults(false)
         }
@@ -177,7 +183,7 @@ export default function FuncionarioSearch({
           disabled={!!selectedFuncionario}
         />
         {loading && (
-          <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+          <InlineLoader size="sm" />
         )}
         {selectedFuncionario && (
           <Button

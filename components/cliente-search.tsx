@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, Search, User, Building2, X } from "lucide-react"
+import { Search, User, Building2, X } from "lucide-react"
 import { clientesApi, converterClienteBackendParaFrontend, ClienteBackend } from "@/lib/api-clientes"
+import { InlineLoader } from "@/components/ui/loader"
 
 interface ClienteSearchProps {
   onClienteSelect: (cliente: any) => void
@@ -109,7 +110,7 @@ export default function ClienteSearch({
           disabled={!!selectedCliente}
         />
         {loading && (
-          <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+          <InlineLoader size="sm" />
         )}
         {selectedCliente && (
           <Button

@@ -16,7 +16,7 @@ router.use(authenticateToken)
 // Schema de validação para funcionários
 const funcionarioSchema = Joi.object({
   nome: Joi.string().min(2).max(255).required(),
-  cargo: Joi.string().valid('Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico').required(),
+  cargo: Joi.string().valid('Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras').required(),
   telefone: Joi.string().max(20).allow(null, '').optional(),
   email: Joi.string().email().allow(null, '').optional(),
   cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/).allow(null, '').optional(),
@@ -67,7 +67,7 @@ const funcionarioUpdateSchema = funcionarioSchema.fork(
  *         name: cargo
  *         schema:
  *           type: string
- *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico]
+ *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico, Engenheiro, Chefe de Obras]
  *         description: Filtrar por cargo
  *       - in: query
  *         name: turno
@@ -188,7 +188,7 @@ router.get('/', async (req, res) => {
  *         name: cargo
  *         schema:
  *           type: string
- *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico]
+ *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico, Engenheiro, Chefe de Obras]
  *         description: Filtrar por cargo
  *       - in: query
  *         name: status
@@ -643,7 +643,7 @@ router.delete('/:id', async (req, res) => {
  *           description: Nome completo do funcionário
  *         cargo:
  *           type: string
- *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico]
+ *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico, Engenheiro, Chefe de Obras]
  *           description: Cargo do funcionário
  *         telefone:
  *           type: string
@@ -695,7 +695,7 @@ router.delete('/:id', async (req, res) => {
  *           description: Nome completo do funcionário
  *         cargo:
  *           type: string
- *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico]
+ *           enum: [Operador, Sinaleiro, Técnico Manutenção, Supervisor, Mecânico, Engenheiro, Chefe de Obras]
  *           description: Cargo do funcionário
  *         telefone:
  *           type: string

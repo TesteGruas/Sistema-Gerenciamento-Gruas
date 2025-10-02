@@ -29,7 +29,6 @@ import {
   ConeIcon as Crane,
   X,
   Trash2,
-  Loader2,
   Package,
   Settings,
   ArrowRight
@@ -39,9 +38,12 @@ import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBa
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
 import FuncionarioSearch from "@/components/funcionario-search"
+import { CardLoader, ButtonLoader } from "@/components/ui/loader"
+import { useToast } from "@/hooks/use-toast"
 
 export default function ObrasPage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -462,11 +464,19 @@ export default function ObrasPage() {
       setIsCreateDialogOpen(false)
       
       // Mostrar mensagem de sucesso
-      alert('Obra criada com sucesso! Custos iniciais foram configurados automaticamente.')
+      toast({
+        title: "Sucesso",
+        description: "Obra criada com sucesso! Custos iniciais foram configurados automaticamente.",
+        variant: "default"
+      })
       
     } catch (err) {
       console.error('Erro ao criar obra:', err)
-      alert(`Erro ao criar obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`)
+      toast({
+        title: "Erro",
+        description: `Erro ao criar obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`,
+        variant: "destructive"
+      })
     } finally {
       setCreating(false)
     }
@@ -490,7 +500,11 @@ export default function ObrasPage() {
       // Verificar se a obra tem gruas vinculadas
       const gruasVinculadas = getGruasByObra(obraToDelete.id)
       if (gruasVinculadas.length > 0) {
-        alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${gruasVinculadas.length} grua(s) vinculada(s). Remova as gruas primeiro.`)
+        toast({
+          title: "Não é possível excluir",
+          description: `A obra "${obraToDelete.name}" possui ${gruasVinculadas.length} grua(s) vinculada(s). Remova as gruas primeiro.`,
+          variant: "destructive"
+        })
         setIsDeleteDialogOpen(false)
         return
       }
@@ -498,7 +512,11 @@ export default function ObrasPage() {
       // Verificar se a obra tem custos
       const custos = getCustosByObra(obraToDelete.id)
       if (custos.length > 0) {
-        alert(`Não é possível excluir a obra "${obraToDelete.name}" pois ela possui ${custos.length} custo(s) registrado(s). Remova os custos primeiro.`)
+        toast({
+          title: "Não é possível excluir",
+          description: `A obra "${obraToDelete.name}" possui ${custos.length} custo(s) registrado(s). Remova os custos primeiro.`,
+          variant: "destructive"
+        })
         setIsDeleteDialogOpen(false)
         return
       }
@@ -515,11 +533,19 @@ export default function ObrasPage() {
       setObraToDelete(null)
       
       // Mostrar mensagem de sucesso
-      alert(`Obra "${obraToDelete.name}" excluída com sucesso!`)
+      toast({
+        title: "Sucesso",
+        description: `Obra "${obraToDelete.name}" excluída com sucesso!`,
+        variant: "default"
+      })
       
     } catch (err) {
       console.error('Erro ao excluir obra:', err)
-      alert(`Erro ao excluir obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`)
+      toast({
+        title: "Erro",
+        description: `Erro ao excluir obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`,
+        variant: "destructive"
+      })
     } finally {
       setDeleting(false)
     }
@@ -698,11 +724,19 @@ export default function ObrasPage() {
       setFuncionariosSelecionados([])
       
       // Mostrar mensagem de sucesso
-      alert('Obra atualizada com sucesso!')
+      toast({
+        title: "Sucesso",
+        description: "Obra atualizada com sucesso!",
+        variant: "default"
+      })
       
     } catch (err) {
       console.error('Erro ao atualizar obra:', err)
-      alert(`Erro ao atualizar obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`)
+      toast({
+        title: "Erro",
+        description: `Erro ao atualizar obra: ${err instanceof Error ? err.message : 'Erro desconhecido'}`,
+        variant: "destructive"
+      })
     } finally {
       setUpdating(false)
     }
@@ -749,10 +783,7 @@ export default function ObrasPage() {
       {loading && (
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Carregando obras...</span>
-            </div>
+            <CardLoader text="Carregando obras..." />
           </CardContent>
         </Card>
       )}
@@ -1340,10 +1371,7 @@ export default function ObrasPage() {
               </Button>
               <Button type="submit" disabled={creating}>
                 {creating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Criando...
-                  </>
+                  <ButtonLoader text="Criando..." />
                 ) : (
                   'Criar Obra e Grua'
                 )}
@@ -1774,10 +1802,7 @@ export default function ObrasPage() {
               </Button>
               <Button type="submit" disabled={updating}>
                 {updating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Atualizando...
-                  </>
+                  <ButtonLoader text="Atualizando..." />
                 ) : (
                   'Atualizar Obra'
                 )}
@@ -1822,10 +1847,7 @@ export default function ObrasPage() {
               disabled={deleting || (obraToDelete && (getGruasByObra(obraToDelete.id).length > 0 || getCustosByObra(obraToDelete.id).length > 0))}
             >
               {deleting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Excluindo...
-                </>
+                <ButtonLoader text="Excluindo..." />
               ) : (
                 <>
                   <Trash2 className="w-4 h-4 mr-2" />

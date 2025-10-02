@@ -17,7 +17,6 @@ import {
   User,
   DollarSign, 
   ArrowLeft,
-  Loader2,
   ConeIcon as Crane,
   X,
   Trash2,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/mock-data"
+import { ButtonLoader } from "@/components/ui/loader"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
 import FuncionarioSearch from "@/components/funcionario-search"
@@ -661,7 +661,7 @@ export default function NovaObraPage() {
                     placeholder="Buscar responsável por nome ou cargo..."
                     className="mt-1"
                     onlyActive={true}
-                    allowedRoles={['Supervisor', 'Engenheiro', 'Chefe de Obras']}
+                    allowedRoles={['Supervisor', 'Engenheiro', 'Chefe de Obras','Operador']}
                   />
                   {responsavelSelecionado && (
                     <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -861,13 +861,10 @@ export default function NovaObraPage() {
             >
               Limpar Formulário
             </Button>
-            <Button type="submit" disabled={creating}>
-              {creating ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Criando...
-                </>
-              ) : (
+              <Button type="submit" disabled={creating}>
+                {creating ? (
+                  <ButtonLoader text="Criando..." />
+                ) : (
                 <>
                   <Plus className="w-4 h-4 mr-2" />
                   Criar Obra

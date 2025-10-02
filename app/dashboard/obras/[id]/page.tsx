@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -51,9 +52,11 @@ import LivroGruaList from "@/components/livro-grua-list"
 import { Progress } from "@/components/ui/progress"
 import { useParams } from "next/navigation"
 import { obrasApi, converterObraBackendParaFrontend, ObraBackend, ensureAuthenticated } from "@/lib/api-obras"
-import { Loader2, AlertCircle } from "lucide-react"
+import { PageLoader, CardLoader, InlineLoader } from "@/components/ui/loader"
+import { AlertCircle } from "lucide-react"
 
 export default function ObraDetailsPage() {
+  const { toast } = useToast()
   const params = useParams()
   const obraId = params.id as string
   
@@ -175,10 +178,18 @@ export default function ObraDetailsPage() {
         await livroGruaApi.baixarCSV(grua.id.toString())
       }
       
-      alert('Arquivos CSV baixados com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Arquivos CSV baixados com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao exportar entradas:', error)
-      alert('Erro ao exportar entradas')
+      toast({
+        title: "Informação",
+        description: "Erro ao exportar entradas",
+        variant: "default"
+      })
     }
   }
 
@@ -190,7 +201,11 @@ export default function ObraDetailsPage() {
     e.preventDefault()
     if (!obra) return
     if (!novoArquivoData.arquivo) {
-      alert('Por favor, selecione um arquivo')
+      toast({
+        title: "Informação",
+        description: "Por favor, selecione um arquivo",
+        variant: "default"
+      })
       return
     }
 
@@ -213,10 +228,18 @@ export default function ObraDetailsPage() {
         arquivo: null
       })
       setIsNovoArquivoOpen(false)
-      alert('Arquivo adicionado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Arquivo adicionado com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao adicionar arquivo:', error)
-      alert(`Erro ao adicionar arquivo: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao adicionar arquivo: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -226,10 +249,18 @@ export default function ObraDetailsPage() {
     try {
       await obrasArquivosApi.excluir(arquivoId)
       await carregarArquivos()
-      alert('Arquivo excluído com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Arquivo excluído com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao excluir arquivo:', error)
-      alert(`Erro ao excluir arquivo: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao excluir arquivo: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -275,7 +306,11 @@ export default function ObraDetailsPage() {
       valorPeriodo: 0
     })
     setIsNovoItemOpen(false)
-    alert('Item adicionado com sucesso!')
+    toast({
+        title: "Informação",
+        description: "Item adicionado com sucesso!",
+        variant: "default"
+      })
   }
 
   const handleNovoAditivo = (e: React.FormEvent) => {
@@ -312,7 +347,11 @@ export default function ObraDetailsPage() {
       valorPeriodo: 0
     })
     setIsNovoAditivoOpen(false)
-    alert('Aditivo adicionado com sucesso!')
+    toast({
+        title: "Informação",
+        description: "Aditivo adicionado com sucesso!",
+        variant: "default"
+      })
   }
 
   // Funções para custos mensais
@@ -362,7 +401,11 @@ export default function ObraDetailsPage() {
     
     if (!obra) return
     if (!novoMesData.mes) {
-      alert('Selecione um mês válido!')
+      toast({
+        title: "Informação",
+        description: "Selecione um mês válido!",
+        variant: "default"
+      })
       return
     }
     
@@ -370,7 +413,11 @@ export default function ObraDetailsPage() {
       // Buscar o último mês com custos para replicar
       const mesesExistentes = await custosMensaisApi.obterMesesDisponiveis(parseInt(obra.id))
       if (mesesExistentes.length === 0) {
-        alert('Não há custos anteriores para replicar. Crie primeiro os custos iniciais da obra.')
+        toast({
+        title: "Informação",
+        description: "Não há custos anteriores para replicar. Crie primeiro os custos iniciais da obra.",
+        variant: "default"
+      })
         return
       }
       
@@ -386,10 +433,18 @@ export default function ObraDetailsPage() {
       setMesSelecionado(novoMesData.mes)
       setNovoMesData({ mes: '' })
       setIsNovoMesOpen(false)
-      alert(`Custos criados para ${formatarMes(novoMesData.mes)} com sucesso!`)
+      toast({
+        title: "Informação",
+        description: "Custos criados para ${formatarMes(novoMesData.mes)} com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao criar novo mês:', error)
-      alert(`Erro ao criar novo mês: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao criar novo mês: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -416,7 +471,11 @@ export default function ObraDetailsPage() {
       await carregarCustosMensais() // Recarregar dados
     } catch (error: any) {
       console.error('Erro ao atualizar quantidade:', error)
-      alert(`Erro ao atualizar quantidade: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao atualizar quantidade: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -455,10 +514,18 @@ export default function ObraDetailsPage() {
         tipo: 'contrato'
       })
       setIsNovoCustoOpen(false)
-      alert('Custo criado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Custo criado com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao criar custo:', error)
-      alert(`Erro ao criar custo: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao criar custo: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -502,10 +569,18 @@ export default function ObraDetailsPage() {
       })
       setIsEditandoCusto(false)
       setIsNovoCustoOpen(false)
-      alert('Custo atualizado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Custo atualizado com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao atualizar custo:', error)
-      alert(`Erro ao atualizar custo: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao atualizar custo: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -515,10 +590,18 @@ export default function ObraDetailsPage() {
     try {
       await custosMensaisApi.excluir(custoId)
       await carregarCustosMensais()
-      alert('Custo excluído com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Custo excluído com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao excluir custo:', error)
-      alert(`Erro ao excluir custo: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao excluir custo: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -582,7 +665,11 @@ export default function ObraDetailsPage() {
       )
 
       if (custosValidos.length === 0) {
-        alert('Adicione pelo menos um custo válido!')
+        toast({
+        title: "Informação",
+        description: "Adicione pelo menos um custo válido!",
+        variant: "default"
+      })
         return
       }
 
@@ -608,10 +695,18 @@ export default function ObraDetailsPage() {
       await carregarCustosMensais()
       setMesSelecionado(custosIniciaisData.mes)
       setIsCustosIniciaisOpen(false)
-      alert(`${custosValidos.length} custos iniciais criados com sucesso!`)
+      toast({
+        title: "Informação",
+        description: "${custosValidos.length} custos iniciais criados com sucesso!",
+        variant: "default"
+      })
     } catch (error: any) {
       console.error('Erro ao criar custos iniciais:', error)
-      alert(`Erro ao criar custos iniciais: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao criar custos iniciais: ${error.message}",
+        variant: "default"
+      })
     }
   }
 
@@ -683,7 +778,11 @@ export default function ObraDetailsPage() {
     let dadosParaExportar = custosMensais
     
     if (dadosParaExportar.length === 0) {
-      alert('Não há dados para exportar!')
+      toast({
+        title: "Informação",
+        description: "Não há dados para exportar!",
+        variant: "default"
+      })
       return
     }
 
@@ -744,7 +843,11 @@ export default function ObraDetailsPage() {
     link.click()
     document.body.removeChild(link)
 
-    alert(`Arquivo ${nomeArquivo} baixado com sucesso!`)
+    toast({
+        title: "Informação",
+        description: "Arquivo ${nomeArquivo} baixado com sucesso!",
+        variant: "default"
+      })
   }
 
   // Carregar dados da obra do backend
@@ -979,12 +1082,7 @@ export default function ObraDetailsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-center p-8">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-6 h-6 animate-spin" />
-            <span>Carregando detalhes da obra...</span>
-          </div>
-        </div>
+        <PageLoader text="Carregando detalhes da obra..." />
       </div>
     )
   }
@@ -1109,7 +1207,7 @@ export default function ObraDetailsPage() {
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">
                   Gruas Vinculadas ({gruasVinculadas.length})
-                  {loadingGruas && <Loader2 className="w-4 h-4 ml-2 animate-spin" />}
+                  {loadingGruas && <InlineLoader size="sm" />}
                 </CardTitle>
                 <Button 
                   size="sm"
@@ -1122,10 +1220,7 @@ export default function ObraDetailsPage() {
             </CardHeader>
             <CardContent>
               {loadingGruas ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                  <span>Carregando gruas vinculadas...</span>
-                </div>
+                <CardLoader text="Carregando gruas vinculadas..." />
               ) : gruasVinculadas.length > 0 ? (
                 <div className="space-y-6">
                   {gruasVinculadas.map((grua) => {
@@ -1357,10 +1452,7 @@ export default function ObraDetailsPage() {
             </CardHeader>
             <CardContent>
               {custosMensaisLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                  <span>Carregando custos mensais...</span>
-                </div>
+                <CardLoader text="Carregando custos mensais..." />
               ) : custosMensaisError ? (
                 <div className="text-center py-8">
                   <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
@@ -1595,10 +1687,7 @@ export default function ObraDetailsPage() {
             </CardHeader>
             <CardContent>
               {loadingDocumentos ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                  <span>Carregando documentos...</span>
-                </div>
+                <CardLoader text="Carregando documentos..." />
               ) : documentos.length > 0 ? (
                 <div className="space-y-4">
                   {documentos.map((documento) => (
@@ -1758,10 +1847,7 @@ export default function ObraDetailsPage() {
             </CardHeader>
             <CardContent>
               {loadingArquivos ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                  <span>Carregando arquivos...</span>
-                </div>
+                <CardLoader text="Carregando arquivos..." />
               ) : arquivos.length > 0 ? (
                 <div className="space-y-4">
                   {arquivos.map((arquivo) => (
@@ -1787,7 +1873,11 @@ export default function ObraDetailsPage() {
                                   await obrasArquivosApi.baixar(parseInt(obra.id), arquivo.id)
                                 } catch (error: any) {
                                   console.error('Erro ao baixar arquivo:', error)
-                                  alert(`Erro ao baixar arquivo: ${error.message}`)
+                                  toast({
+        title: "Informação",
+        description: "Erro ao baixar arquivo: ${error.message}",
+        variant: "default"
+      })
                                 }
                               }}
                             >

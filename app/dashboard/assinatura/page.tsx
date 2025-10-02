@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/lib/user-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,6 +38,7 @@ import { obrasApi } from "@/lib/api-obras"
 import api from "@/lib/api"
 
 export default function AssinaturaPage() {
+  const { toast } = useToast()
   const router = useRouter()
   const { currentUser } = useUser()
   const [searchTerm, setSearchTerm] = useState("")
@@ -225,19 +227,31 @@ export default function AssinaturaPage() {
   const handleSendToDocuSign = (documento: any) => {
     // Simular envio para DocuSign
     console.log('Enviando para DocuSign:', documento.id)
-    alert('Documento enviado para DocuSign! Links individuais serão gerados e enviados por email para cada assinante.')
+    toast({
+        title: "Informação",
+        description: "Documento enviado para DocuSign! Links individuais serão gerados e enviados por email para cada assinante.",
+        variant: "default"
+      })
   }
 
   const handleSendIndividualLink = (documento: any, assinante: any) => {
     // Simular envio de link individual
     console.log('Enviando link individual:', { documentoId: documento.id, assinanteId: assinante.userId })
-    alert(`Link do DocuSign enviado por email para ${assinante.userName}!`)
+    toast({
+        title: "Informação",
+        description: "Link do DocuSign enviado por email para ${assinante.userName}!",
+        variant: "default"
+      })
   }
 
   const handleGenerateDocuSignLinks = (documento: any) => {
     // Simular geração de todos os links
     console.log('Gerando links DocuSign para todos os assinantes:', documento.id)
-    alert('Links do DocuSign gerados com sucesso! Emails serão enviados automaticamente.')
+    toast({
+        title: "Informação",
+        description: "Links do DocuSign gerados com sucesso! Emails serão enviados automaticamente.",
+        variant: "default"
+      })
   }
 
   const stats = [
@@ -600,13 +614,21 @@ function DocumentoDetails({ documento, onClose }: { documento: any; onClose: () 
   const handleGenerateDocuSignLinks = (documento: any) => {
     // Simular geração de todos os links
     console.log('Gerando links DocuSign para todos os assinantes:', documento.id)
-    alert('Links do DocuSign gerados com sucesso! Emails serão enviados automaticamente.')
+    toast({
+        title: "Informação",
+        description: "Links do DocuSign gerados com sucesso! Emails serão enviados automaticamente.",
+        variant: "default"
+      })
   }
 
   const handleSendIndividualLink = (documento: any, assinante: any) => {
     // Simular envio de link individual
     console.log('Enviando link individual:', { documentoId: documento.id, assinanteId: assinante.userId })
-    alert(`Link do DocuSign enviado por email para ${assinante.userName}!`)
+    toast({
+        title: "Informação",
+        description: "Link do DocuSign enviado por email para ${assinante.userName}!",
+        variant: "default"
+      })
   }
 
   return (
@@ -899,7 +921,11 @@ function SignDialog({ documento, onClose }: { documento: any; onClose: () => voi
       observacoes, 
       arquivoAssinado: arquivoAssinado?.name 
     })
-    alert('Assinatura processada com sucesso!')
+    toast({
+        title: "Informação",
+        description: "Assinatura processada com sucesso!",
+        variant: "default"
+      })
     onClose()
   }
 
@@ -1174,12 +1200,20 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
       // As assinaturas serão adicionadas via ordem_assinatura no DocumentoCreate
       // Por enquanto, vamos apenas criar o documento básico
       
-      alert('Documento criado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Documento criado com sucesso!",
+        variant: "default"
+      })
       onDocumentCreated()
       onClose()
     } catch (error: any) {
       console.error('Erro ao criar documento:', error)
-      alert(`Erro ao criar documento: ${error.message}`)
+      toast({
+        title: "Informação",
+        description: "Erro ao criar documento: ${error.message}",
+        variant: "default"
+      })
     } finally {
       setIsSubmitting(false)
     }

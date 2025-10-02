@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
-  Loader2, 
   AlertCircle, 
   Save, 
   X,
@@ -21,6 +20,7 @@ import {
   Upload
 } from "lucide-react"
 import { livroGruaApi, EntradaLivroGrua } from "@/lib/api-livro-grua"
+import { ButtonLoader } from "@/components/ui/loader"
 import FuncionarioSearch from "@/components/funcionario-search"
 
 interface LivroGruaFormProps {
@@ -353,10 +353,7 @@ export default function LivroGruaForm({
             )}
             <Button type="submit" disabled={loading}>
               {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
+                <ButtonLoader text="Salvando..." />
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-2" />

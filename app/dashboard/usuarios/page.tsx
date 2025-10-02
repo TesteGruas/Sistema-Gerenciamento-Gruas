@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { apiPerfis, apiPermissoes, apiPerfilPermissoes, utilsPermissoes, type Perfil, type Permissao, type PerfilPermissao } from "@/lib/api-permissoes"
 import { apiUsuarios, utilsUsuarios, type Usuario } from "@/lib/api-usuarios"
+import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 import { 
   Users, 
   Plus, 
@@ -33,7 +34,6 @@ import {
   Mail, 
   Phone, 
   Calendar,
-  Loader2,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -693,10 +693,7 @@ export default function UsuariosPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
-              <span>Carregando usuários...</span>
-            </div>
+            <CardLoader text="Carregando usuários..." />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -930,10 +927,7 @@ export default function UsuariosPage() {
               </Button>
               <Button type="submit" disabled={creating}>
                 {creating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Criando...
-                  </>
+                  <ButtonLoader text="Criando..." />
                 ) : (
                   'Criar Usuário'
                 )}
@@ -1062,10 +1056,7 @@ export default function UsuariosPage() {
               </Button>
               <Button type="submit" disabled={updating}>
                 {updating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Atualizando...
-                  </>
+                  <ButtonLoader text="Atualizando..." />
                 ) : (
                   'Atualizar Usuário'
                 )}
@@ -1099,10 +1090,7 @@ export default function UsuariosPage() {
               disabled={deleting}
             >
               {deleting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Excluindo...
-                </>
+                <ButtonLoader text="Excluindo..." />
               ) : (
                 <>
                   <Trash2 className="w-4 h-4 mr-2" />
@@ -1239,10 +1227,7 @@ export default function UsuariosPage() {
                     className="flex-1"
                   >
                     {savingPermissoes ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Salvando...
-                      </>
+                      <ButtonLoader text="Salvando..." />
                     ) : (
                       <>
                         <Save className="w-4 h-4 mr-2" />
@@ -1255,10 +1240,7 @@ export default function UsuariosPage() {
             )}
 
             {loadingPermissoes && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                <span>Carregando permissões...</span>
-              </div>
+              <CardLoader text="Carregando permissões..." />
             )}
           </div>
         </SheetContent>

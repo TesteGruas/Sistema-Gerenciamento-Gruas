@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,15 +15,16 @@ import {
   Plus, 
   Download, 
   BarChart3,
-  AlertCircle,
-  Loader2
+  AlertCircle
 } from "lucide-react"
 import LivroGruaForm from "@/components/livro-grua-form"
 import LivroGruaList from "@/components/livro-grua-list"
+import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi, EntradaLivroGruaCompleta } from "@/lib/api-livro-grua"
 import { mockGruas } from "@/lib/mock-data"
 
 export default function LivroGruaPage() {
+  const { toast } = useToast()
   const params = useParams()
   const router = useRouter()
   const gruaId = params.id as string
@@ -133,7 +135,11 @@ export default function LivroGruaPage() {
         window.location.reload()
       } catch (err) {
         console.error('Erro ao excluir entrada:', err)
-        alert('Erro ao excluir entrada')
+        toast({
+        title: "Informação",
+        description: "Erro ao excluir entrada",
+        variant: "default"
+      })
       }
     }
   }
@@ -152,7 +158,11 @@ export default function LivroGruaPage() {
       }
     } catch (err) {
       console.error('Erro ao exportar:', err)
-      alert('Erro ao exportar dados')
+      toast({
+        title: "Informação",
+        description: "Erro ao exportar dados",
+        variant: "default"
+      })
     }
   }
 
@@ -160,12 +170,7 @@ export default function LivroGruaPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-center p-8">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-6 h-6 animate-spin" />
-            <span>Carregando livro da grua...</span>
-          </div>
-        </div>
+        <PageLoader text="Carregando livro da grua..." />
       </div>
     )
   }

@@ -22,11 +22,11 @@ import {
   Calendar,
   UserCheck,
   UserX,
-  Building2,
-  Loader2
+  Building2
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 import { 
   funcionariosApi, 
   converterFuncionarioBackendParaFrontend, 
@@ -443,10 +443,7 @@ export default function FuncionariosPage() {
 
       {/* Lista de Funcionários */}
       {loading ? (
-        <div className="flex justify-center items-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <span className="ml-2 text-gray-600">Carregando funcionários...</span>
-        </div>
+        <CardLoader text="Carregando funcionários..." />
       ) : filteredFuncionarios.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
@@ -749,10 +746,7 @@ export default function FuncionariosPage() {
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Criando...
-                  </>
+                  <ButtonLoader text="Criando..." />
                 ) : (
                   'Criar Funcionário'
                 )}
@@ -914,10 +908,7 @@ export default function FuncionariosPage() {
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Atualizando...
-                  </>
+                  <ButtonLoader text="Atualizando..." />
                 ) : (
                   'Atualizar Funcionário'
                 )}
@@ -961,10 +952,7 @@ export default function FuncionariosPage() {
               disabled={submitting}
             >
               {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Excluindo...
-                </>
+                <ButtonLoader text="Excluindo..." />
               ) : (
                 <>
                   <Trash2 className="w-4 h-4 mr-2" />

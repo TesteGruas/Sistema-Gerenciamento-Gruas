@@ -10,7 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
-  Loader2, 
   AlertCircle, 
   Search, 
   Download, 
@@ -26,6 +25,7 @@ import {
   RefreshCw
 } from "lucide-react"
 import { livroGruaApi, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
+import { CardLoader } from "@/components/ui/loader"
 
 interface LivroGruaListProps {
   gruaId?: string
@@ -161,10 +161,7 @@ export default function LivroGruaList({
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
-              <span>Carregando...</span>
-            </div>
+            <CardLoader text="Carregando..." />
           ) : error ? (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -325,10 +322,7 @@ export default function LivroGruaList({
       <Card>
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
-              <span>Carregando entradas...</span>
-            </div>
+            <CardLoader text="Carregando entradas..." />
           ) : error ? (
             <div className="p-6">
               <Alert variant="destructive">

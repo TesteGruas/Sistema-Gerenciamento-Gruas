@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,7 @@ import { mockObras, mockUsers } from "@/lib/mock-data"
 import { gruasApi, converterGruaBackendParaFrontend, converterGruaFrontendParaBackend, GruaBackend } from "@/lib/api-gruas"
 
 export default function GruasPage() {
+  const { toast } = useToast()
   const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
@@ -166,7 +168,11 @@ export default function GruasPage() {
 
     // Verificar se a grua está em obra
     if (gruaToDelete.status === 'em_obra') {
-      alert(`Não é possível excluir a grua "${gruaToDelete.name}" pois ela está atualmente em obra. Remova-a da obra primeiro.`)
+      toast({
+        title: "Informação",
+        description: `Não é possível excluir a grua "${gruaToDelete.name}" pois ela está atualmente em obra. Remova-a da obra primeiro.`,
+        variant: "default"
+      })
       setIsDeleteDialogOpen(false)
       return
     }
@@ -181,13 +187,25 @@ export default function GruasPage() {
         await carregarGruas()
         setIsDeleteDialogOpen(false)
         setGruaToDelete(null)
-        alert(`Grua "${gruaToDelete.name}" excluída com sucesso!`)
+        toast({
+        title: "Informação",
+        description: `Grua "${gruaToDelete.name}" excluída com sucesso!`,
+        variant: "default"
+      })
       } else {
-        alert('Erro ao excluir grua')
+        toast({
+        title: "Informação",
+        description: "Erro ao excluir grua",
+        variant: "default"
+      })
       }
     } catch (err) {
       console.error('Erro ao excluir grua:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao excluir grua')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao excluir grua',
+        variant: "destructive"
+      })
     } finally {
       setDeleting(false)
     }
@@ -222,13 +240,25 @@ export default function GruasPage() {
         })
         setIsCreateDialogOpen(false)
         
-        alert('Grua criada com sucesso!')
+        toast({
+        title: "Informação",
+        description: "Grua criada com sucesso!",
+        variant: "default"
+      })
       } else {
-        alert('Erro ao criar grua')
+        toast({
+        title: "Informação",
+        description: "Erro ao criar grua",
+        variant: "default"
+      })
       }
     } catch (err) {
       console.error('Erro ao criar grua:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao criar grua')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao criar grua',
+        variant: "destructive"
+      })
     } finally {
       setCreating(false)
     }
@@ -266,13 +296,25 @@ export default function GruasPage() {
         setIsEditDialogOpen(false)
         setGruaToEdit(null)
         
-        alert('Grua atualizada com sucesso!')
+        toast({
+        title: "Informação",
+        description: "Grua atualizada com sucesso!",
+        variant: "default"
+      })
       } else {
-        alert('Erro ao atualizar grua')
+        toast({
+        title: "Informação",
+        description: "Erro ao atualizar grua",
+        variant: "default"
+      })
       }
     } catch (err) {
       console.error('Erro ao atualizar grua:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao atualizar grua')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao atualizar grua',
+        variant: "destructive"
+      })
     } finally {
       setUpdating(false)
     }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -35,6 +36,7 @@ import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
 
 export default function ClientesPage() {
+  const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
@@ -228,10 +230,18 @@ export default function ClientesPage() {
       })
       setIsCreateDialogOpen(false)
       
-      alert('Cliente criado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Cliente criado com sucesso!",
+        variant: "default"
+      })
     } catch (err) {
       console.error('Erro ao criar cliente:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao criar cliente')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao criar cliente',
+        variant: "destructive"
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -258,10 +268,18 @@ export default function ClientesPage() {
       
       setIsEditDialogOpen(false)
       
-      alert('Cliente atualizado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Cliente atualizado com sucesso!",
+        variant: "default"
+      })
     } catch (err) {
       console.error('Erro ao atualizar cliente:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao atualizar cliente')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao atualizar cliente',
+        variant: "destructive"
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -278,7 +296,11 @@ export default function ClientesPage() {
     // Verificar se o cliente tem obras vinculadas
     const obrasVinculadas = getObrasByCliente(clienteToDelete.id)
     if (obrasVinculadas.length > 0) {
-      alert(`Não é possível excluir o cliente "${clienteToDelete.nome}" pois ele possui ${obrasVinculadas.length} obra(s) vinculada(s). Remova as obras primeiro.`)
+      toast({
+        title: "Informação",
+        description: `Não é possível excluir o cliente "${clienteToDelete.nome}" pois ele possui ${obrasVinculadas.length} obra(s) vinculada(s). Remova as obras primeiro.`,
+        variant: "default"
+      })
       setIsDeleteDialogOpen(false)
       return
     }
@@ -293,10 +315,18 @@ export default function ClientesPage() {
       setIsDeleteDialogOpen(false)
       setClienteToDelete(null)
       
-      alert(`Cliente "${clienteToDelete.nome}" excluído com sucesso!`)
+      toast({
+        title: "Informação",
+        description: `Cliente "${clienteToDelete.nome}" excluído com sucesso!`,
+        variant: "default"
+      })
     } catch (err) {
       console.error('Erro ao excluir cliente:', err)
-      alert(err instanceof Error ? err.message : 'Erro ao excluir cliente')
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : 'Erro ao excluir cliente',
+        variant: "destructive"
+      })
     } finally {
       setIsSubmitting(false)
     }

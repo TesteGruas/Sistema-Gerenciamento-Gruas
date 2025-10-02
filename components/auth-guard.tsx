@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { PageLoader } from "@/components/ui/loader"
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -30,14 +30,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 
   // Mostrar loading enquanto verifica autenticação
   if (isAuthenticated === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center gap-2">
-          <Loader2 className="w-6 h-6 animate-spin" />
-          <span>Verificando autenticação...</span>
-        </div>
-      </div>
-    )
+    return <PageLoader text="Verificando autenticação..." />
   }
 
   // Se não autenticado, mostrar fallback ou redirecionar

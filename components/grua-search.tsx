@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, Search, Wrench, X, CheckCircle, AlertCircle } from "lucide-react"
+import { Search, Wrench, X, CheckCircle, AlertCircle } from "lucide-react"
 import { gruasApi, converterGruaBackendParaFrontend, GruaBackend } from "@/lib/api-gruas"
+import { InlineLoader } from "@/components/ui/loader"
 
 interface GruaSearchProps {
   onGruaSelect: (grua: any) => void
@@ -203,7 +204,7 @@ export default function GruaSearch({
           disabled={!!selectedGrua}
         />
         {loading && (
-          <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+          <InlineLoader size="sm" />
         )}
         {selectedGrua && (
           <Button

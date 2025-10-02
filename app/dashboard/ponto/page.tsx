@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,6 +45,7 @@ const estadoInicial = {
 }
 
 export default function PontoPage() {
+  const { toast } = useToast()
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [selectedFuncionario, setSelectedFuncionario] = useState("")
@@ -176,7 +178,11 @@ export default function PontoPage() {
 
   const registrarPonto = async (tipo: string) => {
     if (!selectedFuncionario) {
-      alert("Selecione um funcionário")
+      toast({
+        title: "Informação",
+        description: "Selecione um funcionário",
+        variant: "default"
+      })
       return
     }
 
@@ -223,10 +229,18 @@ export default function PontoPage() {
         }))
       }
 
-      alert(`Ponto registrado: ${tipo} às ${horaAtual}`)
+      toast({
+        title: "Informação",
+        description: "Ponto registrado: ${tipo} às ${horaAtual}",
+        variant: "default"
+      })
     } catch (error) {
       console.error('Erro ao registrar ponto:', error)
-      alert('Erro ao registrar ponto. Tente novamente.')
+      toast({
+        title: "Informação",
+        description: "Erro ao registrar ponto. Tente novamente.",
+        variant: "default"
+      })
     }
   }
 
@@ -287,7 +301,11 @@ export default function PontoPage() {
         motivo: justificativaData.motivo
       })
 
-      alert("Justificativa enviada com sucesso!")
+      toast({
+        title: "Informação",
+        description: "Justificativa enviada com sucesso!",
+        variant: "default"
+      })
       setJustificativaData({
         funcionario_id: "",
         data: "",
@@ -300,18 +318,30 @@ export default function PontoPage() {
       carregarDados()
     } catch (error) {
       console.error('Erro ao criar justificativa:', error)
-      alert('Erro ao enviar justificativa. Tente novamente.')
+      toast({
+        title: "Informação",
+        description: "Erro ao enviar justificativa. Tente novamente.",
+        variant: "default"
+      })
     }
   }
 
   const handleAprovarJustificativa = async (id: string) => {
     try {
       await apiJustificativas.aprovar(id)
-      alert("Justificativa aprovada com sucesso!")
+      toast({
+        title: "Informação",
+        description: "Justificativa aprovada com sucesso!",
+        variant: "default"
+      })
       carregarDados()
     } catch (error) {
       console.error("Erro ao aprovar justificativa:", error)
-      alert("Erro ao aprovar justificativa. Tente novamente.")
+      toast({
+        title: "Informação",
+        description: "Erro ao aprovar justificativa. Tente novamente.",
+        variant: "default"
+      })
     }
   }
 
@@ -321,11 +351,19 @@ export default function PontoPage() {
 
     try {
       await apiJustificativas.rejeitar(id, motivoRejeicao)
-      alert("Justificativa rejeitada com sucesso!")
+      toast({
+        title: "Informação",
+        description: "Justificativa rejeitada com sucesso!",
+        variant: "default"
+      })
       carregarDados()
     } catch (error) {
       console.error("Erro ao rejeitar justificativa:", error)
-      alert("Erro ao rejeitar justificativa. Tente novamente.")
+      toast({
+        title: "Informação",
+        description: "Erro ao rejeitar justificativa. Tente novamente.",
+        variant: "default"
+      })
     }
   }
 
@@ -379,10 +417,18 @@ export default function PontoPage() {
         justificativa_alteracao: "",
       })
       
-      alert("Registro atualizado com sucesso!")
+      toast({
+        title: "Informação",
+        description: "Registro atualizado com sucesso!",
+        variant: "default"
+      })
     } catch (error) {
       console.error('Erro ao atualizar registro:', error)
-      alert('Erro ao atualizar registro. Tente novamente.')
+      toast({
+        title: "Informação",
+        description: "Erro ao atualizar registro. Tente novamente.",
+        variant: "default"
+      })
     }
   }
 

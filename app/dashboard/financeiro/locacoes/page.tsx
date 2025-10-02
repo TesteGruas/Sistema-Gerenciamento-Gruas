@@ -35,7 +35,6 @@ import {
   Calculator,
   Receipt,
   FileSpreadsheet,
-  Loader2,
   X
 } from "lucide-react"
 import { locacoesApi, Locacao, LocacaoStats } from "@/lib/api-locacoes"
@@ -48,6 +47,7 @@ import { clientesApi } from "@/lib/api-clientes"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { gruasApi } from "@/lib/api-gruas"
 import { useToast } from "@/hooks/use-toast"
+import { ButtonLoader } from "@/components/ui/loader"
 
 
 export default function LocacoesPage() {
@@ -1190,10 +1190,7 @@ function LocacaoForm({ onClose, clientes, funcionarios, gruas }: {
         </Button>
         <Button type="submit" disabled={loading}>
           {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Salvando...
-            </>
+            <ButtonLoader text="Salvando..." />
           ) : (
             'Salvar Locação'
           )}

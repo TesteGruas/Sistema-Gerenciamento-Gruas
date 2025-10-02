@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react
+import { useToast } from "@/hooks/use-toast"'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ import { obrasDocumentosApi, DocumentoObra, AssinaturaDocumento } from '@/lib/ap
 import { obrasApi } from '@/lib/api-obras'
 
 export default function AssinaturaDocumentoPage() {
+  const { toast } = useToast()
   const params = useParams()
   const router = useRouter()
   const { currentUser } = useUser()
@@ -253,10 +255,18 @@ export default function AssinaturaDocumentoPage() {
       setObservacoes('')
       
       // Mostrar sucesso
-      alert('Documento assinado e enviado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Documento assinado e enviado com sucesso!",
+        variant: "default"
+      })
     } catch (error) {
       console.error('Erro ao enviar documento assinado:', error)
-      alert('Erro ao enviar documento assinado')
+      toast({
+        title: "Informação",
+        description: "Erro ao enviar documento assinado",
+        variant: "default"
+      })
     } finally {
       setIsLoading(false)
     }
@@ -274,10 +284,18 @@ export default function AssinaturaDocumentoPage() {
       assinaturaAtual.status = 'rejeitado'
       assinaturaAtual.observacoes = reason
       setDocumento({ ...documento })
-      alert('Assinatura rejeitada')
+      toast({
+        title: "Informação",
+        description: "Assinatura rejeitada",
+        variant: "default"
+      })
     } catch (error) {
       console.error('Erro ao rejeitar assinatura:', error)
-      alert('Erro ao rejeitar assinatura')
+      toast({
+        title: "Informação",
+        description: "Erro ao rejeitar assinatura",
+        variant: "default"
+      })
     } finally {
       setIsLoading(false)
     }
@@ -294,7 +312,11 @@ export default function AssinaturaDocumentoPage() {
       window.open(download_url, '_blank')
     } catch (error) {
       console.error('Erro ao abrir documento:', error)
-      alert('Erro ao abrir documento')
+      toast({
+        title: "Informação",
+        description: "Erro ao abrir documento",
+        variant: "default"
+      })
     } finally {
       setIsLoading(false)
     }
@@ -337,10 +359,18 @@ export default function AssinaturaDocumentoPage() {
       })
       
       setIsEditing(false)
-      alert('Documento atualizado com sucesso!')
+      toast({
+        title: "Informação",
+        description: "Documento atualizado com sucesso!",
+        variant: "default"
+      })
     } catch (error) {
       console.error('Erro ao atualizar documento:', error)
-      alert('Erro ao atualizar documento')
+      toast({
+        title: "Informação",
+        description: "Erro ao atualizar documento",
+        variant: "default"
+      })
     } finally {
       setIsLoading(false)
     }
