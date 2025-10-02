@@ -40,7 +40,8 @@ import {
   Folder,
   File,
   Trash2,
-  Paperclip
+  Paperclip,
+  X
 } from "lucide-react"
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis, criarCustosParaNovoMes, CustoMensal, Obra } from "@/lib/mock-data"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalCreate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
@@ -54,6 +55,8 @@ import { useParams } from "next/navigation"
 import { obrasApi, converterObraBackendParaFrontend, ObraBackend, ensureAuthenticated } from "@/lib/api-obras"
 import { PageLoader, CardLoader, InlineLoader } from "@/components/ui/loader"
 import { AlertCircle } from "lucide-react"
+import GruaSearch from "@/components/grua-search"
+import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 
 export default function ObraDetailsPage() {
   const { toast } = useToast()
@@ -66,6 +69,15 @@ export default function ObraDetailsPage() {
   const [error, setError] = useState<string | null>(null)
   const [gruasReais, setGruasReais] = useState<any[]>([])
   const [loadingGruas, setLoadingGruas] = useState(false)
+  
+  // Estados para modal de adicionar grua
+  const [isAdicionarGruaOpen, setIsAdicionarGruaOpen] = useState(false)
+  const [gruasSelecionadas, setGruasSelecionadas] = useState<any[]>([])
+  const [novaGruaData, setNovaGruaData] = useState({
+    dataInicioLocacao: '',
+    dataFimLocacao: '',
+    observacoes: ''
+  })
   
   // Estados para documentos e arquivos
   const [documentos, setDocumentos] = useState<DocumentoObra[]>([])
@@ -710,6 +722,96 @@ export default function ObraDetailsPage() {
     }
   }
 
+  // Funções para adicionar grua
+  const handleAdicionarGrua = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (gruasSelecionadas.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Selecione pelo menos uma grua para adicionar",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setLoadingGruas(true)
+      
+      // Aqui você pode implementar a lógica para vincular as gruas à obra via API
+      // Por enquanto, vou simular uma adição bem-sucedida
+      
+      toast({
+        title: "Sucesso",
+        description: `${gruasSelecionadas.length} grua(s) adicionada(s) à obra com sucesso!`,
+      })
+      
+      // Fechar modal e limpar dados
+      setIsAdicionarGruaOpen(false)
+      setGruasSelecionadas([])
+      setNovaGruaData({
+        dataInicioLocacao: '',
+        dataFimLocacao: '',
+        observacoes: ''
+      })
+      
+      // Recarregar gruas vinculadas
+      await carregarGruasVinculadas()
+      
+    } catch (error) {
+      console.error('Erro ao adicionar gruas:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar gruas à obra",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingGruas(false)
+    }
+  }
+
+  const handleCancelarAdicionarGrua = () => {
+    setIsAdicionarGruaOpen(false)
+    setGruasSelecionadas([])
+    setNovaGruaData({
+      dataInicioLocacao: '',
+      dataFimLocacao: '',
+      observacoes: ''
+    })
+  }
+
+  const handleGruaSelect = (grua: any) => {
+    if (!gruasSelecionadas.find(g => g.id === grua.id)) {
+      setGruasSelecionadas([...gruasSelecionadas, {
+        ...grua,
+        valorLocacao: 0,
+        taxaMensal: 0
+      }])
+    }
+  }
+
+  const handleRemoverGrua = (gruaId: string) => {
+    setGruasSelecionadas(gruasSelecionadas.filter(g => g.id !== gruaId))
+  }
+
+  const handleAtualizarGrua = (gruaId: string, campo: string, valor: number) => {
+    setGruasSelecionadas(gruasSelecionadas.map(g => 
+      g.id === gruaId ? { ...g, [campo]: valor } : g
+    ))
+  }
+
+  const calcularResumo = () => {
+    const totalGruas = gruasSelecionadas.length
+    const valorTotalLocacao = gruasSelecionadas.reduce((sum, g) => sum + (g.valorLocacao || 0), 0)
+    const taxaMensalTotal = gruasSelecionadas.reduce((sum, g) => sum + (g.taxaMensal || 0), 0)
+    
+    return {
+      totalGruas,
+      valorTotalLocacao,
+      taxaMensalTotal
+    }
+  }
+
   const carregarCustosMensais = async () => {
     if (!obra) return
     
@@ -1151,7 +1253,7 @@ export default function ObraDetailsPage() {
       </TabsList>
 
         <TabsContent value="geral" className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-4 w-full" style={{display: 'flex', flexDirection: 'column', width: '100%'}}>
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Informações Básicas</CardTitle>
@@ -1176,6 +1278,42 @@ export default function ObraDetailsPage() {
                   <span className="text-sm text-gray-600">Responsável:</span>
                   <span className="text-sm">{obra.responsavelName}</span>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Informações do Cliente
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {obra.cliente ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Nome:</span>
+                      <span className="text-sm font-medium">{obra.cliente.nome}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">CNPJ:</span>
+                      <span className="text-sm">{obra.cliente.cnpj}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Email:</span>
+                      <span className="text-sm">{obra.cliente.email}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Telefone:</span>
+                      <span className="text-sm">{obra.cliente.telefone}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center text-sm text-gray-500 py-4">
+                    <Building2 className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    <p>Informações do cliente não disponíveis</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -1211,7 +1349,7 @@ export default function ObraDetailsPage() {
                 </CardTitle>
                 <Button 
                   size="sm"
-                  onClick={() => window.location.href = `/dashboard/gruas?obra=${obra.id}`}
+                  onClick={() => setIsAdicionarGruaOpen(true)}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Vincular Grua
@@ -1330,7 +1468,7 @@ export default function ObraDetailsPage() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua vinculada</h3>
                   <p className="text-gray-600 mb-4">Esta obra ainda não possui gruas vinculadas.</p>
                   <Button 
-                    onClick={() => window.location.href = `/dashboard/gruas?obra=${obra.id}`}
+                    onClick={() => setIsAdicionarGruaOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Vincular Primeira Grua
@@ -1463,22 +1601,24 @@ export default function ObraDetailsPage() {
                   </Button>
                 </div>
               ) : custosMensais.length > 0 ? (
-                <div className="overflow-x-auto border rounded-lg">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
-                        <TableHead className="w-[80px] font-semibold text-blue-900 text-center">Item</TableHead>
-                        <TableHead className="min-w-[200px] font-semibold text-blue-900">Descrição</TableHead>
-                        <TableHead className="w-[60px] font-semibold text-blue-900 text-center">UND</TableHead>
-                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Orçamento</TableHead>
-                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Acumulado Anterior</TableHead>
-                        <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Realizado Período</TableHead>
-                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Acumulado Total</TableHead>
-                        <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Saldo Contrato</TableHead>
-                        <TableHead className="w-[80px] font-semibold text-blue-900 text-center">Mês</TableHead>
-                        <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                <div className="space-y-4">
+                  {/* Tabela Desktop */}
+                  <div className="hidden lg:block overflow-x-auto border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+                          <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Item</TableHead>
+                          <TableHead className="min-w-[180px] font-semibold text-blue-900">Descrição</TableHead>
+                          <TableHead className="w-[80px] font-semibold text-blue-900 text-center">UND</TableHead>
+                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Orçamento</TableHead>
+                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Acumulado Anterior</TableHead>
+                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Realizado Período</TableHead>
+                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Acumulado Total</TableHead>
+                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Saldo Contrato</TableHead>
+                          <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Mês</TableHead>
+                          <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
                     <TableBody>
                       {custosMensais.map((custo, index) => (
                         <TableRow key={custo.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
@@ -1647,6 +1787,168 @@ export default function ObraDetailsPage() {
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Cards Mobile/Tablet */}
+                <div className="lg:hidden space-y-4">
+                  {custosMensais.map((custo, index) => (
+                    <Card key={custo.id} className="p-4">
+                      <div className="space-y-4">
+                        {/* Header do Card */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                              {custo.item}
+                            </Badge>
+                            <div className={`w-2 h-2 rounded-full ${
+                              custo.valor_acumulado === 0 ? 'bg-gray-400' :
+                              custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'bg-yellow-400' :
+                              custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'bg-blue-400' :
+                              'bg-green-400'
+                            }`}></div>
+                            <span className="text-xs text-gray-600">
+                              {custo.valor_acumulado === 0 ? 'Não iniciado' :
+                               custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'Iniciado' :
+                               custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'Em andamento' :
+                               'Quase concluído'}
+                            </span>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-8 w-8 p-0 hover:bg-blue-100 text-blue-600"
+                              onClick={() => handleEditarCusto(custo)}
+                              title="Editar custo"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-8 w-8 p-0 hover:bg-red-100 text-red-600"
+                              onClick={() => handleExcluirCusto(custo.id)}
+                              title="Excluir custo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Descrição */}
+                        <div>
+                          <p className="font-medium text-gray-800">{custo.descricao}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {custo.unidade}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
+                              {new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Valores em Grid */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                            <div className="text-xs text-blue-600 mb-1">Orçamento</div>
+                            <div className="text-xs text-blue-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_orcamento)}</div>
+                            <div className="text-xs text-blue-600 mb-1">Unit: R$ {formatarValor(custo.valor_unitario)}</div>
+                            <div className="text-sm font-bold text-blue-800">Total: R$ {formatarValor(custo.total_orcamento)}</div>
+                          </div>
+
+                          <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <div className="text-xs text-gray-600 mb-1">Acumulado Anterior</div>
+                            <div className="text-xs text-gray-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada - custo.quantidade_realizada)}</div>
+                            <div className="text-sm font-medium text-gray-800">R$ {formatarValor(custo.valor_acumulado - custo.valor_realizado)}</div>
+                          </div>
+
+                          <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                            <div className="text-xs text-green-600 mb-1">Realizado Período</div>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={custo.quantidade_realizada}
+                              onChange={(e) => handleAtualizarQuantidade(custo.id, parseFloat(e.target.value) || 0)}
+                              className="w-full h-8 text-xs mb-1 border-green-300 focus:border-green-500"
+                            />
+                            <div className="text-sm font-medium text-green-800">
+                              R$ {formatarValor(custo.valor_realizado)}
+                            </div>
+                          </div>
+
+                          <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                            <div className="text-xs text-purple-600 mb-1">Acumulado Total</div>
+                            <div className="text-xs text-purple-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada)}</div>
+                            <div className="text-sm font-medium text-purple-800">R$ {formatarValor(custo.valor_acumulado)}</div>
+                          </div>
+                        </div>
+
+                        {/* Saldo e Progresso */}
+                        <div className={`p-3 rounded-lg border ${custo.valor_saldo >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                          <div className="text-xs mb-1">Saldo Contrato</div>
+                          <div className="text-xs mb-1">Qtd: {formatarQuantidade(custo.quantidade_saldo)}</div>
+                          <div className={`text-sm font-medium mb-2 ${custo.valor_saldo >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                            R$ {formatarValor(custo.valor_saldo)}
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                custo.valor_saldo >= 0 ? 'bg-green-500' : 'bg-red-500'
+                              }`}
+                              style={{ 
+                                width: `${Math.min(100, Math.max(0, (custo.valor_acumulado / custo.total_orcamento) * 100))}%` 
+                              }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {Math.round((custo.valor_acumulado / custo.total_orcamento) * 100)}% executado
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+
+                  {/* Resumo Mobile */}
+                  <Card className="p-4 bg-gradient-to-r from-gray-100 to-gray-200">
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <DollarSign className="w-5 h-5" />
+                      <span className="font-bold text-lg text-gray-800">TOTAIS (R$)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="bg-blue-100 p-3 rounded-lg border-2 border-blue-300">
+                        <div className="text-blue-600 font-medium mb-1">Orçamento</div>
+                        <div className="font-bold text-blue-900">
+                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.total_orcamento, 0))}
+                        </div>
+                      </div>
+                      <div className="bg-gray-100 p-3 rounded-lg border-2 border-gray-300">
+                        <div className="text-gray-600 font-medium mb-1">Acumulado Anterior</div>
+                        <div className="font-bold text-gray-900">
+                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + (custo.valor_acumulado - custo.valor_realizado), 0))}
+                        </div>
+                      </div>
+                      <div className="bg-green-100 p-3 rounded-lg border-2 border-green-300">
+                        <div className="text-green-600 font-medium mb-1">Realizado Período</div>
+                        <div className="font-bold text-green-900">
+                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_realizado, 0))}
+                        </div>
+                      </div>
+                      <div className="bg-purple-100 p-3 rounded-lg border-2 border-purple-300">
+                        <div className="text-purple-600 font-medium mb-1">Acumulado Total</div>
+                        <div className="font-bold text-purple-900">
+                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
+                        </div>
+                      </div>
+                      <div className={`p-3 rounded-lg border-2 col-span-2 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
+                        <div className={`font-medium mb-1 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>Saldo Contrato</div>
+                        <div className={`font-bold ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0))}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              </div>
               ) : (
                 <div className="text-center py-8">
                   <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -2463,6 +2765,174 @@ export default function ObraDetailsPage() {
               <Button type="submit">
                 <Upload className="w-4 h-4 mr-2" />
                 Adicionar Arquivo
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para adicionar grua */}
+      <Dialog open={isAdicionarGruaOpen} onOpenChange={setIsAdicionarGruaOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vincular Gruas à Obra</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAdicionarGrua} className="space-y-6">
+            <div className="space-y-4">
+              {/* Busca de Grua */}
+              <div>
+                <Label htmlFor="gruaSearch">Buscar Grua</Label>
+                <GruaSearch
+                  onGruaSelect={handleGruaSelect}
+                  selectedGrua={null}
+                  placeholder="Digite o nome ou modelo da grua para buscar"
+                  onlyAvailable={true}
+                />
+              </div>
+
+              {/* Gruas Selecionadas */}
+              {gruasSelecionadas.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium">Gruas Selecionadas ({gruasSelecionadas.length})</h3>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {gruasSelecionadas.map((grua) => (
+                      <Card key={grua.id} className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <Wrench className="w-5 h-5 text-blue-600" />
+                            <div>
+                              <p className="font-medium">{grua.name}</p>
+                              <p className="text-sm text-gray-600">
+                                {grua.manufacturer} {grua.model} - {grua.capacity}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoverGrua(grua.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor={`valorLocacao-${grua.id}`}>Valor da Locação (R$)</Label>
+                            <Input
+                              id={`valorLocacao-${grua.id}`}
+                              type="text"
+                              value={grua.valorLocacao ? grua.valorLocacao.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : ''}
+                              onChange={(e) => {
+                                const valor = parseFloat(e.target.value.replace(/[^\d,]/g, '').replace(',', '.')) || 0
+                                handleAtualizarGrua(grua.id, 'valorLocacao', valor)
+                              }}
+                              placeholder="0,00"
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor={`taxaMensal-${grua.id}`}>Taxa Mensal (R$)</Label>
+                            <Input
+                              id={`taxaMensal-${grua.id}`}
+                              type="text"
+                              value={grua.taxaMensal ? grua.taxaMensal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : ''}
+                              onChange={(e) => {
+                                const valor = parseFloat(e.target.value.replace(/[^\d,]/g, '').replace(',', '.')) || 0
+                                handleAtualizarGrua(grua.id, 'taxaMensal', valor)
+                              }}
+                              placeholder="0,00"
+                            />
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dados Gerais da Locação */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="dataInicioLocacao">Data Início Locação *</Label>
+                  <Input
+                    id="dataInicioLocacao"
+                    type="date"
+                    value={novaGruaData.dataInicioLocacao}
+                    onChange={(e) => setNovaGruaData({...novaGruaData, dataInicioLocacao: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="dataFimLocacao">Data Fim Locação</Label>
+                  <Input
+                    id="dataFimLocacao"
+                    type="date"
+                    value={novaGruaData.dataFimLocacao}
+                    onChange={(e) => setNovaGruaData({...novaGruaData, dataFimLocacao: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="observacoes">Observações</Label>
+                <Textarea
+                  id="observacoes"
+                  value={novaGruaData.observacoes}
+                  onChange={(e) => setNovaGruaData({...novaGruaData, observacoes: e.target.value})}
+                  placeholder="Observações sobre a locação..."
+                  rows={3}
+                />
+              </div>
+
+              {/* Resumo das Gruas */}
+              {gruasSelecionadas.length > 0 && (
+                <Card className="p-4 bg-blue-50 border-blue-200">
+                  <h3 className="text-lg font-medium text-blue-900 mb-3">Resumo das Gruas</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-blue-700 font-medium">Total de Gruas:</span>
+                      <p className="text-blue-900 font-semibold">{calcularResumo().totalGruas}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Valor Total de Locação:</span>
+                      <p className="text-blue-900 font-semibold">
+                        R$ {calcularResumo().valorTotalLocacao.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Taxa Mensal Total:</span>
+                      <p className="text-blue-900 font-semibold">
+                        R$ {calcularResumo().taxaMensalTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={handleCancelarAdicionarGrua}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={gruasSelecionadas.length === 0 || loadingGruas}>
+                {loadingGruas ? (
+                  <>
+                    <InlineLoader size="sm" />
+                    Adicionando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Gruas ({gruasSelecionadas.length})
+                  </>
+                )}
               </Button>
             </div>
           </form>

@@ -395,12 +395,12 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     createdAt: obraBackend.created_at,
     updatedAt: obraBackend.updated_at,
     // Dados da grua
-    grua: {
+    grua: relacao.grua ? {
       id: relacao.grua.id,
       modelo: relacao.grua.modelo,
       fabricante: relacao.grua.fabricante,
       tipo: relacao.grua.tipo
-    }
+    } : null
   })) || []
 
   const funcionariosVinculados = obraBackend.grua_funcionario?.map(relacao => ({
@@ -422,12 +422,12 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
       status: relacao.funcionario.status
     },
     // Dados da grua
-    grua: {
+    grua: relacao.grua ? {
       id: relacao.grua.id,
       modelo: relacao.grua.modelo,
       fabricante: relacao.grua.fabricante,
       tipo: relacao.grua.tipo
-    }
+    } : null
   })) || []
 
   return {
@@ -441,6 +441,13 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     responsavelName: obraBackend.responsavel_nome || 'Pedro Costa',
     clienteId: obraBackend.cliente_id.toString(),
     clienteName: obraBackend.clientes?.nome || 'Cliente não encontrado',
+    cliente: obraBackend.clientes ? {
+      id: obraBackend.clientes.id.toString(),
+      nome: obraBackend.clientes.nome,
+      cnpj: obraBackend.clientes.cnpj,
+      email: obraBackend.clientes.email,
+      telefone: obraBackend.clientes.telefone
+    } : null,
     budget: obraBackend.orcamento || 0,
     location: `${obraBackend.cidade}, ${obraBackend.estado}`,
     client: obraBackend.clientes?.nome || 'Cliente não encontrado',

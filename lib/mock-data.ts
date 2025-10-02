@@ -50,6 +50,13 @@ export interface Obra {
   responsavelName: string
   clienteId: string
   clienteName: string
+  cliente?: {
+    id: string
+    nome: string
+    cnpj: string
+    email?: string
+    telefone?: string
+  } | null
   budget: number
   location: string
   client: string

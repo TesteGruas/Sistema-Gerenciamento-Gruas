@@ -31,6 +31,103 @@ import GruaSearch from "@/components/grua-search"
 import FuncionarioSearch from "@/components/funcionario-search"
 import { useToast } from "@/hooks/use-toast"
 
+// Funções de máscara
+const formatCurrency = (value: string) => {
+  // Remove tudo que não é dígito
+  const numbers = value.replace(/\D/g, '')
+  
+  // Se não há números, retorna vazio
+  if (!numbers || numbers === '0') return ''
+  
+  // Converte para número e divide por 100 para ter centavos
+  const amount = parseInt(numbers) / 100
+  
+  // Formata como moeda brasileira
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount)
+}
+
+const formatCNPJ = (value: string) => {
+  // Remove tudo que não é dígito
+  const numbers = value.replace(/\D/g, '')
+  
+  // Aplica a máscara do CNPJ
+  return numbers
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+    .substring(0, 18)
+}
+
+const formatPhone = (value: string) => {
+  // Remove tudo que não é dígito
+  const numbers = value.replace(/\D/g, '')
+  
+  // Aplica a máscara do telefone
+  if (numbers.length <= 10) {
+    return numbers
+      .replace(/^(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2')
+      .substring(0, 14)
+  } else {
+    return numbers
+      .replace(/^(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{5})(\d)/, '$1-$2')
+      .substring(0, 15)
+  }
+}
+
+const formatCEP = (value: string) => {
+  // Remove tudo que não é dígito
+  const numbers = value.replace(/\D/g, '')
+  
+  // Aplica a máscara do CEP
+  return numbers
+    .replace(/^(\d{5})(\d)/, '$1-$2')
+    .substring(0, 9)
+}
+
+// Função para remover máscaras
+const removeMasks = (value: string) => {
+  return value.replace(/\D/g, '')
+}
+
+// Função para converter valor formatado para número
+const parseCurrency = (value: string) => {
+  const cleanValue = value.replace(/[^\d,]/g, '').replace(',', '.')
+  return parseFloat(cleanValue) || 0
+}
+
+// Função para formatar números decimais
+const formatDecimal = (value: string) => {
+  // Remove tudo que não é dígito ou ponto
+  const numbers = value.replace(/[^\d,]/g, '')
+  
+  // Se não há números, retorna vazio
+  if (!numbers || numbers === '0') return ''
+  
+  // Se tem vírgula, formata como decimal
+  if (numbers.includes(',')) {
+    const parts = numbers.split(',')
+    if (parts.length === 2) {
+      // Limita a 2 casas decimais
+      const decimal = parts[1].substring(0, 2)
+      return `${parts[0]},${decimal}`
+    }
+  }
+  
+  return numbers
+}
+
+// Função para converter valor decimal formatado para número
+const parseDecimal = (value: string) => {
+  const cleanValue = value.replace(',', '.')
+  return parseFloat(cleanValue) || 0
+}
+
 export default function NovaObraPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -99,7 +196,7 @@ export default function NovaObraPage() {
       valorAcumulado: 0,
       quantidadeSaldo: custoForm.quantidadeOrcamento,
       valorSaldo: custoForm.quantidadeOrcamento * custoForm.valorUnitario,
-      tipo: 'orcamento',
+      tipo: 'contrato',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -177,7 +274,7 @@ export default function NovaObraPage() {
       userId: funcionario.id,
       role: funcionario.role,
       name: funcionario.name,
-      gruaId: obraFormData.gruaId
+      gruaId: '' // Removido - usando array de gruas
     }
     
     setFuncionariosSelecionados([...funcionariosSelecionados, novoFuncionario])
@@ -235,7 +332,7 @@ export default function NovaObraPage() {
         status: obraFormData.status,
         startDate: obraFormData.startDate,
         endDate: obraFormData.endDate,
-        budget: parseFloat(obraFormData.budget) || 0,
+        budget: parseCurrency(obraFormData.budget),
         location: obraFormData.location,
         clienteId: obraFormData.clienteId,
         observations: obraFormData.observations,
@@ -256,7 +353,9 @@ export default function NovaObraPage() {
         custosMensais: custosMensais
       }
 
-      const response = await obrasApi.criarObra(obraData)
+      // Converter para formato do backend
+      const obraBackendData = converterObraFrontendParaBackend(obraData)
+      const response = await obrasApi.criarObra(obraBackendData)
       
       if (response.success) {
         toast({
@@ -265,7 +364,7 @@ export default function NovaObraPage() {
         })
         router.push('/dashboard/obras')
       } else {
-        throw new Error(response.message || 'Erro ao criar obra')
+        throw new Error('Erro ao criar obra')
       }
     } catch (err) {
       console.error('Erro ao criar obra:', err)
@@ -393,12 +492,13 @@ export default function NovaObraPage() {
                     <Label htmlFor="budget">Orçamento (R$)</Label>
                     <Input
                       id="budget"
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
                       value={obraFormData.budget}
-                      onChange={(e) => setObraFormData({ ...obraFormData, budget: e.target.value })}
-                      placeholder="0.00"
+                      onChange={(e) => {
+                        const formatted = formatCurrency(e.target.value)
+                        setObraFormData({ ...obraFormData, budget: formatted })
+                      }}
+                      placeholder="0,00"
                     />
                   </div>
                   <div>
@@ -514,34 +614,34 @@ export default function NovaObraPage() {
                               <Label htmlFor={`gruaValue-${grua.id}`}>Valor da Locação (R$)</Label>
                               <Input
                                 id={`gruaValue-${grua.id}`}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={grua.valor_locacao}
+                                type="text"
+                                value={grua.valor_locacao && grua.valor_locacao > 0 ? formatCurrency((grua.valor_locacao * 100).toString()) : ''}
                                 onChange={(e) => {
+                                  const formatted = formatCurrency(e.target.value)
+                                  const numericValue = parseCurrency(formatted)
                                   const updatedGruas = gruasSelecionadas.map(g => 
-                                    g.id === grua.id ? { ...g, valor_locacao: parseFloat(e.target.value) || 0 } : g
+                                    g.id === grua.id ? { ...g, valor_locacao: numericValue } : g
                                   )
                                   setGruasSelecionadas(updatedGruas)
                                 }}
-                                placeholder="0.00"
+                                placeholder="0,00"
                               />
                             </div>
                             <div>
                               <Label htmlFor={`monthlyFee-${grua.id}`}>Taxa Mensal (R$)</Label>
                               <Input
                                 id={`monthlyFee-${grua.id}`}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={grua.taxa_mensal}
+                                type="text"
+                                value={grua.taxa_mensal && grua.taxa_mensal > 0 ? formatCurrency((grua.taxa_mensal * 100).toString()) : ''}
                                 onChange={(e) => {
+                                  const formatted = formatCurrency(e.target.value)
+                                  const numericValue = parseCurrency(formatted)
                                   const updatedGruas = gruasSelecionadas.map(g => 
-                                    g.id === grua.id ? { ...g, taxa_mensal: parseFloat(e.target.value) || 0 } : g
+                                    g.id === grua.id ? { ...g, taxa_mensal: numericValue } : g
                                   )
                                   setGruasSelecionadas(updatedGruas)
                                 }}
-                                placeholder="0.00"
+                                placeholder="0,00"
                               />
                             </div>
                           </div>
@@ -758,22 +858,28 @@ export default function NovaObraPage() {
                       <Label htmlFor="custoQuantidade">Quantidade Orçada *</Label>
                       <Input
                         id="custoQuantidade"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={custoForm.quantidadeOrcamento}
-                        onChange={(e) => setCustoForm({...custoForm, quantidadeOrcamento: parseFloat(e.target.value) || 0})}
+                        type="text"
+                        value={custoForm.quantidadeOrcamento && custoForm.quantidadeOrcamento > 0 ? custoForm.quantidadeOrcamento.toString().replace('.', ',') : ''}
+                        onChange={(e) => {
+                          const formatted = formatDecimal(e.target.value)
+                          const numericValue = parseDecimal(formatted)
+                          setCustoForm({...custoForm, quantidadeOrcamento: numericValue})
+                        }}
+                        placeholder="0,00"
                       />
                     </div>
                     <div>
                       <Label htmlFor="custoValorUnitario">Valor Unitário (R$) *</Label>
                       <Input
                         id="custoValorUnitario"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={custoForm.valorUnitario}
-                        onChange={(e) => setCustoForm({...custoForm, valorUnitario: parseFloat(e.target.value) || 0})}
+                        type="text"
+                        value={custoForm.valorUnitario && custoForm.valorUnitario > 0 ? formatCurrency((custoForm.valorUnitario * 100).toString()) : ''}
+                        onChange={(e) => {
+                          const formatted = formatCurrency(e.target.value)
+                          const numericValue = parseCurrency(formatted)
+                          setCustoForm({...custoForm, valorUnitario: numericValue})
+                        }}
+                        placeholder="0,00"
                       />
                     </div>
                   </div>

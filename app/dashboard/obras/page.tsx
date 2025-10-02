@@ -31,7 +31,11 @@ import {
   Trash2,
   Package,
   Settings,
-  ArrowRight
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react"
 import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos } from "@/lib/mock-data"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
@@ -51,6 +55,10 @@ export default function ObrasPage() {
   const [editingObra, setEditingObra] = useState<any>(null)
   const [obraToDelete, setObraToDelete] = useState<any>(null)
   
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(9)
+  
   // Estados para integração com backend
   const [obras, setObras] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,6 +66,12 @@ export default function ObrasPage() {
   const [creating, setCreating] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 9,
+    total: 0,
+    pages: 0
+  })
   const [obraFormData, setObraFormData] = useState({
     name: '',
     description: '',
@@ -102,12 +116,15 @@ export default function ObrasPage() {
     mes: new Date().toISOString().slice(0, 7)
   })
 
-  // Carregar obras do backend
+  // Carregar obras do backend com paginação
   const carregarObras = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await obrasApi.listarObras({ limit: 100 })
+      const response = await obrasApi.listarObras({ 
+        page: currentPage,
+        limit: itemsPerPage
+      })
       
       // Converter obras - os relacionamentos já vêm incluídos no endpoint
       const obrasComRelacionamentos = response.data.map((obraBackend: any) => {
@@ -115,6 +132,11 @@ export default function ObrasPage() {
       })
       
       setObras(obrasComRelacionamentos)
+      
+      // Atualizar informações de paginação da API
+      if (response.pagination) {
+        setPagination(response.pagination)
+      }
     } catch (err) {
       console.error('Erro ao carregar obras:', err)
       setError(err instanceof Error ? err.message : 'Erro ao carregar obras')
@@ -252,10 +274,95 @@ export default function ObrasPage() {
     init()
   }, [])
 
-  const filteredObras = obras.filter(obra =>
-    (obra.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (obra.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Recarregar obras quando página ou itens por página mudarem
+  useEffect(() => {
+    if (currentPage > 0 && itemsPerPage > 0) {
+      carregarObras()
+    }
+  }, [currentPage, itemsPerPage])
+
+  // Função de busca via API
+  const buscarObras = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await obrasApi.listarObras({ 
+        page: currentPage,
+        limit: itemsPerPage,
+        // Adicionar parâmetros de busca se a API suportar
+        // Por enquanto, vamos fazer busca local após carregar
+      })
+      
+      // Converter obras
+      const obrasComRelacionamentos = response.data.map((obraBackend: any) => {
+        return converterObraBackendParaFrontend(obraBackend)
+      })
+      
+      // Aplicar filtro de busca localmente
+      const obrasFiltradas = searchTerm.trim() 
+        ? obrasComRelacionamentos.filter(obra =>
+            (obra.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (obra.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        : obrasComRelacionamentos
+      
+      setObras(obrasFiltradas)
+      
+      // Atualizar informações de paginação da API
+      if (response.pagination) {
+        setPagination(response.pagination)
+      }
+    } catch (err) {
+      console.error('Erro ao buscar obras:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao buscar obras')
+      setObras(mockObras)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Como a paginação é feita no backend, não precisamos filtrar localmente
+  // Apenas aplicamos filtro de busca se necessário
+  const filteredObras = searchTerm.trim() 
+    ? obras.filter(obra =>
+        (obra.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (obra.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : obras
+
+  // Usar dados de paginação da API
+  const totalPages = pagination.pages || 1
+  const startIndex = ((currentPage - 1) * itemsPerPage) + 1
+  const endIndex = Math.min(currentPage * itemsPerPage, pagination.total || obras.length)
+  const paginatedObras = filteredObras
+
+  // Função para resetar página quando termo de busca muda e buscar obras
+  useEffect(() => {
+    setCurrentPage(1)
+    if (searchTerm.trim()) {
+      buscarObras()
+    } else {
+      carregarObras()
+    }
+  }, [searchTerm])
+
+  // Funções de paginação completas
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
+
+  const goToFirstPage = () => goToPage(1)
+  const goToLastPage = () => goToPage(totalPages)
+  const goToPreviousPage = () => goToPage(currentPage - 1)
+  const goToNextPage = () => goToPage(currentPage + 1)
+
+  const changePageSize = (newLimit: number) => {
+    setItemsPerPage(newLimit)
+    setCurrentPage(1)
+    setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }))
+  }
 
   const addFuncionario = () => {
     const newFuncionario = {
@@ -810,8 +917,16 @@ export default function ObrasPage() {
 
       {/* Lista de Obras */}
       {!loading && !error && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredObras.map((obra) => {
+        <div className={`grid gap-6 ${
+          paginatedObras.length >= 9 
+            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' 
+            : paginatedObras.length >= 6 
+            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+            : paginatedObras.length >= 3
+            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+            : 'grid-cols-1 md:grid-cols-2'
+        }`}>
+          {paginatedObras.map((obra) => {
           const custos = getCustosByObra(obra.id)
           const obraComRelacionamentos = obra as any
           
@@ -932,6 +1047,126 @@ export default function ObrasPage() {
           )
         })}
         </div>
+      )}
+
+      {/* Controles de Paginação */}
+      {!loading && !error && filteredObras.length > 0 && totalPages > 1 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* Informações da paginação */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
+                <span>
+                  Mostrando {startIndex} a{' '}
+                  {endIndex} de{' '}
+                  {pagination.total || filteredObras.length} obras
+                </span>
+                
+                {/* Seletor de itens por página */}
+                <div className="flex items-center gap-2">
+                  <span>Itens por página:</span>
+                  <Select value={itemsPerPage.toString()} onValueChange={(value) => changePageSize(Number(value))}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="9">9</SelectItem>
+                      <SelectItem value="12">12</SelectItem>
+                      <SelectItem value="15">15</SelectItem>
+                      <SelectItem value="18">18</SelectItem>
+                      <SelectItem value="21">21</SelectItem>
+                      <SelectItem value="24">24</SelectItem>
+                      <SelectItem value="27">27</SelectItem>
+                      <SelectItem value="30">30</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Controles de navegação */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToFirstPage}
+                  disabled={currentPage === 1}
+                  className="hidden sm:flex"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+
+                {/* Números das páginas */}
+                <div className="hidden sm:flex items-center gap-1">
+                  {(() => {
+                    const pages = []
+                    const totalPagesCount = totalPages
+                    const currentPageNum = currentPage
+                    
+                    // Mostrar até 5 páginas
+                    let startPage = Math.max(1, currentPageNum - 2)
+                    let endPage = Math.min(totalPagesCount, startPage + 4)
+                    
+                    // Ajustar se estivermos no final
+                    if (endPage - startPage < 4) {
+                      startPage = Math.max(1, endPage - 4)
+                    }
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <Button
+                          key={i}
+                          variant={currentPageNum === i ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => goToPage(i)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {i}
+                        </Button>
+                      )
+                    }
+                    
+                    return pages
+                  })()}
+                </div>
+
+                {/* Indicador de página atual - Mobile */}
+                <div className="sm:hidden flex items-center gap-2">
+                  <span className="text-sm text-gray-600">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToLastPage}
+                  disabled={currentPage === totalPages}
+                  className="hidden sm:flex"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Mensagem quando não há obras */}
