@@ -32,36 +32,11 @@ import {
   Clock
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { medicoesApi, Medicao, MedicaoCreate } from "@/lib/api-medicoes"
+import { medicoesUtils } from "@/lib/medicoes-utils"
+import { locacoesApi, Locacao } from "@/lib/api-locacoes"
 
-// Tipos para medições
-interface Medicao {
-  id: string
-  numero: string
-  obra_id: string
-  grua_id: string
-  periodo: string
-  data_medicao: string
-  altura_medida: number
-  quantidade_medida: number
-  valor_unitario: number
-  valor_base: number
-  valor_aditivos: number
-  valor_total: number
-  status: 'pendente' | 'aprovada' | 'finalizada' | 'cancelada'
-  observacoes?: string
-  created_at: string
-  updated_at: string
-  obras?: {
-    id: string
-    nome: string
-    cliente_id: string
-  }
-  gruas?: {
-    id: string
-    nome: string
-    modelo: string
-  }
-}
+// Tipos para receitas e custos (mantidos para compatibilidade)
 
 interface Receita {
   id: string
@@ -109,9 +84,18 @@ export default function MedicoesPage() {
   const [medicoes, setMedicoes] = useState<Medicao[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [editingMedicao, setEditingMedicao] = useState<Medicao | null>(null)
+  const [viewingMedicao, setViewingMedicao] = useState<Medicao | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterPeriodo, setFilterPeriodo] = useState("")
+  const [filterLocacao, setFilterLocacao] = useState("all")
+  const [locacaoFilter, setLocacaoFilter] = useState("")
+  
+  // Estados para locações
+  const [locacoes, setLocacoes] = useState<Locacao[]>([])
   
   // Estados para receitas
   const [receitas, setReceitas] = useState<Receita[]>([])
@@ -124,13 +108,12 @@ export default function MedicoesPage() {
   // Formulários
   const [medicaoForm, setMedicaoForm] = useState({
     numero: '',
-    obra_id: '',
-    grua_id: '',
+    locacao_id: '',
     periodo: '',
     data_medicao: new Date().toISOString().split('T')[0],
-    altura_medida: 0,
-    quantidade_medida: 0,
-    valor_unitario: 0,
+    valor_base: 0,
+    valor_aditivos: 0,
+    valor_total: 0,
     observacoes: ''
   })
 
@@ -156,59 +139,32 @@ export default function MedicoesPage() {
   // Carregar dados
   useEffect(() => {
     carregarDados()
+    // Inicializar formulário com valores padrão
+    setMedicaoForm({
+      numero: medicoesUtils.generateNumeroMedicao(),
+      locacao_id: '',
+      periodo: medicoesUtils.getPeriodoAtual(),
+      data_medicao: new Date().toISOString().split('T')[0],
+      valor_base: 0,
+      valor_aditivos: 0,
+      valor_total: 0,
+      observacoes: ''
+    })
   }, [])
 
   const carregarDados = async () => {
     try {
       setIsLoading(true)
       
-      // Simular carregamento de dados (substituir por chamadas reais da API)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Carregar medições
+      const medicoesData = await medicoesApi.list()
+      setMedicoes(medicoesData.medicoes || [])
       
-      // Dados mockados para demonstração
-      const mockMedicoes: Medicao[] = [
-        {
-          id: '1',
-          numero: 'MED-001',
-          obra_id: '1',
-          grua_id: '1',
-          periodo: '2025-01',
-          data_medicao: '2025-01-15',
-          altura_medida: 15,
-          quantidade_medida: 1,
-          valor_unitario: 25000,
-          valor_base: 25000,
-          valor_aditivos: 5000,
-          valor_total: 30000,
-          status: 'aprovada',
-          observacoes: 'Medição mensal padrão',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          obras: { id: '1', nome: 'Obra Jardim das Flores', cliente_id: '1' },
-          gruas: { id: '1', nome: 'Grua STT293', modelo: 'Potain MDT 178' }
-        },
-        {
-          id: '2',
-          numero: 'MED-002',
-          obra_id: '2',
-          grua_id: '2',
-          periodo: '2025-01',
-          data_medicao: '2025-01-20',
-          altura_medida: 20,
-          quantidade_medida: 1,
-          valor_unitario: 30000,
-          valor_base: 30000,
-          valor_aditivos: 0,
-          valor_total: 30000,
-          status: 'pendente',
-          observacoes: 'Medição com altura adicional',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          obras: { id: '2', nome: 'Shopping Center Norte', cliente_id: '2' },
-          gruas: { id: '2', nome: 'Grua Liebherr', modelo: '132 EC-H' }
-        }
-      ]
-
+      // Carregar locações
+      const locacoesData = await locacoesApi.list({ limit: 100 })
+      setLocacoes(locacoesData.data || [])
+      
+      // Dados mockados para receitas e custos (manter por enquanto)
       const mockReceitas: Receita[] = [
         {
           id: '1',
@@ -261,7 +217,6 @@ export default function MedicoesPage() {
         }
       ]
 
-      setMedicoes(mockMedicoes)
       setReceitas(mockReceitas)
       setCustos(mockCustos)
       
@@ -277,41 +232,43 @@ export default function MedicoesPage() {
     }
   }
 
+  // Filtrar locações para o select
+  const locacoesFiltradas = locacoes.filter(locacao => {
+    if (!locacaoFilter) return true
+    const searchTerm = locacaoFilter.toLowerCase()
+    return (
+      locacao.numero?.toLowerCase().includes(searchTerm) ||
+      locacao.cliente_nome?.toLowerCase().includes(searchTerm) ||
+      locacao.equipamento_id?.toLowerCase().includes(searchTerm)
+    )
+  })
+
   // Filtrar medições
-  const filteredMedicoes = medicoes.filter(medicao => {
-    const matchesSearch = medicao.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         medicao.obras?.nome.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredMedicoes = (medicoes || []).filter(medicao => {
+    const matchesSearch = (medicao.numero || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (medicao.locacoes?.clientes?.nome || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = filterStatus === 'all' || medicao.status === filterStatus
     const matchesPeriodo = !filterPeriodo || medicao.periodo === filterPeriodo
-    return matchesSearch && matchesStatus && matchesPeriodo
+    const matchesLocacao = filterLocacao === 'all' || medicao.locacao_id?.toString() === filterLocacao
+    return matchesSearch && matchesStatus && matchesPeriodo && matchesLocacao
   })
 
   // Handlers
   const handleCreateMedicao = async () => {
     try {
-      const valorBase = medicaoForm.altura_medida * medicaoForm.quantidade_medida * medicaoForm.valor_unitario
-      const valorTotal = valorBase
-
-      const novaMedicao: Medicao = {
-        id: Date.now().toString(),
+      const medicaoData: MedicaoCreate = {
         numero: medicaoForm.numero,
-        obra_id: medicaoForm.obra_id,
-        grua_id: medicaoForm.grua_id,
+        locacao_id: parseInt(medicaoForm.locacao_id),
         periodo: medicaoForm.periodo,
         data_medicao: medicaoForm.data_medicao,
-        altura_medida: medicaoForm.altura_medida,
-        quantidade_medida: medicaoForm.quantidade_medida,
-        valor_unitario: medicaoForm.valor_unitario,
-        valor_base: valorBase,
-        valor_aditivos: 0,
-        valor_total: valorTotal,
-        status: 'pendente',
-        observacoes: medicaoForm.observacoes,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        valor_base: medicaoForm.valor_base,
+        valor_aditivos: medicaoForm.valor_aditivos,
+        valor_total: medicaoForm.valor_total,
+        observacoes: medicaoForm.observacoes.trim() || undefined
       }
 
-      setMedicoes([...medicoes, novaMedicao])
+      const novaMedicao = await medicoesApi.create(medicaoData)
+      setMedicoes([novaMedicao, ...(medicoes || [])])
       setIsCreateDialogOpen(false)
       resetMedicaoForm()
 
@@ -324,6 +281,100 @@ export default function MedicoesPage() {
       toast({
         title: "Erro",
         description: "Erro ao criar medição",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleViewMedicao = (medicao: Medicao) => {
+    setViewingMedicao(medicao)
+    setIsViewDialogOpen(true)
+  }
+
+  const handleEditMedicao = (medicao: Medicao) => {
+    setEditingMedicao(medicao)
+    setMedicaoForm({
+      numero: medicao.numero,
+      locacao_id: medicao.locacao_id.toString(),
+      periodo: medicao.periodo,
+      data_medicao: medicao.data_medicao,
+      valor_base: medicao.valor_base,
+      valor_aditivos: medicao.valor_aditivos,
+      valor_total: medicao.valor_total,
+      observacoes: medicao.observacoes || ''
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleUpdateMedicao = async () => {
+    if (!editingMedicao) return
+
+    try {
+      const medicaoData = {
+        numero: medicaoForm.numero,
+        locacao_id: parseInt(medicaoForm.locacao_id),
+        periodo: medicaoForm.periodo,
+        data_medicao: medicaoForm.data_medicao,
+        valor_base: medicaoForm.valor_base,
+        valor_aditivos: medicaoForm.valor_aditivos,
+        valor_total: medicaoForm.valor_total,
+        observacoes: medicaoForm.observacoes.trim() || undefined
+      }
+
+      const medicaoAtualizada = await medicoesApi.update(editingMedicao.id.toString(), medicaoData)
+      
+      setMedicoes(medicoes.map(m => m.id === editingMedicao.id ? medicaoAtualizada : m))
+      setIsEditDialogOpen(false)
+      setEditingMedicao(null)
+      resetMedicaoForm()
+
+      toast({
+        title: "Sucesso",
+        description: "Medição atualizada com sucesso"
+      })
+    } catch (error) {
+      console.error('Erro ao atualizar medição:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar medição",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDeleteMedicao = async (medicao: Medicao) => {
+    try {
+      await medicoesApi.delete(medicao.id.toString())
+      setMedicoes(medicoes.filter(m => m.id !== medicao.id))
+
+      toast({
+        title: "Sucesso",
+        description: "Medição deletada com sucesso"
+      })
+    } catch (error) {
+      console.error('Erro ao deletar medição:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao deletar medição",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleFinalizarMedicao = async (medicao: Medicao) => {
+    try {
+      const medicaoFinalizada = await medicoesApi.finalizar(medicao.id.toString())
+      setMedicoes(medicoes.map(m => m.id === medicao.id ? medicaoFinalizada : m))
+
+      toast({
+        title: "Sucesso",
+        description: "Medição finalizada com sucesso"
+      })
+    } catch (error) {
+      console.error('Erro ao finalizar medição:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao finalizar medição",
         variant: "destructive"
       })
     }
@@ -396,16 +447,16 @@ export default function MedicoesPage() {
 
   const resetMedicaoForm = () => {
     setMedicaoForm({
-      numero: '',
-      obra_id: '',
-      grua_id: '',
-      periodo: '',
+      numero: medicoesUtils.generateNumeroMedicao(),
+      locacao_id: '',
+      periodo: medicoesUtils.getPeriodoAtual(),
       data_medicao: new Date().toISOString().split('T')[0],
-      altura_medida: 0,
-      quantidade_medida: 0,
-      valor_unitario: 0,
+      valor_base: 0,
+      valor_aditivos: 0,
+      valor_total: 0,
       observacoes: ''
     })
+    setLocacaoFilter('')
   }
 
   const resetReceitaForm = () => {
@@ -432,25 +483,15 @@ export default function MedicoesPage() {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'aprovada':
-      case 'confirmada':
-      case 'finalizada': return 'bg-green-500'
-      case 'pendente': return 'bg-yellow-500'
-      case 'cancelada':
-      case 'cancelado': return 'bg-red-500'
-      default: return 'bg-gray-500'
-    }
+    return medicoesUtils.getStatusColor(status)
   }
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'aprovada':
-      case 'confirmada':
-      case 'finalizada': return <CheckCircle className="w-4 h-4" />
-      case 'pendente': return <Clock className="w-4 h-4" />
-      case 'cancelada':
-      case 'cancelado': return <XCircle className="w-4 h-4" />
+    const iconType = medicoesUtils.getStatusIcon(status)
+    switch (iconType) {
+      case 'check-circle': return <CheckCircle className="w-4 h-4" />
+      case 'clock': return <Clock className="w-4 h-4" />
+      case 'x-circle': return <XCircle className="w-4 h-4" />
       default: return <Clock className="w-4 h-4" />
     }
   }
@@ -513,12 +554,12 @@ export default function MedicoesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div>
                   <Label htmlFor="search">Buscar</Label>
                   <Input
                     id="search"
-                    placeholder="Buscar por número ou obra..."
+                    placeholder="Buscar por número ou cliente..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -532,7 +573,6 @@ export default function MedicoesPage() {
                     <SelectContent>
                       <SelectItem value="all">Todos os status</SelectItem>
                       <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="aprovada">Aprovada</SelectItem>
                       <SelectItem value="finalizada">Finalizada</SelectItem>
                       <SelectItem value="cancelada">Cancelada</SelectItem>
                     </SelectContent>
@@ -546,6 +586,22 @@ export default function MedicoesPage() {
                     value={filterPeriodo}
                     onChange={(e) => setFilterPeriodo(e.target.value)}
                   />
+                </div>
+                <div>
+                  <Label htmlFor="locacao">Locação</Label>
+                  <Select value={filterLocacao} onValueChange={setFilterLocacao}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as locações</SelectItem>
+                      {locacoes.map(locacao => (
+                        <SelectItem key={locacao.id} value={locacao.id.toString()}>
+                          {locacao.numero} - {locacao.cliente_nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-end">
                   <Button variant="outline" onClick={carregarDados}>
@@ -574,10 +630,10 @@ export default function MedicoesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Número</TableHead>
-                      <TableHead>Obra</TableHead>
-                      <TableHead>Grua</TableHead>
+                      <TableHead>Locacao</TableHead>
+                      <TableHead>Cliente</TableHead>
                       <TableHead>Período</TableHead>
-                      <TableHead>Altura</TableHead>
+                      <TableHead>Data</TableHead>
                       <TableHead>Valor Total</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Ações</TableHead>
@@ -590,42 +646,92 @@ export default function MedicoesPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Building2 className="w-4 h-4 text-gray-400" />
-                            {medicao.obras?.nome || 'N/A'}
+                            {medicao.locacoes?.numero || 'N/A'}
                           </div>
                         </TableCell>
-                        <TableCell>{medicao.gruas?.nome || 'N/A'}</TableCell>
+                        <TableCell>{medicao.locacoes?.clientes?.nome || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-gray-400" />
-                            {medicao.periodo}
+                            {medicoesUtils.formatPeriodo(medicao.periodo)}
                           </div>
                         </TableCell>
-                        <TableCell>{medicao.altura_medida}m</TableCell>
+                        <TableCell>
+                          {medicoesUtils.formatDate(medicao.data_medicao)}
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <DollarSign className="w-4 h-4 text-green-600" />
-                            R$ {medicao.valor_total.toLocaleString('pt-BR')}
+                            {medicoesUtils.formatCurrency(medicao.valor_total)}
                           </div>
                         </TableCell>
                         <TableCell>
                           <Badge className={getStatusColor(medicao.status)}>
                             <div className="flex items-center gap-1">
                               {getStatusIcon(medicao.status)}
-                              {medicao.status}
+                              {medicoesUtils.getStatusLabel(medicao.status)}
                             </div>
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleViewMedicao(medicao)}
+                              title="Visualizar medição"
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" variant="outline">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleEditMedicao(medicao)}
+                              title="Editar medição"
+                            >
                               <Edit className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" variant="outline">
+                            {medicao.status === 'pendente' && (
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="text-green-600 hover:text-green-700"
+                                onClick={() => handleFinalizarMedicao(medicao)}
+                                title="Finalizar medição"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </Button>
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="text-red-600 hover:text-red-700"
+                                  title="Deletar medição"
+                                >
                               <Trash2 className="w-4 h-4" />
                             </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Tem certeza que deseja deletar a medição <strong>{medicao.numero}</strong>?
+                                    Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteMedicao(medicao)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Deletar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -807,34 +913,43 @@ export default function MedicoesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="obra_id">Obra *</Label>
+              <Label htmlFor="locacao_id">Locação *</Label>
+              <div className="space-y-2">
+                <Input
+                  placeholder="Buscar locação por número, cliente ou equipamento..."
+                  value={locacaoFilter}
+                  onChange={(e) => setLocacaoFilter(e.target.value)}
+                  className="text-sm"
+                />
                 <Select 
-                  value={medicaoForm.obra_id} 
-                  onValueChange={(value) => setMedicaoForm({ ...medicaoForm, obra_id: value })}
+                  value={medicaoForm.locacao_id} 
+                  onValueChange={(value) => setMedicaoForm({ ...medicaoForm, locacao_id: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione a obra" />
+                    <SelectValue placeholder="Selecione a locação" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Obra Jardim das Flores</SelectItem>
-                    <SelectItem value="2">Shopping Center Norte</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="grua_id">Grua *</Label>
-                <Select 
-                  value={medicaoForm.grua_id} 
-                  onValueChange={(value) => setMedicaoForm({ ...medicaoForm, grua_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a grua" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Grua STT293</SelectItem>
-                    <SelectItem value="2">Grua Liebherr</SelectItem>
+                  <SelectContent className="max-h-60">
+                    {!locacoes || locacoes.length === 0 ? (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        Carregando locações...
+                      </div>
+                    ) : locacoesFiltradas.length > 0 ? (
+                      locacoesFiltradas.map(locacao => (
+                        <SelectItem key={locacao.id} value={locacao.id.toString()}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{locacao.numero || 'Locação sem número'}</span>
+                            <span className="text-xs text-gray-500">
+                              {locacao.cliente_nome} - {locacao.equipamento_id}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        Nenhuma locação encontrada
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -842,37 +957,51 @@ export default function MedicoesPage() {
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="altura_medida">Altura Medida (m) *</Label>
+                <Label htmlFor="valor_base">Valor Base (R$) *</Label>
                 <Input
-                  id="altura_medida"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={medicaoForm.altura_medida}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, altura_medida: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="quantidade_medida">Quantidade *</Label>
-                <Input
-                  id="quantidade_medida"
-                  type="number"
-                  min="0"
-                  value={medicaoForm.quantidade_medida}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, quantidade_medida: parseInt(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="valor_unitario">Valor Unitário (R$) *</Label>
-                <Input
-                  id="valor_unitario"
+                  id="valor_base"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={medicaoForm.valor_unitario}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_unitario: parseFloat(e.target.value) || 0 })}
+                  value={medicaoForm.valor_base}
+                  onChange={(e) => {
+                    const valorBase = parseFloat(e.target.value) || 0
+                    setMedicaoForm({ 
+                      ...medicaoForm, 
+                      valor_base: valorBase,
+                      valor_total: valorBase + medicaoForm.valor_aditivos
+                    })
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="valor_aditivos">Valor Aditivos (R$)</Label>
+                <Input
+                  id="valor_aditivos"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={medicaoForm.valor_aditivos}
+                  onChange={(e) => {
+                    const valorAditivos = parseFloat(e.target.value) || 0
+                    setMedicaoForm({ 
+                      ...medicaoForm, 
+                      valor_aditivos: valorAditivos,
+                      valor_total: medicaoForm.valor_base + valorAditivos
+                    })
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="valor_total">Valor Total (R$) *</Label>
+                <Input
+                  id="valor_total"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={medicaoForm.valor_total}
+                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_total: parseFloat(e.target.value) || 0 })}
                   required
                 />
               </div>
@@ -905,6 +1034,266 @@ export default function MedicoesPage() {
               </Button>
               <Button type="submit">
                 Criar Medição
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Visualização de Medição */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Medição</DialogTitle>
+            <DialogDescription>
+              Informações completas da medição
+            </DialogDescription>
+          </DialogHeader>
+          
+          {viewingMedicao && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Número</Label>
+                  <p className="text-lg font-semibold">{viewingMedicao.numero}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Status</Label>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(viewingMedicao.status)}>
+                      <div className="flex items-center gap-1">
+                        {getStatusIcon(viewingMedicao.status)}
+                        {medicoesUtils.getStatusLabel(viewingMedicao.status)}
+                      </div>
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Período</Label>
+                  <p className="text-lg">{medicoesUtils.formatPeriodo(viewingMedicao.periodo)}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Data da Medição</Label>
+                  <p className="text-lg">{medicoesUtils.formatDate(viewingMedicao.data_medicao)}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-gray-500">Locação</Label>
+                <p className="text-lg font-semibold">
+                  {viewingMedicao.locacoes?.numero || 'N/A'} - {viewingMedicao.locacoes?.clientes?.nome || 'N/A'}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Equipamento: {viewingMedicao.locacoes?.equipamento_id || 'N/A'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Valor Base</Label>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {medicoesUtils.formatCurrency(viewingMedicao.valor_base)}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Valor Aditivos</Label>
+                  <p className="text-lg font-semibold text-orange-600">
+                    {medicoesUtils.formatCurrency(viewingMedicao.valor_aditivos)}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Valor Total</Label>
+                  <p className="text-lg font-semibold text-green-600">
+                    {medicoesUtils.formatCurrency(viewingMedicao.valor_total)}
+                  </p>
+                </div>
+              </div>
+
+              {viewingMedicao.observacoes && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Observações</Label>
+                  <p className="text-sm bg-gray-50 p-3 rounded-md">{viewingMedicao.observacoes}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 text-sm text-gray-500">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Criado em</Label>
+                  <p>{medicoesUtils.formatDate(viewingMedicao.created_at)}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Atualizado em</Label>
+                  <p>{medicoesUtils.formatDate(viewingMedicao.updated_at)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Edição de Medição */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Medição</DialogTitle>
+            <DialogDescription>
+              Atualize as informações da medição
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={(e) => { e.preventDefault(); handleUpdateMedicao(); }} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_numero">Número da Medição *</Label>
+                <Input
+                  id="edit_numero"
+                  value={medicaoForm.numero}
+                  onChange={(e) => setMedicaoForm({ ...medicaoForm, numero: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_periodo">Período *</Label>
+                <Input
+                  id="edit_periodo"
+                  type="month"
+                  value={medicaoForm.periodo}
+                  onChange={(e) => setMedicaoForm({ ...medicaoForm, periodo: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit_locacao_id">Locação *</Label>
+              <div className="space-y-2">
+                <Input
+                  placeholder="Buscar locação por número, cliente ou equipamento..."
+                  value={locacaoFilter}
+                  onChange={(e) => setLocacaoFilter(e.target.value)}
+                  className="text-sm"
+                />
+                <Select 
+                  value={medicaoForm.locacao_id} 
+                  onValueChange={(value) => setMedicaoForm({ ...medicaoForm, locacao_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a locação" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {!locacoes || locacoes.length === 0 ? (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        Carregando locações...
+                      </div>
+                    ) : locacoesFiltradas.length > 0 ? (
+                      locacoesFiltradas.map(locacao => (
+                        <SelectItem key={locacao.id} value={locacao.id.toString()}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{locacao.numero || 'Locação sem número'}</span>
+                            <span className="text-xs text-gray-500">
+                              {locacao.cliente_nome} - {locacao.equipamento_id}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        Nenhuma locação encontrada
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="edit_valor_base">Valor Base (R$) *</Label>
+                <Input
+                  id="edit_valor_base"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={medicaoForm.valor_base}
+                  onChange={(e) => {
+                    const valorBase = parseFloat(e.target.value) || 0
+                    setMedicaoForm({ 
+                      ...medicaoForm, 
+                      valor_base: valorBase,
+                      valor_total: valorBase + medicaoForm.valor_aditivos
+                    })
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_valor_aditivos">Valor Aditivos (R$)</Label>
+                <Input
+                  id="edit_valor_aditivos"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={medicaoForm.valor_aditivos}
+                  onChange={(e) => {
+                    const valorAditivos = parseFloat(e.target.value) || 0
+                    setMedicaoForm({ 
+                      ...medicaoForm, 
+                      valor_aditivos: valorAditivos,
+                      valor_total: medicaoForm.valor_base + valorAditivos
+                    })
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_valor_total">Valor Total (R$) *</Label>
+                <Input
+                  id="edit_valor_total"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={medicaoForm.valor_total}
+                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_total: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit_data_medicao">Data da Medição *</Label>
+              <Input
+                id="edit_data_medicao"
+                type="date"
+                value={medicaoForm.data_medicao}
+                onChange={(e) => setMedicaoForm({ ...medicaoForm, data_medicao: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit_observacoes">Observações</Label>
+              <Textarea
+                id="edit_observacoes"
+                value={medicaoForm.observacoes}
+                onChange={(e) => setMedicaoForm({ ...medicaoForm, observacoes: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit">
+                Atualizar Medição
               </Button>
             </div>
           </form>

@@ -1,193 +1,63 @@
 import express from 'express';
-import { supabase } from '../config/supabase.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { supabaseAdmin } from '../config/supabase.js';
+import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { medicaoSchema, medicaoUpdateSchema, medicaoFiltersSchema } from '../schemas/medicao-schemas.js';
 
 const router = express.Router();
 
-// Middleware de autenticação para todas as rotas
-router.use(authenticateToken);
-
-/**
- * @swagger
- * /api/medicoes:
- *   get:
- *     summary: Lista medições com filtros opcionais
- *     tags: [Medições]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *         description: Número da página
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *         description: Limite de registros por página
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [pendente, aprovada, finalizada, cancelada]
- *         description: Status da medição
- *       - in: query
- *         name: locacao_id
- *         schema:
- *           type: integer
- *         description: ID da locação
- *       - in: query
- *         name: periodo
- *         schema:
- *           type: string
- *         description: Período da medição
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Busca por número ou período
- *     responses:
- *       200:
- *         description: Lista de medições
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: integer
- *                         description: ID da medição
- *                       numero:
- *                         type: string
- *                         description: Número da medição
- *                       locacao_id:
- *                         type: integer
- *                         description: ID da locação
- *                       periodo:
- *                         type: string
- *                         description: Período da medição
- *                       data_medicao:
- *                         type: string
- *                         format: date
- *                         description: Data da medição
- *                       valor_base:
- *                         type: number
- *                         description: Valor base da medição
- *                       valor_aditivos:
- *                         type: number
- *                         description: Valor dos aditivos
- *                       valor_total:
- *                         type: number
- *                         description: Valor total da medição
- *                       status:
- *                         type: string
- *                         description: Status da medição
- *                       observacoes:
- *                         type: string
- *                         description: Observações
- *                       created_at:
- *                         type: string
- *                         format: date-time
- *                         description: Data de criação
- *                       locacoes:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: integer
- *                           numero:
- *                             type: string
- *                           cliente_id:
- *                             type: integer
- *                           equipamento_id:
- *                             type: integer
- *                           tipo_equipamento:
- *                             type: string
- *                           clientes:
- *                             type: object
- *                             properties:
- *                               nome:
- *                                 type: string
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                     limit:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     pages:
- *                       type: integer
- *       500:
- *         description: Erro interno do servidor
- */
-router.get('/', async (req, res) => {
+// GET /api/medicoes - Listar medições com filtros
+router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      status, 
-      locacao_id,
-      periodo,
-      search 
-    } = req.query;
+    const { error: validationError, value } = medicaoFiltersSchema.validate(req.query);
+    if (validationError) {
+      return res.status(400).json({
+        error: 'Parâmetros inválidos',
+        message: validationError.details[0].message
+      });
+    }
 
-    let query = supabase
+    const { locacao_id, periodo, status, data_inicio, data_fim, page, limit } = value;
+    const offset = (page - 1) * limit;
+
+    let query = supabaseAdmin
       .from('medicoes')
       .select(`
         *,
-        locacoes!inner(
+        locacoes (
           id,
           numero,
           cliente_id,
           equipamento_id,
           tipo_equipamento,
-          clientes!inner(nome)
+          valor_mensal,
+          status,
+          clientes (
+            id,
+            nome
+          )
         )
       `);
 
     // Aplicar filtros
-    if (status && status !== 'all') {
-      query = query.eq('status', status);
-    }
+    if (locacao_id) query = query.eq('locacao_id', locacao_id);
+    if (periodo) query = query.eq('periodo', periodo);
+    if (status) query = query.eq('status', status);
+    if (data_inicio) query = query.gte('data_medicao', data_inicio);
+    if (data_fim) query = query.lte('data_medicao', data_fim);
 
-    if (locacao_id) {
-      query = query.eq('locacao_id', locacao_id);
-    }
+    // Contar total
+    const { count } = await query;
+    
+    // Aplicar paginação
+    query = query.order('data_medicao', { ascending: false })
+                 .range(offset, offset + limit - 1);
 
-    if (periodo) {
-      query = query.eq('periodo', periodo);
-    }
-
-    if (search) {
-      query = query.or(`numero.ilike.%${search}%,periodo.ilike.%${search}%`);
-    }
-
-    // Paginação
-    const offset = (page - 1) * limit;
-    query = query.range(offset, offset + limit - 1);
-
-    // Ordenação
-    query = query.order('data_medicao', { ascending: false });
-
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
-      console.error('Erro ao buscar medições:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erro interno do servidor',
-        error: error.message 
+      return res.status(500).json({
+        error: 'Erro ao buscar medições',
+        message: error.message
       });
     }
 
@@ -195,147 +65,51 @@ router.get('/', async (req, res) => {
       success: true,
       data: data || [],
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page,
+        limit,
         total: count || 0,
         pages: Math.ceil((count || 0) / limit)
       }
     });
-
   } catch (error) {
-    console.error('Erro na rota de medições:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erro interno do servidor',
-      error: error.message 
+    console.error('Erro ao buscar medições:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
     });
   }
 });
 
-/**
- * @swagger
- * /api/medicoes/{id}:
- *   get:
- *     summary: Obtém uma medição específica por ID
- *     tags: [Medições]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: ID da medição
- *     responses:
- *       200:
- *         description: Dados da medição
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: integer
- *                       description: ID da medição
- *                     numero:
- *                       type: string
- *                       description: Número da medição
- *                     locacao_id:
- *                       type: integer
- *                       description: ID da locação
- *                     periodo:
- *                       type: string
- *                       description: Período da medição
- *                     data_medicao:
- *                       type: string
- *                       format: date
- *                       description: Data da medição
- *                     valor_base:
- *                       type: number
- *                       description: Valor base da medição
- *                     valor_aditivos:
- *                       type: number
- *                       description: Valor dos aditivos
- *                     valor_total:
- *                       type: number
- *                       description: Valor total da medição
- *                     status:
- *                       type: string
- *                       description: Status da medição
- *                     observacoes:
- *                       type: string
- *                       description: Observações
- *                     created_at:
- *                       type: string
- *                       format: date-time
- *                       description: Data de criação
- *                     locacoes:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         numero:
- *                           type: string
- *                         cliente_id:
- *                           type: integer
- *                         equipamento_id:
- *                           type: integer
- *                         tipo_equipamento:
- *                           type: string
- *                         clientes:
- *                           type: object
- *                           properties:
- *                             nome:
- *                               type: string
- *                     aditivos:
- *                       type: array
- *                       items:
- *                         type: object
- *                         description: Aditivos associados à medição
- *       404:
- *         description: Medição não encontrada
- *       500:
- *         description: Erro interno do servidor
- */
-router.get('/:id', async (req, res) => {
+// GET /api/medicoes/:id - Buscar medição por ID
+router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('medicoes')
       .select(`
         *,
-        locacoes!inner(
+        locacoes (
           id,
           numero,
           cliente_id,
           equipamento_id,
           tipo_equipamento,
-          clientes!inner(nome)
-        ),
-        aditivos(*)
+          valor_mensal,
+          status,
+          clientes (
+            id,
+            nome
+          )
+        )
       `)
       .eq('id', id)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({ 
-          success: false, 
-          message: 'Medição não encontrada' 
-        });
-      }
-      console.error('Erro ao buscar medição:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erro interno do servidor',
-        error: error.message 
+      return res.status(404).json({
+        error: 'Medição não encontrada',
+        message: error.message
       });
     }
 
@@ -343,534 +117,204 @@ router.get('/:id', async (req, res) => {
       success: true,
       data
     });
-
   } catch (error) {
-    console.error('Erro na rota de medição específica:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erro interno do servidor',
-      error: error.message 
+    console.error('Erro ao buscar medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
     });
   }
 });
 
-/**
- * @swagger
- * /api/medicoes:
- *   post:
- *     summary: Cria uma nova medição
- *     tags: [Medições]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - numero
- *               - locacao_id
- *               - periodo
- *               - data_medicao
- *               - valor_base
- *             properties:
- *               numero:
- *                 type: string
- *                 description: Número da medição
- *               locacao_id:
- *                 type: integer
- *                 description: ID da locação
- *               periodo:
- *                 type: string
- *                 description: Período da medição
- *               data_medicao:
- *                 type: string
- *                 format: date
- *                 description: Data da medição (YYYY-MM-DD)
- *               valor_base:
- *                 type: number
- *                 description: Valor base da medição
- *               valor_aditivos:
- *                 type: number
- *                 default: 0
- *                 description: Valor dos aditivos
- *               status:
- *                 type: string
- *                 enum: [pendente, aprovada, finalizada, cancelada]
- *                 default: pendente
- *                 description: Status da medição
- *               observacoes:
- *                 type: string
- *                 description: Observações da medição
- *     responses:
- *       201:
- *         description: Medição criada com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   description: Dados da medição criada
- *       400:
- *         description: Dados inválidos ou medição já existe
- *       500:
- *         description: Erro interno do servidor
- */
-router.post('/', async (req, res) => {
+// POST /api/medicoes - Criar nova medição
+router.post('/', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
-    const {
-      numero,
-      locacao_id,
-      periodo,
-      data_medicao,
-      valor_base,
-      valor_aditivos = 0,
-      status = 'pendente',
-      observacoes
-    } = req.body;
-
-    // Validações básicas
-    if (!numero || !locacao_id || !periodo || !data_medicao || !valor_base) {
+    const { error: validationError, value } = medicaoSchema.validate(req.body);
+    if (validationError) {
       return res.status(400).json({
-        success: false,
-        message: 'Campos obrigatórios: numero, locacao_id, periodo, data_medicao, valor_base'
+        error: 'Dados inválidos',
+        message: validationError.details[0].message
       });
     }
 
-    // Verificar se o número já existe
-    const { data: existingMedicao } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('medicoes')
-      .select('id')
-      .eq('numero', numero)
-      .single();
-
-    if (existingMedicao) {
-      return res.status(400).json({
-        success: false,
-        message: 'Já existe uma medição com este número'
-      });
-    }
-
-    // Verificar se a locação existe
-    const { data: locacao } = await supabase
-      .from('locacoes')
-      .select('id, valor_mensal')
-      .eq('id', locacao_id)
-      .single();
-
-    if (!locacao) {
-      return res.status(400).json({
-        success: false,
-        message: 'Locação não encontrada'
-      });
-    }
-
-    // Verificar se já existe medição para este período nesta locação
-    const { data: existingPeriodo } = await supabase
-      .from('medicoes')
-      .select('id')
-      .eq('locacao_id', locacao_id)
-      .eq('periodo', periodo)
-      .single();
-
-    if (existingPeriodo) {
-      return res.status(400).json({
-        success: false,
-        message: 'Já existe uma medição para este período nesta locação'
-      });
-    }
-
-    // Calcular valor total
-    const valor_total = parseFloat(valor_base) + parseFloat(valor_aditivos);
-
-    // Criar a medição
-    const { data, error } = await supabase
-      .from('medicoes')
-      .insert({
-        numero,
-        locacao_id,
-        periodo,
-        data_medicao,
-        valor_base,
-        valor_aditivos,
-        valor_total,
-        status,
-        observacoes
-      })
-      .select()
+      .insert([value])
+      .select(`
+        *,
+        locacoes (
+          id,
+          numero,
+          cliente_id,
+          equipamento_id,
+          tipo_equipamento,
+          valor_mensal,
+          status,
+          clientes (
+            id,
+            nome
+          )
+        )
+      `)
       .single();
 
     if (error) {
-      console.error('Erro ao criar medição:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erro interno do servidor',
-        error: error.message 
+      return res.status(500).json({
+        error: 'Erro ao criar medição',
+        message: error.message
       });
     }
 
     res.status(201).json({
       success: true,
-      message: 'Medição criada com sucesso',
-      data
+      data,
+      message: 'Medição criada com sucesso'
     });
-
   } catch (error) {
-    console.error('Erro na rota de criação de medição:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erro interno do servidor',
-      error: error.message 
+    console.error('Erro ao criar medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
     });
   }
 });
 
-/**
- * @swagger
- * /api/medicoes/{id}:
- *   put:
- *     summary: Atualiza uma medição existente
- *     tags: [Medições]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: ID da medição
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               numero:
- *                 type: string
- *                 description: Número da medição
- *               locacao_id:
- *                 type: integer
- *                 description: ID da locação
- *               periodo:
- *                 type: string
- *                 description: Período da medição
- *               data_medicao:
- *                 type: string
- *                 format: date
- *                 description: Data da medição (YYYY-MM-DD)
- *               valor_base:
- *                 type: number
- *                 description: Valor base da medição
- *               valor_aditivos:
- *                 type: number
- *                 description: Valor dos aditivos
- *               status:
- *                 type: string
- *                 enum: [pendente, aprovada, finalizada, cancelada]
- *                 description: Status da medição
- *               observacoes:
- *                 type: string
- *                 description: Observações da medição
- *     responses:
- *       200:
- *         description: Medição atualizada com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   description: Dados atualizados da medição
- *       400:
- *         description: Dados inválidos ou medição finalizada
- *       404:
- *         description: Medição não encontrada
- *       500:
- *         description: Erro interno do servidor
- */
-router.put('/:id', async (req, res) => {
+// PUT /api/medicoes/:id - Atualizar medição
+router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
-
-    // Remover campos que não devem ser atualizados
-    delete updateData.id;
-    delete updateData.created_at;
-
-    // Verificar se a medição existe
-    const { data: existingMedicao } = await supabase
-      .from('medicoes')
-      .select('id, status')
-      .eq('id', id)
-      .single();
-
-    if (!existingMedicao) {
-      return res.status(404).json({
-        success: false,
-        message: 'Medição não encontrada'
-      });
-    }
-
-    // Não permitir edição de medições finalizadas
-    if (existingMedicao.status === 'finalizada') {
+    const { error: validationError, value } = medicaoUpdateSchema.validate(req.body);
+    
+    if (validationError) {
       return res.status(400).json({
-        success: false,
-        message: 'Não é possível editar medição finalizada'
+        error: 'Dados inválidos',
+        message: validationError.details[0].message
       });
     }
 
-    // Se estiver atualizando o número, verificar se não existe outro com o mesmo número
-    if (updateData.numero) {
-      const { data: duplicateMedicao } = await supabase
-        .from('medicoes')
-        .select('id')
-        .eq('numero', updateData.numero)
-        .neq('id', id)
-        .single();
-
-      if (duplicateMedicao) {
-        return res.status(400).json({
-          success: false,
-          message: 'Já existe uma medição com este número'
-        });
-      }
-    }
-
-    // Recalcular valor total se necessário
-    if (updateData.valor_base !== undefined || updateData.valor_aditivos !== undefined) {
-      const valor_base = updateData.valor_base || existingMedicao.valor_base;
-      const valor_aditivos = updateData.valor_aditivos || existingMedicao.valor_aditivos;
-      updateData.valor_total = parseFloat(valor_base) + parseFloat(valor_aditivos);
-    }
-
-    // Atualizar a medição
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('medicoes')
-      .update(updateData)
+      .update({
+        ...value,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
-      .select()
+      .select(`
+        *,
+        locacoes (
+          id,
+          numero,
+          cliente_id,
+          equipamento_id,
+          tipo_equipamento,
+          valor_mensal,
+          status,
+          clientes (
+            id,
+            nome
+          )
+        )
+      `)
       .single();
 
     if (error) {
-      console.error('Erro ao atualizar medição:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erro interno do servidor',
-        error: error.message 
+      return res.status(500).json({
+        error: 'Erro ao atualizar medição',
+        message: error.message
       });
     }
 
     res.json({
       success: true,
-      message: 'Medição atualizada com sucesso',
-      data
+      data,
+      message: 'Medição atualizada com sucesso'
     });
-
   } catch (error) {
-    console.error('Erro na rota de atualização de medição:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erro interno do servidor',
-      error: error.message 
+    console.error('Erro ao atualizar medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
     });
   }
 });
 
-/**
- * @swagger
- * /api/medicoes/{id}:
- *   delete:
- *     summary: Exclui uma medição
- *     tags: [Medições]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: ID da medição
- *     responses:
- *       200:
- *         description: Medição excluída com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *       400:
- *         description: Não é possível excluir medição finalizada
- *       404:
- *         description: Medição não encontrada
- *       500:
- *         description: Erro interno do servidor
- */
-router.delete('/:id', async (req, res) => {
+// DELETE /api/medicoes/:id - Deletar medição
+router.delete('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Verificar se a medição existe
-    const { data: existingMedicao } = await supabase
-      .from('medicoes')
-      .select('id, status')
-      .eq('id', id)
-      .single();
-
-    if (!existingMedicao) {
-      return res.status(404).json({
-        success: false,
-        message: 'Medição não encontrada'
-      });
-    }
-
-    // Não permitir exclusão de medições finalizadas
-    if (existingMedicao.status === 'finalizada') {
-      return res.status(400).json({
-        success: false,
-        message: 'Não é possível excluir medição finalizada'
-      });
-    }
-
-    // Excluir a medição
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('medicoes')
       .delete()
       .eq('id', id);
 
     if (error) {
-      console.error('Erro ao excluir medição:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erro interno do servidor',
-        error: error.message 
+      return res.status(500).json({
+        error: 'Erro ao deletar medição',
+        message: error.message
       });
     }
 
     res.json({
       success: true,
-      message: 'Medição excluída com sucesso'
+      message: 'Medição deletada com sucesso'
     });
-
   } catch (error) {
-    console.error('Erro na rota de exclusão de medição:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erro interno do servidor',
-      error: error.message 
+    console.error('Erro ao deletar medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
     });
   }
 });
 
-/**
- * @swagger
- * /api/medicoes/{id}/finalizar:
- *   post:
- *     summary: Finaliza uma medição
- *     tags: [Medições]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: ID da medição
- *     responses:
- *       200:
- *         description: Medição finalizada com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   description: Dados da medição finalizada
- *       400:
- *         description: Medição já está finalizada
- *       404:
- *         description: Medição não encontrada
- *       500:
- *         description: Erro interno do servidor
- */
-router.post('/:id/finalizar', async (req, res) => {
+// PATCH /api/medicoes/:id/finalizar - Finalizar medição
+router.patch('/:id/finalizar', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Verificar se a medição existe
-    const { data: existingMedicao } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('medicoes')
-      .select('id, status')
+      .update({
+        status: 'finalizada',
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
-      .single();
-
-    if (!existingMedicao) {
-      return res.status(404).json({
-        success: false,
-        message: 'Medição não encontrada'
-      });
-    }
-
-    if (existingMedicao.status === 'finalizada') {
-      return res.status(400).json({
-        success: false,
-        message: 'Medição já está finalizada'
-      });
-    }
-
-    // Finalizar a medição
-    const { data, error } = await supabase
-      .from('medicoes')
-      .update({ status: 'finalizada' })
-      .eq('id', id)
-      .select()
+      .select(`
+        *,
+        locacoes (
+          id,
+          numero,
+          cliente_id,
+          equipamento_id,
+          tipo_equipamento,
+          valor_mensal,
+          status,
+          clientes (
+            id,
+            nome
+          )
+        )
+      `)
       .single();
 
     if (error) {
-      console.error('Erro ao finalizar medição:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erro interno do servidor',
-        error: error.message 
+      return res.status(500).json({
+        error: 'Erro ao finalizar medição',
+        message: error.message
       });
     }
 
     res.json({
       success: true,
-      message: 'Medição finalizada com sucesso',
-      data
+      data,
+      message: 'Medição finalizada com sucesso'
     });
-
   } catch (error) {
-    console.error('Erro na rota de finalização de medição:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erro interno do servidor',
-      error: error.message 
+    console.error('Erro ao finalizar medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
     });
   }
 });
