@@ -51,6 +51,27 @@ export default function EstoquePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isMovDialogOpen, setIsMovDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Produto | null>(null)
+  
+  // Estados para filtros
+  const [filtros, setFiltros] = useState({
+    categoria_id: "todas",
+    status: "todos",
+    page: 1,
+    limit: 10
+  })
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  
+  // Estados para filtros de movimentações
+  const [filtrosMovimentacoes, setFiltrosMovimentacoes] = useState({
+    tipo: "todos",
+    data_inicio: "",
+    data_fim: "",
+    page: 1,
+    limit: 10
+  })
+  const [totalPagesMovimentacoes, setTotalPagesMovimentacoes] = useState(1)
+  const [totalItemsMovimentacoes, setTotalItemsMovimentacoes] = useState(0)
 
   // Formulário para novo item
   const [formData, setFormData] = useState({
@@ -78,20 +99,65 @@ export default function EstoquePage() {
   // Carregar dados iniciais
   useEffect(() => {
     carregarDados()
-  }, [])
+  }, [filtros, filtrosMovimentacoes])
 
   const carregarDados = async () => {
     try {
       setLoading(true)
+      
+      // Preparar parâmetros de filtro
+      const params: any = {
+        page: filtros.page,
+        limit: filtros.limit
+      }
+      
+      if (filtros.categoria_id && filtros.categoria_id !== "todas") {
+        params.categoria_id = parseInt(filtros.categoria_id)
+      }
+      
+      if (filtros.status && filtros.status !== "todos") {
+        params.status = filtros.status
+      }
+      
+      // Preparar parâmetros para movimentações
+      const paramsMovimentacoes: any = {
+        page: filtrosMovimentacoes.page,
+        limit: filtrosMovimentacoes.limit
+      }
+      
+      if (filtrosMovimentacoes.tipo && filtrosMovimentacoes.tipo !== "todos") {
+        paramsMovimentacoes.tipo = filtrosMovimentacoes.tipo
+      }
+      
+      if (filtrosMovimentacoes.data_inicio) {
+        paramsMovimentacoes.data_inicio = filtrosMovimentacoes.data_inicio
+      }
+      
+      if (filtrosMovimentacoes.data_fim) {
+        paramsMovimentacoes.data_fim = filtrosMovimentacoes.data_fim
+      }
+
       const [produtosResponse, categoriasResponse, movimentacoesResponse] = await Promise.all([
-        estoqueAPI.listarProdutos({ limit: 100 }),
+        estoqueAPI.listarProdutos(params),
         estoqueAPI.listarCategorias(),
-        estoqueAPI.listarMovimentacoes({ limit: 100 })
+        estoqueAPI.listarMovimentacoes(paramsMovimentacoes)
       ])
       
       setEstoque(produtosResponse.data)
       setCategorias(categoriasResponse.data)
       setMovimentacoes(movimentacoesResponse.data)
+      
+      // Atualizar informações de paginação se disponíveis
+      if (produtosResponse.pagination) {
+        setTotalItems(produtosResponse.pagination.total)
+        setTotalPages(produtosResponse.pagination.pages)
+      }
+      
+      // Atualizar informações de paginação das movimentações
+      if (movimentacoesResponse.pagination) {
+        setTotalItemsMovimentacoes(movimentacoesResponse.pagination.total)
+        setTotalPagesMovimentacoes(movimentacoesResponse.pagination.pages)
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
       toast({
@@ -102,6 +168,58 @@ export default function EstoquePage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Funções para gerenciar filtros
+  const handleFiltroChange = (campo: string, valor: string) => {
+    setFiltros(prev => ({
+      ...prev,
+      [campo]: valor,
+      page: 1 // Reset para primeira página ao filtrar
+    }))
+  }
+
+  const limparFiltros = () => {
+    setFiltros({
+      categoria_id: "todas",
+      status: "todos",
+      page: 1,
+      limit: 10
+    })
+    setSearchTerm("")
+  }
+
+  const handlePageChange = (novaPagina: number) => {
+    setFiltros(prev => ({
+      ...prev,
+      page: novaPagina
+    }))
+  }
+
+  // Funções para gerenciar filtros de movimentações
+  const handleFiltroMovimentacaoChange = (campo: string, valor: string) => {
+    setFiltrosMovimentacoes(prev => ({
+      ...prev,
+      [campo]: valor,
+      page: 1 // Reset para primeira página ao filtrar
+    }))
+  }
+
+  const limparFiltrosMovimentacoes = () => {
+    setFiltrosMovimentacoes({
+      tipo: "todos",
+      data_inicio: "",
+      data_fim: "",
+      page: 1,
+      limit: 10
+    })
+  }
+
+  const handlePageChangeMovimentacoes = (novaPagina: number) => {
+    setFiltrosMovimentacoes(prev => ({
+      ...prev,
+      page: novaPagina
+    }))
   }
 
   const filteredEstoque = estoque.filter(
@@ -124,12 +242,12 @@ export default function EstoquePage() {
     const estoqueMinimo = item.estoque_minimo || 0
     
     if (estoqueAtual <= estoqueMinimo) {
-      return <Badge className="bg-red-100 text-red-800">Estoque Baixo</Badge>
+      return <Badge variant="secondary">Estoque Baixo</Badge>
     }
     if (estoqueAtual <= estoqueMinimo * 1.5) {
-      return <Badge className="bg-yellow-100 text-yellow-800">Atenção</Badge>
+      return <Badge variant="secondary">Atenção</Badge>
     }
-    return <Badge className="bg-green-100 text-green-800">Normal</Badge>
+    return <Badge variant="secondary">Normal</Badge>
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -305,7 +423,12 @@ export default function EstoquePage() {
   }
 
   const stats = [
-    { title: "Total de Itens", value: estoque.length, icon: Package, color: "bg-blue-500" },
+    { 
+      title: "Total de Itens", 
+      value: totalItems > 0 ? totalItems : estoque.length, 
+      icon: Package, 
+      color: "bg-blue-500" 
+    },
     {
       title: "Estoque Baixo",
       value: estoque.filter((item) => {
@@ -627,6 +750,7 @@ export default function EstoquePage() {
         </div>
       </div>
 
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
@@ -659,15 +783,109 @@ export default function EstoquePage() {
               <CardDescription>Visualize e gerencie todos os itens do estoque</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Buscar por nome, categoria ou fornecedor..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-4 flex-1">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Buscar por nome, categoria ou código..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  
+                  {/* Filtros de Categoria e Status */}
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={filtros.categoria_id}
+                      onValueChange={(value) => handleFiltroChange('categoria_id', value)}
+                    >
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Categoria" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as categorias</SelectItem>
+                        {categorias.map((categoria) => (
+                          <SelectItem key={categoria.id} value={categoria.id.toString()}>
+                            {categoria.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={filtros.status}
+                      onValueChange={(value) => handleFiltroChange('status', value)}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="Ativo">Ativo</SelectItem>
+                        <SelectItem value="Inativo">Inativo</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limparFiltros}
+                      className="text-gray-600"
+                    >
+                      Limpar
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Controles de Paginação e Quantidade */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="itens-por-pagina" className="text-sm text-gray-600">
+                      Itens por página:
+                    </Label>
+                    <Select
+                      value={filtros.limit.toString()}
+                      onValueChange={(value) => handleFiltroChange('limit', value)}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(filtros.page - 1)}
+                        disabled={filtros.page <= 1}
+                      >
+                        ←
+                      </Button>
+                      
+                      <span className="text-sm text-gray-600 min-w-[80px] text-center">
+                        Página {filtros.page} de {totalPages}
+                      </span>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(filtros.page + 1)}
+                        disabled={filtros.page >= totalPages}
+                      >
+                        →
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -743,6 +961,42 @@ export default function EstoquePage() {
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Informações de contagem */}
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div className="text-sm text-gray-600">
+                  {totalItems > 0 ? (
+                    <>
+                      Mostrando {((filtros.page - 1) * filtros.limit) + 1} a{' '}
+                      {Math.min(filtros.page * filtros.limit, totalItems)} de {totalItems} itens
+                    </>
+                  ) : (
+                    "Nenhum item encontrado"
+                  )}
+                </div>
+                
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    {/* Números das páginas */}
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      const pageNum = Math.max(1, filtros.page - 2) + i
+                      if (pageNum > totalPages) return null
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === filtros.page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChange(pageNum)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -754,6 +1008,94 @@ export default function EstoquePage() {
               <CardDescription>Acompanhe todas as entradas e saídas do estoque</CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filtros para Movimentações */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tipo-movimentacao">Tipo de Movimentação</Label>
+                    <Select
+                      value={filtrosMovimentacoes.tipo}
+                      onValueChange={(value) => handleFiltroMovimentacaoChange('tipo', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os tipos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os tipos</SelectItem>
+                        <SelectItem value="Entrada">Entrada</SelectItem>
+                        <SelectItem value="Saída">Saída</SelectItem>
+                        <SelectItem value="Ajuste">Ajuste</SelectItem>
+                        <SelectItem value="Transferência">Transferência</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="data-inicio">Data Início</Label>
+                    <Input
+                      id="data-inicio"
+                      type="date"
+                      value={filtrosMovimentacoes.data_inicio}
+                      onChange={(e) => handleFiltroMovimentacaoChange('data_inicio', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="data-fim">Data Fim</Label>
+                    <Input
+                      id="data-fim"
+                      type="date"
+                      value={filtrosMovimentacoes.data_fim}
+                      onChange={(e) => handleFiltroMovimentacaoChange('data_fim', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="limite-movimentacoes">Itens por página</Label>
+                    <Select
+                      value={filtrosMovimentacoes.limit.toString()}
+                      onValueChange={(value) => handleFiltroMovimentacaoChange('limit', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 itens</SelectItem>
+                        <SelectItem value="25">25 itens</SelectItem>
+                        <SelectItem value="50">50 itens</SelectItem>
+                        <SelectItem value="100">100 itens</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-4">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limparFiltrosMovimentacoes}
+                      className="text-gray-600"
+                    >
+                      Limpar Filtros
+                    </Button>
+                    {(filtrosMovimentacoes.tipo !== "todos" || filtrosMovimentacoes.data_inicio || filtrosMovimentacoes.data_fim) && (
+                      <Badge variant="secondary" className="text-xs">
+                        Filtros ativos
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="text-sm text-gray-600">
+                    {totalItemsMovimentacoes > 0 && (
+                      <>
+                        Mostrando {((filtrosMovimentacoes.page - 1) * filtrosMovimentacoes.limit) + 1} a{' '}
+                        {Math.min(filtrosMovimentacoes.page * filtrosMovimentacoes.limit, totalItemsMovimentacoes)} de {totalItemsMovimentacoes} movimentações
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
@@ -792,13 +1134,7 @@ export default function EstoquePage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              className={
-                                mov.tipo === "Entrada" ? "bg-green-100 text-green-800" : 
-                                mov.tipo === "Saída" ? "bg-red-100 text-red-800" : 
-                                "bg-blue-100 text-blue-800"
-                              }
-                            >
+                            <Badge variant="secondary">
                               {mov.tipo === "Entrada" ? (
                                 <TrendingUp className="w-3 h-3 mr-1" />
                               ) : mov.tipo === "Saída" ? (
@@ -832,110 +1168,57 @@ export default function EstoquePage() {
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Paginação para Movimentações */}
+              {totalPagesMovimentacoes > 1 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="text-sm text-gray-600">
+                    Página {filtrosMovimentacoes.page} de {totalPagesMovimentacoes}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChangeMovimentacoes(filtrosMovimentacoes.page - 1)}
+                      disabled={filtrosMovimentacoes.page <= 1}
+                    >
+                      Anterior
+                    </Button>
+                    
+                    {/* Mostrar números das páginas */}
+                    {Array.from({ length: Math.min(5, totalPagesMovimentacoes) }, (_, i) => {
+                      const pageNum = Math.max(1, filtrosMovimentacoes.page - 2) + i
+                      if (pageNum > totalPagesMovimentacoes) return null
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === filtrosMovimentacoes.page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChangeMovimentacoes(pageNum)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChangeMovimentacoes(filtrosMovimentacoes.page + 1)}
+                      disabled={filtrosMovimentacoes.page >= totalPagesMovimentacoes}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Painel de Alertas Melhorado */}
-      <Card className="border-orange-200 bg-orange-50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-orange-800">
-            <AlertTriangle className="w-5 h-5" />
-            Alertas de Estoque
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Estoque Crítico */}
-            {estoque.filter((item) => {
-              const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-              const estoqueMinimo = item.estoque_minimo || 0
-              return estoqueAtual <= estoqueMinimo
-            }).length > 0 && (
-              <div className="p-4 bg-red-100 border border-red-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
-                  <div>
-                    <p className="font-semibold text-red-800">🚨 Estoque Crítico</p>
-                    <p className="text-sm text-red-700">
-                      {estoque.filter((item) => {
-                        const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-                        const estoqueMinimo = item.estoque_minimo || 0
-                        return estoqueAtual <= estoqueMinimo
-                      }).length} itens estão abaixo do estoque mínimo
-                    </p>
-                    <div className="mt-2 space-y-1">
-                      {estoque
-                        .filter((item) => {
-                          const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-                          const estoqueMinimo = item.estoque_minimo || 0
-                          return estoqueAtual <= estoqueMinimo
-                        })
-                        .map((item) => {
-                          const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-                          const estoqueMinimo = item.estoque_minimo || 0
-                          return (
-                            <div key={item.id} className="text-xs text-red-600">
-                              • {item.nome}: {estoqueAtual} {item.unidade_medida} (mín: {estoqueMinimo})
-                            </div>
-                          )
-                        })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Estoque em Atenção */}
-            {estoque.filter((item) => {
-              const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-              const estoqueMinimo = item.estoque_minimo || 0
-              return estoqueAtual > estoqueMinimo && estoqueAtual <= estoqueMinimo * 1.5
-            }).length > 0 && (
-              <div className="p-4 bg-yellow-100 border border-yellow-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                  <div>
-                    <p className="font-semibold text-yellow-800">⚠️ Estoque em Atenção</p>
-                    <p className="text-sm text-yellow-700">
-                      {estoque.filter((item) => {
-                        const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-                        const estoqueMinimo = item.estoque_minimo || 0
-                        return estoqueAtual > estoqueMinimo && estoqueAtual <= estoqueMinimo * 1.5
-                      }).length} itens próximos do estoque mínimo
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Status Geral */}
-            {estoque.filter((item) => {
-              const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-              const estoqueMinimo = item.estoque_minimo || 0
-              return estoqueAtual <= estoqueMinimo
-            }).length === 0 && 
-             estoque.filter((item) => {
-               const estoqueAtual = getEstoqueData(item.id)?.quantidade_disponivel || 0
-               const estoqueMinimo = item.estoque_minimo || 0
-               return estoqueAtual > estoqueMinimo && estoqueAtual <= estoqueMinimo * 1.5
-             }).length === 0 && (
-              <div className="p-4 bg-green-100 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <div>
-                    <p className="font-semibold text-green-800">✅ Estoque Normal</p>
-                    <p className="text-sm text-green-700">
-                      Todos os itens estão com estoque adequado
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
