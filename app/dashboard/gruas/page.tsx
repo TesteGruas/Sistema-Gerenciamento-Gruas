@@ -28,7 +28,11 @@ import {
   Package,
   Settings,
   Users,
-  ArrowRight
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react"
 import { mockObras, mockUsers } from "@/lib/mock-data"
 import { gruasApi, converterGruaBackendParaFrontend, converterGruaFrontendParaBackend, GruaBackend } from "@/lib/api-gruas"
@@ -39,12 +43,20 @@ export default function GruasPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedObra, setSelectedObra] = useState("all")
+  const [selectedTipo, setSelectedTipo] = useState("all")
   const [selectedGrua, setSelectedGrua] = useState<any>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [gruaToDelete, setGruaToDelete] = useState<any>(null)
   const [gruaToEdit, setGruaToEdit] = useState<any>(null)
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(9)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  
   const [gruaFormData, setGruaFormData] = useState({
     name: '',
     model: '',
@@ -72,21 +84,42 @@ export default function GruasPage() {
       setError(null)
       
       const params: any = {
-        limit: 100 // Carregar todas as gruas
+        page: currentPage,
+        limit: itemsPerPage
       }
       
+      // Adicionar filtros para a API (conforme documentação)
       if (selectedStatus !== "all") {
         params.status = selectedStatus
       }
       
-        const response = await gruasApi.listarGruas(params)
+      if (selectedTipo !== "all") {
+        params.tipo = selectedTipo
+      }
+      
+      // Nota: obra_id e search não estão na documentação da API
+      // Mantendo apenas os parâmetros documentados: page, limit, status, tipo
+      
+      console.log('Parâmetros enviados para API:', params)
+      
+      const response = await gruasApi.listarGruas(params)
+      
+      if (response.success) {
+        const gruasConvertidas = response.data.map(converterGruaBackendParaFrontend)
+        setGruas(gruasConvertidas)
         
-        if (response.success) {
-          const gruasConvertidas = response.data.map(converterGruaBackendParaFrontend)
-          setGruas(gruasConvertidas)
+        // Atualizar informações de paginação se disponíveis na resposta
+        if (response.pagination) {
+          setTotalItems(response.pagination.total)
+          setTotalPages(response.pagination.pages)
         } else {
-          setError('Erro ao carregar gruas')
+          // Fallback: calcular baseado nos dados recebidos
+          setTotalItems(gruasConvertidas.length)
+          setTotalPages(1)
         }
+      } else {
+        setError('Erro ao carregar gruas')
+      }
     } catch (err) {
       console.error('Erro ao carregar gruas:', err)
       setError(err instanceof Error ? err.message : 'Erro ao carregar gruas')
@@ -95,10 +128,11 @@ export default function GruasPage() {
     }
   }
 
+  
   // Carregar gruas quando o componente montar ou filtros mudarem
   useEffect(() => {
     carregarGruas()
-  }, [selectedStatus])
+  }, [selectedStatus, selectedTipo, currentPage, itemsPerPage])
 
   // Aplicar filtros da URL
   useEffect(() => {
@@ -109,13 +143,17 @@ export default function GruasPage() {
     }
   }, [searchParams])
 
+  // Aplicar filtros locais para campos não suportados pela API
   const filteredGruas = gruas.filter(grua => {
-    const matchesSearch = (grua.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (grua.model || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === "all" || grua.status === selectedStatus
+    // Filtro por busca (nome ou modelo) - aplicado localmente
+    const matchesSearch = searchTerm.trim() === "" || 
+      (grua.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (grua.model || '').toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // Filtro por obra - aplicado localmente
     const matchesObra = selectedObra === "all" || grua.currentObraId === selectedObra
     
-    return matchesSearch && matchesStatus && matchesObra
+    return matchesSearch && matchesObra
   })
 
   const getStatusColor = (status: string) => {
@@ -407,26 +445,25 @@ export default function GruasPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="disponivel">Disponível</SelectItem>
-                  <SelectItem value="em_obra">Em Obra</SelectItem>
-                  <SelectItem value="manutencao">Manutenção</SelectItem>
-                  <SelectItem value="inativa">Inativa</SelectItem>
+                  <SelectItem value="Disponível">Disponível</SelectItem>
+                  <SelectItem value="Operacional">Operacional</SelectItem>
+                  <SelectItem value="Manutenção">Manutenção</SelectItem>
+                  <SelectItem value="Vendida">Vendida</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label htmlFor="obra">Obra</Label>
-              <Select value={selectedObra} onValueChange={setSelectedObra}>
+              <Label htmlFor="tipo">Tipo</Label>
+              <Select value={selectedTipo} onValueChange={setSelectedTipo}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Todas as obras" />
+                  <SelectValue placeholder="Todos os tipos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as obras</SelectItem>
-                  {mockObras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
-                      {obra.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                  <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                  <SelectItem value="Guincho">Guincho</SelectItem>
+                  <SelectItem value="Outros">Outros</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -437,6 +474,8 @@ export default function GruasPage() {
                   setSearchTerm("")
                   setSelectedStatus("all")
                   setSelectedObra("all")
+                  setSelectedTipo("all")
+                  setCurrentPage(1)
                 }}
                 className="w-full"
               >
@@ -572,6 +611,110 @@ export default function GruasPage() {
           )
         })}
         </div>
+      )}
+
+      {/* Paginação */}
+      {!loading && !error && totalPages > 1 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
+                <span>
+                  Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} gruas
+                </span>
+                <div className="flex items-center gap-2">
+                  <span>Itens por página:</span>
+                  <Select 
+                    value={itemsPerPage.toString()} 
+                    onValueChange={(value) => {
+                      setItemsPerPage(parseInt(value))
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="hidden sm:flex"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                
+                <div className="hidden sm:flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                
+                <div className="sm:hidden flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Página {currentPage} de {totalPages}</span>
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="hidden sm:flex"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Dialog de Criação de Grua */}
