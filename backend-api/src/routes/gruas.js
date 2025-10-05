@@ -827,6 +827,7 @@ router.post('/', async (req, res) => {
       valor_manutencao: value.valor_manutencao || 0,
       ultima_manutencao: value.ultima_manutencao || null,
       proxima_manutencao: value.proxima_manutencao || null,
+      observacoes: value.observacoes || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -938,6 +939,7 @@ router.put('/:id', async (req, res) => {
       valor_manutencao: value.valor_manutencao || 0,
       ultima_manutencao: value.ultima_manutencao || null,
       proxima_manutencao: value.proxima_manutencao || null,
+      observacoes: value.observacoes || null,
       updated_at: new Date().toISOString()
     }
 

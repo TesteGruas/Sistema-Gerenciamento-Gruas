@@ -23,6 +23,7 @@ export interface GruaBackend {
   valor_manutencao?: number
   ultima_manutencao?: string
   proxima_manutencao?: string
+  observacoes?: string
   created_at: string
   updated_at: string
   current_obra_id?: number
@@ -233,6 +234,7 @@ export const converterGruaBackendParaFrontend = (gruaBackend: GruaBackend) => {
     valor_manutencao: gruaBackend.valor_manutencao,
     ultima_manutencao: gruaBackend.ultima_manutencao,
     proxima_manutencao: gruaBackend.proxima_manutencao,
+    observacoes: gruaBackend.observacoes,
     createdAt: gruaBackend.created_at,
     updatedAt: gruaBackend.updated_at
   }
