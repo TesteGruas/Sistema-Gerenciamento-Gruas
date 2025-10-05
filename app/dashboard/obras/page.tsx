@@ -151,7 +151,7 @@ export default function ObrasPage() {
   const adicionarCustoMensal = () => {
     const novoCusto: CustoMensal = {
       id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      obraId: editingObra?.id || '',
+      obraId: editingObra?.id || '', // Será preenchido quando a obra for criada
       item: custoForm.item,
       descricao: custoForm.descricao,
       unidade: custoForm.unidade,
@@ -170,7 +170,10 @@ export default function ObrasPage() {
       updatedAt: new Date().toISOString()
     }
     
-    setCustosMensais([...custosMensais, novoCusto])
+    console.log('💰 DEBUG - Adicionando custo mensal:', novoCusto)
+    const novosCustos = [...custosMensais, novoCusto]
+    console.log('💰 DEBUG - Lista de custos atualizada:', novosCustos)
+    setCustosMensais(novosCustos)
     setCustoForm({
       item: '',
       descricao: '',
@@ -216,16 +219,32 @@ export default function ObrasPage() {
 
   // Função para lidar com seleção de grua
   const handleGruaSelect = (grua: any) => {
+    console.log('🔧 DEBUG - Grua selecionada:', grua)
     setGruaSelecionada(grua)
     if (grua) {
-      setObraFormData({ ...obraFormData, gruaId: grua.id })
+      const newFormData = {
+        ...obraFormData,
+        gruaId: grua.id,
+        gruaValue: grua.valorLocacao || grua.valor || '', // tente ambos os campos
+        monthlyFee: grua.taxaMensal || grua.mensalidade || '' // tente ambos os campos
+      }
+      console.log('🔧 DEBUG - Atualizando obraFormData com grua:', newFormData)
+      setObraFormData(newFormData)
     } else {
-      setObraFormData({ ...obraFormData, gruaId: '' })
+      const newFormData = {
+        ...obraFormData,
+        gruaId: '',
+        gruaValue: '',
+        monthlyFee: ''
+      }
+      console.log('🔧 DEBUG - Limpando dados da grua:', newFormData)
+      setObraFormData(newFormData)
     }
   }
 
   // Função para adicionar funcionário selecionado
   const handleFuncionarioSelect = (funcionario: any) => {
+    console.log('👥 DEBUG - Funcionário selecionado:', funcionario)
     if (funcionario && !funcionariosSelecionados.find(f => f.userId === funcionario.id)) {
       const novoFuncionario = {
         id: Date.now().toString(),
@@ -234,7 +253,10 @@ export default function ObrasPage() {
         name: funcionario.name,
         gruaId: obraFormData.gruaId // Associar funcionário à grua selecionada
       }
-      setFuncionariosSelecionados([...funcionariosSelecionados, novoFuncionario])
+      console.log('👥 DEBUG - Novo funcionário criado:', novoFuncionario)
+      const novosFuncionarios = [...funcionariosSelecionados, novoFuncionario]
+      console.log('👥 DEBUG - Lista de funcionários atualizada:', novosFuncionarios)
+      setFuncionariosSelecionados(novosFuncionarios)
       setObraFormData({
         ...obraFormData,
         funcionarios: [...obraFormData.funcionarios, novoFuncionario]
@@ -478,6 +500,16 @@ export default function ObrasPage() {
   const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Validação dos campos obrigatórios
+    if (!obraFormData.name || !obraFormData.description || !obraFormData.clienteId) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha todos os campos obrigatórios (Nome, Descrição, Cliente)",
+        variant: "destructive"
+      })
+      return
+    }
+    
     try {
       setCreating(true)
       
@@ -498,12 +530,23 @@ export default function ObrasPage() {
               // Dados do responsável
               responsavelId: obraFormData.responsavelId,
               responsavelName: obraFormData.responsavelName,
-              // Dados da grua selecionada
-              gruaId: obraFormData.gruaId,
-              gruaValue: obraFormData.gruaValue,
-              monthlyFee: obraFormData.monthlyFee,
+              // Dados da grua selecionada - usar dados do estado atual
+              gruaId: gruaSelecionada?.id || obraFormData.gruaId || '',
+              gruaValue: obraFormData.gruaValue || '',
+              monthlyFee: obraFormData.monthlyFee || '',
               // Dados dos funcionários selecionados
-              funcionarios: funcionariosSelecionados,
+              funcionarios: funcionariosSelecionados && funcionariosSelecionados.length > 0 ? funcionariosSelecionados : [],
+              // Custos mensais - usar diretamente do estado custosMensais
+              custos_mensais: custosMensais.map(custo => ({
+                item: custo.item,
+                descricao: custo.descricao,
+                unidade: custo.unidade,
+                quantidadeOrcamento: custo.quantidadeOrcamento,
+                valorUnitario: custo.valorUnitario,
+                totalOrcamento: custo.totalOrcamento,
+                mes: custo.mes,
+                tipo: custo.tipo || 'contrato'
+              })),
               // Dados adicionais para criação automática de cliente se necessário
               cliente_nome: clienteSelecionado?.name,
               cliente_cnpj: clienteSelecionado?.cnpj,
@@ -516,8 +559,64 @@ export default function ObrasPage() {
               endereco: obraFormData.location || 'Endereço não informado'
             }
 
+      // Debug: Log dos dados antes da conversão
+      console.log('🔍 DEBUG - Dados antes da conversão:', obraData)
+      console.log('🔍 DEBUG - Custos mensais:', custosMensais)
+      console.log('🔍 DEBUG - Funcionários selecionados:', funcionariosSelecionados)
+      console.log('🔍 DEBUG - Grua selecionada:', gruaSelecionada)
+      console.log('🔍 DEBUG - Dados da grua no obraData:', {
+        gruaId: obraData.gruaId,
+        gruaValue: obraData.gruaValue,
+        monthlyFee: obraData.monthlyFee
+      })
+      console.log('🔍 DEBUG - Estado completo do form:', obraFormData)
+      console.log('🔍 DEBUG - Custos mensais processados:', obraData.custos_mensais)
+      console.log('🔍 DEBUG - Quantidade de custos mensais:', custosMensais.length)
+      console.log('🔍 DEBUG - Primeiro custo mensal:', custosMensais[0])
+      
+      // Debug adicional para verificar se os dados estão sendo montados corretamente
+      console.log('🔍 DEBUG - Verificação de campos obrigatórios:')
+      console.log('  - gruaId:', obraData.gruaId)
+      console.log('  - gruaValue:', obraData.gruaValue)
+      console.log('  - monthlyFee:', obraData.monthlyFee)
+      console.log('  - custos_mensais.length:', obraData.custos_mensais.length)
+      console.log('  - funcionarios.length:', obraData.funcionarios.length)
+      
+      // Verificação adicional dos dados
+      if (!obraData.gruaId && gruaSelecionada) {
+        console.warn('⚠️ WARNING - Grua selecionada mas gruaId vazio!')
+        console.log('  - gruaSelecionada:', gruaSelecionada)
+        console.log('  - obraFormData.gruaId:', obraFormData.gruaId)
+      }
+      
+      if (obraData.custos_mensais.length === 0 && custosMensais.length > 0) {
+        console.warn('⚠️ WARNING - Custos mensais no estado mas vazios no objeto!')
+        console.log('  - custosMensais.length:', custosMensais.length)
+        console.log('  - obraData.custos_mensais.length:', obraData.custos_mensais.length)
+      }
+      
+      // Debug final dos dados que serão enviados
+      console.log('🚀 DEBUG - Dados finais que serão enviados:')
+      console.log('  - gruaId:', obraData.gruaId)
+      console.log('  - gruaValue:', obraData.gruaValue)
+      console.log('  - monthlyFee:', obraData.monthlyFee)
+      console.log('  - custos_mensais:', obraData.custos_mensais)
+      console.log('  - funcionarios:', obraData.funcionarios)
+      
+      // Debug do estado atual
+      console.log('🔍 DEBUG - Estado atual do componente:')
+      console.log('  - custosMensais.length:', custosMensais.length)
+      console.log('  - funcionariosSelecionados.length:', funcionariosSelecionados.length)
+      console.log('  - gruaSelecionada:', gruaSelecionada)
+      console.log('  - obraFormData.gruaId:', obraFormData.gruaId)
+      console.log('  - obraFormData.gruaValue:', obraFormData.gruaValue)
+      console.log('  - obraFormData.monthlyFee:', obraFormData.monthlyFee)
+
       // Converter para formato do backend
       const obraBackendData = converterObraFrontendParaBackend(obraData)
+      
+      // Debug: Log dos dados após conversão
+      console.log('🔍 DEBUG - Dados após conversão:', obraBackendData)
       
       // Criar obra no backend
       const response = await obrasApi.criarObra(obraBackendData)
@@ -857,13 +956,34 @@ export default function ObrasPage() {
           <h1 className="text-3xl font-bold text-gray-900">Gerenciamento de Obras</h1>
           <p className="text-gray-600">Controle e acompanhamento de todas as obras</p>
         </div>
-        <Button 
-          className="flex items-center gap-2"
-          onClick={() => router.push('/dashboard/obras/nova')}
-        >
-          <Plus className="w-4 h-4" />
-          Nova Obra
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            className="flex items-center gap-2"
+            onClick={() => router.push('/dashboard/obras/nova')}
+          >
+            <Plus className="w-4 h-4" />
+            Nova Obra
+          </Button>
+          <Button 
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={() => {
+              console.log('🔍 TESTE - Estado atual:')
+              console.log('  - custosMensais:', custosMensais)
+              console.log('  - custosMensais.length:', custosMensais.length)
+              console.log('  - funcionariosSelecionados:', funcionariosSelecionados)
+              console.log('  - funcionariosSelecionados.length:', funcionariosSelecionados.length)
+              console.log('  - gruaSelecionada:', gruaSelecionada)
+              console.log('  - obraFormData:', obraFormData)
+              console.log('  - obraFormData.gruaId:', obraFormData.gruaId)
+              console.log('  - obraFormData.gruaValue:', obraFormData.gruaValue)
+              console.log('  - obraFormData.monthlyFee:', obraFormData.monthlyFee)
+            }}
+          >
+            <Settings className="w-4 h-4" />
+            Teste Debug
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}

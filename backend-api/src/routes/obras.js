@@ -42,6 +42,19 @@ const obraSchema = Joi.object({
       gruaId: Joi.string().optional()
     })
   ).optional(),
+  // Custos mensais
+  custos_mensais: Joi.array().items(
+    Joi.object({
+      item: Joi.string().required(),
+      descricao: Joi.string().required(),
+      unidade: Joi.string().required(),
+      quantidadeOrcamento: Joi.number().positive().required(),
+      valorUnitario: Joi.number().positive().required(),
+      totalOrcamento: Joi.number().positive().required(),
+      mes: Joi.string().pattern(/^\d{4}-\d{2}$/).required(),
+      tipo: Joi.string().valid('contrato', 'aditivo').default('contrato')
+    })
+  ).optional(),
   // Campos adicionais para criação automática de cliente
   cliente_nome: Joi.string().optional(),
   cliente_cnpj: Joi.string().optional(),
@@ -500,6 +513,23 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
             fabricante,
             tipo
           )
+        ),
+        custos_mensais (
+          id,
+          item,
+          descricao,
+          unidade,
+          quantidade_orcamento,
+          valor_unitario,
+          total_orcamento,
+          mes,
+          quantidade_realizada,
+          valor_realizado,
+          quantidade_acumulada,
+          valor_acumulado,
+          quantidade_saldo,
+          valor_saldo,
+          tipo
         )
       `)
       .eq('id', id)
@@ -518,9 +548,33 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
       })
     }
 
+    // Calcular totais dos custos
+    const totalCustosMensais = data.custos_mensais?.reduce((total, custo) => 
+      total + parseFloat(custo.total_orcamento || 0), 0) || 0
+
+    // Buscar custos gerais (tabela custos)
+    const { data: custosGerais, error: custosError } = await supabaseAdmin
+      .from('custos')
+      .select('valor')
+      .eq('obra_id', id)
+      .eq('status', 'confirmado')
+
+    const totalCustosGerais = custosGerais?.reduce((total, custo) => 
+      total + parseFloat(custo.valor || 0), 0) || 0
+
+    // Adicionar totais aos dados
+    const obraComTotais = {
+      ...data,
+      total_custos_mensais: totalCustosMensais,
+      total_custos_gerais: totalCustosGerais,
+      custos_iniciais: totalCustosMensais, // Para compatibilidade com frontend
+      custos_adicionais: totalCustosGerais,
+      total_custos: totalCustosMensais + totalCustosGerais
+    }
+
     res.json({
       success: true,
-      data
+      data: obraComTotais
     })
   } catch (error) {
     console.error('Erro ao buscar obra:', error)
@@ -608,6 +662,29 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *                       type: string
  *                     name:
  *                       type: string
+ *               custos_mensais:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     item:
+ *                       type: string
+ *                     descricao:
+ *                       type: string
+ *                     unidade:
+ *                       type: string
+ *                     quantidadeOrcamento:
+ *                       type: number
+ *                     valorUnitario:
+ *                       type: number
+ *                     totalOrcamento:
+ *                       type: number
+ *                     mes:
+ *                       type: string
+ *                       pattern: '^\d{4}-\d{2}$'
+ *                     tipo:
+ *                       type: string
+ *                       enum: [contrato, aditivo]
  *               status:
  *                 type: string
  *                 enum: [Planejamento, Em Andamento, Pausada, Concluída, Cancelada]
@@ -638,6 +715,13 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
       grua_mensalidade: value.grua_mensalidade
     })
     console.log('👥 Funcionários recebidos:', value.funcionarios)
+    console.log('💰 Custos mensais recebidos:', value.custos_mensais)
+    console.log('📊 Resumo dos dados recebidos:')
+    console.log('  - Obra:', value.nome)
+    console.log('  - Cliente ID:', value.cliente_id)
+    console.log('  - Grua ID:', value.grua_id || 'Nenhuma')
+    console.log('  - Funcionários:', value.funcionarios?.length || 0)
+    console.log('  - Custos mensais:', value.custos_mensais?.length || 0)
 
     // Verificar se cliente existe
     console.log('🔍 DEBUG - Verificando se cliente existe:', value.cliente_id)
@@ -852,6 +936,65 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
       } catch (funcionarioError) {
         console.error('❌ Erro ao processar dados dos funcionários:', funcionarioError)
         // Não falhar a criação da obra por causa dos funcionários
+      }
+    }
+
+    // Processar custos mensais se fornecidos
+    if (value.custos_mensais && value.custos_mensais.length > 0) {
+      console.log('💰 Processando custos mensais...')
+      try {
+        console.log('📝 Custos mensais para processar:', value.custos_mensais.map(c => ({
+          obra_id: data.id,
+          item: c.item,
+          descricao: c.descricao,
+          unidade: c.unidade,
+          quantidade_orcamento: c.quantidadeOrcamento,
+          valor_unitario: c.valorUnitario,
+          total_orcamento: c.totalOrcamento,
+          mes: c.mes,
+          tipo: c.tipo
+        })))
+        
+        // Criar custos mensais
+        for (const custo of value.custos_mensais) {
+          const custoMensalData = {
+            obra_id: data.id,
+            item: custo.item,
+            descricao: custo.descricao,
+            unidade: custo.unidade,
+            quantidade_orcamento: custo.quantidadeOrcamento,
+            valor_unitario: custo.valorUnitario,
+            total_orcamento: custo.totalOrcamento,
+            mes: custo.mes,
+            quantidade_realizada: 0,
+            valor_realizado: 0,
+            quantidade_acumulada: 0,
+            valor_acumulado: 0,
+            quantidade_saldo: custo.quantidadeOrcamento,
+            valor_saldo: custo.totalOrcamento,
+            tipo: custo.tipo || 'contrato',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+          
+          console.log('📝 Inserindo custo mensal:', custoMensalData)
+          
+          const { data: custoResult, error: custoError } = await supabaseAdmin
+            .from('custos_mensais')
+            .insert(custoMensalData)
+            .select()
+            .single()
+          
+          if (custoError) {
+            console.error('❌ Erro ao inserir custo mensal:', custoError)
+          } else {
+            console.log('✅ Custo mensal inserido:', custoResult)
+          }
+        }
+        
+      } catch (custoError) {
+        console.error('❌ Erro ao processar custos mensais:', custoError)
+        // Não falhar a criação da obra por causa dos custos
       }
     }
 

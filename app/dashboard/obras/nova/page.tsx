@@ -201,7 +201,10 @@ export default function NovaObraPage() {
       updatedAt: new Date().toISOString()
     }
     
-    setCustosMensais([...custosMensais, novoCusto])
+    console.log('💰 DEBUG - Adicionando custo mensal:', novoCusto)
+    const novosCustos = [...custosMensais, novoCusto]
+    console.log('💰 DEBUG - Lista de custos atualizada:', novosCustos)
+    setCustosMensais(novosCustos)
     setCustoForm({
       item: '',
       descricao: '',
@@ -245,6 +248,7 @@ export default function NovaObraPage() {
 
   // Função para lidar com seleção de grua
   const handleGruaSelect = (grua: any) => {
+    console.log('🔧 DEBUG - Grua selecionada:', grua)
     if (gruasSelecionadas.find(g => g.id === grua.id)) {
       return // Já está selecionada
     }
@@ -255,7 +259,10 @@ export default function NovaObraPage() {
       taxa_mensal: grua.valor_locacao || 0
     }
     
-    setGruasSelecionadas([...gruasSelecionadas, novaGrua])
+    console.log('🔧 DEBUG - Nova grua criada:', novaGrua)
+    const novasGruas = [...gruasSelecionadas, novaGrua]
+    console.log('🔧 DEBUG - Lista de gruas atualizada:', novasGruas)
+    setGruasSelecionadas(novasGruas)
   }
 
   // Função para remover grua selecionada
@@ -265,6 +272,7 @@ export default function NovaObraPage() {
 
   // Função para lidar com seleção de funcionário
   const handleFuncionarioSelect = (funcionario: any) => {
+    console.log('👥 DEBUG - Funcionário selecionado:', funcionario)
     if (funcionariosSelecionados.find(f => f.id === funcionario.id)) {
       return // Já está selecionado
     }
@@ -277,7 +285,10 @@ export default function NovaObraPage() {
       gruaId: '' // Removido - usando array de gruas
     }
     
-    setFuncionariosSelecionados([...funcionariosSelecionados, novoFuncionario])
+    console.log('👥 DEBUG - Novo funcionário criado:', novoFuncionario)
+    const novosFuncionarios = [...funcionariosSelecionados, novoFuncionario]
+    console.log('👥 DEBUG - Lista de funcionários atualizada:', novosFuncionarios)
+    setFuncionariosSelecionados(novosFuncionarios)
     setObraFormData({
       ...obraFormData,
       funcionarios: [...obraFormData.funcionarios, novoFuncionario]
@@ -325,6 +336,13 @@ export default function NovaObraPage() {
       setCreating(true)
       setError(null)
 
+      // Debug: Log dos dados antes da conversão
+      console.log('🔍 DEBUG - Dados antes da conversão:')
+      console.log('  - custosMensais:', custosMensais)
+      console.log('  - funcionariosSelecionados:', funcionariosSelecionados)
+      console.log('  - gruasSelecionadas:', gruasSelecionadas)
+      console.log('  - obraFormData:', obraFormData)
+
       // Preparar dados para o backend
       const obraData = {
         name: obraFormData.name,
@@ -336,22 +354,35 @@ export default function NovaObraPage() {
         location: obraFormData.location,
         clienteId: obraFormData.clienteId,
         observations: obraFormData.observations,
-        // Dados das gruas
-        gruas: gruasSelecionadas.map(grua => ({
-          id: grua.id,
-          name: grua.name,
-          model: grua.model,
-          valor_locacao: grua.valor_locacao,
-          taxa_mensal: grua.taxa_mensal
-        })),
+        // Dados das gruas - usar a primeira grua selecionada
+        gruaId: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].id : '',
+        gruaValue: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].valor_locacao?.toString() || '' : '',
+        monthlyFee: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].taxa_mensal?.toString() || '' : '',
         // Dados do responsável
         responsavelId: obraFormData.responsavelId,
         responsavelName: obraFormData.responsavelName,
         // Lista de funcionários
-        funcionarios: obraFormData.funcionarios,
-        // Custos mensais
-        custosMensais: custosMensais
+        funcionarios: funcionariosSelecionados,
+        // Custos mensais - converter para formato do backend
+        custos_mensais: custosMensais.map(custo => ({
+          item: custo.item,
+          descricao: custo.descricao,
+          unidade: custo.unidade,
+          quantidadeOrcamento: custo.quantidadeOrcamento,
+          valorUnitario: custo.valorUnitario,
+          totalOrcamento: custo.totalOrcamento,
+          mes: custo.mes,
+          tipo: custo.tipo || 'contrato'
+        }))
       }
+
+      // Debug: Log dos dados finais
+      console.log('🚀 DEBUG - Dados finais que serão enviados:')
+      console.log('  - gruaId:', obraData.gruaId)
+      console.log('  - gruaValue:', obraData.gruaValue)
+      console.log('  - monthlyFee:', obraData.monthlyFee)
+      console.log('  - custos_mensais:', obraData.custos_mensais)
+      console.log('  - funcionarios:', obraData.funcionarios)
 
       // Converter para formato do backend
       const obraBackendData = converterObraFrontendParaBackend(obraData)

@@ -957,17 +957,26 @@ export default function ObraDetailsPage() {
     try {
       setLoading(true)
       setError(null)
+      console.log('🔍 DEBUG - Carregando obra ID:', obraId)
       const response = await obrasApi.obterObra(parseInt(obraId))
+      console.log('🔍 DEBUG - Resposta da API:', response)
       const obraConvertida = converterObraBackendParaFrontend(response.data)
+      console.log('🔍 DEBUG - Obra convertida:', obraConvertida)
       setObra(obraConvertida)
     } catch (err) {
-      console.error('Erro ao carregar obra:', err)
+      console.error('❌ ERRO ao carregar obra:', err)
+      console.error('❌ Detalhes do erro:', {
+        message: err instanceof Error ? err.message : 'Erro desconhecido',
+        stack: err instanceof Error ? err.stack : undefined,
+        obraId: obraId
+      })
       setError(err instanceof Error ? err.message : 'Erro ao carregar obra')
-      // Fallback para dados mockados em caso de erro
-      const obraMockada = mockObras.find(o => o.id === obraId)
-      if (obraMockada) {
-        setObra(obraMockada)
-      }
+      
+      // TEMPORARIAMENTE DESABILITADO: Fallback para dados mockados em caso de erro
+      // const obraMockada = mockObras.find(o => o.id === obraId)
+      // if (obraMockada) {
+      //   setObra(obraMockada)
+      // }
     } finally {
       setLoading(false)
     }

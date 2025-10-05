@@ -103,6 +103,17 @@ export interface ObraCreateData {
     role: string
     name: string
   }>
+  // Custos mensais
+  custos_mensais?: Array<{
+    item: string
+    descricao: string
+    unidade: string
+    quantidadeOrcamento: number
+    valorUnitario: number
+    totalOrcamento: number
+    mes: string
+    tipo?: 'contrato' | 'aditivo'
+  }>
   // Campos para criação automática de cliente
   cliente_nome?: string
   cliente_cnpj?: string
@@ -454,9 +465,9 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     observations: obraBackend.observacoes || (obraBackend.contato_obra ? `Contato: ${obraBackend.contato_obra}` : undefined),
     createdAt: obraBackend.created_at,
     updatedAt: obraBackend.updated_at,
-    custosIniciais: 0,
-    custosAdicionais: 0,
-    totalCustos: 0,
+    custosIniciais: obraBackend.custos_iniciais || obraBackend.total_custos_mensais || obraBackend.custos_mensais?.reduce((total, custo) => total + (custo.total_orcamento || 0), 0) || 0,
+    custosAdicionais: obraBackend.custos_adicionais || obraBackend.total_custos_gerais || 0,
+    totalCustos: obraBackend.total_custos || (obraBackend.custos_iniciais || 0) + (obraBackend.custos_adicionais || 0),
     // Campos adicionais do backend
     endereco: obraBackend.endereco,
     cidade: obraBackend.cidade,
@@ -473,7 +484,24 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
 }
 
 export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateData => {
-  return {
+  console.log('🔍 DEBUG - Converter recebeu:', obraFrontend)
+  console.log('🔍 DEBUG - Custos mensais recebidos:', obraFrontend.custos_mensais)
+  console.log('🔍 DEBUG - Funcionários recebidos:', obraFrontend.funcionarios)
+  console.log('🔍 DEBUG - Dados da grua recebidos:', {
+    gruaId: obraFrontend.gruaId,
+    gruaValue: obraFrontend.gruaValue,
+    monthlyFee: obraFrontend.monthlyFee
+  })
+  
+  // Debug adicional para verificar se os campos estão sendo processados
+  console.log('🔍 DEBUG - Verificação no conversor:')
+  console.log('  - gruaId existe?', !!obraFrontend.gruaId)
+  console.log('  - gruaValue existe?', !!obraFrontend.gruaValue)
+  console.log('  - monthlyFee existe?', !!obraFrontend.monthlyFee)
+  console.log('  - custos_mensais é array?', Array.isArray(obraFrontend.custos_mensais))
+  console.log('  - custos_mensais.length:', obraFrontend.custos_mensais?.length || 0)
+  
+  const result = {
     nome: obraFrontend.name,
     cliente_id: parseInt(obraFrontend.clienteId),
     endereco: obraFrontend.location || obraFrontend.endereco || '',
@@ -494,23 +522,34 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     responsavel_id: obraFrontend.responsavelId ? parseInt(obraFrontend.responsavelId) : undefined,
     responsavel_nome: obraFrontend.responsavelName,
     // Dados da grua
-    grua_id: obraFrontend.gruaId,
-    grua_valor: obraFrontend.gruaValue ? parseFloat(obraFrontend.gruaValue) : undefined,
-    grua_mensalidade: obraFrontend.monthlyFee ? parseFloat(obraFrontend.monthlyFee) : undefined,
+    grua_id: obraFrontend.gruaId || null,
+    grua_valor: obraFrontend.gruaValue ? parseFloat(obraFrontend.gruaValue) : null,
+    grua_mensalidade: obraFrontend.monthlyFee ? parseFloat(obraFrontend.monthlyFee) : null,
             // Dados dos funcionários
-            funcionarios: obraFrontend.funcionarios?.map((func: any) => ({
+            funcionarios: obraFrontend.funcionarios && Array.isArray(obraFrontend.funcionarios) ? obraFrontend.funcionarios.map((func: any) => ({
               id: func.id,
               userId: func.userId,
               role: func.role,
               name: func.name,
               gruaId: func.gruaId || obraFrontend.gruaId // Usar gruaId do funcionário ou da obra
-            })) || [],
+            })) : [],
+    // Custos mensais
+    custos_mensais: obraFrontend.custos_mensais && Array.isArray(obraFrontend.custos_mensais) ? obraFrontend.custos_mensais : [],
     // Dados para criação automática de cliente se necessário
     cliente_nome: obraFrontend.cliente_nome,
     cliente_cnpj: obraFrontend.cliente_cnpj,
     cliente_email: obraFrontend.cliente_email,
     cliente_telefone: obraFrontend.cliente_telefone
   }
+  
+  console.log('🔍 DEBUG - Resultado da conversão:', result)
+  console.log('🔍 DEBUG - Verificação final dos campos:')
+  console.log('  - grua_id:', result.grua_id)
+  console.log('  - grua_valor:', result.grua_valor)
+  console.log('  - grua_mensalidade:', result.grua_mensalidade)
+  console.log('  - funcionarios.length:', result.funcionarios?.length || 0)
+  console.log('  - custos_mensais.length:', result.custos_mensais?.length || 0)
+  return result
 }
 
 export const converterStatusBackendParaFrontend = (status: string): 'ativa' | 'pausada' | 'concluida' => {
