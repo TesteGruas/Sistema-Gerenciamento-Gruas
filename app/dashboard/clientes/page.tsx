@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,6 +38,7 @@ import { obrasApi, Obra } from "@/lib/api-obras"
 export default function ClientesPage() {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("")
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
@@ -56,7 +57,8 @@ export default function ClientesPage() {
     contato: '',
     contato_email: '',
     contato_cpf: '',
-    contato_telefone: ''
+    contato_telefone: '',
+    status: 'ativo'
   })
   
   // Estados para gerenciar dados da API
@@ -71,6 +73,9 @@ export default function ClientesPage() {
     pages: 0
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const isLoadingRef = useRef(false)
+  const isLoadingObrasRef = useRef(false)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
   // Verificar autenticação e carregar dados da API
   useEffect(() => {
@@ -84,27 +89,29 @@ export default function ClientesPage() {
       return
     }
     
-    carregarClientes()
     carregarObras()
-  }, [pagination.page, pagination.limit])
+  }, [])
 
-  // Carregar clientes quando o termo de busca mudar
+  // Carregar clientes quando paginação, busca ou filtro mudarem
   useEffect(() => {
     if (searchTerm.trim()) {
       buscarClientes()
     } else {
       carregarClientes()
     }
-  }, [searchTerm])
+  }, [pagination.page, pagination.limit, searchTerm, statusFilter])
 
 
   const carregarClientes = async () => {
     try {
+      if (isLoadingRef.current) return
+      isLoadingRef.current = true
       setLoading(true)
       setError(null)
       const response = await clientesApi.listarClientes({
         page: pagination.page,
-        limit: pagination.limit
+        limit: pagination.limit,
+        status: statusFilter || undefined
       })
       setClientes(response.data)
       setPagination(response.pagination || {
@@ -113,33 +120,44 @@ export default function ClientesPage() {
         total: 0,
         pages: 0
       })
+      setHasLoadedOnce(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar clientes')
       console.error('Erro ao carregar clientes:', err)
+      setHasLoadedOnce(true)
     } finally {
       setLoading(false)
+      isLoadingRef.current = false
     }
   }
 
   const carregarObras = async () => {
     try {
+      if (isLoadingObrasRef.current) return
+      isLoadingObrasRef.current = true
+      
       // Carregar todas as obras (sem paginação para ter acesso completo)
-      const response = await obrasApi.listarObras({ page: 1, limit: 1000 })
+      const response = await obrasApi.listarObras({ page: 1, limit: 10 })
       setObras(response.data)
     } catch (err) {
       console.error('Erro ao carregar obras:', err)
       // Não definir erro aqui para não quebrar a interface de clientes
+    } finally {
+      isLoadingObrasRef.current = false
     }
   }
 
   const buscarClientes = async () => {
     try {
+      if (isLoadingRef.current) return
+      isLoadingRef.current = true
       setLoading(true)
       setError(null)
       const response = await clientesApi.buscarClientes(
         searchTerm, 
         pagination.page, 
-        pagination.limit
+        pagination.limit,
+        statusFilter || undefined
       )
       setClientes(response.data)
       setPagination(response.pagination || {
@@ -148,11 +166,14 @@ export default function ClientesPage() {
         total: 0,
         pages: 0
       })
+      setHasLoadedOnce(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao buscar clientes')
       console.error('Erro ao buscar clientes:', err)
+      setHasLoadedOnce(true)
     } finally {
       setLoading(false)
+      isLoadingRef.current = false
     }
   }
 
@@ -200,7 +221,8 @@ export default function ClientesPage() {
       contato: cliente.contato || '',
       contato_email: cliente.contato_email || '',
       contato_cpf: cliente.contato_cpf || '',
-      contato_telefone: cliente.contato_telefone || ''
+      contato_telefone: cliente.contato_telefone || '',
+      status: cliente.status || 'ativo'
     })
     setIsEditDialogOpen(true)
   }
@@ -239,7 +261,8 @@ export default function ClientesPage() {
         contato: '',
         contato_email: '',
         contato_cpf: '',
-        contato_telefone: ''
+        contato_telefone: '',
+        status: 'ativo'
       })
       setIsCreateDialogOpen(false)
       
@@ -414,7 +437,7 @@ export default function ClientesPage() {
       {/* Filtros */}
       <Card>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <Label htmlFor="search">Buscar clientes</Label>
               <div className="relative">
@@ -428,11 +451,27 @@ export default function ClientesPage() {
                 />
               </div>
             </div>
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select value={statusFilter || "todos"} onValueChange={(value) => setStatusFilter(value === "todos" ? "" : value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os status</SelectItem>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="inativo">Inativo</SelectItem>
+                  <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                  <SelectItem value="pendente">Pendente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-end">
               <Button 
                 variant="outline" 
                 onClick={() => {
                   setSearchTerm("")
+                  setStatusFilter("")
                 }}
                 className="w-full"
               >
@@ -503,6 +542,21 @@ export default function ClientesPage() {
                       <Building2 className="w-5 h-5 text-blue-600" />
                       <CardTitle className="text-lg">{cliente.nome}</CardTitle>
                     </div>
+                    <Badge 
+                      variant={
+                        cliente.status === 'ativo' ? 'default' :
+                        cliente.status === 'inativo' ? 'secondary' :
+                        cliente.status === 'bloqueado' ? 'destructive' :
+                        'outline'
+                      }
+                      className="text-xs"
+                    >
+                      {cliente.status === 'ativo' ? 'Ativo' :
+                       cliente.status === 'inativo' ? 'Inativo' :
+                       cliente.status === 'bloqueado' ? 'Bloqueado' :
+                       cliente.status === 'pendente' ? 'Pendente' :
+                       'N/A'}
+                    </Badge>
                   </div>
                   <CardDescription>{cliente.cnpj}</CardDescription>
                 </CardHeader>
@@ -590,7 +644,7 @@ export default function ClientesPage() {
       )}
 
       {/* Empty State */}
-      {!loading && !error && filteredClientes.length === 0 && (
+      {!loading && !error && hasLoadedOnce && filteredClientes.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center">
             <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -890,6 +944,26 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
+            <Label htmlFor="status">Status *</Label>
+            <Select
+              value={formData.status || 'ativo'}
+              onValueChange={(value) => setFormData({ ...formData, status: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ativo">Ativo</SelectItem>
+                <SelectItem value="inativo">Inativo</SelectItem>
+                <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
@@ -1133,6 +1207,24 @@ function ClienteDetails({
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">CNPJ:</span>
               <span className="text-sm">{cliente.cnpj}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">Status:</span>
+              <Badge 
+                variant={
+                  cliente.status === 'ativo' ? 'default' :
+                  cliente.status === 'inativo' ? 'secondary' :
+                  cliente.status === 'bloqueado' ? 'destructive' :
+                  'outline'
+                }
+                className="text-xs"
+              >
+                {cliente.status === 'ativo' ? 'Ativo' :
+                 cliente.status === 'inativo' ? 'Inativo' :
+                 cliente.status === 'bloqueado' ? 'Bloqueado' :
+                 cliente.status === 'pendente' ? 'Pendente' :
+                 'N/A'}
+              </Badge>
             </div>
             {cliente.email && (
               <div className="flex justify-between">

@@ -48,7 +48,7 @@ const clienteSchema = Joi.object({
  *         name: search
  *         schema:
  *           type: string
- *         description: Buscar por nome ou email (LIKE)
+ *         description: Buscar por nome, email ou CNPJ (LIKE)
  *       - in: query
  *         name: status
  *         schema:
@@ -71,7 +71,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_clientes'), asy
     // Aplicar filtro de busca
     if (req.query.search) {
       const searchTerm = `%${req.query.search}%`
-      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm}`)
+      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm},cnpj.ilike.${searchTerm}`)
     }
 
     // Aplicar filtro de status

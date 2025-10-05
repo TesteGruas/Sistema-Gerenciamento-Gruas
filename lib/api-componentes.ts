@@ -140,7 +140,7 @@ export const apiComponentes = {
     const filters: ComponenteFilters = {}
     if (gruaId) filters.grua_id = gruaId
 
-    const response = await this.listar({ ...filters, limit: 1000 })
+    const response = await this.listar({ ...filters, limit: 10 })
     
     const componentes = response.data
     const estatisticas = {

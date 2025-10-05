@@ -52,10 +52,10 @@ export interface ClienteUpdateData {
   contato_telefone?: string
 }
 
-// Tipo para o frontend (sem status)
-export type Cliente = Omit<ClienteBackend, 'status'>
+// Tipo para o frontend (incluindo status)
+export type Cliente = ClienteBackend
 
-// Interface para formulários (sem status)
+// Interface para formulários (incluindo status)
 export interface ClienteFormData {
   nome: string
   cnpj: string
@@ -69,6 +69,7 @@ export interface ClienteFormData {
   contato_email?: string
   contato_cpf?: string
   contato_telefone?: string
+  status?: string
 }
 
 export interface ClientesResponse {

@@ -120,7 +120,7 @@ export default function CustosPage() {
       // Carregar custos com filtros
       const filters: CustoFilters = {
         page: 1,
-        limit: 1000
+        limit: 10
       }
       
       const custosData = await custosApi.list(filters)

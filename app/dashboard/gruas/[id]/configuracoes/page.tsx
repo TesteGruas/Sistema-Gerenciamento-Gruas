@@ -85,7 +85,7 @@ export default function ConfiguracoesGruaPage() {
       // Carregar componentes disponíveis da grua
       const componentesResponse = await apiComponentes.buscarPorGrua(gruaId, {
         page: 1,
-        limit: 1000
+        limit: 10
       })
       console.log('Componentes carregados:', componentesResponse.data)
       setComponentesDisponiveis(componentesResponse.data)

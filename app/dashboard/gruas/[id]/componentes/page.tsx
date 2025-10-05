@@ -125,7 +125,7 @@ export default function ComponentesGruaPage() {
       // Carregar componentes da grua com filtros aplicados
       const componentesResponse = await apiComponentes.buscarPorGrua(gruaId, {
         page: 1,
-        limit: 1000, // Aumentar limite para carregar todos os componentes
+        limit: 10, // Aumentar limite para carregar todos os componentes
         search: searchTerm || undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
         tipo: filterTipo !== 'all' ? filterTipo : undefined
