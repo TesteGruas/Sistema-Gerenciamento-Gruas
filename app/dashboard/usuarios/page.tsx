@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { useToast } from "@/hooks/use-toast"
 import { apiPerfis, apiPermissoes, apiPerfilPermissoes, utilsPermissoes, type Perfil, type Permissao, type PerfilPermissao } from "@/lib/api-permissoes"
 import { apiUsuarios, utilsUsuarios, type Usuario } from "@/lib/api-usuarios"
@@ -43,7 +44,9 @@ import {
   Unlock,
   ChevronRight,
   Save,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon
 } from "lucide-react"
 
 // Tipos para compatibilidade com o frontend
@@ -122,6 +125,12 @@ export default function UsuariosPage() {
   
   const [usuarios, setUsuarios] = useState<UsuarioFrontend[]>([])
   const [usuariosBackend, setUsuariosBackend] = useState<Usuario[]>([])
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalUsuarios, setTotalUsuarios] = useState(0)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Estados para o sistema de permissões
   const [isPermissoesSidebarOpen, setIsPermissoesSidebarOpen] = useState(false)
@@ -314,11 +323,16 @@ export default function UsuariosPage() {
     return roleToPerfilMap[role] || null
   }
 
-  const carregarUsuarios = async () => {
+  const carregarUsuarios = async (page: number = 1, limit: number = itemsPerPage) => {
     try {
       setLoading(true)
-      const response = await apiUsuarios.listar()
+      const response = await apiUsuarios.listar({ page, limit })
       setUsuariosBackend(response.data)
+      
+      // Atualizar informações de paginação
+      setTotalUsuarios(response.pagination?.total || response.data.length)
+      setTotalPages(response.pagination?.totalPages || Math.ceil((response.pagination?.total || response.data.length) / limit))
+      setCurrentPage(page)
       
       // Converter dados do backend para formato do frontend
       const usuariosFrontend = response.data.map(usuario => {
@@ -379,6 +393,19 @@ export default function UsuariosPage() {
     carregarUsuarios()
   }, [])
 
+  // Função para mudar de página
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    carregarUsuarios(page, itemsPerPage)
+  }
+
+  // Função para mudar itens por página
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage)
+    setCurrentPage(1)
+    carregarUsuarios(1, newItemsPerPage)
+  }
+
   const filteredUsuarios = usuarios.filter(usuario =>
     (usuario.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (usuario.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -424,7 +451,7 @@ export default function UsuariosPage() {
       const novoUsuario = await apiUsuarios.criar(dadosBackend)
       
       // Recarregar lista de usuários
-      await carregarUsuarios()
+      await carregarUsuarios(currentPage, itemsPerPage)
       
       setIsCreateDialogOpen(false)
       resetForm()
@@ -487,7 +514,7 @@ export default function UsuariosPage() {
       await apiUsuarios.atualizar(parseInt(editingUser.id), dadosBackend)
       
       // Recarregar lista de usuários
-      await carregarUsuarios()
+      await carregarUsuarios(currentPage, itemsPerPage)
       
       setIsEditDialogOpen(false)
       setEditingUser(null)
@@ -524,7 +551,7 @@ export default function UsuariosPage() {
       await apiUsuarios.excluir(parseInt(userToDelete.id))
       
       // Recarregar lista de usuários
-      await carregarUsuarios()
+      await carregarUsuarios(currentPage, itemsPerPage)
       
       setIsDeleteDialogOpen(false)
       setUserToDelete(null)
@@ -565,7 +592,7 @@ export default function UsuariosPage() {
       await apiUsuarios.atualizarStatus(parseInt(usuario.id), statusBackend)
       
       // Recarregar lista de usuários
-      await carregarUsuarios()
+      await carregarUsuarios(currentPage, itemsPerPage)
       
       toast({
         title: "Sucesso",
@@ -617,7 +644,7 @@ export default function UsuariosPage() {
               <Users className="w-5 h-5 text-blue-600" />
               <div>
                 <p className="text-sm text-gray-600">Total de Usuários</p>
-                <p className="text-2xl font-bold">{usuarios.length}</p>
+                <p className="text-2xl font-bold">{totalUsuarios}</p>
               </div>
             </div>
           </CardContent>
@@ -663,7 +690,7 @@ export default function UsuariosPage() {
       {/* Filtros */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-end">
             <div className="flex-1">
               <label className="text-sm font-medium">Buscar usuários</label>
               <div className="relative">
@@ -675,6 +702,20 @@ export default function UsuariosPage() {
                   className="pl-10"
                 />
               </div>
+            </div>
+            <div className="flex gap-2 items-center">
+              <Label htmlFor="items-per-page" className="text-sm font-medium">Itens por página:</Label>
+              <Select value={itemsPerPage.toString()} onValueChange={(value) => handleItemsPerPageChange(parseInt(value))}>
+                <SelectTrigger className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardContent>
@@ -689,6 +730,11 @@ export default function UsuariosPage() {
           </CardTitle>
           <CardDescription>
             Gerencie usuários, permissões e acessos ao sistema
+            {totalUsuarios > 0 && (
+              <span className="ml-2 text-blue-600">
+                ({totalUsuarios} usuários total)
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -806,6 +852,58 @@ export default function UsuariosPage() {
             </div>
           )}
         </CardContent>
+        
+        {/* Paginação */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t">
+            <div className="text-sm text-gray-700">
+              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalUsuarios)} de {totalUsuarios} usuários
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+                
+                {/* Páginas numeradas */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNumber;
+                  if (totalPages <= 5) {
+                    pageNumber = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNumber = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNumber = totalPages - 4 + i;
+                  } else {
+                    pageNumber = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        onClick={() => handlePageChange(pageNumber)}
+                        isActive={currentPage === pageNumber}
+                        className="cursor-pointer"
+                      >
+                        {pageNumber}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                })}
+                
+                <PaginationItem>
+                  <PaginationNext 
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </Card>
 
       {/* Dialog de Criação de Usuário */}

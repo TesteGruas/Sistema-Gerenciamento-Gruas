@@ -23,7 +23,8 @@ import {
   Calendar,
   UserCheck,
   UserX,
-  Building2
+  Building2,
+  User
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -62,12 +63,14 @@ export default function FuncionariosPage() {
     email: '',
     phone: '',
     cpf: '',
-    role: 'Operador' as 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico',
+    role: 'Operador' as 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras',
     status: 'Ativo' as 'Ativo' | 'Inativo' | 'Férias',
     turno: 'Diurno' as 'Diurno' | 'Noturno' | 'Sob Demanda',
     salary: '',
     hireDate: '',
-    observations: ''
+    observations: '',
+    criar_usuario: true,
+    usuario_senha: ''
   })
 
   // Carregar funcionários do backend
@@ -169,15 +172,22 @@ export default function FuncionariosPage() {
       
       const funcionarioData = converterFuncionarioFrontendParaBackend({
         ...funcionarioFormData,
-        salary: parseFloat(funcionarioFormData.salary) || 0
+        salary: parseFloat(funcionarioFormData.salary) || 0,
+        // Incluir campos de usuário se estiver criando
+        criar_usuario: funcionarioFormData.criar_usuario || false,
+        usuario_senha: funcionarioFormData.criar_usuario ? funcionarioFormData.usuario_senha : undefined
       })
       
       const response = await funcionariosApi.criarFuncionario(funcionarioData)
       
       if (response.success) {
+        const message = response.data?.usuario_criado 
+          ? "Funcionário e usuário criados com sucesso! O funcionário receberá um email com as instruções de acesso."
+          : "Funcionário criado com sucesso!"
+        
         toast({
           title: "Sucesso",
-          description: "Funcionário criado com sucesso! Redirecionando para a primeira página...",
+          description: message,
         })
         
         // Recarregar lista de funcionários (primeira página para mostrar o novo funcionário)
@@ -194,7 +204,9 @@ export default function FuncionariosPage() {
           turno: 'Diurno',
           salary: '',
           hireDate: '',
-          observations: ''
+          observations: '',
+          criar_usuario: true,
+          usuario_senha: ''
         })
         setIsCreateDialogOpen(false)
       }
@@ -222,7 +234,9 @@ export default function FuncionariosPage() {
       turno: funcionario.turno,
       salary: funcionario.salario?.toString() || '',
       hireDate: funcionario.data_admissao || '',
-      observations: funcionario.observacoes || ''
+      observations: funcionario.observacoes || '',
+      criar_usuario: funcionario.usuario_existe || false,
+      usuario_senha: ''
     })
     setIsEditDialogOpen(true)
   }
@@ -237,7 +251,10 @@ export default function FuncionariosPage() {
       
       const funcionarioData = converterFuncionarioFrontendParaBackend({
         ...funcionarioFormData,
-        salary: parseFloat(funcionarioFormData.salary) || 0
+        salary: parseFloat(funcionarioFormData.salary) || 0,
+        // Incluir campos de usuário para compatibilidade (serão filtrados no backend)
+        criar_usuario: funcionarioFormData.criar_usuario || false,
+        usuario_senha: funcionarioFormData.criar_usuario ? funcionarioFormData.usuario_senha : undefined
       })
       
       const response = await funcionariosApi.atualizarFuncionario(editingFuncionario.id, funcionarioData)
@@ -264,7 +281,9 @@ export default function FuncionariosPage() {
           turno: 'Diurno',
           salary: '',
           hireDate: '',
-          observations: ''
+          observations: '',
+          criar_usuario: true,
+          usuario_senha: ''
         })
       }
     } catch (error: any) {
@@ -736,6 +755,58 @@ export default function FuncionariosPage() {
               </div>
             </div>
 
+            {/* Configuração de Usuário */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Configuração de Usuário</h3>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="criar_usuario"
+                  checked={funcionarioFormData.criar_usuario || false}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, criar_usuario: e.target.checked })}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="criar_usuario" className="text-sm font-medium">
+                  Criar usuário para o funcionário
+                </Label>
+              </div>
+
+              {funcionarioFormData.criar_usuario && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <User className="w-5 h-5 text-blue-600 mt-0.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-blue-900 mb-1">
+                        Criação de Usuário
+                      </h4>
+                      <p className="text-sm text-blue-700 mb-3">
+                        Será criado um usuário para o funcionário com acesso ao sistema baseado no seu cargo.
+                      </p>
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="usuario_senha">Senha Inicial *</Label>
+                          <Input
+                            id="usuario_senha"
+                            type="password"
+                            value={funcionarioFormData.usuario_senha || ''}
+                            onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, usuario_senha: e.target.value })}
+                            placeholder="Mínimo 6 caracteres"
+                            required={funcionarioFormData.criar_usuario}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            O funcionário poderá alterar esta senha no primeiro acesso.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <Label htmlFor="observations">Observações</Label>
               <Textarea
@@ -896,6 +967,67 @@ export default function FuncionariosPage() {
                   onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, hireDate: e.target.value })}
                 />
               </div>
+            </div>
+
+            {/* Configuração de Usuário */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Configuração de Usuário</h3>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="edit-criar_usuario"
+                  checked={funcionarioFormData.criar_usuario || false}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, criar_usuario: e.target.checked })}
+                  disabled={!!(editingFuncionario && funcionarioFormData.criar_usuario)}
+                  className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                <Label htmlFor="edit-criar_usuario" className={`text-sm font-medium ${editingFuncionario && funcionarioFormData.criar_usuario ? 'text-gray-500' : ''}`}>
+                  {editingFuncionario && funcionarioFormData.criar_usuario 
+                    ? 'Usuário já criado para o funcionário' 
+                    : 'Criar usuário para o funcionário'
+                  }
+                </Label>
+              </div>
+
+              {funcionarioFormData.criar_usuario && (
+                <div className={`border rounded-lg p-4 ${editingFuncionario ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <User className={`w-5 h-5 mt-0.5 ${editingFuncionario ? 'text-green-600' : 'text-blue-600'}`} />
+                    </div>
+                    <div>
+                      <h4 className={`text-sm font-medium mb-1 ${editingFuncionario ? 'text-green-900' : 'text-blue-900'}`}>
+                        {editingFuncionario ? 'Usuário Existente' : 'Criação de Usuário'}
+                      </h4>
+                      <p className={`text-sm mb-3 ${editingFuncionario ? 'text-green-700' : 'text-blue-700'}`}>
+                        {editingFuncionario 
+                          ? 'Este funcionário já possui um usuário vinculado com acesso ao sistema.'
+                          : 'Será criado um usuário para o funcionário com acesso ao sistema baseado no seu cargo.'
+                        }
+                      </p>
+                      {!editingFuncionario && (
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="edit-usuario_senha">Senha Inicial *</Label>
+                            <Input
+                              id="edit-usuario_senha"
+                              type="password"
+                              value={funcionarioFormData.usuario_senha || ''}
+                              onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, usuario_senha: e.target.value })}
+                              placeholder="Mínimo 6 caracteres"
+                              required={funcionarioFormData.criar_usuario}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              O funcionário poderá alterar esta senha no primeiro acesso.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>

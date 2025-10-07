@@ -24,7 +24,10 @@ const funcionarioSchema = Joi.object({
   status: Joi.string().valid('Ativo', 'Inativo', 'Férias').default('Ativo'),
   data_admissao: Joi.date().allow(null).optional(),
   salario: Joi.number().min(0).allow(null).optional(),
-  observacoes: Joi.string().allow(null, '').optional()
+  observacoes: Joi.string().allow(null, '').optional(),
+  // Campos para criação do usuário
+  criar_usuario: Joi.boolean().default(true).optional(),
+  usuario_senha: Joi.string().min(6).when('criar_usuario', { is: true, then: Joi.required(), otherwise: Joi.optional() })
 })
 
 // Schema para atualização (campos opcionais)
@@ -119,7 +122,15 @@ router.get('/', async (req, res) => {
     // Construir filtros
     let query = supabaseAdmin
       .from('funcionarios')
-      .select('*', { count: 'exact' })
+      .select(`
+        *,
+        usuario:usuarios!funcionario_id(
+          id,
+          nome,
+          email,
+          status
+        )
+      `, { count: 'exact' })
 
     // Aplicar filtros
     if (req.query.status) {
@@ -148,11 +159,18 @@ router.get('/', async (req, res) => {
       })
     }
 
+    // Adicionar informações sobre usuário existente para cada funcionário
+    const funcionariosComUsuario = (data || []).map(funcionario => ({
+      ...funcionario,
+      usuario_existe: !!funcionario.usuario,
+      usuario_criado: !!funcionario.usuario
+    }))
+
     const totalPages = Math.ceil(count / limit)
 
     res.json({
       success: true,
-      data: data || [],
+      data: funcionariosComUsuario,
       pagination: {
         page,
         limit,
@@ -313,7 +331,15 @@ router.get('/:id', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('funcionarios')
-      .select('*')
+      .select(`
+        *,
+        usuario:usuarios!funcionario_id(
+          id,
+          nome,
+          email,
+          status
+        )
+      `)
       .eq('id', id)
       .single()
 
@@ -330,9 +356,16 @@ router.get('/:id', async (req, res) => {
       })
     }
 
+    // Adicionar informações sobre o usuário vinculado
+    const responseData = {
+      ...data,
+      usuario_existe: !!data.usuario,
+      usuario_criado: !!data.usuario
+    }
+
     res.json({
       success: true,
-      data
+      data: responseData
     })
   } catch (error) {
     console.error('Erro ao buscar funcionário:', error)
@@ -387,6 +420,8 @@ router.post('/', async (req, res) => {
       })
     }
 
+    const { criar_usuario, usuario_senha, ...funcionarioData } = value
+
     // Verificar se CPF já existe (se fornecido)
     if (value.cpf) {
       const { data: existingFuncionario } = await supabaseAdmin
@@ -403,24 +438,157 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Criar funcionário
-    const { data, error: createError } = await supabaseAdmin
-      .from('funcionarios')
-      .insert([value])
-      .select()
-      .single()
+    // Iniciar transação
+    let usuarioId = null
 
-    if (createError) {
-      return res.status(500).json({
-        error: 'Erro ao criar funcionário',
-        message: createError.message
+    // Criar usuário se solicitado
+    if (criar_usuario && value.email) {
+      try {
+        // Verificar se já existe um usuário com este email
+        const { data: existingUser } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('email', value.email)
+          .single()
+
+        if (existingUser) {
+          return res.status(400).json({
+            error: 'Email já cadastrado',
+            message: 'Já existe um usuário cadastrado com este email'
+          })
+        }
+
+        // Criar funcionário primeiro
+        const { data: novoFuncionario, error: funcionarioError } = await supabaseAdmin
+          .from('funcionarios')
+          .insert([funcionarioData])
+          .select()
+          .single()
+
+        if (funcionarioError) {
+          return res.status(500).json({
+            error: 'Erro ao criar funcionário',
+            message: funcionarioError.message
+          })
+        }
+
+        // Mapear turno da tabela funcionarios para usuarios
+        const mapearTurno = (turnoFuncionario) => {
+          switch (turnoFuncionario) {
+            case 'Diurno': return 'Manhã'
+            case 'Noturno': return 'Noite'
+            case 'Sob Demanda': return 'Integral'
+            default: return 'Manhã' // Valor padrão
+          }
+        }
+
+        // Criar usuário vinculado ao funcionário
+        const usuarioData = {
+          nome: value.nome,
+          email: value.email,
+          cpf: value.cpf || null,
+          telefone: value.telefone || null,
+          cargo: value.cargo,
+          turno: mapearTurno(value.turno),
+          data_admissao: value.data_admissao || null,
+          salario: value.salario || null,
+          status: value.status,
+          funcionario_id: novoFuncionario.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
+        const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .insert(usuarioData)
+          .select()
+          .single()
+
+        if (usuarioError) {
+          // Se falhou ao criar usuário, tentar remover o funcionário criado
+          await supabaseAdmin
+            .from('funcionarios')
+            .delete()
+            .eq('id', novoFuncionario.id)
+          
+          return res.status(500).json({
+            error: 'Erro ao criar usuário',
+            message: usuarioError.message
+          })
+        }
+
+        usuarioId = novoUsuario.id
+
+        // Atribuir perfil baseado no cargo do funcionário
+        let perfilId = 4 // Operador por padrão
+        switch (value.cargo) {
+          case 'Supervisor':
+            perfilId = 3
+            break
+          case 'Operador':
+            perfilId = 4
+            break
+          default:
+            perfilId = 4 // Operador para outros cargos
+        }
+
+        const { error: perfilError } = await supabaseAdmin
+          .from('usuario_perfis')
+          .insert({
+            usuario_id: usuarioId,
+            perfil_id: perfilId,
+            status: 'Ativa',
+            data_atribuicao: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+
+        if (perfilError) {
+          console.error('Erro ao atribuir perfil ao usuário:', perfilError)
+          // Não falhar a criação do funcionário por causa disso
+        }
+
+        res.status(201).json({
+          success: true,
+          data: {
+            ...novoFuncionario,
+            usuario_criado: true,
+            usuario_id: usuarioId
+          },
+          message: 'Funcionário e usuário criados com sucesso'
+        })
+
+      } catch (usuarioError) {
+        console.error('Erro ao criar usuário:', usuarioError)
+        return res.status(500).json({
+          error: 'Erro ao criar usuário',
+          message: usuarioError.message
+        })
+      }
+    } else {
+      // Criar apenas funcionário sem usuário
+      const { data, error: createError } = await supabaseAdmin
+        .from('funcionarios')
+        .insert([funcionarioData])
+        .select()
+        .single()
+
+      if (createError) {
+        return res.status(500).json({
+          error: 'Erro ao criar funcionário',
+          message: createError.message
+        })
+      }
+
+      res.status(201).json({
+        success: true,
+        data: {
+          ...data,
+          usuario_criado: false
+        },
+        message: 'Funcionário criado com sucesso'
       })
     }
-
-    res.status(201).json({
-      success: true,
-      data
-    })
   } catch (error) {
     console.error('Erro ao criar funcionário:', error)
     res.status(500).json({
@@ -485,6 +653,9 @@ router.put('/:id', async (req, res) => {
       })
     }
 
+    // Filtrar campos que não devem ser salvos na tabela funcionarios
+    const { criar_usuario, usuario_senha, ...funcionarioData } = value
+
     // Verificar se CPF já existe em outro funcionário (se fornecido)
     if (value.cpf) {
       const { data: existingFuncionario } = await supabaseAdmin
@@ -506,7 +677,7 @@ router.put('/:id', async (req, res) => {
     const { data, error: updateError } = await supabaseAdmin
       .from('funcionarios')
       .update({
-        ...value,
+        ...funcionarioData,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)

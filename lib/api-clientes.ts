@@ -17,8 +17,19 @@ export interface ClienteBackend {
   contato_cpf?: string
   contato_telefone?: string
   status?: string
+  contato_usuario_id?: number
   created_at: string
   updated_at: string
+  // Campos adicionais retornados pela API
+  usuario_criado?: boolean
+  usuario_id?: number
+  usuario_existe?: boolean
+  usuario?: {
+    id: number
+    nome: string
+    email: string
+    status: string
+  }
 }
 
 export interface ClienteCreateData {
@@ -35,6 +46,8 @@ export interface ClienteCreateData {
   contato_cpf?: string
   contato_telefone?: string
   status?: string
+  criar_usuario?: boolean
+  usuario_senha?: string
 }
 
 export interface ClienteUpdateData {
@@ -70,6 +83,8 @@ export interface ClienteFormData {
   contato_cpf?: string
   contato_telefone?: string
   status?: string
+  criar_usuario?: boolean
+  usuario_senha?: string
 }
 
 export interface ClientesResponse {

@@ -19,7 +19,10 @@ const clienteSchema = Joi.object({
   contato_email: Joi.string().email().allow('').optional(), // Email do representante
   contato_cpf: Joi.string().allow('').optional(), // CPF do representante
   contato_telefone: Joi.string().allow('').optional(), // Telefone do representante
-  status: Joi.string().valid('ativo', 'inativo', 'bloqueado', 'pendente').default('ativo').optional()
+  status: Joi.string().valid('ativo', 'inativo', 'bloqueado', 'pendente').default('ativo').optional(),
+  // Campos para criação do usuário
+  criar_usuario: Joi.boolean().default(true).optional(),
+  usuario_senha: Joi.string().min(6).when('criar_usuario', { is: true, then: Joi.required(), otherwise: Joi.optional() })
 })
 
 /**
@@ -66,7 +69,15 @@ router.get('/', authenticateToken, requirePermission('visualizar_clientes'), asy
     const offset = (page - 1) * limit
     let query = supabaseAdmin
       .from('clientes')
-      .select('*', { count: 'exact' })
+      .select(`
+        *,
+        usuario:usuarios!contato_usuario_id(
+          id,
+          nome,
+          email,
+          status
+        )
+      `, { count: 'exact' })
 
     // Aplicar filtro de busca
     if (req.query.search) {
@@ -90,11 +101,18 @@ router.get('/', authenticateToken, requirePermission('visualizar_clientes'), asy
       })
     }
 
+    // Adicionar informações sobre usuário existente para cada cliente
+    const clientesComUsuario = (data || []).map(cliente => ({
+      ...cliente,
+      usuario_existe: !!cliente.contato_usuario_id,
+      usuario_criado: !!cliente.contato_usuario_id
+    }))
+
     const totalPages = Math.ceil(count / limit)
 
     res.json({
       success: true,
-      data: data || [],
+      data: clientesComUsuario,
       pagination: {
         page,
         limit,
@@ -138,7 +156,15 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_clientes'), 
 
     const { data, error } = await supabaseAdmin
       .from('clientes')
-      .select('*')
+      .select(`
+        *,
+        usuario:usuarios!contato_usuario_id(
+          id,
+          nome,
+          email,
+          status
+        )
+      `)
       .eq('id', id)
       .single()
 
@@ -155,9 +181,16 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_clientes'), 
       })
     }
 
+    // Adicionar informações sobre o usuário vinculado
+    const responseData = {
+      ...data,
+      usuario_existe: !!data.contato_usuario_id,
+      usuario_criado: !!data.contato_usuario_id
+    }
+
     res.json({
       success: true,
-      data
+      data: responseData
     })
   } catch (error) {
     console.error('Erro ao buscar cliente:', error)
@@ -211,19 +244,107 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
       })
     }
 
-    const clienteData = {
-      ...value,
+    const { criar_usuario, usuario_senha, ...clienteData } = value
+
+    // Iniciar transação
+    let usuarioId = null
+
+    // Criar usuário se solicitado
+    if (criar_usuario && value.contato && value.contato_email) {
+      try {
+        // Verificar se já existe um usuário com este email
+        const { data: existingUser } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('email', value.contato_email)
+          .single()
+
+        if (existingUser) {
+          return res.status(400).json({
+            error: 'Email já cadastrado',
+            message: 'Já existe um usuário cadastrado com este email'
+          })
+        }
+
+        // Criar usuário
+        const usuarioData = {
+          nome: value.contato,
+          email: value.contato_email,
+          cpf: value.contato_cpf || null,
+          telefone: value.contato_telefone || null,
+          endereco: value.endereco || null,
+          cidade: value.cidade || null,
+          estado: value.estado || null,
+          cep: value.cep || null,
+          status: 'Ativo',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
+        const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .insert(usuarioData)
+          .select()
+          .single()
+
+        if (usuarioError) {
+          return res.status(500).json({
+            error: 'Erro ao criar usuário',
+            message: usuarioError.message
+          })
+        }
+
+        usuarioId = novoUsuario.id
+
+        // Atribuir perfil de cliente ao usuário
+        const { error: perfilError } = await supabaseAdmin
+          .from('usuario_perfis')
+          .insert({
+            usuario_id: usuarioId,
+            perfil_id: 6, // ID do perfil "Cliente"
+            status: 'Ativa',
+            data_atribuicao: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+
+        if (perfilError) {
+          console.error('Erro ao atribuir perfil ao usuário:', perfilError)
+          // Não falhar a criação do cliente por causa disso
+        }
+
+      } catch (usuarioError) {
+        console.error('Erro ao criar usuário:', usuarioError)
+        return res.status(500).json({
+          error: 'Erro ao criar usuário',
+          message: usuarioError.message
+        })
+      }
+    }
+
+    // Criar cliente
+    const clienteInsertData = {
+      ...clienteData,
+      contato_usuario_id: usuarioId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
 
     const { data, error: insertError } = await supabaseAdmin
       .from('clientes')
-      .insert(clienteData)
+      .insert(clienteInsertData)
       .select()
       .single()
 
     if (insertError) {
+      // Se falhou ao criar cliente, tentar remover o usuário criado
+      if (usuarioId) {
+        await supabaseAdmin
+          .from('usuarios')
+          .delete()
+          .eq('id', usuarioId)
+      }
+      
       return res.status(500).json({
         error: 'Erro ao criar cliente',
         message: insertError.message
@@ -232,8 +353,12 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
 
     res.status(201).json({
       success: true,
-      data,
-      message: 'Cliente criado com sucesso'
+      data: {
+        ...data,
+        usuario_criado: !!usuarioId,
+        usuario_id: usuarioId
+      },
+      message: usuarioId ? 'Cliente e usuário criados com sucesso' : 'Cliente criado com sucesso'
     })
   } catch (error) {
     console.error('Erro ao criar cliente:', error)
@@ -294,8 +419,11 @@ router.put('/:id', authenticateToken, requirePermission('editar_clientes'), asyn
       })
     }
 
+    // Filtrar campos que não devem ser salvos na tabela clientes
+    const { criar_usuario, usuario_senha, ...clienteData } = value
+
     const updateData = {
-      ...value,
+      ...clienteData,
       updated_at: new Date().toISOString()
     }
 

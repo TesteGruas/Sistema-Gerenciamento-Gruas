@@ -64,10 +64,25 @@ interface FuncionarioRH {
   cidade?: string
   estado?: string
   cep?: string
-  status: 'ativo' | 'inativo' | 'férias' | 'licença'
-  obra_atual?: string
-  turno?: 'manhã' | 'tarde' | 'noite' | 'integral'
+  status: 'Ativo' | 'Inativo' | 'Afastado' | 'Demitido'
+  turno?: 'Manhã' | 'Tarde' | 'Noite' | 'Integral'
   observacoes?: string
+  created_at: string
+  updated_at: string
+  usuario?: {
+    id: number
+    nome: string
+    email: string
+    status: string
+  }
+  obra_atual?: {
+    id: number
+    nome: string
+    status: string
+    cliente: {
+      nome: string
+    }
+  }
 }
 
 interface SalarioDetalhado {
@@ -139,165 +154,45 @@ export default function FuncionarioDetalhesPage() {
   const [loading, setLoading] = useState(true)
   const [isEditMode, setIsEditMode] = useState(false)
 
-  // Dados mockados para demonstração
+  // Carregar dados reais do funcionário
   useEffect(() => {
-    const funcionarioId = params.id as string
-    
-    // Simular carregamento
-    setTimeout(() => {
-      setFuncionario({
-        id: parseInt(funcionarioId),
-        nome: "Carlos Eduardo Menezes",
-        cpf: "123.456.789-00",
-        cargo: "Supervisor",
-        departamento: "Operações",
-        salario: 5000,
-        data_admissao: "2024-10-23",
-        telefone: "(11) 99999-9999",
-        email: "carlos.menezes@construtoraatlantica.com.br",
-        endereco: "Rua das Flores, 123",
-        cidade: "São Paulo",
-        estado: "SP",
-        cep: "01234-567",
-        status: "ativo",
-        obra_atual: "Residencial Atlântica",
-        turno: "integral",
-        observacoes: "Supervisor experiente"
-      })
+    const carregarFuncionario = async () => {
+      try {
+        setLoading(true)
+        const funcionarioId = parseInt(params.id as string)
+        const funcionarioData = await apiRH.buscarFuncionario(funcionarioId)
+        
+        setFuncionario(funcionarioData)
+        
+        // TODO: Implementar carregamento de dados relacionados
+        // setSalarios([])
+        // setBeneficios([])
+        // setDocumentos([])
+        // setPontos([])
+        
+      } catch (error) {
+        console.error('Erro ao carregar funcionário:', error)
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar dados do funcionário",
+          variant: "destructive"
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
 
-      setSalarios([
-        {
-          id: 1,
-          mes: "2024-11",
-          salarioBase: 5000,
-          horasTrabalhadas: 176,
-          horasExtras: 8,
-          valorHoraExtra: 28.41,
-          totalProventos: 5227.28,
-          totalDescontos: 1045.46,
-          salarioLiquido: 4181.82,
-          status: "pago",
-          dataPagamento: "2024-11-05",
-          descontos: {
-            inss: 550.00,
-            irrf: 0,
-            valeTransporte: 300.00,
-            valeRefeicao: 195.46,
-            outros: 0
-          }
-        },
-        {
-          id: 2,
-          mes: "2024-10",
-          salarioBase: 5000,
-          horasTrabalhadas: 176,
-          horasExtras: 4,
-          valorHoraExtra: 28.41,
-          totalProventos: 5113.64,
-          totalDescontos: 1022.73,
-          salarioLiquido: 4090.91,
-          status: "pago",
-          dataPagamento: "2024-10-05",
-          descontos: {
-            inss: 550.00,
-            irrf: 0,
-            valeTransporte: 300.00,
-            valeRefeicao: 172.73,
-            outros: 0
-          }
-        }
-      ])
-
-      setBeneficios([
-        {
-          id: "1",
-          tipo: "plano-saude",
-          descricao: "Plano de Saúde Unimed",
-          valor: 200.00,
-          dataInicio: "2024-10-01",
-          ativo: true,
-          observacoes: "Cobertura nacional"
-        },
-        {
-          id: "2",
-          tipo: "plano-odonto",
-          descricao: "Plano Odontológico",
-          valor: 50.00,
-          dataInicio: "2024-10-01",
-          ativo: true
-        },
-        {
-          id: "3",
-          tipo: "vale-transporte",
-          descricao: "Vale Transporte",
-          valor: 300.00,
-          dataInicio: "2024-10-01",
-          ativo: true
-        }
-      ])
-
-      setDocumentos([
-        {
-          id: "1",
-          tipo: "rg",
-          nome: "Registro Geral",
-          numero: "12.345.678-9",
-          dataEmissao: "2020-01-15",
-          dataVencimento: "2030-01-15"
-        },
-        {
-          id: "2",
-          tipo: "cpf",
-          nome: "CPF",
-          numero: "123.456.789-00",
-          dataEmissao: "2018-03-10"
-        },
-        {
-          id: "3",
-          tipo: "ctps",
-          nome: "Carteira de Trabalho",
-          numero: "123456789",
-          dataEmissao: "2019-05-20"
-        }
-      ])
-
-      setPontos([
-        {
-          id: "1",
-          data: "2024-11-15",
-          entrada: "08:00",
-          saida: "17:00",
-          entradaAlmoco: "12:00",
-          saidaAlmoco: "13:00",
-          horasTrabalhadas: 8,
-          horasExtras: 0,
-          obra: "Residencial Atlântica",
-          status: "normal"
-        },
-        {
-          id: "2",
-          data: "2024-11-14",
-          entrada: "08:00",
-          saida: "18:00",
-          entradaAlmoco: "12:00",
-          saidaAlmoco: "13:00",
-          horasTrabalhadas: 8,
-          horasExtras: 1,
-          obra: "Residencial Atlântica",
-          status: "hora-extra"
-        }
-      ])
-
-      setLoading(false)
-    }, 1000)
-  }, [params.id])
+    if (params.id) {
+      carregarFuncionario()
+    }
+  }, [params.id, toast])
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ativo': return 'bg-green-100 text-green-800'
-      case 'inativo': return 'bg-gray-100 text-gray-800'
-      case 'férias': return 'bg-blue-100 text-blue-800'
-      case 'licença': return 'bg-yellow-100 text-yellow-800'
+      case 'Ativo': return 'bg-green-100 text-green-800'
+      case 'Inativo': return 'bg-gray-100 text-gray-800'
+      case 'Afastado': return 'bg-yellow-100 text-yellow-800'
+      case 'Demitido': return 'bg-red-100 text-red-800'
       case 'calculado': return 'bg-blue-100 text-blue-800'
       case 'pago': return 'bg-green-100 text-green-800'
       case 'pendente': return 'bg-yellow-100 text-yellow-800'
@@ -311,10 +206,10 @@ export default function FuncionarioDetalhesPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'ativo': return <UserCheck className="w-4 h-4" />
-      case 'inativo': return <UserX className="w-4 h-4" />
-      case 'férias': return <Calendar className="w-4 h-4" />
-      case 'licença': return <AlertCircle className="w-4 h-4" />
+      case 'Ativo': return <UserCheck className="w-4 h-4" />
+      case 'Inativo': return <UserX className="w-4 h-4" />
+      case 'Afastado': return <AlertCircle className="w-4 h-4" />
+      case 'Demitido': return <UserX className="w-4 h-4" />
       case 'calculado': return <Calculator className="w-4 h-4" />
       case 'pago': return <CheckCircle className="w-4 h-4" />
       case 'pendente': return <AlertCircle className="w-4 h-4" />
@@ -492,7 +387,23 @@ export default function FuncionarioDetalhesPage() {
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Obra Atual</Label>
-                    <p className="text-sm">{funcionario.obra_atual || 'Sem obra'}</p>
+                    <p className="text-sm">{funcionario.obra_atual?.nome || 'Sem obra'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Usuário do Sistema</Label>
+                    <div className="flex items-center gap-2">
+                      {funcionario.usuario ? (
+                        <>
+                          <UserCheck className="w-4 h-4 text-green-600" />
+                          <span className="text-sm text-green-600">{funcionario.usuario.email}</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserX className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-500">Sem usuário</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -583,71 +494,79 @@ export default function FuncionarioDetalhesPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mês</TableHead>
-                    <TableHead>Salário Base</TableHead>
-                    <TableHead>Horas Extras</TableHead>
-                    <TableHead>Proventos</TableHead>
-                    <TableHead>Descontos</TableHead>
-                    <TableHead>Líquido</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {salarios.map((salario) => (
-                    <TableRow key={salario.id}>
-                      <TableCell>
-                        <span className="font-medium">
-                          {format(new Date(salario.mes + '-01'), 'MMM/yyyy', { locale: ptBR })}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">R$ {salario.salarioBase.toLocaleString('pt-BR')}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{salario.horasExtras}h</div>
-                          <div className="text-orange-600">R$ {salario.valorHoraExtra.toFixed(2)}/h</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium text-green-600">
-                          R$ {salario.totalProventos.toLocaleString('pt-BR')}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium text-red-600">
-                          R$ {salario.totalDescontos.toLocaleString('pt-BR')}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-bold text-blue-600">
-                          R$ {salario.salarioLiquido.toLocaleString('pt-BR')}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${getStatusColor(salario.status)} border`}>
-                          {getStatusIcon(salario.status)}
-                          <span className="ml-1">{salario.status}</span>
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              {salarios.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mês</TableHead>
+                      <TableHead>Salário Base</TableHead>
+                      <TableHead>Horas Extras</TableHead>
+                      <TableHead>Proventos</TableHead>
+                      <TableHead>Descontos</TableHead>
+                      <TableHead>Líquido</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {salarios.map((salario) => (
+                      <TableRow key={salario.id}>
+                        <TableCell>
+                          <span className="font-medium">
+                            {format(new Date(salario.mes + '-01'), 'MMM/yyyy', { locale: ptBR })}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">R$ {salario.salarioBase.toLocaleString('pt-BR')}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div>{salario.horasExtras}h</div>
+                            <div className="text-orange-600">R$ {salario.valorHoraExtra.toFixed(2)}/h</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium text-green-600">
+                            R$ {salario.totalProventos.toLocaleString('pt-BR')}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium text-red-600">
+                            R$ {salario.totalDescontos.toLocaleString('pt-BR')}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-bold text-blue-600">
+                            R$ {salario.salarioLiquido.toLocaleString('pt-BR')}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getStatusColor(salario.status)} border`}>
+                            {getStatusIcon(salario.status)}
+                            <span className="ml-1">{salario.status}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Calculator className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum registro de salário encontrado</p>
+                  <p className="text-sm">Os dados de salários serão implementados em breve</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -668,42 +587,50 @@ export default function FuncionarioDetalhesPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {beneficios.map((beneficio) => (
-                  <Card key={beneficio.id}>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Gift className="w-5 h-5" />
-                        {beneficio.descricao}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Valor:</span>
-                          <span className="font-semibold">R$ {beneficio.valor.toLocaleString('pt-BR')}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Data Início:</span>
-                          <span className="text-sm">{format(new Date(beneficio.dataInicio), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Status:</span>
-                          <Badge className={beneficio.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                            {beneficio.ativo ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                        </div>
-                        {beneficio.observacoes && (
-                          <div>
-                            <span className="text-sm text-gray-600">Observações:</span>
-                            <p className="text-sm">{beneficio.observacoes}</p>
+              {beneficios.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {beneficios.map((beneficio) => (
+                    <Card key={beneficio.id}>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Gift className="w-5 h-5" />
+                          {beneficio.descricao}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Valor:</span>
+                            <span className="font-semibold">R$ {beneficio.valor.toLocaleString('pt-BR')}</span>
                           </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Data Início:</span>
+                            <span className="text-sm">{format(new Date(beneficio.dataInicio), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Status:</span>
+                            <Badge className={beneficio.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                              {beneficio.ativo ? 'Ativo' : 'Inativo'}
+                            </Badge>
+                          </div>
+                          {beneficio.observacoes && (
+                            <div>
+                              <span className="text-sm text-gray-600">Observações:</span>
+                              <p className="text-sm">{beneficio.observacoes}</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Gift className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum benefício cadastrado</p>
+                  <p className="text-sm">Os benefícios serão implementados em breve</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -724,58 +651,66 @@ export default function FuncionarioDetalhesPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Data Emissão</TableHead>
-                    <TableHead>Data Vencimento</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {documentos.map((documento) => (
-                    <TableRow key={documento.id}>
-                      <TableCell>
-                        <Badge className={`${getTipoDocumentoColor(documento.tipo)} border`}>
-                          {documento.tipo}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">{documento.nome}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{documento.numero}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {format(new Date(documento.dataEmissao), 'dd/MM/yyyy', { locale: ptBR })}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {documento.dataVencimento ? format(new Date(documento.dataVencimento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm">
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Download className="w-4 h-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              {documentos.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Número</TableHead>
+                      <TableHead>Data Emissão</TableHead>
+                      <TableHead>Data Vencimento</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {documentos.map((documento) => (
+                      <TableRow key={documento.id}>
+                        <TableCell>
+                          <Badge className={`${getTipoDocumentoColor(documento.tipo)} border`}>
+                            {documento.tipo}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">{documento.nome}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{documento.numero}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {format(new Date(documento.dataEmissao), 'dd/MM/yyyy', { locale: ptBR })}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {documento.dataVencimento ? format(new Date(documento.dataVencimento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <Download className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum documento cadastrado</p>
+                  <p className="text-sm">Os documentos serão implementados em breve</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -788,64 +723,72 @@ export default function FuncionarioDetalhesPage() {
               <CardDescription>Controle de frequência e horas trabalhadas</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Entrada</TableHead>
-                    <TableHead>Saída</TableHead>
-                    <TableHead>Almoço</TableHead>
-                    <TableHead>Horas</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pontos.map((ponto) => (
-                    <TableRow key={ponto.id}>
-                      <TableCell>
-                        <span className="text-sm">
-                          {format(new Date(ponto.data), 'dd/MM/yyyy', { locale: ptBR })}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{ponto.entrada}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{ponto.saida}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {ponto.entradaAlmoco && ponto.saidaAlmoco 
-                            ? `${ponto.entradaAlmoco} - ${ponto.saidaAlmoco}`
-                            : '-'
-                          }
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{ponto.horasTrabalhadas}h</div>
-                          {ponto.horasExtras > 0 && (
-                            <div className="text-orange-600">+{ponto.horasExtras}h extra</div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-sm text-gray-600">
-                          <Building2 className="w-3 h-3" />
-                          <span>{ponto.obra || '-'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${getStatusColor(ponto.status)} border`}>
-                          {getStatusIcon(ponto.status)}
-                          <span className="ml-1">{ponto.status}</span>
-                        </Badge>
-                      </TableCell>
+              {pontos.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Entrada</TableHead>
+                      <TableHead>Saída</TableHead>
+                      <TableHead>Almoço</TableHead>
+                      <TableHead>Horas</TableHead>
+                      <TableHead>Obra</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {pontos.map((ponto) => (
+                      <TableRow key={ponto.id}>
+                        <TableCell>
+                          <span className="text-sm">
+                            {format(new Date(ponto.data), 'dd/MM/yyyy', { locale: ptBR })}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{ponto.entrada}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{ponto.saida}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {ponto.entradaAlmoco && ponto.saidaAlmoco 
+                              ? `${ponto.entradaAlmoco} - ${ponto.saidaAlmoco}`
+                              : '-'
+                            }
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div>{ponto.horasTrabalhadas}h</div>
+                            {ponto.horasExtras > 0 && (
+                              <div className="text-orange-600">+{ponto.horasExtras}h extra</div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-sm text-gray-600">
+                            <Building2 className="w-3 h-3" />
+                            <span>{ponto.obra || '-'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getStatusColor(ponto.status)} border`}>
+                            {getStatusIcon(ponto.status)}
+                            <span className="ml-1">{ponto.status}</span>
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Clock className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum registro de ponto encontrado</p>
+                  <p className="text-sm">Os registros de ponto serão implementados em breve</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

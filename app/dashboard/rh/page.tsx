@@ -49,9 +49,11 @@ import {
   Upload
 } from "lucide-react"
 import { apiRH } from "@/lib/api-rh"
+import { funcionariosApi, type FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 
 interface FuncionarioRH {
   id: number
@@ -67,10 +69,25 @@ interface FuncionarioRH {
   cidade?: string
   estado?: string
   cep?: string
-  status: 'ativo' | 'inativo' | 'férias' | 'licença'
-  obra_atual?: string
-  turno?: 'manhã' | 'tarde' | 'noite' | 'integral'
+  status: 'Ativo' | 'Inativo' | 'Afastado' | 'Demitido'
+  turno?: 'Manhã' | 'Tarde' | 'Noite' | 'Integral'
   observacoes?: string
+  created_at: string
+  updated_at: string
+  usuario?: {
+    id: number
+    nome: string
+    email: string
+    status: string
+  }
+  obra_atual?: {
+    id: number
+    nome: string
+    status: string
+    cliente: {
+      nome: string
+    }
+  }
 }
 
 interface SalarioFuncionario {
@@ -151,195 +168,141 @@ export default function RHPage() {
   const [isEditBeneficioDialogOpen, setIsEditBeneficioDialogOpen] = useState(false)
   const [isEditPontoDialogOpen, setIsEditPontoDialogOpen] = useState(false)
   const [isUploadDocumentoDialogOpen, setIsUploadDocumentoDialogOpen] = useState(false)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [funcionarioFormData, setFuncionarioFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    cpf: '',
+    role: 'Operador' as 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras',
+    status: 'Ativo' as 'Ativo' | 'Inativo' | 'Férias',
+    turno: 'Diurno' as 'Diurno' | 'Noturno' | 'Sob Demanda',
+    salary: '',
+    hireDate: '',
+    observations: '',
+    criar_usuario: true,
+    usuario_senha: ''
+  })
   const [selectedFuncionario, setSelectedFuncionario] = useState<FuncionarioRH | null>(null)
   const [selectedSalario, setSelectedSalario] = useState<SalarioFuncionario | null>(null)
   const [selectedBeneficio, setSelectedBeneficio] = useState<any>(null)
   const [selectedPonto, setSelectedPonto] = useState<PontoRegistro | null>(null)
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
+  // Função para criar funcionário
+  const handleCreateFuncionario = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      setSubmitting(true)
+      
+      const funcionarioData: FuncionarioCreateData = {
+        nome: funcionarioFormData.name,
+        cargo: funcionarioFormData.role,
+        telefone: funcionarioFormData.phone,
+        email: funcionarioFormData.email,
+        cpf: funcionarioFormData.cpf,
+        turno: funcionarioFormData.turno,
+        status: funcionarioFormData.status,
+        data_admissao: funcionarioFormData.hireDate,
+        salario: parseFloat(funcionarioFormData.salary) || 0,
+        observacoes: funcionarioFormData.observations,
+        criar_usuario: funcionarioFormData.criar_usuario,
+        usuario_senha: funcionarioFormData.criar_usuario ? funcionarioFormData.usuario_senha : undefined
+      }
+      
+      const response = await funcionariosApi.criarFuncionario(funcionarioData)
+      
+      if (response.success) {
+        const message = "Funcionário criado com sucesso!"
+        
+        toast({
+          title: "Sucesso",
+          description: message,
+        })
+        
+        // Recarregar lista de funcionários
+        const response = await apiRH.listarFuncionarios({
+          page: 1,
+          limit: 100
+        })
+        
+        if (response.success) {
+          setFuncionarios(response.data)
+        }
+        
+        // Resetar formulário e fechar dialog
+        setFuncionarioFormData({
+          name: '',
+          email: '',
+          phone: '',
+          cpf: '',
+          role: 'Operador',
+          status: 'Ativo',
+          turno: 'Diurno',
+          salary: '',
+          hireDate: '',
+          observations: '',
+          criar_usuario: true,
+          usuario_senha: ''
+        })
+        setIsCreateDialogOpen(false)
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar funcionário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar funcionário. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Carregar dados reais dos funcionários
   useEffect(() => {
-    setFuncionarios([
-      {
-        id: 1,
-        nome: "Carlos Eduardo Menezes",
-        cpf: "123.456.789-00",
-        cargo: "Supervisor",
-        departamento: "Operações",
-        salario: 5000,
-        data_admissao: "2024-10-23",
-        telefone: "(11) 99999-9999",
-        email: "carlos.menezes@construtoraatlantica.com.br",
-        endereco: "Rua das Flores, 123",
-        cidade: "São Paulo",
-        estado: "SP",
-        cep: "01234-567",
-        status: "ativo",
-        obra_atual: "Residencial Atlântica",
-        turno: "integral",
-        observacoes: "Supervisor experiente"
-      },
-      {
-        id: 2,
-        nome: "João Marcos Ferreira da Silva",
-        cpf: "987.654.321-00",
-        cargo: "Sinaleiro",
-        departamento: "Operações",
-        salario: 3500,
-        data_admissao: "2024-10-08",
-        telefone: "(11) 88888-8888",
-        email: "joao.ferreira@empresaexemplo.com",
-        endereco: "Av. Principal, 456",
-        cidade: "São Paulo",
-        estado: "SP",
-        cep: "04567-890",
-        status: "ativo",
-        obra_atual: "Residencial Atlântica",
-        turno: "manhã",
-        observacoes: "Sinaleiro especializado"
-      },
-      {
-        id: 3,
-        nome: "Ana Paula",
-        cpf: "456.789.123-00",
-        cargo: "Supervisor",
-        departamento: "Operações",
-        salario: 4500,
-        data_admissao: "2023-03-19",
-        telefone: "(11) 77777-7777",
-        email: "ana@empresa.com",
-        endereco: "Rua das Palmeiras, 789",
-        cidade: "São Paulo",
-        estado: "SP",
-        cep: "07890-123",
-        status: "ativo",
-        obra_atual: "Shopping Center",
-        turno: "tarde",
-        observacoes: "Supervisora de qualidade"
+    const carregarDados = async () => {
+      try {
+        setLoading(true)
+        
+        // Carregar funcionários
+        const response = await apiRH.listarFuncionarios({
+          page: 1,
+          limit: 100
+        })
+        
+        if (response.success) {
+          setFuncionarios(response.data)
+        }
+        
+        // TODO: Implementar carregamento de dados relacionados
+        // setSalarios([])
+        // setPontos([])
+        // setVales([])
+        
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error)
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar dados dos funcionários",
+          variant: "destructive"
+        })
+      } finally {
+        setLoading(false)
       }
-    ])
+    }
 
-    setSalarios([
-      {
-        id: 1,
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes",
-          cargo: "Supervisor"
-        },
-        salarioBase: 5000,
-        horasTrabalhadas: 176,
-        horasExtras: 8,
-        valorHoraExtra: 28.41,
-        totalProventos: 5227.28,
-        totalDescontos: 1045.46,
-        salarioLiquido: 4181.82,
-        mes: "2024-11",
-        status: "pago",
-        dataPagamento: "2024-11-05"
-      },
-      {
-        id: 2,
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva",
-          cargo: "Sinaleiro"
-        },
-        salarioBase: 3500,
-        horasTrabalhadas: 176,
-        horasExtras: 4,
-        valorHoraExtra: 19.89,
-        totalProventos: 3579.56,
-        totalDescontos: 715.91,
-        salarioLiquido: 2863.65,
-        mes: "2024-11",
-        status: "pago",
-        dataPagamento: "2024-11-05"
-      }
-    ])
-
-    setPontos([
-      {
-        id: "1",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes"
-        },
-        data: "2024-11-15",
-        entrada: "08:00",
-        saida: "17:00",
-        entradaAlmoco: "12:00",
-        saidaAlmoco: "13:00",
-        horasTrabalhadas: 8,
-        horasExtras: 0,
-        obra: {
-          id: 1,
-          nome: "Residencial Atlântica"
-        },
-        status: "normal"
-      },
-      {
-        id: "2",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva"
-        },
-        data: "2024-11-15",
-        entrada: "08:15",
-        saida: "17:30",
-        entradaAlmoco: "12:00",
-        saidaAlmoco: "13:00",
-        horasTrabalhadas: 8.25,
-        horasExtras: 0.25,
-        obra: {
-          id: 1,
-          nome: "Residencial Atlântica"
-        },
-        status: "atraso"
-      }
-    ])
-
-    setVales([
-      {
-        id: "1",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes",
-          cargo: "Supervisor"
-        },
-        tipo: "vale-transporte",
-        descricao: "Vale Transporte - Novembro 2024",
-        valor: 200.00,
-        dataSolicitacao: "2024-11-01",
-        dataAprovacao: "2024-11-02",
-        dataPagamento: "2024-11-05",
-        status: "pago",
-        aprovadoPor: "Ana Silva"
-      },
-      {
-        id: "2",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva",
-          cargo: "Sinaleiro"
-        },
-        tipo: "vale-refeicao",
-        descricao: "Vale Refeição - Novembro 2024",
-        valor: 300.00,
-        dataSolicitacao: "2024-11-01",
-        dataAprovacao: "2024-11-02",
-        status: "aprovado",
-        aprovadoPor: "Ana Silva"
-      }
-    ])
-  }, [])
+    carregarDados()
+  }, [toast])
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ativo': return 'bg-green-100 text-green-800'
-      case 'inativo': return 'bg-gray-100 text-gray-800'
-      case 'férias': return 'bg-blue-100 text-blue-800'
-      case 'licença': return 'bg-yellow-100 text-yellow-800'
+      case 'Ativo': return 'bg-green-100 text-green-800'
+      case 'Inativo': return 'bg-gray-100 text-gray-800'
+      case 'Afastado': return 'bg-yellow-100 text-yellow-800'
+      case 'Demitido': return 'bg-red-100 text-red-800'
       case 'calculado': return 'bg-blue-100 text-blue-800'
       case 'pago': return 'bg-green-100 text-green-800'
       case 'pendente': return 'bg-yellow-100 text-yellow-800'
@@ -356,10 +319,10 @@ export default function RHPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'ativo': return <UserCheck className="w-4 h-4" />
-      case 'inativo': return <UserX className="w-4 h-4" />
-      case 'férias': return <Calendar className="w-4 h-4" />
-      case 'licença': return <AlertCircle className="w-4 h-4" />
+      case 'Ativo': return <UserCheck className="w-4 h-4" />
+      case 'Inativo': return <UserX className="w-4 h-4" />
+      case 'Afastado': return <AlertCircle className="w-4 h-4" />
+      case 'Demitido': return <UserX className="w-4 h-4" />
       case 'calculado': return <Calculator className="w-4 h-4" />
       case 'pago': return <CheckCircle className="w-4 h-4" />
       case 'pendente': return <AlertCircle className="w-4 h-4" />
@@ -627,7 +590,7 @@ export default function RHPage() {
             <Download className="w-4 h-4 mr-2" />
             Exportar
           </Button>
-          <Button>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Funcionário
           </Button>
@@ -656,7 +619,7 @@ export default function RHPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Horas Trabalhadas</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {pontos.reduce((acc, p) => acc + p.horasTrabalhadas, 0)}h
+                  0h
                 </p>
               </div>
               <div className="p-3 rounded-full bg-green-500">
@@ -672,7 +635,7 @@ export default function RHPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Salários</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  R$ {salarios.reduce((acc, s) => acc + s.totalProventos, 0).toLocaleString('pt-BR')}
+                  R$ 0,00
                 </p>
               </div>
               <div className="p-3 rounded-full bg-purple-500">
@@ -688,7 +651,7 @@ export default function RHPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Vales Pendentes</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {vales.filter(v => v.status === 'solicitado').length}
+                  0
                 </p>
               </div>
               <div className="p-3 rounded-full bg-orange-500">
@@ -745,10 +708,10 @@ export default function RHPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os Status</SelectItem>
-                  <SelectItem value="ativo">Ativo</SelectItem>
-                  <SelectItem value="inativo">Inativo</SelectItem>
-                  <SelectItem value="férias">Férias</SelectItem>
-                  <SelectItem value="licença">Licença</SelectItem>
+                  <SelectItem value="Ativo">Ativo</SelectItem>
+                  <SelectItem value="Inativo">Inativo</SelectItem>
+                  <SelectItem value="Afastado">Afastado</SelectItem>
+                  <SelectItem value="Demitido">Demitido</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -838,7 +801,7 @@ export default function RHPage() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Building2 className="w-4 h-4" />
-                        <span>{funcionario.obra_atual || 'Sem obra'}</span>
+                        <span>{funcionario.obra_atual?.nome || 'Sem obra'}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Calendar className="w-4 h-4" />
@@ -905,7 +868,7 @@ export default function RHPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>{funcionario.departamento}</TableCell>
-                        <TableCell>{funcionario.obra_atual || '-'}</TableCell>
+                        <TableCell>{funcionario.obra_atual?.nome || '-'}</TableCell>
                         <TableCell>
                           <Badge className={`${getStatusColor(funcionario.status)} border`}>
                             {getStatusIcon(funcionario.status)}
@@ -955,88 +918,96 @@ export default function RHPage() {
               <CardDescription>Controle de salários e pagamentos</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Salário Base</TableHead>
-                    <TableHead>Horas Extras</TableHead>
-                    <TableHead>Proventos</TableHead>
-                    <TableHead>Descontos</TableHead>
-                    <TableHead>Líquido</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {salarios.map((salario) => (
-                    <TableRow key={salario.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="w-8 h-8">
-                            <AvatarImage src={`/api/avatar/${salario.funcionario.id}`} />
-                            <AvatarFallback className="bg-blue-100 text-blue-800 text-xs">
-                              {getInitials(salario.funcionario.nome)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <div className="font-medium">{salario.funcionario.nome}</div>
-                            <div className="text-sm text-gray-500">{salario.funcionario.cargo}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">R$ {salario.salarioBase.toLocaleString('pt-BR')}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{salario.horasExtras}h</div>
-                          <div className="text-orange-600">R$ {salario.valorHoraExtra.toFixed(2)}/h</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium text-green-600">
-                          R$ {salario.totalProventos.toLocaleString('pt-BR')}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium text-red-600">
-                          R$ {salario.totalDescontos.toLocaleString('pt-BR')}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-bold text-blue-600">
-                          R$ {salario.salarioLiquido.toLocaleString('pt-BR')}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${getStatusColor(salario.status)} border`}>
-                          {getStatusIcon(salario.status)}
-                          <span className="ml-1">{salario.status}</span>
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditSalario(salario)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => calcularSalario(salario.funcionario.id)}
-                          >
-                            <Calculator className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              {salarios.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Funcionário</TableHead>
+                      <TableHead>Salário Base</TableHead>
+                      <TableHead>Horas Extras</TableHead>
+                      <TableHead>Proventos</TableHead>
+                      <TableHead>Descontos</TableHead>
+                      <TableHead>Líquido</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {salarios.map((salario) => (
+                      <TableRow key={salario.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="w-8 h-8">
+                              <AvatarImage src={`/api/avatar/${salario.funcionario.id}`} />
+                              <AvatarFallback className="bg-blue-100 text-blue-800 text-xs">
+                                {getInitials(salario.funcionario.nome)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium">{salario.funcionario.nome}</div>
+                              <div className="text-sm text-gray-500">{salario.funcionario.cargo}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">R$ {salario.salarioBase.toLocaleString('pt-BR')}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div>{salario.horasExtras}h</div>
+                            <div className="text-orange-600">R$ {salario.valorHoraExtra.toFixed(2)}/h</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium text-green-600">
+                            R$ {salario.totalProventos.toLocaleString('pt-BR')}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium text-red-600">
+                            R$ {salario.totalDescontos.toLocaleString('pt-BR')}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-bold text-blue-600">
+                            R$ {salario.salarioLiquido.toLocaleString('pt-BR')}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getStatusColor(salario.status)} border`}>
+                            {getStatusIcon(salario.status)}
+                            <span className="ml-1">{salario.status}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditSalario(salario)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => calcularSalario(salario.funcionario.id)}
+                            >
+                              <Calculator className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Calculator className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum registro de salário encontrado</p>
+                  <p className="text-sm">Os dados de salários serão implementados em breve</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1050,7 +1021,7 @@ export default function RHPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total de Horas</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {pontos.reduce((acc, p) => acc + p.horasTrabalhadas, 0)}h
+                      0h
                     </p>
                   </div>
                   <div className="p-3 rounded-full bg-blue-500">
@@ -1066,7 +1037,7 @@ export default function RHPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Horas Extras</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {pontos.reduce((acc, p) => acc + p.horasExtras, 0)}h
+                      0h
                     </p>
                   </div>
                   <div className="p-3 rounded-full bg-orange-500">
@@ -1082,7 +1053,7 @@ export default function RHPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Atrasos</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {pontos.filter(p => p.status === 'atraso').length}
+                      0
                     </p>
                   </div>
                   <div className="p-3 rounded-full bg-red-500">
@@ -1114,47 +1085,7 @@ export default function RHPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[
-                    ...pontos,
-                    {
-                      id: "3",
-                      funcionario: {
-                        id: 3,
-                        nome: "Ana Paula"
-                      },
-                      data: "2024-11-15",
-                      entrada: "08:00",
-                      saida: "17:00",
-                      entradaAlmoco: "12:00",
-                      saidaAlmoco: "13:00",
-                      horasTrabalhadas: 8,
-                      horasExtras: 0,
-                      obra: {
-                        id: 2,
-                        nome: "Shopping Center"
-                      },
-                      status: "normal"
-                    },
-                    {
-                      id: "4",
-                      funcionario: {
-                        id: 4,
-                        nome: "Roberto Silva"
-                      },
-                      data: "2024-11-15",
-                      entrada: "08:30",
-                      saida: "17:30",
-                      entradaAlmoco: "12:00",
-                      saidaAlmoco: "13:00",
-                      horasTrabalhadas: 8,
-                      horasExtras: 0.5,
-                      obra: {
-                        id: 1,
-                        nome: "Residencial Atlântica"
-                      },
-                      status: "atraso"
-                    }
-                  ].map((ponto) => (
+                  {pontos.length > 0 ? pontos.map((ponto) => (
                     <TableRow key={ponto.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -1225,7 +1156,15 @@ export default function RHPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                        <Clock className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <p>Nenhum registro de ponto encontrado</p>
+                        <p className="text-sm">Os registros de ponto serão implementados em breve</p>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -1253,7 +1192,7 @@ export default function RHPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {vales.map((vale) => (
+                  {vales.length > 0 ? vales.map((vale) => (
                     <TableRow key={vale.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -1308,7 +1247,15 @@ export default function RHPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                        <Gift className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <p>Nenhum vale encontrado</p>
+                        <p className="text-sm">Os vales serão implementados em breve</p>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -1738,19 +1685,19 @@ export default function RHPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Funcionários Ativos</span>
                     <span className="font-semibold text-green-600">
-                      {funcionarios.filter(f => f.status === 'ativo').length}
+                      {funcionarios.filter(f => f.status === 'Ativo').length}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Total de Horas</span>
                     <span className="font-semibold text-blue-600">
-                      {pontos.reduce((acc, p) => acc + p.horasTrabalhadas, 0)}h
+                      0h
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Vales Pendentes</span>
                     <span className="font-semibold text-yellow-600">
-                      {vales.filter(v => v.status === 'solicitado').length}
+                      0
                     </span>
                   </div>
                 </div>
@@ -2050,6 +1997,222 @@ export default function RHPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Criação de Funcionário */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Novo Funcionário
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateFuncionario} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name">Nome Completo *</Label>
+                <Input
+                  id="name"
+                  value={funcionarioFormData.name}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, name: e.target.value })}
+                  placeholder="Ex: João Silva"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="email">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={funcionarioFormData.email}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, email: e.target.value })}
+                  placeholder="Ex: joao@empresa.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="phone">Telefone</Label>
+                <Input
+                  id="phone"
+                  value={funcionarioFormData.phone}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, phone: e.target.value })}
+                  placeholder="Ex: (11) 99999-9999"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cpf">CPF</Label>
+                <Input
+                  id="cpf"
+                  value={funcionarioFormData.cpf}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, cpf: e.target.value })}
+                  placeholder="Ex: 000.000.000-00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="role">Cargo *</Label>
+                <Select
+                  value={funcionarioFormData.role}
+                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, role: value as any })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Operador">Operador</SelectItem>
+                    <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
+                    <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
+                    <SelectItem value="Supervisor">Supervisor</SelectItem>
+                    <SelectItem value="Mecânico">Mecânico</SelectItem>
+                    <SelectItem value="Engenheiro">Engenheiro</SelectItem>
+                    <SelectItem value="Chefe de Obras">Chefe de Obras</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="turno">Turno *</Label>
+                <Select
+                  value={funcionarioFormData.turno}
+                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, turno: value as any })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Diurno">Diurno</SelectItem>
+                    <SelectItem value="Noturno">Noturno</SelectItem>
+                    <SelectItem value="Sob Demanda">Sob Demanda</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="status">Status *</Label>
+                <Select
+                  value={funcionarioFormData.status}
+                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, status: value as any })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Ativo">Ativo</SelectItem>
+                    <SelectItem value="Inativo">Inativo</SelectItem>
+                    <SelectItem value="Férias">Férias</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="salary">Salário (R$)</Label>
+                <Input
+                  id="salary"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={funcionarioFormData.salary}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, salary: e.target.value })}
+                  placeholder="Ex: 5000.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="hireDate">Data de Admissão</Label>
+                <Input
+                  id="hireDate"
+                  type="date"
+                  value={funcionarioFormData.hireDate}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, hireDate: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Configuração de Usuário */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Configuração de Usuário</h3>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="criar_usuario"
+                  checked={funcionarioFormData.criar_usuario || false}
+                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, criar_usuario: e.target.checked })}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="criar_usuario" className="text-sm font-medium">
+                  Criar usuário para o funcionário
+                </Label>
+              </div>
+
+              {funcionarioFormData.criar_usuario && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <User className="w-5 h-5 text-blue-600 mt-0.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-blue-900 mb-1">
+                        Criação de Usuário
+                      </h4>
+                      <p className="text-sm text-blue-700 mb-3">
+                        Será criado um usuário para o funcionário com acesso ao sistema baseado no seu cargo.
+                      </p>
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="usuario_senha">Senha Inicial *</Label>
+                          <Input
+                            id="usuario_senha"
+                            type="password"
+                            value={funcionarioFormData.usuario_senha || ''}
+                            onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, usuario_senha: e.target.value })}
+                            placeholder="Mínimo 6 caracteres"
+                            required={funcionarioFormData.criar_usuario}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            O funcionário poderá alterar esta senha no primeiro acesso.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="observations">Observações</Label>
+              <Textarea
+                id="observations"
+                value={funcionarioFormData.observations}
+                onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, observations: e.target.value })}
+                placeholder="Observações sobre o funcionário..."
+                rows={3}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={submitting}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <ButtonLoader text="Criando..." />
+                ) : (
+                  'Criar Funcionário'
+                )}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

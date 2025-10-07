@@ -16,6 +16,16 @@ export interface FuncionarioBackend {
   observacoes?: string
   created_at: string
   updated_at: string
+  // Campos adicionais retornados pela API
+  usuario_criado?: boolean
+  usuario_id?: number
+  usuario_existe?: boolean
+  usuario?: {
+    id: number
+    nome: string
+    email: string
+    status: string
+  }
 }
 
 export interface FuncionarioCreateData {
@@ -29,6 +39,9 @@ export interface FuncionarioCreateData {
   data_admissao?: string
   salario?: number
   observacoes?: string
+  // Campos para criação do usuário
+  criar_usuario?: boolean
+  usuario_senha?: string
 }
 
 export interface FuncionarioUpdateData {
@@ -42,6 +55,9 @@ export interface FuncionarioUpdateData {
   data_admissao?: string
   salario?: number
   observacoes?: string
+  // Campos para criação do usuário (apenas para compatibilidade, não são salvos na tabela)
+  criar_usuario?: boolean
+  usuario_senha?: string
 }
 
 export interface FuncionariosResponse {

@@ -58,7 +58,9 @@ export default function ClientesPage() {
     contato_email: '',
     contato_cpf: '',
     contato_telefone: '',
-    status: 'ativo'
+    status: 'ativo',
+    criar_usuario: true,
+    usuario_senha: ''
   })
   
   // Estados para gerenciar dados da API
@@ -222,7 +224,9 @@ export default function ClientesPage() {
       contato_email: cliente.contato_email || '',
       contato_cpf: cliente.contato_cpf || '',
       contato_telefone: cliente.contato_telefone || '',
-      status: cliente.status || 'ativo'
+      status: cliente.status || 'ativo',
+      criar_usuario: cliente.usuario_existe || false,
+      usuario_senha: ''
     })
     setIsEditDialogOpen(true)
   }
@@ -240,10 +244,13 @@ export default function ClientesPage() {
         telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
         cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
         contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
-        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : ''
+        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
+        // Incluir campos de usuário se estiver criando
+        criar_usuario: clienteFormData.criar_usuario || false,
+        usuario_senha: clienteFormData.criar_usuario ? clienteFormData.usuario_senha : undefined
       }
       
-      await clientesApi.criarCliente(dadosFormatados)
+      const response = await clientesApi.criarCliente(dadosFormatados)
       
       // Recarregar lista de clientes
       await carregarClientes()
@@ -262,13 +269,19 @@ export default function ClientesPage() {
         contato_email: '',
         contato_cpf: '',
         contato_telefone: '',
-        status: 'ativo'
+        status: 'ativo',
+        criar_usuario: true,
+        usuario_senha: ''
       })
       setIsCreateDialogOpen(false)
       
+      const message = response.data?.usuario_criado 
+        ? "Cliente e usuário criados com sucesso! O representante receberá um email com as instruções de acesso."
+        : "Cliente criado com sucesso!"
+      
       toast({
         title: "Informação",
-        description: "Cliente criado com sucesso!",
+        description: message,
         variant: "default"
       })
     } catch (err) {
@@ -1080,21 +1093,65 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
         </div>
       </div>
 
-      {/* Informação sobre Email */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0">
-            <Mail className="w-5 h-5 text-blue-600 mt-0.5" />
-          </div>
-          <div>
-            <h4 className="text-sm font-medium text-blue-900 mb-1">
-              Confirmação por Email
-            </h4>
-            <p className="text-sm text-blue-700">
-              Após a criação da conta, o cliente receberá um email de confirmação com um link para definir sua senha de acesso ao sistema.
-            </p>
-          </div>
+      {/* Configuração de Usuário */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Configuração de Usuário</h3>
+        
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="criar_usuario"
+            checked={formData.criar_usuario || false}
+            onChange={(e) => setFormData({ ...formData, criar_usuario: e.target.checked })}
+            disabled={isEdit && formData.criar_usuario}
+            className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <Label htmlFor="criar_usuario" className={`text-sm font-medium ${isEdit && formData.criar_usuario ? 'text-gray-500' : ''}`}>
+            {isEdit && formData.criar_usuario 
+              ? 'Usuário já criado para o representante' 
+              : 'Criar usuário para o representante'
+            }
+          </Label>
         </div>
+
+        {formData.criar_usuario && (
+          <div className={`border rounded-lg p-4 ${isEdit ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <User className={`w-5 h-5 mt-0.5 ${isEdit ? 'text-green-600' : 'text-blue-600'}`} />
+              </div>
+              <div>
+                <h4 className={`text-sm font-medium mb-1 ${isEdit ? 'text-green-900' : 'text-blue-900'}`}>
+                  {isEdit ? 'Usuário Existente' : 'Criação de Usuário'}
+                </h4>
+                <p className={`text-sm mb-3 ${isEdit ? 'text-green-700' : 'text-blue-700'}`}>
+                  {isEdit 
+                    ? 'Este cliente já possui um usuário vinculado com acesso ao sistema.'
+                    : 'Será criado um usuário para o representante com acesso limitado ao sistema.'
+                  }
+                </p>
+                {!isEdit && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="usuario_senha">Senha Inicial *</Label>
+                      <Input
+                        id="usuario_senha"
+                        type="password"
+                        value={formData.usuario_senha || ''}
+                        onChange={(e) => setFormData({ ...formData, usuario_senha: e.target.value })}
+                        placeholder="Mínimo 6 caracteres"
+                        required={formData.criar_usuario}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        O representante poderá alterar esta senha no primeiro acesso.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Contato */}

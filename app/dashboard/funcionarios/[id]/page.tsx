@@ -63,12 +63,14 @@ export default function FuncionarioDetalhesPage() {
     email: '',
     phone: '',
     cpf: '',
-    role: 'Operador' as 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico',
+    role: 'Operador' as 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras',
     status: 'Ativo' as 'Ativo' | 'Inativo' | 'Férias',
     turno: 'Diurno' as 'Diurno' | 'Noturno' | 'Sob Demanda',
     salary: '',
     hireDate: '',
-    observations: ''
+    observations: '',
+    criar_usuario: false,
+    usuario_senha: ''
   })
 
   // Carregar dados do funcionário
@@ -79,7 +81,7 @@ export default function FuncionarioDetalhesPage() {
   const carregarFuncionario = async () => {
     try {
       setLoading(true)
-      const response = await funcionariosApi.obterFuncionario(funcionarioId)
+      const response = await funcionariosApi.obterFuncionario(parseInt(funcionarioId))
       
       if (response.success) {
         setFuncionario(response.data)
@@ -93,7 +95,9 @@ export default function FuncionarioDetalhesPage() {
           turno: response.data.turno,
           salary: response.data.salario?.toString() || '',
           hireDate: response.data.data_admissao || '',
-          observations: response.data.observacoes || ''
+          observations: response.data.observacoes || '',
+          criar_usuario: response.data.usuario_existe || false,
+          usuario_senha: ''
         })
       }
     } catch (error) {
@@ -116,7 +120,10 @@ export default function FuncionarioDetalhesPage() {
       
       const funcionarioData = converterFuncionarioFrontendParaBackend({
         ...formData,
-        salary: parseFloat(formData.salary) || 0
+        salary: parseFloat(formData.salary) || 0,
+        // Incluir campos de usuário para compatibilidade (serão filtrados no backend)
+        criar_usuario: formData.criar_usuario || false,
+        usuario_senha: formData.criar_usuario ? formData.usuario_senha : undefined
       })
       
       const response = await funcionariosApi.atualizarFuncionario(funcionario.id, funcionarioData)
@@ -178,7 +185,9 @@ export default function FuncionarioDetalhesPage() {
       'Sinaleiro': 'bg-green-100 text-green-800',
       'Técnico Manutenção': 'bg-orange-100 text-orange-800',
       'Supervisor': 'bg-purple-100 text-purple-800',
-      'Mecânico': 'bg-red-100 text-red-800'
+      'Mecânico': 'bg-red-100 text-red-800',
+      'Engenheiro': 'bg-indigo-100 text-indigo-800',
+      'Chefe de Obras': 'bg-yellow-100 text-yellow-800'
     }
     return colors[role as keyof typeof colors] || 'bg-gray-100 text-gray-800'
   }
@@ -342,6 +351,69 @@ export default function FuncionarioDetalhesPage() {
               </div>
             </div>
 
+            {/* Configuração de Usuário */}
+            {isEditMode && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Configuração de Usuário</h3>
+                
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="criar_usuario"
+                    checked={formData.criar_usuario || false}
+                    onChange={(e) => setFormData({ ...formData, criar_usuario: e.target.checked })}
+                    disabled={formData.criar_usuario}
+                    className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <Label htmlFor="criar_usuario" className={`text-sm font-medium ${formData.criar_usuario ? 'text-gray-500' : ''}`}>
+                    {formData.criar_usuario 
+                      ? 'Usuário já criado para o funcionário' 
+                      : 'Criar usuário para o funcionário'
+                    }
+                  </Label>
+                </div>
+
+                {formData.criar_usuario && (
+                  <div className={`border rounded-lg p-4 ${formData.criar_usuario ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <User className={`w-5 h-5 mt-0.5 ${formData.criar_usuario ? 'text-green-600' : 'text-blue-600'}`} />
+                      </div>
+                      <div>
+                        <h4 className={`text-sm font-medium mb-1 ${formData.criar_usuario ? 'text-green-900' : 'text-blue-900'}`}>
+                          {formData.criar_usuario ? 'Usuário Existente' : 'Criação de Usuário'}
+                        </h4>
+                        <p className={`text-sm mb-3 ${formData.criar_usuario ? 'text-green-700' : 'text-blue-700'}`}>
+                          {formData.criar_usuario 
+                            ? 'Este funcionário já possui um usuário vinculado com acesso ao sistema.'
+                            : 'Será criado um usuário para o funcionário com acesso ao sistema baseado no seu cargo.'
+                          }
+                        </p>
+                        {!formData.criar_usuario && (
+                          <div className="space-y-3">
+                            <div>
+                              <Label htmlFor="usuario_senha">Senha Inicial *</Label>
+                              <Input
+                                id="usuario_senha"
+                                type="password"
+                                value={formData.usuario_senha || ''}
+                                onChange={(e) => setFormData({ ...formData, usuario_senha: e.target.value })}
+                                placeholder="Mínimo 6 caracteres"
+                                required={formData.criar_usuario}
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                O funcionário poderá alterar esta senha no primeiro acesso.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <Label htmlFor="observations">Observações</Label>
               <Textarea
@@ -380,6 +452,8 @@ export default function FuncionarioDetalhesPage() {
                   <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
                   <SelectItem value="Supervisor">Supervisor</SelectItem>
                   <SelectItem value="Mecânico">Mecânico</SelectItem>
+                  <SelectItem value="Engenheiro">Engenheiro</SelectItem>
+                  <SelectItem value="Chefe de Obras">Chefe de Obras</SelectItem>
                 </SelectContent>
               </Select>
             </div>
