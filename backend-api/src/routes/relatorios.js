@@ -761,6 +761,79 @@ router.get('/dashboard', async (req, res) => {
       })
     )
 
+    // Buscar últimas atividades do histórico
+    const ultimasAtividades = []
+    
+    // Últimas locações de gruas
+    const { data: ultimasLocacoes, error: locacoesError } = await supabaseAdmin
+      .from('historico_locacoes')
+      .select(`
+        *,
+        obra:obras(nome, cliente:clientes(nome)),
+        funcionario:funcionarios(nome),
+        grua:gruas(name, modelo)
+      `)
+      .order('data_inicio', { ascending: false })
+      .limit(3)
+
+    if (!locacoesError && ultimasLocacoes) {
+      ultimasLocacoes.forEach(locacao => {
+        ultimasAtividades.push({
+          tipo: 'locacao',
+          acao: `Grua ${locacao.grua?.name} ${locacao.tipo_operacao === 'Locacao' ? 'locada' : 'transferida'}`,
+          detalhes: locacao.obra?.nome ? `para obra ${locacao.obra.nome}` : '',
+          timestamp: locacao.data_inicio,
+          usuario: locacao.funcionario?.nome || 'Sistema'
+        })
+      })
+    }
+
+    // Últimos registros de ponto
+    const { data: ultimosPontos, error: pontosError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios(nome, cargo)
+      `)
+      .order('data', { ascending: false })
+      .limit(2)
+
+    if (!pontosError && ultimosPontos) {
+      ultimosPontos.forEach(ponto => {
+        ultimasAtividades.push({
+          tipo: 'ponto',
+          acao: `Registro de ponto - ${ponto.funcionario?.nome}`,
+          detalhes: `${ponto.entrada || 'N/A'} - ${ponto.saida || 'N/A'}`,
+          timestamp: ponto.data,
+          usuario: ponto.funcionario?.nome || 'Sistema'
+        })
+      })
+    }
+
+    // Últimos logs de auditoria
+    const { data: ultimosLogs, error: logsError } = await supabaseAdmin
+      .from('logs_auditoria')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(3)
+
+    if (!logsError && ultimosLogs) {
+      ultimosLogs.forEach(log => {
+        ultimasAtividades.push({
+          tipo: 'auditoria',
+          acao: `${log.acao} em ${log.entidade}`,
+          detalhes: log.entidade_id ? `ID: ${log.entidade_id}` : '',
+          timestamp: log.timestamp,
+          usuario: log.usuario_id ? `Usuário ${log.usuario_id}` : 'Sistema'
+        })
+      })
+    }
+
+    // Ordenar por timestamp e pegar as 5 mais recentes
+    const atividadesOrdenadas = ultimasAtividades
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 5)
+
     // Alertas e notificações
     const alertas = []
     
@@ -797,9 +870,9 @@ router.get('/dashboard', async (req, res) => {
       data: {
         resumo_geral: {
           total_gruas: totalGruas,
-          gruas_ocupadas,
-          gruas_disponiveis,
-          taxa_utilizacao,
+          gruas_ocupadas: gruasOcupadas,
+          gruas_disponiveis: gruasDisponiveis,
+          taxa_utilizacao: taxaUtilizacao,
           valor_total_parque: valorTotalParque,
           receita_mes_atual: receitaMesAtual
         },
@@ -813,6 +886,7 @@ router.get('/dashboard', async (req, res) => {
         },
         top_gruas: topGruas.sort((a, b) => b.taxa_utilizacao - a.taxa_utilizacao),
         alertas,
+        ultimas_atividades: atividadesOrdenadas,
         ultima_atualizacao: new Date().toISOString()
       }
     })

@@ -122,16 +122,22 @@ export const requirePermission = (permission) => {
           'visualizar_funcionarios', 'criar_funcionarios', 'editar_funcionarios', 'excluir_funcionarios',
           'visualizar_equipamentos', 'criar_equipamentos', 'editar_equipamentos', 'excluir_equipamentos',
           'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
-          'usuarios:visualizar', 'usuarios:criar', 'usuarios:editar', 'usuarios:deletar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes'
+          'usuarios:visualizar', 'usuarios:criar', 'usuarios:editar', 'usuarios:deletar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes',
+          'rh:visualizar', 'rh:criar', 'rh:editar', 'rh:deletar',
+          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar'
         ],
         'gerente': [
           'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'movimentar_estoque',
           'visualizar_clientes', 'criar_clientes', 'editar_clientes',
-          'usuarios:visualizar'
+          'usuarios:visualizar',
+          'rh:visualizar', 'rh:criar', 'rh:editar',
+          'historico:visualizar', 'historico:criar', 'historico:editar'
         ],
         'supervisor': [
           'visualizar_estoque', 'visualizar_clientes', 'visualizar_obras',
-          'usuarios:visualizar'
+          'usuarios:visualizar',
+          'rh:visualizar',
+          'historico:visualizar'
         ],
         'operador': [
           'visualizar_estoque', 'visualizar_clientes'
@@ -146,7 +152,9 @@ export const requirePermission = (permission) => {
           'visualizar_funcionarios', 'criar_funcionarios', 'editar_funcionarios', 'excluir_funcionarios',
           'visualizar_equipamentos', 'criar_equipamentos', 'editar_equipamentos', 'excluir_equipamentos',
           'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
-          'usuarios:visualizar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes'
+          'usuarios:visualizar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes',
+          'rh:visualizar', 'rh:criar', 'rh:editar', 'rh:deletar',
+          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar'
         ],
         'user': [
           'visualizar_estoque', 'visualizar_clientes'

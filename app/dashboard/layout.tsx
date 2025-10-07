@@ -19,6 +19,8 @@ import {
   LogOut,
   Home,
   Shield,
+  UserCheck,
+  History,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -31,6 +33,8 @@ const baseNavigation = [
   { name: "Estoque", href: "/dashboard/estoque", icon: Package },
   { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock },
   { name: "Funcionários", href: "/dashboard/funcionarios", icon: Users },
+  { name: "RH", href: "/dashboard/rh", icon: UserCheck },
+  { name: "Histórico", href: "/dashboard/historico", icon: History },
   { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature },
   { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign },
   { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3 },

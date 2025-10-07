@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -23,65 +23,179 @@ import {
   Shield,
   Edit,
   Trash2,
-  Eye
+  Eye,
+  Loader2
 } from "lucide-react"
-import { mockUsers, mockObras, getUserById, getUsersByRole, getUsersByObra } from "@/lib/mock-data"
+import { apiRH } from "@/lib/api-rh"
+import { useToast } from "@/hooks/use-toast"
+
+interface FuncionarioRH {
+  id: number
+  nome: string
+  cpf: string
+  cargo: string
+  departamento: string
+  salario: number
+  data_admissao: string
+  telefone?: string
+  email?: string
+  endereco?: string
+  cidade?: string
+  estado?: string
+  cep?: string
+  status: 'Ativo' | 'Inativo' | 'Afastado' | 'Demitido'
+  turno?: 'Manhã' | 'Tarde' | 'Noite' | 'Integral'
+  obra_atual_id?: number
+  created_at: string
+  updated_at: string
+  usuario?: {
+    id: number
+    nome: string
+    email: string
+    status: string
+  }
+  obra_atual?: {
+    id: number
+    nome: string
+    status: string
+    cliente: {
+      nome: string
+    }
+  }
+}
 
 export default function RHPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedRole, setSelectedRole] = useState("all")
-  const [selectedObra, setSelectedObra] = useState("all")
+  const [selectedStatus, setSelectedStatus] = useState("all")
+  const [selectedDepartamento, setSelectedDepartamento] = useState("all")
+  const [funcionarios, setFuncionarios] = useState<FuncionarioRH[]>([])
+  const [loading, setLoading] = useState(true)
+  const [estatisticas, setEstatisticas] = useState<any>(null)
+  const { toast } = useToast()
 
-  const filteredUsers = mockUsers.filter(user => {
-    const matchesSearch = (user.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (user.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesRole = selectedRole === "all" || user.role === selectedRole
-    const matchesObra = selectedObra === "all" || user.obraId === selectedObra
+  // Carregar dados iniciais
+  useEffect(() => {
+    carregarFuncionarios()
+    carregarEstatisticas()
+  }, [])
+
+  const carregarFuncionarios = async () => {
+    try {
+      setLoading(true)
+      const response = await apiRH.listarFuncionarios({
+        page: 1,
+        limit: 100
+      })
+      setFuncionarios(response.data)
+    } catch (error) {
+      console.error('Erro ao carregar funcionários:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar funcionários",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const carregarEstatisticas = async () => {
+    try {
+      const stats = await apiRH.obterEstatisticas()
+      setEstatisticas(stats)
+    } catch (error) {
+      console.error('Erro ao carregar estatísticas:', error)
+    }
+  }
+
+  const filteredFuncionarios = funcionarios.filter(funcionario => {
+    const matchesSearch = (funcionario.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (funcionario.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = selectedStatus === "all" || funcionario.status === selectedStatus
+    const matchesDepartamento = selectedDepartamento === "all" || funcionario.departamento === selectedDepartamento
     
-    return matchesSearch && matchesRole && matchesObra
+    return matchesSearch && matchesStatus && matchesDepartamento
   })
 
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800'
-      case 'engenheiro': return 'bg-blue-100 text-blue-800'
-      case 'chefe_obras': return 'bg-green-100 text-green-800'
-      case 'funcionario': return 'bg-gray-100 text-gray-800'
+  const getCargoColor = (cargo: string) => {
+    switch (cargo.toLowerCase()) {
+      case 'operador': return 'bg-blue-100 text-blue-800'
+      case 'sinaleiro': return 'bg-green-100 text-green-800'
+      case 'técnico manutenção': return 'bg-purple-100 text-purple-800'
+      case 'supervisor': return 'bg-orange-100 text-orange-800'
+      case 'mecânico': return 'bg-yellow-100 text-yellow-800'
+      case 'engenheiro': return 'bg-indigo-100 text-indigo-800'
+      case 'chefe de obras': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
 
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'admin': return <Shield className="w-4 h-4" />
+  const getCargoIcon = (cargo: string) => {
+    switch (cargo.toLowerCase()) {
+      case 'operador': return <Users className="w-4 h-4" />
+      case 'sinaleiro': return <UserCheck className="w-4 h-4" />
+      case 'técnico manutenção': return <Building2 className="w-4 h-4" />
+      case 'supervisor': return <Shield className="w-4 h-4" />
+      case 'mecânico': return <Building2 className="w-4 h-4" />
       case 'engenheiro': return <Building2 className="w-4 h-4" />
-      case 'chefe_obras': return <UserCheck className="w-4 h-4" />
-      case 'funcionario': return <Users className="w-4 h-4" />
+      case 'chefe de obras': return <Shield className="w-4 h-4" />
       default: return <Users className="w-4 h-4" />
     }
   }
 
   const getStatusColor = (status: string) => {
-    return status === 'ativo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+    switch (status) {
+      case 'Ativo': return 'bg-green-100 text-green-800'
+      case 'Inativo': return 'bg-gray-100 text-gray-800'
+      case 'Afastado': return 'bg-yellow-100 text-yellow-800'
+      case 'Demitido': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
   }
 
   const getStatusIcon = (status: string) => {
-    return status === 'ativo' ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />
+    switch (status) {
+      case 'Ativo': return <UserCheck className="w-4 h-4" />
+      case 'Inativo': return <UserX className="w-4 h-4" />
+      case 'Afastado': return <UserX className="w-4 h-4" />
+      case 'Demitido': return <UserX className="w-4 h-4" />
+      default: return <UserX className="w-4 h-4" />
+    }
   }
 
-  const handleViewDetails = (user: any) => {
-    window.location.href = `/dashboard/rh/${user.id}`
+  const handleViewDetails = (funcionario: FuncionarioRH) => {
+    window.location.href = `/dashboard/rh/${funcionario.id}`
   }
 
-  const handleEdit = (user: any) => {
-    window.location.href = `/dashboard/rh/${user.id}/edit`
+  const handleEdit = (funcionario: FuncionarioRH) => {
+    window.location.href = `/dashboard/rh/${funcionario.id}/edit`
   }
 
   const stats = [
-    { title: "Total de Usuários", value: mockUsers.length, icon: Users, color: "bg-blue-500" },
-    { title: "Administradores", value: mockUsers.filter(u => u.role === 'admin').length, icon: Shield, color: "bg-red-500" },
-    { title: "Engenheiros", value: mockUsers.filter(u => u.role === 'engenheiro').length, icon: Building2, color: "bg-green-500" },
-    { title: "Funcionários Ativos", value: mockUsers.filter(u => u.status === 'ativo').length, icon: UserCheck, color: "bg-purple-500" },
+    { 
+      title: "Total de Funcionários", 
+      value: funcionarios.length, 
+      icon: Users, 
+      color: "bg-blue-500" 
+    },
+    { 
+      title: "Funcionários Ativos", 
+      value: funcionarios.filter(f => f.status === 'Ativo').length, 
+      icon: UserCheck, 
+      color: "bg-green-500" 
+    },
+    { 
+      title: "Departamentos", 
+      value: estatisticas ? Object.keys(estatisticas.por_departamento).length : 0, 
+      icon: Building2, 
+      color: "bg-purple-500" 
+    },
+    { 
+      title: "Em Obras", 
+      value: funcionarios.filter(f => f.obra_atual_id).length, 
+      icon: Shield, 
+      color: "bg-orange-500" 
+    },
   ]
 
   return (
@@ -93,7 +207,7 @@ export default function RHPage() {
         </div>
         <Button 
           className="flex items-center gap-2"
-          onClick={() => window.location.href = '/dashboard/rh/novo'}
+          onClick={() => window.location.href = '/dashboard/usuarios'}
         >
           <Plus className="w-4 h-4" />
           Novo Usuário
@@ -137,31 +251,31 @@ export default function RHPage() {
               </div>
             </div>
             <div>
-              <Label htmlFor="role">Papel</Label>
-              <Select value={selectedRole} onValueChange={setSelectedRole}>
+              <Label htmlFor="status">Status</Label>
+              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Todos os papéis" />
+                  <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os papéis</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="engenheiro">Engenheiro</SelectItem>
-                  <SelectItem value="chefe_obras">Chefe de Obras</SelectItem>
-                  <SelectItem value="funcionario">Funcionário</SelectItem>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="Ativo">Ativo</SelectItem>
+                  <SelectItem value="Inativo">Inativo</SelectItem>
+                  <SelectItem value="Afastado">Afastado</SelectItem>
+                  <SelectItem value="Demitido">Demitido</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label htmlFor="obra">Obra</Label>
-              <Select value={selectedObra} onValueChange={setSelectedObra}>
+              <Label htmlFor="departamento">Departamento</Label>
+              <Select value={selectedDepartamento} onValueChange={setSelectedDepartamento}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Todas as obras" />
+                  <SelectValue placeholder="Todos os departamentos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as obras</SelectItem>
-                  {mockObras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
-                      {obra.name}
+                  <SelectItem value="all">Todos os departamentos</SelectItem>
+                  {Array.from(new Set(funcionarios.map(f => f.departamento))).map((dept) => (
+                    <SelectItem key={dept} value={dept}>
+                      {dept}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -172,8 +286,8 @@ export default function RHPage() {
                 variant="outline" 
                 onClick={() => {
                   setSearchTerm("")
-                  setSelectedRole("all")
-                  setSelectedObra("all")
+                  setSelectedStatus("all")
+                  setSelectedDepartamento("all")
                 }}
                 className="w-full"
               >
@@ -184,73 +298,83 @@ export default function RHPage() {
         </CardContent>
       </Card>
 
-      {/* Lista de Usuários */}
+      {/* Lista de Funcionários */}
       <Card>
         <CardHeader>
-          <CardTitle>Usuários ({filteredUsers.length})</CardTitle>
-          <CardDescription>Lista de todos os usuários do sistema</CardDescription>
+          <CardTitle>Funcionários ({filteredFuncionarios.length})</CardTitle>
+          <CardDescription>Lista de todos os funcionários do sistema</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Usuário</TableHead>
-                <TableHead>Papel</TableHead>
-                <TableHead>Obra</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Último Login</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{user.name}</div>
-                      <div className="text-sm text-gray-500">{user.email}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getRoleColor(user.role)}>
-                      {getRoleIcon(user.role)}
-                      <span className="ml-1 capitalize">{user.role.replace('_', ' ')}</span>
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {user.obraName || '-'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(user.status)}>
-                      {getStatusIcon(user.status)}
-                      <span className="ml-1 capitalize">{user.status}</span>
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('pt-BR') : '-'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetails(user)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(user)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {loading ? (
+            <div className="flex justify-center items-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Funcionário</TableHead>
+                  <TableHead>Cargo</TableHead>
+                  <TableHead>Departamento</TableHead>
+                  <TableHead>Obra Atual</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Admissão</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredFuncionarios.map((funcionario) => (
+                  <TableRow key={funcionario.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{funcionario.nome}</div>
+                        <div className="text-sm text-gray-500">{funcionario.email || '-'}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getCargoColor(funcionario.cargo)}>
+                        {getCargoIcon(funcionario.cargo)}
+                        <span className="ml-1">{funcionario.cargo}</span>
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {funcionario.departamento}
+                    </TableCell>
+                    <TableCell>
+                      {funcionario.obra_atual?.obra.nome || '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(funcionario.status)}>
+                        {getStatusIcon(funcionario.status)}
+                        <span className="ml-1">{funcionario.status}</span>
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {new Date(funcionario.data_admissao).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewDetails(funcionario)}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEdit(funcionario)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
