@@ -135,7 +135,16 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
       }
     }
     
-    throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`)
+    // Criar um erro personalizado que preserva os detalhes
+    const error = new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`)
+    // Adicionar os detalhes do erro como propriedade
+    if (errorData.details) {
+      (error as any).details = errorData.details
+    }
+    if (errorData.error) {
+      (error as any).error = errorData.error
+    }
+    throw error
   }
 
   return response.json()
@@ -211,6 +220,19 @@ export const funcionariosApi = {
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}/${id}`)
     return apiRequest(url, {
       method: 'DELETE',
+    })
+  },
+
+  // Desassociar funcionário de todas as gruas ativas
+  async desassociarFuncionarioDasGruas(id: number): Promise<{ 
+    success: boolean; 
+    message: string; 
+    desassociacoes: number;
+    gruas_desassociadas: any[];
+  }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}/${id}/desassociar-gruas`)
+    return apiRequest(url, {
+      method: 'POST',
     })
   }
 }

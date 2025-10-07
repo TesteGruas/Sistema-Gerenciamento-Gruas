@@ -759,18 +759,80 @@ router.delete('/:id', async (req, res) => {
       })
     }
 
-    // Verificar se funcionário está associado a alguma grua
+    // Verificar se funcionário está associado a alguma grua (diretamente ou através de obra)
     const { data: associacoes } = await supabaseAdmin
       .from('grua_funcionario')
-      .select('id')
+      .select(`
+        id,
+        grua_id,
+        obra_id,
+        status,
+        data_inicio,
+        data_fim,
+        observacoes,
+        gruas (
+          id,
+          modelo,
+          fabricante,
+          tipo,
+          status
+        ),
+        obras (
+          id,
+          nome
+        )
+      `)
       .eq('funcionario_id', id)
       .eq('status', 'Ativo')
 
+    // Verificar se funcionário tem usuário associado
+    const { data: usuarioAssociado } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, email')
+      .eq('funcionario_id', id)
+      .single()
+
+    if (usuarioAssociado) {
+      console.log(`🔧 Funcionário ${funcionario.nome} possui usuário associado (${usuarioAssociado.email}). Excluindo usuário...`)
+      
+      // Excluir usuário associado
+      const { error: deleteUsuarioError } = await supabaseAdmin
+        .from('usuarios')
+        .delete()
+        .eq('funcionario_id', id)
+
+      if (deleteUsuarioError) {
+        console.error('❌ Erro ao excluir usuário do funcionário:', deleteUsuarioError)
+        return res.status(500).json({
+          error: 'Erro ao excluir usuário',
+          message: 'Erro ao excluir usuário associado ao funcionário',
+          details: deleteUsuarioError.message
+        })
+      }
+
+      console.log(`✅ Usuário ${usuarioAssociado.email} do funcionário ${funcionario.nome} excluído com sucesso`)
+    }
+
     if (associacoes && associacoes.length > 0) {
-      return res.status(400).json({
-        error: 'Funcionário em uso',
-        message: 'Não é possível excluir o funcionário pois ele está associado a uma ou mais gruas ativas'
-      })
+      console.log(`🔧 Funcionário ${funcionario.nome} possui ${associacoes.length} associação(ões) ativa(s). Excluindo automaticamente...`)
+      
+      // Excluir todas as associações ativas do funcionário
+      const { error: deleteAssociationsError } = await supabaseAdmin
+        .from('grua_funcionario')
+        .delete()
+        .eq('funcionario_id', id)
+        .eq('status', 'Ativo')
+
+      if (deleteAssociationsError) {
+        console.error('❌ Erro ao excluir associações do funcionário:', deleteAssociationsError)
+        return res.status(500).json({
+          error: 'Erro ao excluir associações',
+          message: 'Erro ao excluir associações ativas do funcionário',
+          details: deleteAssociationsError.message
+        })
+      }
+
+      console.log(`✅ ${associacoes.length} associação(ões) do funcionário ${funcionario.nome} excluída(s) com sucesso`)
     }
 
     // Excluir funcionário
@@ -786,12 +848,171 @@ router.delete('/:id', async (req, res) => {
       })
     }
 
+    // Preparar mensagem de sucesso
+    let mensagem = `Funcionário ${funcionario.nome} excluído com sucesso`
+    let detalhes = []
+    
+    if (usuarioAssociado) {
+      detalhes.push(`usuário ${usuarioAssociado.email}`)
+    }
+    
+    if (associacoes && associacoes.length > 0) {
+      detalhes.push(`${associacoes.length} associação(ões)`)
+    }
+    
+    if (detalhes.length > 0) {
+      mensagem += `. ${detalhes.join(' e ')} foram excluído(s) automaticamente.`
+    }
+
     res.json({
       success: true,
-      message: `Funcionário ${funcionario.nome} excluído com sucesso`
+      message: mensagem,
+      desassociacoes_realizadas: associacoes ? associacoes.length : 0,
+      usuario_excluido: usuarioAssociado ? {
+        id: usuarioAssociado.id,
+        email: usuarioAssociado.email
+      } : null
     })
   } catch (error) {
     console.error('Erro ao excluir funcionário:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/funcionarios/{id}/desassociar-gruas:
+ *   post:
+ *     summary: Desassociar funcionário de todas as gruas ativas
+ *     tags: [Funcionários]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário
+ *     responses:
+ *       200:
+ *         description: Funcionário desassociado das gruas com sucesso
+ *       404:
+ *         description: Funcionário não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/:id/desassociar-gruas', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Verificar se funcionário existe
+    const { data: funcionario, error: checkError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome')
+      .eq('id', id)
+      .single()
+
+    if (checkError) {
+      if (checkError.code === 'PGRST116') {
+        return res.status(404).json({
+          error: 'Funcionário não encontrado',
+          message: 'O funcionário com o ID especificado não existe'
+        })
+      }
+      return res.status(500).json({
+        error: 'Erro ao verificar funcionário',
+        message: checkError.message
+      })
+    }
+
+    // Buscar todas as associações ativas
+    const { data: associacoes } = await supabaseAdmin
+      .from('grua_funcionario')
+      .select(`
+        id,
+        grua_id,
+        obra_id,
+        status,
+        data_inicio,
+        data_fim,
+        observacoes,
+        gruas (
+          id,
+          modelo,
+          fabricante,
+          tipo,
+          status
+        ),
+        obras (
+          id,
+          nome
+        )
+      `)
+      .eq('funcionario_id', id)
+      .eq('status', 'Ativo')
+
+    if (!associacoes || associacoes.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Funcionário não possui associações ativas com gruas',
+        desassociacoes: 0
+      })
+    }
+
+    // Excluir todas as associações ativas do funcionário
+    const { error: deleteError } = await supabaseAdmin
+      .from('grua_funcionario')
+      .delete()
+      .eq('funcionario_id', id)
+      .eq('status', 'Ativo')
+
+    if (deleteError) {
+      return res.status(500).json({
+        error: 'Erro ao excluir associações do funcionário',
+        message: deleteError.message
+      })
+    }
+
+    // Preparar informações das associações que foram desassociadas
+    const desassociacoes = associacoes.map(assoc => {
+      if (assoc.grua_id) {
+        // Associação direta com grua
+        return {
+          id: assoc.grua_id,
+          modelo: assoc.gruas?.modelo || 'Modelo não informado',
+          fabricante: assoc.gruas?.fabricante || 'Fabricante não informado',
+          tipo: assoc.gruas?.tipo || 'Tipo não informado',
+          data_fim: new Date().toISOString().split('T')[0],
+          tipo_associacao: 'grua_direta'
+        }
+      } else if (assoc.obra_id) {
+        // Associação com obra
+        return {
+          id: `obra_${assoc.obra_id}`,
+          modelo: 'N/A',
+          fabricante: 'N/A',
+          tipo: 'Associação com Obra',
+          data_fim: new Date().toISOString().split('T')[0],
+          tipo_associacao: 'obra',
+          obra_id: assoc.obra_id,
+          obra_nome: assoc.obras?.nome || 'Obra não informada'
+        }
+      }
+      return null
+    }).filter(Boolean)
+
+    res.json({
+      success: true,
+      message: `Funcionário ${funcionario.nome} teve ${associacoes.length} associação(ões) excluída(s) com sucesso`,
+      desassociacoes: associacoes.length,
+      detalhes_desassociacoes: desassociacoes
+    })
+  } catch (error) {
+    console.error('Erro ao desassociar funcionário das gruas:', error)
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message
