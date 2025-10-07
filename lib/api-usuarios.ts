@@ -133,10 +133,25 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       
-      if (response.status === 401 || response.status === 403) {
-        console.warn('Token inválido ou expirado');
-        localStorage.removeItem('access_token');
-        // Não redirecionar automaticamente, deixar o componente lidar com o erro
+      // Tratar erro 403 com token inválido ou expirado
+      if (response.status === 403 && errorData.error === "Token inválido ou expirado" && errorData.code === "INVALID_TOKEN") {
+        console.warn('Token inválido ou expirado, removendo dados do localStorage e redirecionando para login...')
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('user_data')
+        localStorage.removeItem('refresh_token')
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
+      }
+      // Tratar outros erros 401/403
+      else if (response.status === 401 || response.status === 403) {
+        console.warn('Erro de autenticação, redirecionando para login...')
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('user_data')
+        localStorage.removeItem('refresh_token')
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
       }
       
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
@@ -147,7 +162,7 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
     console.error('API request error:', error);
     throw error;
   }
-};
+}
 
 // Usuários API
 export const apiUsuarios = {

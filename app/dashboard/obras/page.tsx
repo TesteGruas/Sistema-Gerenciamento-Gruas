@@ -964,25 +964,6 @@ export default function ObrasPage() {
             <Plus className="w-4 h-4" />
             Nova Obra
           </Button>
-          <Button 
-            variant="outline"
-            className="flex items-center gap-2"
-            onClick={() => {
-              console.log('🔍 TESTE - Estado atual:')
-              console.log('  - custosMensais:', custosMensais)
-              console.log('  - custosMensais.length:', custosMensais.length)
-              console.log('  - funcionariosSelecionados:', funcionariosSelecionados)
-              console.log('  - funcionariosSelecionados.length:', funcionariosSelecionados.length)
-              console.log('  - gruaSelecionada:', gruaSelecionada)
-              console.log('  - obraFormData:', obraFormData)
-              console.log('  - obraFormData.gruaId:', obraFormData.gruaId)
-              console.log('  - obraFormData.gruaValue:', obraFormData.gruaValue)
-              console.log('  - obraFormData.monthlyFee:', obraFormData.monthlyFee)
-            }}
-          >
-            <Settings className="w-4 h-4" />
-            Teste Debug
-          </Button>
         </div>
       </div>
 

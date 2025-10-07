@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +37,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 
 export default function FuncionariosPage() {
+  const router = useRouter()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedRole, setSelectedRole] = useState("all")
@@ -521,7 +523,12 @@ export default function FuncionariosPage() {
                 )}
 
                 <div className="pt-2 border-t">
-                  <Button variant="outline" size="sm" className="w-full">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => router.push(`/dashboard/funcionarios/${funcionario.id}`)}
+                  >
                     <Eye className="w-4 h-4 mr-2" />
                     Ver Detalhes
                   </Button>

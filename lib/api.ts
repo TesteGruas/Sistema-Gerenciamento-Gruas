@@ -35,12 +35,26 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
-    // Tratar erros de autenticação
-    if (error.response?.status === 401) {
+    // Tratar erro 403 com token inválido ou expirado
+    if (error.response?.status === 403 && 
+        error.response?.data?.error === "Token inválido ou expirado" && 
+        error.response?.data?.code === "INVALID_TOKEN") {
+      console.warn('Token inválido ou expirado, removendo dados do localStorage e redirecionando para login...')
       if (typeof window !== 'undefined') {
         localStorage.removeItem('access_token')
-        // Redirecionar para a página de login (que está na raiz)
-        window.location.href = '/'
+        localStorage.removeItem('user_data')
+        localStorage.removeItem('refresh_token')
+        window.location.href = '/login'
+      }
+    }
+    // Tratar outros erros de autenticação
+    else if (error.response?.status === 401 || error.response?.status === 403) {
+      console.warn('Erro de autenticação, redirecionando para login...')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('user_data')
+        localStorage.removeItem('refresh_token')
+        window.location.href = '/login'
       }
     }
     return Promise.reject(error)

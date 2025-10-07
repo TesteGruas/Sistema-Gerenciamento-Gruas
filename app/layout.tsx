@@ -9,6 +9,20 @@ export const metadata: Metadata = {
   title: 'Sistema IRBANA',
   description: 'Sistema de Gestão Empresarial',
   generator: 'IRBANA',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'IRBANA PWA',
+  },
+}
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#3b82f6',
 }
 
 export default function RootLayout({
@@ -26,6 +40,23 @@ html {
   --font-mono: ${GeistMono.variable};
 }
         `}</style>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(function(registration) {
+                      console.log('SW registered: ', registration);
+                    })
+                    .catch(function(registrationError) {
+                      console.log('SW registration failed: ', registrationError);
+                    });
+                });
+              }
+            `,
+          }}
+        />
       </head>
       <body>
         <UserProvider>

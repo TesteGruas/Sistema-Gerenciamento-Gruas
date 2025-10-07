@@ -32,7 +32,6 @@ const baseNavigation = [
   { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane },
   { name: "Estoque", href: "/dashboard/estoque", icon: Package },
   { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock },
-  { name: "Funcionários", href: "/dashboard/funcionarios", icon: Users },
   { name: "RH", href: "/dashboard/rh", icon: UserCheck },
   { name: "Histórico", href: "/dashboard/historico", icon: History },
   { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature },
