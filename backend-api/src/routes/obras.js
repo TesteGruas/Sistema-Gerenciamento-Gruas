@@ -28,10 +28,18 @@ const obraSchema = Joi.object({
   responsavel_nome: Joi.string().allow('').optional(),
   created_at: Joi.date().optional(),
   updated_at: Joi.date().optional(),
-  // Dados da grua
+  // Dados da grua (mantido para compatibilidade)
   grua_id: Joi.string().optional(),
   grua_valor: Joi.number().positive().optional(),
   grua_mensalidade: Joi.number().positive().optional(),
+  // Múltiplas gruas
+  gruas: Joi.array().items(
+    Joi.object({
+      grua_id: Joi.string().required(),
+      valor_locacao: Joi.number().positive().required(),
+      taxa_mensal: Joi.number().positive().required()
+    })
+  ).optional(),
   // Dados dos funcionários
   funcionarios: Joi.array().items(
     Joi.object({
@@ -847,12 +855,47 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
 
     console.log('✅ Obra criada com sucesso:', data?.id)
 
-    // Processar dados da grua se fornecidos
-    if (value.grua_id) {
-      console.log('🔧 Processando dados da grua...')
+    // Processar dados das gruas se fornecidos
+    if (value.gruas && value.gruas.length > 0) {
+      console.log('🔧 Processando múltiplas gruas...')
       try {
-        // Aqui você pode criar um registro na tabela grua_obra
-        // Por enquanto, vamos apenas logar os dados
+        console.log('📝 Dados das gruas para processar:', value.gruas)
+        
+        // Processar cada grua
+        for (const grua of value.gruas) {
+          const gruaObraData = {
+            obra_id: data.id,
+            grua_id: grua.grua_id,
+            valor_locacao_mensal: grua.taxa_mensal,
+            data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
+            status: 'Ativa',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+          
+          console.log('📝 Inserindo grua na tabela grua_obra:', gruaObraData)
+          
+          const { data: gruaObraResult, error: gruaObraError } = await supabaseAdmin
+            .from('grua_obra')
+            .insert(gruaObraData)
+            .select()
+            .single()
+          
+          if (gruaObraError) {
+            console.error('❌ Erro ao inserir grua na tabela grua_obra:', gruaObraError)
+          } else {
+            console.log('✅ Grua inserida na tabela grua_obra:', gruaObraResult)
+          }
+        }
+        
+      } catch (gruaError) {
+        console.error('❌ Erro ao processar dados das gruas:', gruaError)
+        // Não falhar a criação da obra por causa das gruas
+      }
+    } else if (value.grua_id) {
+      // Processar grua única (compatibilidade com versão anterior)
+      console.log('🔧 Processando grua única (compatibilidade)...')
+      try {
         console.log('📝 Dados da grua para processar:', {
           obra_id: data.id,
           grua_id: value.grua_id,
@@ -861,7 +904,6 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
           status: 'Ativa'
         })
         
-        // Implementar criação do registro na tabela grua_obra
         const gruaObraData = {
           obra_id: data.id,
           grua_id: value.grua_id,

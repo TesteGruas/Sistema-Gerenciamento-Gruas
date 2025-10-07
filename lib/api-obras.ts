@@ -92,10 +92,16 @@ export interface ObraCreateData {
   observacoes?: string
   responsavel_id?: number
   responsavel_nome?: string
-  // Dados da grua
+  // Dados da grua (mantido para compatibilidade)
   grua_id?: string
   grua_valor?: number
   grua_mensalidade?: number
+  // Múltiplas gruas
+  gruas?: Array<{
+    grua_id: string
+    valor_locacao: number
+    taxa_mensal: number
+  }>
   // Dados dos funcionários
   funcionarios?: Array<{
     id: string
@@ -497,6 +503,7 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
   console.log('🔍 DEBUG - Converter recebeu:', obraFrontend)
   console.log('🔍 DEBUG - Custos mensais recebidos:', obraFrontend.custos_mensais)
   console.log('🔍 DEBUG - Funcionários recebidos:', obraFrontend.funcionarios)
+  console.log('🔍 DEBUG - Gruas selecionadas recebidas:', obraFrontend.gruasSelecionadas)
   console.log('🔍 DEBUG - Dados da grua recebidos:', {
     gruaId: obraFrontend.gruaId,
     gruaValue: obraFrontend.gruaValue,
@@ -508,8 +515,21 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
   console.log('  - gruaId existe?', !!obraFrontend.gruaId)
   console.log('  - gruaValue existe?', !!obraFrontend.gruaValue)
   console.log('  - monthlyFee existe?', !!obraFrontend.monthlyFee)
+  console.log('  - gruasSelecionadas é array?', Array.isArray(obraFrontend.gruasSelecionadas))
+  console.log('  - gruasSelecionadas.length:', obraFrontend.gruasSelecionadas?.length || 0)
   console.log('  - custos_mensais é array?', Array.isArray(obraFrontend.custos_mensais))
   console.log('  - custos_mensais.length:', obraFrontend.custos_mensais?.length || 0)
+  
+  // Processar múltiplas gruas se disponível
+  const gruas = obraFrontend.gruasSelecionadas && Array.isArray(obraFrontend.gruasSelecionadas) 
+    ? obraFrontend.gruasSelecionadas.map((grua: any) => ({
+        grua_id: grua.id,
+        valor_locacao: grua.valor_locacao || 0,
+        taxa_mensal: grua.taxa_mensal || 0
+      }))
+    : []
+  
+  console.log('🔍 DEBUG - Gruas processadas:', gruas)
   
   const result = {
     nome: obraFrontend.name,
@@ -531,18 +551,20 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     observacoes: obraFrontend.observations,
     responsavel_id: obraFrontend.responsavelId ? parseInt(obraFrontend.responsavelId) : undefined,
     responsavel_nome: obraFrontend.responsavelName,
-    // Dados da grua
+    // Dados da grua (mantido para compatibilidade)
     grua_id: obraFrontend.gruaId || null,
     grua_valor: obraFrontend.gruaValue ? parseFloat(obraFrontend.gruaValue) : null,
     grua_mensalidade: obraFrontend.monthlyFee ? parseFloat(obraFrontend.monthlyFee) : null,
-            // Dados dos funcionários
-            funcionarios: obraFrontend.funcionarios && Array.isArray(obraFrontend.funcionarios) ? obraFrontend.funcionarios.map((func: any) => ({
-              id: func.id,
-              userId: func.userId,
-              role: func.role,
-              name: func.name,
-              gruaId: func.gruaId || obraFrontend.gruaId // Usar gruaId do funcionário ou da obra
-            })) : [],
+    // Múltiplas gruas
+    gruas: gruas,
+    // Dados dos funcionários
+    funcionarios: obraFrontend.funcionarios && Array.isArray(obraFrontend.funcionarios) ? obraFrontend.funcionarios.map((func: any) => ({
+      id: func.id,
+      userId: func.userId,
+      role: func.role,
+      name: func.name,
+      gruaId: func.gruaId || obraFrontend.gruaId // Usar gruaId do funcionário ou da obra
+    })) : [],
     // Custos mensais
     custos_mensais: obraFrontend.custos_mensais && Array.isArray(obraFrontend.custos_mensais) ? obraFrontend.custos_mensais : [],
     // Dados para criação automática de cliente se necessário
@@ -557,6 +579,7 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
   console.log('  - grua_id:', result.grua_id)
   console.log('  - grua_valor:', result.grua_valor)
   console.log('  - grua_mensalidade:', result.grua_mensalidade)
+  console.log('  - gruas.length:', result.gruas?.length || 0)
   console.log('  - funcionarios.length:', result.funcionarios?.length || 0)
   console.log('  - custos_mensais.length:', result.custos_mensais?.length || 0)
   return result

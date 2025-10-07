@@ -1079,20 +1079,43 @@ export default function ObrasPage() {
                         {obraComRelacionamentos.gruasVinculadas.slice(0, 2).map((grua: any) => (
                           <div key={grua.id} className="text-xs bg-blue-50 p-2 rounded border">
                             <div className="flex items-center justify-between">
-                              <span className="font-medium">{grua.gruaId}</span>
-                              <Badge variant="default" className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{grua.gruaId}</span>
+                                {grua.grua && (
+                                  <span className="text-gray-500">
+                                    {grua.grua.modelo} - {grua.grua.fabricante}
+                                  </span>
+                                )}
+                              </div>
+                              <Badge 
+                                variant={grua.status === 'Ativa' ? 'default' : 'secondary'} 
+                                className="text-xs"
+                              >
                                 {grua.status}
                               </Badge>
                             </div>
                             <div className="mt-1 text-gray-600">
-                              <div>Mensalidade: R$ {parseFloat(grua.valorLocacaoMensal).toLocaleString('pt-BR')}</div>
+                              <div>Mensalidade: R$ {parseFloat(grua.valorLocacaoMensal || 0).toLocaleString('pt-BR')}</div>
                               <div>Início: {new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR')}</div>
+                              {grua.dataFimLocacao && (
+                                <div>Fim: {new Date(grua.dataFimLocacao).toLocaleDateString('pt-BR')}</div>
+                              )}
                             </div>
                           </div>
                         ))}
                         {obraComRelacionamentos.gruasVinculadas.length > 2 && (
-                          <div className="text-xs text-gray-500">
-                            +{obraComRelacionamentos.gruasVinculadas.length - 2} mais...
+                          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded border">
+                            <div className="flex items-center justify-between">
+                              <span>+{obraComRelacionamentos.gruasVinculadas.length - 2} gruas adicionais</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => window.location.href = `/dashboard/obras/${obra.id}?tab=gruas`}
+                              >
+                                Ver todas
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1138,7 +1161,10 @@ export default function ObrasPage() {
                         className="flex-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 font-medium bg-orange-50 shadow-sm"
                       >
                         <Crane className="w-4 h-4 mr-1" />
-                        Gerenciar Gruas
+                        {obraComRelacionamentos.gruasVinculadas && obraComRelacionamentos.gruasVinculadas.length > 0 
+                          ? `Gerenciar Gruas (${obraComRelacionamentos.gruasVinculadas.length})`
+                          : 'Gerenciar Gruas'
+                        }
                       </Button>
                     </div>
                   </div>

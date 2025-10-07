@@ -354,10 +354,12 @@ export default function NovaObraPage() {
         location: obraFormData.location,
         clienteId: obraFormData.clienteId,
         observations: obraFormData.observations,
-        // Dados das gruas - usar a primeira grua selecionada
+        // Dados das gruas - usar a primeira grua selecionada (compatibilidade)
         gruaId: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].id : '',
         gruaValue: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].valor_locacao?.toString() || '' : '',
         monthlyFee: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].taxa_mensal?.toString() || '' : '',
+        // Múltiplas gruas
+        gruasSelecionadas: gruasSelecionadas,
         // Dados do responsável
         responsavelId: obraFormData.responsavelId,
         responsavelName: obraFormData.responsavelName,
@@ -381,6 +383,7 @@ export default function NovaObraPage() {
       console.log('  - gruaId:', obraData.gruaId)
       console.log('  - gruaValue:', obraData.gruaValue)
       console.log('  - monthlyFee:', obraData.monthlyFee)
+      console.log('  - gruasSelecionadas:', obraData.gruasSelecionadas)
       console.log('  - custos_mensais:', obraData.custos_mensais)
       console.log('  - funcionarios:', obraData.funcionarios)
 

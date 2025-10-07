@@ -1016,60 +1016,66 @@ export default function ObraDetailsPage() {
     try {
       setLoadingGruas(true)
       
-      // Tentar usar a nova API de obra-gruas primeiro
       console.log('Buscando gruas para obra ID:', obra.id)
-      let response
-      let useNewApi = true
       
-      try {
-        response = await obraGruasApi.listarGruasObra(parseInt(obra.id))
-        console.log('Resposta da API obra-gruas:', response)
-      } catch (error) {
-        console.warn('Erro na nova API, tentando API antiga:', error)
-        useNewApi = false
-        response = await obrasApi.buscarGruasVinculadas(parseInt(obra.id))
-        console.log('Resposta da API antiga:', response)
-      }
+      // Usar o endpoint de obras que já inclui os relacionamentos
+      const response = await obrasApi.obterObra(parseInt(obra.id))
+      console.log('Resposta da API de obras:', response)
       
-      if (response.success) {
-        let gruasConvertidas = []
+      if (response.success && response.data) {
+        const obraData = response.data
+        console.log('🔍 DEBUG - Dados completos da obra:', obraData)
         
-        if (useNewApi) {
-          // Converter dados da nova API
-          gruasConvertidas = response.data.map((config: any) => {
-            const gruaData = config.grua || {}
+        // Extrair gruas do relacionamento grua_obra
+        const gruasVinculadas = obraData.grua_obra || []
+        console.log('🔍 DEBUG - Gruas encontradas no relacionamento:', gruasVinculadas)
+        console.log('🔍 DEBUG - Tipo de gruasVinculadas:', typeof gruasVinculadas, Array.isArray(gruasVinculadas))
+        
+        if (gruasVinculadas.length > 0) {
+          // Converter dados das gruas vinculadas
+          const gruasConvertidas = gruasVinculadas.map((relacao: any, index: number) => {
+            console.log(`🔍 DEBUG - Processando grua ${index}:`, relacao)
+            const gruaData = relacao.grua || {}
+            console.log(`🔍 DEBUG - Dados da grua ${index}:`, gruaData)
             
-            return {
-              id: config.grua_id,
-              name: gruaData.name || config.grua_id,
+            const gruaConvertida = {
+              id: relacao.grua_id,
+              name: gruaData.name || `${gruaData.fabricante || 'Grua'} ${gruaData.modelo || relacao.grua_id}`,
               modelo: gruaData.modelo || 'Modelo não informado',
               fabricante: gruaData.fabricante || 'Fabricante não informado',
               tipo: gruaData.tipo || 'Tipo não informado',
               capacidade: gruaData.capacidade || 'Capacidade não informada',
-              status: config.status,
-              data_instalacao: config.data_instalacao,
-              observacoes: config.observacoes,
-              posicao_x: config.posicao_x,
-              posicao_y: config.posicao_y,
-              posicao_z: config.posicao_z,
-              angulo_rotacao: config.angulo_rotacao,
-              alcance_operacao: config.alcance_operacao,
+              status: relacao.status || 'Ativa',
+              data_instalacao: relacao.data_inicio_locacao,
+              data_inicio_locacao: relacao.data_inicio_locacao,
+              dataFimLocacao: relacao.data_fim_locacao,
+              valor_locacao_mensal: relacao.valor_locacao_mensal || 0,
+              valorLocacaoMensal: relacao.valor_locacao_mensal || 0,
+              observacoes: relacao.observacoes,
               // Campos adicionais para compatibilidade
-              data_inicio_locacao: config.data_instalacao,
-              valor_locacao_mensal: 0,
-              status_legacy: config.status === 'ativa' ? 'Ativa' : config.status
+              status_legacy: relacao.status === 'Ativa' ? 'Ativa' : relacao.status,
+              // Dados da grua para exibição
+              grua: {
+                id: relacao.grua_id,
+                modelo: gruaData.modelo,
+                fabricante: gruaData.fabricante,
+                tipo: gruaData.tipo
+              }
             }
+            
+            console.log(`🔍 DEBUG - Grua convertida ${index}:`, gruaConvertida)
+            return gruaConvertida
           })
+          
+          setGruasReais(gruasConvertidas)
+          console.log('✅ Gruas carregadas e convertidas:', gruasConvertidas)
         } else {
-          // Usar dados da API antiga (já convertidos)
-          gruasConvertidas = response.data
+          console.warn('⚠️ Nenhuma grua encontrada no relacionamento')
+          setGruasReais([])
         }
-        
-        setGruasReais(gruasConvertidas)
-        console.log('Gruas carregadas:', gruasConvertidas)
-        console.log('Dados brutos da API:', response.data)
       } else {
-        console.warn('Erro ao carregar gruas vinculadas')
+        console.warn('❌ Erro ao carregar obra ou obra não encontrada')
+        console.log('🔍 DEBUG - Response:', response)
         setGruasReais([])
       }
     } catch (err) {
