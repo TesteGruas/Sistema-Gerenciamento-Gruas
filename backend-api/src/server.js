@@ -70,6 +70,7 @@ import gruaObrasRoutes from './routes/grua-obras.js'
 import permissoesRoutes from './routes/permissoes.js'
 import custosRoutes from './routes/custos.js'
 import receitasRoutes from './routes/receitas.js'
+import obraGruasRoutes from './routes/obra-gruas.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -250,6 +251,7 @@ app.use('/api/grua-obras', gruaObrasRoutes)
 app.use('/api/permissoes', permissoesRoutes)
 app.use('/api/custos', custosRoutes)
 app.use('/api/receitas', receitasRoutes)
+app.use('/api/obra-gruas', obraGruasRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

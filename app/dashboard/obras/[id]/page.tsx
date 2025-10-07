@@ -57,6 +57,7 @@ import { PageLoader, CardLoader, InlineLoader } from "@/components/ui/loader"
 import { AlertCircle } from "lucide-react"
 import GruaSearch from "@/components/grua-search"
 import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
+import { obraGruasApi } from "@/lib/api-obra-gruas"
 
 export default function ObraDetailsPage() {
   const { toast } = useToast()
@@ -738,13 +739,39 @@ export default function ObraDetailsPage() {
     try {
       setLoadingGruas(true)
       
-      // Aqui você pode implementar a lógica para vincular as gruas à obra via API
-      // Por enquanto, vou simular uma adição bem-sucedida
-      
-      toast({
-        title: "Sucesso",
-        description: `${gruasSelecionadas.length} grua(s) adicionada(s) à obra com sucesso!`,
+      // Vincular cada grua selecionada à obra
+      const promises = gruasSelecionadas.map(async (grua) => {
+        const payload = {
+          obra_id: parseInt(obraId),
+          grua_id: grua.id,
+          data_instalacao: novaGruaData.dataInicioLocacao || new Date().toISOString().split('T')[0],
+          observacoes: novaGruaData.observacoes || `Valor locação: R$ ${grua.valorLocacao || 0}, Taxa mensal: R$ ${grua.taxaMensal || 0}`
+        }
+        
+        console.log('Enviando payload para API:', payload)
+        return obraGruasApi.adicionarGruaObra(payload)
       })
+      
+      const results = await Promise.all(promises)
+      
+      // Verificar se todas as operações foram bem-sucedidas
+      const sucessos = results.filter(result => result.success).length
+      const falhas = results.length - sucessos
+      
+      if (sucessos > 0) {
+        toast({
+          title: "Sucesso",
+          description: `${sucessos} grua(s) adicionada(s) à obra com sucesso!${falhas > 0 ? ` (${falhas} falharam)` : ''}`,
+        })
+      }
+      
+      if (falhas > 0) {
+        toast({
+          title: "Atenção",
+          description: `${falhas} grua(s) não puderam ser adicionadas. Verifique se já estão vinculadas à obra.`,
+          variant: "destructive"
+        })
+      }
       
       // Fechar modal e limpar dados
       setIsAdicionarGruaOpen(false)
@@ -988,11 +1015,61 @@ export default function ObraDetailsPage() {
     
     try {
       setLoadingGruas(true)
-      const response = await obrasApi.buscarGruasVinculadas(parseInt(obra.id))
+      
+      // Tentar usar a nova API de obra-gruas primeiro
+      console.log('Buscando gruas para obra ID:', obra.id)
+      let response
+      let useNewApi = true
+      
+      try {
+        response = await obraGruasApi.listarGruasObra(parseInt(obra.id))
+        console.log('Resposta da API obra-gruas:', response)
+      } catch (error) {
+        console.warn('Erro na nova API, tentando API antiga:', error)
+        useNewApi = false
+        response = await obrasApi.buscarGruasVinculadas(parseInt(obra.id))
+        console.log('Resposta da API antiga:', response)
+      }
+      
       if (response.success) {
-        setGruasReais(response.data)
+        let gruasConvertidas = []
+        
+        if (useNewApi) {
+          // Converter dados da nova API
+          gruasConvertidas = response.data.map((config: any) => {
+            const gruaData = config.grua || {}
+            
+            return {
+              id: config.grua_id,
+              name: gruaData.name || config.grua_id,
+              modelo: gruaData.modelo || 'Modelo não informado',
+              fabricante: gruaData.fabricante || 'Fabricante não informado',
+              tipo: gruaData.tipo || 'Tipo não informado',
+              capacidade: gruaData.capacidade || 'Capacidade não informada',
+              status: config.status,
+              data_instalacao: config.data_instalacao,
+              observacoes: config.observacoes,
+              posicao_x: config.posicao_x,
+              posicao_y: config.posicao_y,
+              posicao_z: config.posicao_z,
+              angulo_rotacao: config.angulo_rotacao,
+              alcance_operacao: config.alcance_operacao,
+              // Campos adicionais para compatibilidade
+              data_inicio_locacao: config.data_instalacao,
+              valor_locacao_mensal: 0,
+              status_legacy: config.status === 'ativa' ? 'Ativa' : config.status
+            }
+          })
+        } else {
+          // Usar dados da API antiga (já convertidos)
+          gruasConvertidas = response.data
+        }
+        
+        setGruasReais(gruasConvertidas)
+        console.log('Gruas carregadas:', gruasConvertidas)
+        console.log('Dados brutos da API:', response.data)
       } else {
-        console.warn('Erro ao carregar gruas vinculadas, usando dados mockados')
+        console.warn('Erro ao carregar gruas vinculadas')
         setGruasReais([])
       }
     } catch (err) {
@@ -1379,18 +1456,18 @@ export default function ObraDetailsPage() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="font-semibold text-lg">
-                              {isGruaReal ? grua.grua?.name || grua.name : grua.name}
+                              {isGruaReal ? grua.name : grua.name}
                             </h3>
                             <p className="text-sm text-gray-600">
                               {isGruaReal ? 
-                                `${grua.grua?.manufacturer || 'N/A'} ${grua.grua?.model || 'N/A'}` : 
+                                `${grua.fabricante} ${grua.modelo}` : 
                                 `${grua.model} - ${grua.capacity}`
                               }
                             </p>
                             {isGruaReal && (
                               <div className="mt-2 space-y-1">
                                 <p className="text-xs text-gray-500">
-                                  <strong>Início da Locação:</strong> {new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR')}
+                                  <strong>Início da Locação:</strong> {grua.data_instalacao ? new Date(grua.data_instalacao).toLocaleDateString('pt-BR') : 'Não informado'}
                                 </p>
                                 {grua.dataFimLocacao && (
                                   <p className="text-xs text-gray-500">
@@ -1419,7 +1496,7 @@ export default function ObraDetailsPage() {
                             </Badge>
                             {isGruaReal && (
                               <Badge variant="outline" className="text-xs">
-                                {grua.grua?.type || 'N/A'}
+                                {grua.tipo || 'Tipo não informado'}
                               </Badge>
                             )}
                           </div>
@@ -2369,15 +2446,15 @@ export default function ObraDetailsPage() {
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Wrench className="w-5 h-5" />
-                          {grua.grua?.name || grua.name}
+                          {grua.name}
                         </CardTitle>
                         <CardDescription>
-                          {grua.grua?.manufacturer || 'N/A'} {grua.grua?.model || 'N/A'} - {grua.grua?.capacity || 'N/A'}
+                          {grua.fabricante} {grua.modelo} - {grua.capacidade}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <LivroGruaList
-                          gruaId={grua.grua?.id?.toString() || grua.id.toString()}
+                          gruaId={grua.id.toString()}
                           onNovaEntrada={handleNovaEntrada}
                           onEditarEntrada={handleEditarEntrada}
                           onVisualizarEntrada={handleVisualizarEntrada}
