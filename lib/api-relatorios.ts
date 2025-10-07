@@ -1,0 +1,269 @@
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+// Interfaces para os relatórios
+export interface RelatorioUtilizacao {
+  periodo: {
+    data_inicio: string;
+    data_fim: string;
+  };
+  filtros: {
+    tipo_grua?: string;
+    ordenar_por: string;
+    limite: number;
+    pagina?: number;
+  };
+  totais: {
+    total_gruas: number;
+    gruas_analisadas: number;
+    receita_total_periodo: number;
+    dias_total_locacao: number;
+    taxa_utilizacao_media: number;
+  };
+  relatorio: Array<{
+    grua: {
+      id: number;
+      modelo: string;
+      fabricante: string;
+      tipo: string;
+      capacidade: number;
+      status: string;
+    };
+    total_locacoes: number;
+    dias_total_locacao: number;
+    receita_total: number;
+    obras_visitadas: number;
+    taxa_utilizacao: number;
+    receita_media_dia: number;
+  }>;
+  paginacao?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface RelatorioFinanceiro {
+  periodo: {
+    data_inicio: string;
+    data_fim: string;
+  };
+  agrupamento: string;
+  totais: {
+    receita_total_periodo: number;
+    total_vendas: number;
+    total_compras: number;
+    total_orcamentos: number;
+    lucro_bruto_total: number;
+    margem_lucro: number;
+  };
+  relatorio: Array<{
+    chave: string;
+    nome: string;
+    detalhes: any;
+    total_receita: number;
+    total_vendas: number;
+    total_compras: number;
+    total_orcamentos: number;
+    lucro_bruto: number;
+    vendas: any[];
+    compras: any[];
+    orcamentos: any[];
+  }>;
+  projecoes?: any;
+  paginacao?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface RelatorioManutencao {
+  filtros: {
+    dias_antecedencia: number;
+    status_grua: string;
+    tipo_manutencao: string;
+  };
+  estatisticas: {
+    total_gruas_analisadas: number;
+    manutencoes_alta_prioridade: number;
+    manutencoes_media_prioridade: number;
+    manutencoes_baixa_prioridade: number;
+    gruas_ocupadas: number;
+    valor_total_estimado: number;
+  };
+  relatorio: Array<{
+    grua: {
+      id: number;
+      modelo: string;
+      fabricante: string;
+      tipo: string;
+      capacidade: number;
+      status: string;
+      status_operacional: string;
+      horas_operacao: number;
+      ultima_manutencao: string;
+    };
+    manutencao: {
+      proxima_manutencao: string;
+      dias_restantes: number;
+      prioridade: string;
+      tipo_manutencao: string;
+      valor_estimado: number;
+    };
+    obra_atual: any;
+  }>;
+}
+
+export interface DashboardRelatorios {
+  resumo_geral: {
+    total_gruas: number;
+    gruas_ocupadas: number;
+    gruas_disponiveis: number;
+    taxa_utilizacao: number;
+    valor_total_parque: number;
+    receita_mes_atual: number;
+  };
+  distribuicao: {
+    por_status: Record<string, number>;
+    por_tipo: Record<string, number>;
+  };
+  manutencao: {
+    manutencoes_proximas: number;
+    proxima_semana: string;
+  };
+  top_gruas: Array<{
+    grua: {
+      id: number;
+      modelo: string;
+      fabricante: string;
+    };
+    total_locacoes: number;
+    dias_total_locacao: number;
+    receita_total: number;
+    obras_visitadas: number;
+    taxa_utilizacao: number;
+    receita_media_dia: number;
+  }>;
+  alertas: Array<{
+    tipo: string;
+    prioridade: string;
+    mensagem: string;
+    acao: string;
+  }>;
+  ultima_atualizacao: string;
+}
+
+export const apiRelatorios = {
+  // Relatório de utilização de gruas
+  async utilizacao(params: {
+    data_inicio: string;
+    data_fim: string;
+    tipo_grua?: string;
+    ordenar_por?: string;
+    limite?: number;
+    pagina?: number;
+  }): Promise<{ success: boolean; data: RelatorioUtilizacao }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('data_inicio', params.data_inicio);
+    queryParams.append('data_fim', params.data_fim);
+    if (params.tipo_grua) queryParams.append('tipo_grua', params.tipo_grua);
+    if (params.ordenar_por) queryParams.append('ordenar_por', params.ordenar_por);
+    if (params.limite) queryParams.append('limite', params.limite.toString());
+    if (params.pagina) queryParams.append('pagina', params.pagina.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/relatorios/utilizacao?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório financeiro
+  async financeiro(params: {
+    data_inicio: string;
+    data_fim: string;
+    agrupar_por?: string;
+    incluir_projecao?: boolean;
+    limite?: number;
+    pagina?: number;
+  }): Promise<{ success: boolean; data: RelatorioFinanceiro }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('data_inicio', params.data_inicio);
+    queryParams.append('data_fim', params.data_fim);
+    if (params.agrupar_por) queryParams.append('agrupar_por', params.agrupar_por);
+    if (params.incluir_projecao !== undefined) queryParams.append('incluir_projecao', params.incluir_projecao.toString());
+    if (params.limite) queryParams.append('limite', params.limite.toString());
+    if (params.pagina) queryParams.append('pagina', params.pagina.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/relatorios/financeiro?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de manutenção
+  async manutencao(params?: {
+    dias_antecedencia?: number;
+    status_grua?: string;
+    tipo_manutencao?: string;
+  }): Promise<{ success: boolean; data: RelatorioManutencao }> {
+    const queryParams = new URLSearchParams();
+    if (params?.dias_antecedencia) queryParams.append('dias_antecedencia', params.dias_antecedencia.toString());
+    if (params?.status_grua) queryParams.append('status_grua', params.status_grua);
+    if (params?.tipo_manutencao) queryParams.append('tipo_manutencao', params.tipo_manutencao);
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/relatorios/manutencao?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Dashboard de relatórios (reutiliza o endpoint do dashboard principal)
+  async dashboard(): Promise<{ success: boolean; data: DashboardRelatorios }> {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/relatorios/dashboard`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  }
+};

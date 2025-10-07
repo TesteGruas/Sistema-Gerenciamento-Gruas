@@ -26,14 +26,17 @@ const relatorioUtilizacaoSchema = Joi.object({
   data_fim: Joi.date().required(),
   tipo_grua: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').optional(),
   ordenar_por: Joi.string().valid('utilizacao', 'receita', 'dias_locacao', 'obras_visitadas').default('utilizacao'),
-  limite: Joi.number().integer().min(1).max(100).default(20)
+  limite: Joi.number().integer().min(1).max(100).default(20),
+  pagina: Joi.number().integer().min(1).default(1)
 })
 
 const relatorioFinanceiroSchema = Joi.object({
   data_inicio: Joi.date().required(),
   data_fim: Joi.date().required(),
   agrupar_por: Joi.string().valid('grua', 'obra', 'cliente', 'mes').default('grua'),
-  incluir_projecao: Joi.boolean().default(false)
+  incluir_projecao: Joi.boolean().default(false),
+  limite: Joi.number().integer().min(1).max(100).default(20),
+  pagina: Joi.number().integer().min(1).default(1)
 })
 
 const relatorioManutencaoSchema = Joi.object({
@@ -50,13 +53,21 @@ const relatorioManutencaoSchema = Joi.object({
  * Calcular estatísticas de utilização de uma grua
  */
 const calcularEstatisticasUtilizacao = async (gruaId, dataInicio, dataFim) => {
-  // Buscar histórico de locações no período
+  // Garantir que as datas estão no formato correto
+  const dataInicioISO = new Date(dataInicio).toISOString().split('T')[0]
+  const dataFimISO = new Date(dataFim).toISOString().split('T')[0]
+  
+  // Buscar locações ativas da grua no período
   const { data: historico, error: historicoError } = await supabaseAdmin
-    .from('historico_locacoes')
-    .select('*')
+    .from('grua_obra')
+    .select(`
+      *,
+      obra:obras(id, nome, cliente_id, cliente:clientes(nome))
+    `)
     .eq('grua_id', gruaId)
-    .gte('data_inicio', dataInicio)
-    .lte('data_fim', dataFim)
+    .eq('status', 'Ativa')
+    .gte('data_inicio_locacao', dataInicioISO)
+    .lte('data_inicio_locacao', dataFimISO)
 
   if (historicoError) {
     throw new Error(`Erro ao buscar histórico: ${historicoError.message}`)
@@ -65,15 +76,12 @@ const calcularEstatisticasUtilizacao = async (gruaId, dataInicio, dataFim) => {
   // Calcular métricas
   const totalLocacoes = historico.length
   const diasTotalLocacao = historico.reduce((total, loc) => {
-    if (loc.data_fim) {
-      const inicio = new Date(loc.data_inicio)
-      const fim = new Date(loc.data_fim)
-      return total + Math.ceil((fim - inicio) / (1000 * 60 * 60 * 24))
-    }
-    return total
+    const inicio = new Date(loc.data_inicio_locacao)
+    const fim = loc.data_fim_locacao ? new Date(loc.data_fim_locacao) : new Date() // Se não tem data fim, usa hoje
+    return total + Math.ceil((fim - inicio) / (1000 * 60 * 60 * 24))
   }, 0)
 
-  const receitaTotal = historico.reduce((total, loc) => total + (loc.valor_locacao || 0), 0)
+  const receitaTotal = historico.reduce((total, loc) => total + (parseFloat(loc.valor_locacao_mensal) || 0), 0)
   const obrasVisitadas = [...new Set(historico.map(loc => loc.obra_id))].length
 
   // Calcular taxa de utilização
@@ -186,7 +194,7 @@ router.get('/utilizacao', async (req, res) => {
       })
     }
 
-    const { data_inicio, data_fim, tipo_grua, ordenar_por, limite } = value
+    const { data_inicio, data_fim, tipo_grua, ordenar_por, limite, pagina } = value
 
     // Buscar todas as gruas
     let query = supabaseAdmin
@@ -240,13 +248,16 @@ router.get('/utilizacao', async (req, res) => {
       }
     })
 
-    // Limitar resultados
-    const resultadosLimitados = relatorio.slice(0, limite)
+    // Calcular paginação
+    const total = relatorio.length
+    const totalPages = Math.ceil(total / limite)
+    const offset = (pagina - 1) * limite
+    const relatorioPaginado = relatorio.slice(offset, offset + limite)
 
     // Calcular totais gerais
     const totais = {
       total_gruas: gruas.length,
-      gruas_analisadas: resultadosLimitados.length,
+      gruas_analisadas: relatorioPaginado.length,
       receita_total_periodo: relatorio.reduce((total, item) => total + item.receita_total, 0),
       dias_total_locacao: relatorio.reduce((total, item) => total + item.dias_total_locacao, 0),
       taxa_utilizacao_media: relatorio.length > 0 
@@ -264,10 +275,17 @@ router.get('/utilizacao', async (req, res) => {
         filtros: {
           tipo_grua,
           ordenar_por,
-          limite
+          limite,
+          pagina
         },
         totais,
-        relatorio: resultadosLimitados
+        relatorio: relatorioPaginado,
+        paginacao: {
+          page: pagina,
+          limit: limite,
+          total: total,
+          pages: totalPages
+        }
       }
     })
 
@@ -337,26 +355,62 @@ router.get('/financeiro', async (req, res) => {
       })
     }
 
-    const { data_inicio, data_fim, agrupar_por, incluir_projecao } = value
+    const { data_inicio, data_fim, agrupar_por, incluir_projecao, limite, pagina } = value
 
-    // Buscar dados financeiros
-    let query = supabaseAdmin
-      .from('historico_locacoes')
+    // Garantir que as datas estão no formato correto
+    const dataInicioISO = new Date(data_inicio).toISOString().split('T')[0]
+    const dataFimISO = new Date(data_fim).toISOString().split('T')[0]
+    
+    // Buscar dados de vendas
+    const { data: vendas, error: vendasError } = await supabaseAdmin
+      .from('vendas')
       .select(`
         *,
-        grua:gruas(id, modelo, fabricante, tipo),
-        obra:obras(id, nome, cliente_id, cliente:clientes(nome, cnpj))
+        cliente:clientes(id, nome, cnpj)
       `)
-      .gte('data_inicio', data_inicio)
-      .lte('data_fim', data_fim)
-      .not('valor_locacao', 'is', null)
+      .gte('data_venda', dataInicioISO)
+      .lte('data_venda', dataFimISO)
+      .eq('status', 'confirmada')
 
-    const { data: historico, error: historicoError } = await query
-
-    if (historicoError) {
+    if (vendasError) {
       return res.status(500).json({
-        error: 'Erro ao buscar dados financeiros',
-        message: historicoError.message
+        error: 'Erro ao buscar vendas',
+        message: vendasError.message
+      })
+    }
+
+    // Buscar dados de compras
+    const { data: compras, error: comprasError } = await supabaseAdmin
+      .from('compras')
+      .select(`
+        *,
+        fornecedor:fornecedores(id, nome, cnpj)
+      `)
+      .gte('data_pedido', dataInicioISO)
+      .lte('data_pedido', dataFimISO)
+      .eq('status', 'recebido')
+
+    if (comprasError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar compras',
+        message: comprasError.message
+      })
+    }
+
+    // Buscar dados de orçamentos
+    const { data: orcamentos, error: orcamentosError } = await supabaseAdmin
+      .from('orcamentos')
+      .select(`
+        *,
+        cliente:clientes(id, nome, cnpj)
+      `)
+      .gte('data_orcamento', dataInicioISO)
+      .lte('data_orcamento', dataFimISO)
+
+    if (orcamentosError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar orçamentos',
+        message: orcamentosError.message
       })
     }
 
@@ -364,40 +418,40 @@ router.get('/financeiro', async (req, res) => {
     let relatorio = []
     const agrupamento = {}
 
-    historico.forEach(item => {
+    // Processar vendas
+    vendas.forEach(item => {
       let chave = ''
       let nome = ''
       let detalhes = {}
 
       switch (agrupar_por) {
-        case 'grua':
-          chave = item.grua_id
-          nome = `${item.grua?.modelo} - ${item.grua?.fabricante}`
+        case 'cliente':
+          chave = item.cliente_id
+          nome = item.cliente?.nome || 'Cliente não informado'
           detalhes = {
-            tipo: item.grua?.tipo,
-            capacidade: item.grua?.capacidade
+            cnpj: item.cliente?.cnpj
           }
           break
         case 'obra':
-          chave = item.obra_id
-          nome = item.obra?.nome
+          chave = item.obra_id || 'sem_obra'
+          nome = item.obra_id ? `Obra ${item.obra_id}` : 'Sem obra'
           detalhes = {
-            cliente: item.obra?.cliente?.nome,
-            cnpj: item.obra?.cliente?.cnpj
-          }
-          break
-        case 'cliente':
-          chave = item.obra?.cliente_id
-          nome = item.obra?.cliente?.nome
-          detalhes = {
-            cnpj: item.obra?.cliente?.cnpj
+            cliente: item.cliente?.nome
           }
           break
         case 'mes':
-          const data = new Date(item.data_inicio)
+          const data = new Date(item.data_venda)
           chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
           nome = `${data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`
           detalhes = {}
+          break
+        case 'tipo':
+        default:
+          chave = item.tipo_venda
+          nome = item.tipo_venda
+          detalhes = {
+            cliente: item.cliente?.nome
+          }
           break
       }
 
@@ -407,55 +461,152 @@ router.get('/financeiro', async (req, res) => {
           nome,
           detalhes,
           total_receita: 0,
-          total_locacoes: 0,
-          dias_total_locacao: 0,
-          valor_medio_locacao: 0,
-          locacoes: []
+          total_vendas: 0,
+          total_compras: 0,
+          total_orcamentos: 0,
+          lucro_bruto: 0,
+          vendas: [],
+          compras: [],
+          orcamentos: []
         }
       }
 
-      const diasLocacao = item.data_fim 
-        ? Math.ceil((new Date(item.data_fim) - new Date(item.data_inicio)) / (1000 * 60 * 60 * 24))
-        : 0
-
-      agrupamento[chave].total_receita += item.valor_locacao || 0
-      agrupamento[chave].total_locacoes += 1
-      agrupamento[chave].dias_total_locacao += diasLocacao
-      agrupamento[chave].locacoes.push(item)
+      agrupamento[chave].total_receita += parseFloat(item.valor_total) || 0
+      agrupamento[chave].total_vendas += 1
+      agrupamento[chave].vendas.push(item)
     })
 
-    // Calcular valores médios e ordenar
+    // Processar compras
+    compras.forEach(item => {
+      let chave = ''
+      let nome = ''
+      let detalhes = {}
+
+      switch (agrupar_por) {
+        case 'cliente':
+          // Para compras, agrupamos por fornecedor
+          chave = `fornecedor_${item.fornecedor_id}`
+          nome = item.fornecedor?.nome || 'Fornecedor não informado'
+          detalhes = {
+            cnpj: item.fornecedor?.cnpj
+          }
+          break
+        case 'mes':
+          const data = new Date(item.data_pedido)
+          chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
+          nome = `${data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`
+          detalhes = {}
+          break
+        case 'tipo':
+        default:
+          chave = 'compras'
+          nome = 'Compras'
+          detalhes = {
+            fornecedor: item.fornecedor?.nome
+          }
+          break
+      }
+
+      if (!agrupamento[chave]) {
+        agrupamento[chave] = {
+          chave,
+          nome,
+          detalhes,
+          total_receita: 0,
+          total_vendas: 0,
+          total_compras: 0,
+          total_orcamentos: 0,
+          lucro_bruto: 0,
+          vendas: [],
+          compras: [],
+          orcamentos: []
+        }
+      }
+
+      agrupamento[chave].total_compras += parseFloat(item.valor_total) || 0
+      agrupamento[chave].compras.push(item)
+    })
+
+    // Processar orçamentos
+    orcamentos.forEach(item => {
+      let chave = ''
+      let nome = ''
+      let detalhes = {}
+
+      switch (agrupar_por) {
+        case 'cliente':
+          chave = item.cliente_id
+          nome = item.cliente?.nome || 'Cliente não informado'
+          detalhes = {
+            cnpj: item.cliente?.cnpj
+          }
+          break
+        case 'obra':
+          chave = item.obra_id || 'sem_obra'
+          nome = item.obra_id ? `Obra ${item.obra_id}` : 'Sem obra'
+          detalhes = {
+            cliente: item.cliente?.nome
+          }
+          break
+        case 'mes':
+          const data = new Date(item.data_orcamento)
+          chave = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
+          nome = `${data.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}`
+          detalhes = {}
+          break
+        case 'tipo':
+        default:
+          chave = item.tipo_orcamento
+          nome = item.tipo_orcamento
+          detalhes = {
+            cliente: item.cliente?.nome
+          }
+          break
+      }
+
+      if (!agrupamento[chave]) {
+        agrupamento[chave] = {
+          chave,
+          nome,
+          detalhes,
+          total_receita: 0,
+          total_vendas: 0,
+          total_compras: 0,
+          total_orcamentos: 0,
+          lucro_bruto: 0,
+          vendas: [],
+          compras: [],
+          orcamentos: []
+        }
+      }
+
+      agrupamento[chave].total_orcamentos += parseFloat(item.valor_total) || 0
+      agrupamento[chave].orcamentos.push(item)
+    })
+
+    // Calcular lucro bruto e ordenar
     relatorio = Object.values(agrupamento).map(item => {
-      item.valor_medio_locacao = item.total_locacoes > 0 
-        ? Math.round((item.total_receita / item.total_locacoes) * 100) / 100
-        : 0
+      item.lucro_bruto = item.total_receita - item.total_compras
       return item
     }).sort((a, b) => b.total_receita - a.total_receita)
+
+    // Aplicar paginação
+    const total = relatorio.length
+    const totalPages = Math.ceil(total / limite)
+    const offset = (pagina - 1) * limite
+    const relatorioPaginado = relatorio.slice(offset, offset + limite)
 
     // Calcular totais gerais
     const totais = {
       receita_total_periodo: relatorio.reduce((total, item) => total + item.total_receita, 0),
-      total_locacoes: relatorio.reduce((total, item) => total + item.total_locacoes, 0),
-      dias_total_locacao: relatorio.reduce((total, item) => total + item.dias_total_locacao, 0),
-      valor_medio_geral: relatorio.length > 0 
-        ? Math.round((relatorio.reduce((total, item) => total + item.total_receita, 0) / 
-                     relatorio.reduce((total, item) => total + item.total_locacoes, 0)) * 100) / 100
+      total_vendas: relatorio.reduce((total, item) => total + item.total_vendas, 0),
+      total_compras: relatorio.reduce((total, item) => total + item.total_compras, 0),
+      total_orcamentos: relatorio.reduce((total, item) => total + item.total_orcamentos, 0),
+      lucro_bruto_total: relatorio.reduce((total, item) => total + item.lucro_bruto, 0),
+      margem_lucro: relatorio.reduce((total, item) => total + item.total_receita, 0) > 0 
+        ? Math.round((relatorio.reduce((total, item) => total + item.lucro_bruto, 0) / 
+                     relatorio.reduce((total, item) => total + item.total_receita, 0)) * 100 * 100) / 100
         : 0
-    }
-
-    // Adicionar projeções se solicitado
-    let projecoes = null
-    if (incluir_projecao && agrupar_por === 'grua') {
-      projecoes = await Promise.all(
-        relatorio.slice(0, 10).map(async (item) => {
-          const projecao = await calcularProjecaoFinanceira(item.chave, data_inicio, data_fim)
-          return {
-            grua_id: item.chave,
-            grua_nome: item.nome,
-            ...projecao
-          }
-        })
-      )
     }
 
     res.json({
@@ -467,8 +618,14 @@ router.get('/financeiro', async (req, res) => {
         },
         agrupamento: agrupar_por,
         totais,
-        relatorio,
-        projecoes
+        relatorio: relatorioPaginado,
+        projecoes: null,
+        paginacao: {
+          page: pagina,
+          limit: limite,
+          total: total,
+          pages: totalPages
+        }
       }
     })
 
