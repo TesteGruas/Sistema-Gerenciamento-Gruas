@@ -95,6 +95,37 @@ const registerSchema = Joi.object({
  *                       type: object
  *                     session:
  *                       type: object
+ *                     profile:
+ *                       type: object
+ *                       description: Dados do perfil do usuário
+ *                     perfil:
+ *                       type: object
+ *                       description: Dados do perfil de acesso
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                         nome:
+ *                           type: string
+ *                         nivel_acesso:
+ *                           type: string
+ *                         descricao:
+ *                           type: string
+ *                     permissoes:
+ *                       type: array
+ *                       description: Lista de permissões do usuário
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           nome:
+ *                             type: string
+ *                           descricao:
+ *                             type: string
+ *                           modulo:
+ *                             type: string
+ *                           acao:
+ *                             type: string
  *                     access_token:
  *                       type: string
  *       400:
@@ -139,12 +170,72 @@ router.post('/login', async (req, res) => {
       console.error('Erro ao buscar perfil:', profileError)
     }
 
+    // Buscar perfil e permissões do usuário
+    let perfilData = null
+    let permissoes = []
+
+    if (profile) {
+      // Buscar o perfil do usuário
+      const { data: perfilUsuario, error: perfilError } = await supabase
+        .from('usuario_perfis')
+        .select(`
+          perfil_id,
+          status,
+          perfis!inner(
+            id,
+            nome,
+            nivel_acesso,
+            descricao
+          )
+        `)
+        .eq('usuario_id', profile.id)
+        .eq('status', 'Ativa')
+        .single()
+
+      if (perfilUsuario && !perfilError) {
+        perfilData = {
+          id: perfilUsuario.perfil_id,
+          nome: perfilUsuario.perfis.nome,
+          nivel_acesso: perfilUsuario.perfis.nivel_acesso,
+          descricao: perfilUsuario.perfis.descricao
+        }
+
+        // Buscar permissões do perfil
+        const { data: perfilPermissoes, error: permissoesError } = await supabase
+          .from('perfil_permissoes')
+          .select(`
+            *,
+            permissoes(
+              id,
+              nome,
+              descricao,
+              modulo,
+              acao
+            )
+          `)
+          .eq('perfil_id', perfilUsuario.perfil_id)
+          .eq('status', 'Ativa')
+
+        if (perfilPermissoes && !permissoesError) {
+          permissoes = perfilPermissoes.map(pp => ({
+            id: pp.permissoes.id,
+            nome: pp.permissoes.nome,
+            descricao: pp.permissoes.descricao,
+            modulo: pp.permissoes.modulo,
+            acao: pp.permissoes.acao
+          }))
+        }
+      }
+    }
+
     res.json({
       success: true,
       data: {
         user: data.user,
         session: data.session,
         profile: profile,
+        perfil: perfilData,
+        permissoes: permissoes,
         access_token: data.session.access_token
       }
     })
@@ -337,11 +428,71 @@ router.get('/me', authenticateToken, async (req, res) => {
       })
     }
 
+    // Buscar perfil e permissões do usuário
+    let perfilData = null
+    let permissoes = []
+
+    if (profile) {
+      // Buscar o perfil do usuário
+      const { data: perfilUsuario, error: perfilError } = await supabase
+        .from('usuario_perfis')
+        .select(`
+          perfil_id,
+          status,
+          perfis!inner(
+            id,
+            nome,
+            nivel_acesso,
+            descricao
+          )
+        `)
+        .eq('usuario_id', profile.id)
+        .eq('status', 'Ativa')
+        .single()
+
+      if (perfilUsuario && !perfilError) {
+        perfilData = {
+          id: perfilUsuario.perfil_id,
+          nome: perfilUsuario.perfis.nome,
+          nivel_acesso: perfilUsuario.perfis.nivel_acesso,
+          descricao: perfilUsuario.perfis.descricao
+        }
+
+        // Buscar permissões do perfil
+        const { data: perfilPermissoes, error: permissoesError } = await supabase
+          .from('perfil_permissoes')
+          .select(`
+            *,
+            permissoes(
+              id,
+              nome,
+              descricao,
+              modulo,
+              acao
+            )
+          `)
+          .eq('perfil_id', perfilUsuario.perfil_id)
+          .eq('status', 'Ativa')
+
+        if (perfilPermissoes && !permissoesError) {
+          permissoes = perfilPermissoes.map(pp => ({
+            id: pp.permissoes.id,
+            nome: pp.permissoes.nome,
+            descricao: pp.permissoes.descricao,
+            modulo: pp.permissoes.modulo,
+            acao: pp.permissoes.acao
+          }))
+        }
+      }
+    }
+
     res.json({
       success: true,
       data: {
         user: req.user,
-        profile: profile
+        profile: profile,
+        perfil: perfilData,
+        permissoes: permissoes
       }
     })
   } catch (error) {

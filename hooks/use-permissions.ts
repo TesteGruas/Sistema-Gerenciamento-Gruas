@@ -1,132 +1,81 @@
 "use client"
 
-import { useState, useEffect } from "react"
-
-export interface UserPermissions {
-  role: string
-  permissions: string[]
-}
+import { useAuth } from "./use-auth"
 
 export function usePermissions() {
-  const [userPermissions, setUserPermissions] = useState<UserPermissions | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { permissoes, perfil, hasPermission, hasAnyPermission, hasAllPermissions } = useAuth()
 
-  useEffect(() => {
-    // Simular carregamento de permissões do usuário
-    const loadUserPermissions = async () => {
-      try {
-        // Em uma implementação real, isso viria de uma API ou contexto de autenticação
-        const storedRole = localStorage.getItem('userRole') || 'funcionario_nivel_1'
-        
-        const rolePermissions = {
-          admin: ["all"],
-          gestor: ["obras", "gruas", "funcionarios", "financeiro", "estoque", "relatorios"],
-          funcionario_nivel_1: ["obras_read", "gruas_read"],
-          funcionario_nivel_2: ["obras", "gruas", "funcionarios_read"],
-          funcionario_nivel_3: ["obras", "gruas", "funcionarios", "financeiro_read"],
-          cliente: ["obras_read", "gruas_read"]
-        }
-
-        setUserPermissions({
-          role: storedRole,
-          permissions: rolePermissions[storedRole as keyof typeof rolePermissions] || []
-        })
-      } catch (error) {
-        console.error('Erro ao carregar permissões:', error)
-        setUserPermissions({
-          role: 'funcionario_nivel_1',
-          permissions: ["obras_read", "gruas_read"]
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadUserPermissions()
-  }, [])
-
-  const hasPermission = (permission: string): boolean => {
-    if (!userPermissions) return false
-    
-    // Admin tem todas as permissões
-    if (userPermissions.permissions.includes('all')) return true
-    
-    return userPermissions.permissions.includes(permission)
+  const canView = (module: string) => {
+    return hasPermission(`visualizar_${module}`) || hasPermission(`${module}:visualizar`)
   }
 
-  const hasAnyPermission = (permissions: string[]): boolean => {
-    if (!userPermissions) return false
-    
-    // Admin tem todas as permissões
-    if (userPermissions.permissions.includes('all')) return true
-    
-    return permissions.some(permission => userPermissions.permissions.includes(permission))
+  const canCreate = (module: string) => {
+    return hasPermission(`criar_${module}`) || hasPermission(`${module}:criar`)
   }
 
-  const hasAllPermissions = (permissions: string[]): boolean => {
-    if (!userPermissions) return false
-    
-    // Admin tem todas as permissões
-    if (userPermissions.permissions.includes('all')) return true
-    
-    return permissions.every(permission => userPermissions.permissions.includes(permission))
+  const canEdit = (module: string) => {
+    return hasPermission(`editar_${module}`) || hasPermission(`${module}:editar`)
   }
 
-  const isAdmin = (): boolean => {
-    return userPermissions?.role === 'admin'
+  const canDelete = (module: string) => {
+    return hasPermission(`excluir_${module}`) || hasPermission(`${module}:deletar`)
   }
 
-  const isGestor = (): boolean => {
-    return userPermissions?.role === 'gestor'
+  const canManage = (module: string) => {
+    return hasAnyPermission([
+      `gerenciar_${module}`,
+      `${module}:gerenciar`,
+      `criar_${module}`,
+      `editar_${module}`,
+      `excluir_${module}`
+    ])
   }
 
-  const isFuncionario = (): boolean => {
-    return userPermissions?.role?.startsWith('funcionario_') || false
+  const getPermissionsByModule = (module: string) => {
+    return permissoes.filter(p => 
+      p.modulo === module || 
+      p.nome.includes(module) || 
+      p.acao.includes(module)
+    )
   }
 
-  const isCliente = (): boolean => {
-    return userPermissions?.role === 'cliente'
+  const isAdmin = () => {
+    return perfil?.nome?.toLowerCase() === 'administrador' || 
+           perfil?.nivel_acesso === 'admin'
   }
 
-  const canManageUsers = (): boolean => {
-    return hasPermission('usuarios') || isAdmin()
+  const isManager = () => {
+    return perfil?.nome?.toLowerCase() === 'gerente' || 
+           perfil?.nivel_acesso === 'manager'
   }
 
-  const canAccessFinancial = (): boolean => {
-    return hasAnyPermission(['financeiro', 'financeiro_read'])
+  const isSupervisor = () => {
+    return perfil?.nome?.toLowerCase() === 'supervisor' || 
+           perfil?.nivel_acesso === 'supervisor'
   }
 
-  const canManageObras = (): boolean => {
-    return hasAnyPermission(['obras', 'obras_read'])
-  }
-
-  const canManageGruas = (): boolean => {
-    return hasAnyPermission(['gruas', 'gruas_read'])
-  }
-
-  const canManageFuncionarios = (): boolean => {
-    return hasAnyPermission(['funcionarios', 'funcionarios_read'])
-  }
-
-  const canAccessReports = (): boolean => {
-    return hasAnyPermission(['relatorios', 'relatorios_read'])
+  const isOperator = () => {
+    return perfil?.nome?.toLowerCase() === 'operador' || 
+           perfil?.nivel_acesso === 'operator'
   }
 
   return {
-    userPermissions,
-    isLoading,
+    permissoes,
+    perfil,
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
+    canView,
+    canCreate,
+    canEdit,
+    canDelete,
+    canManage,
+    getPermissionsByModule,
     isAdmin,
-    isGestor,
-    isFuncionario,
-    isCliente,
-    canManageUsers,
-    canAccessFinancial,
-    canManageObras,
-    canManageGruas,
-    canManageFuncionarios,
-    canAccessReports
+    isManager,
+    isSupervisor,
+    isOperator
   }
 }
+
+export default usePermissions

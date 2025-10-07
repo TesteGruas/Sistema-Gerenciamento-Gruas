@@ -62,9 +62,17 @@ export default function LoginPage() {
         throw new Error('Token não recebido na resposta')
       }
       
-      // Salvar token no localStorage
+      // Salvar dados no localStorage
       localStorage.setItem('access_token', token)
-      console.log('Token salvo no localStorage')
+      localStorage.setItem('user_profile', JSON.stringify(data.data.profile))
+      localStorage.setItem('user_perfil', JSON.stringify(data.data.perfil))
+      localStorage.setItem('user_permissoes', JSON.stringify(data.data.permissoes))
+      console.log('Dados salvos no localStorage:', {
+        token: !!token,
+        profile: !!data.data.profile,
+        perfil: !!data.data.perfil,
+        permissoes: data.data.permissoes?.length || 0
+      })
       
       // Redirecionar para dashboard
       window.location.href = '/dashboard'

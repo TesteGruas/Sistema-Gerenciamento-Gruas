@@ -252,6 +252,17 @@ export default function EstoquePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validação do estoque máximo
+    if (formData.estoque_maximo && formData.estoque_maximo <= formData.estoque_minimo) {
+      toast({
+        title: "Erro de Validação",
+        description: "O estoque máximo deve ser maior que o estoque mínimo",
+        variant: "destructive",
+      })
+      return
+    }
+    
     try {
       if (editingItem) {
         await estoqueAPI.atualizarProduto(editingItem.id, formData)
@@ -722,7 +733,13 @@ export default function EstoquePage() {
                       onChange={(e) =>
                         setFormData({ ...formData, estoque_maximo: Number.parseInt(e.target.value) || 0 })
                       }
+                      className={formData.estoque_maximo && formData.estoque_maximo <= formData.estoque_minimo ? "border-red-500" : ""}
                     />
+                    {formData.estoque_maximo && formData.estoque_maximo <= formData.estoque_minimo && (
+                      <p className="text-sm text-red-500">
+                        O estoque máximo deve ser maior que o estoque mínimo ({formData.estoque_minimo})
+                      </p>
+                    )}
                   </div>
                 </div>
 

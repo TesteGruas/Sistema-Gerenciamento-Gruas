@@ -20,7 +20,9 @@ const produtoSchema = Joi.object({
 }).custom((value, helpers) => {
   // Validar se estoque_maximo > estoque_minimo quando ambos estão definidos
   if (value.estoque_maximo && value.estoque_maximo <= value.estoque_minimo) {
-    return helpers.error('custom.estoqueMaximo');
+    return helpers.error('custom.estoqueMaximo', {
+      message: 'O estoque máximo deve ser maior que o estoque mínimo'
+    });
   }
   return value;
 }, 'Validação de estoque máximo')
