@@ -35,6 +35,8 @@ export default function PWALoginPage() {
   // Verificar se já está autenticado
   useEffect(() => {
     const checkAuth = () => {
+      if (typeof window === 'undefined') return
+      
       const token = localStorage.getItem('access_token')
       const userData = localStorage.getItem('user_data')
       

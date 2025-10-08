@@ -48,7 +48,7 @@ import {
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
-import { apiRH } from "@/lib/api-rh"
+import { funcionariosApi } from "@/lib/api-funcionarios"
 
 interface FuncionarioRH {
   id: number
@@ -147,12 +147,214 @@ export default function FuncionarioDetalhesPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [funcionario, setFuncionario] = useState<FuncionarioRH | null>(null)
-  const [salarios, setSalarios] = useState<SalarioDetalhado[]>([])
-  const [beneficios, setBeneficios] = useState<BeneficioFuncionario[]>([])
-  const [documentos, setDocumentos] = useState<DocumentoFuncionario[]>([])
-  const [pontos, setPontos] = useState<PontoDetalhado[]>([])
   const [loading, setLoading] = useState(true)
   const [isEditMode, setIsEditMode] = useState(false)
+
+  // Dados mockados
+  const [salarios] = useState<SalarioDetalhado[]>([
+    {
+      id: 1,
+      mes: 'Outubro/2024',
+      salarioBase: 3500,
+      horasTrabalhadas: 220,
+      horasExtras: 20,
+      valorHoraExtra: 25.50,
+      totalProventos: 4010,
+      totalDescontos: 890.50,
+      salarioLiquido: 3119.50,
+      status: 'pago',
+      dataPagamento: '2024-10-05',
+      descontos: {
+        inss: 385,
+        irrf: 125.50,
+        valeTransporte: 280,
+        valeRefeicao: 100,
+        outros: 0
+      }
+    },
+    {
+      id: 2,
+      mes: 'Setembro/2024',
+      salarioBase: 3500,
+      horasTrabalhadas: 220,
+      horasExtras: 15,
+      valorHoraExtra: 25.50,
+      totalProventos: 3882.50,
+      totalDescontos: 890.50,
+      salarioLiquido: 2992,
+      status: 'pago',
+      dataPagamento: '2024-09-05',
+      descontos: {
+        inss: 385,
+        irrf: 125.50,
+        valeTransporte: 280,
+        valeRefeicao: 100,
+        outros: 0
+      }
+    },
+    {
+      id: 3,
+      mes: 'Agosto/2024',
+      salarioBase: 3500,
+      horasTrabalhadas: 220,
+      horasExtras: 25,
+      valorHoraExtra: 25.50,
+      totalProventos: 4137.50,
+      totalDescontos: 890.50,
+      salarioLiquido: 3247,
+      status: 'pago',
+      dataPagamento: '2024-08-05',
+      descontos: {
+        inss: 385,
+        irrf: 125.50,
+        valeTransporte: 280,
+        valeRefeicao: 100,
+        outros: 0
+      }
+    }
+  ])
+
+  const [beneficios] = useState<BeneficioFuncionario[]>([
+    {
+      id: '1',
+      tipo: 'plano-saude',
+      descricao: 'Plano de Saúde Unimed - Enfermaria',
+      valor: 450,
+      dataInicio: '2024-01-01',
+      ativo: true,
+      observacoes: 'Plano familiar com 2 dependentes'
+    },
+    {
+      id: '2',
+      tipo: 'vale-transporte',
+      descricao: 'Vale Transporte',
+      valor: 280,
+      dataInicio: '2024-01-01',
+      ativo: true
+    },
+    {
+      id: '3',
+      tipo: 'vale-refeicao',
+      descricao: 'Vale Refeição Ticket',
+      valor: 100,
+      dataInicio: '2024-01-01',
+      ativo: true
+    },
+    {
+      id: '4',
+      tipo: 'seguro-vida',
+      descricao: 'Seguro de Vida em Grupo',
+      valor: 50,
+      dataInicio: '2024-01-01',
+      ativo: true,
+      observacoes: 'Cobertura de R$ 100.000'
+    }
+  ])
+
+  const [documentos] = useState<DocumentoFuncionario[]>([
+    {
+      id: '1',
+      tipo: 'rg',
+      nome: 'RG',
+      numero: '12.345.678-9',
+      dataEmissao: '2015-05-10',
+      observacoes: 'SSP/PE'
+    },
+    {
+      id: '2',
+      tipo: 'cpf',
+      nome: 'CPF',
+      numero: '123.456.789-00',
+      dataEmissao: '2000-01-01'
+    },
+    {
+      id: '3',
+      tipo: 'ctps',
+      nome: 'Carteira de Trabalho',
+      numero: '987654/001-2',
+      dataEmissao: '2018-03-15',
+      observacoes: 'Digital'
+    },
+    {
+      id: '4',
+      tipo: 'pis',
+      nome: 'PIS/PASEP',
+      numero: '123.45678.90-1',
+      dataEmissao: '2018-03-20'
+    },
+    {
+      id: '5',
+      tipo: 'comprovante-residencia',
+      nome: 'Comprovante de Residência',
+      numero: 'Conta de Luz',
+      dataEmissao: '2024-10-01',
+      observacoes: 'Atualizado mensalmente'
+    }
+  ])
+
+  const [pontos] = useState<PontoDetalhado[]>([
+    {
+      id: '1',
+      data: '2024-10-08',
+      entrada: '08:00',
+      saida: '17:00',
+      entradaAlmoco: '12:00',
+      saidaAlmoco: '13:00',
+      horasTrabalhadas: 8,
+      horasExtras: 0,
+      obra: 'Edifício Centro',
+      status: 'normal'
+    },
+    {
+      id: '2',
+      data: '2024-10-07',
+      entrada: '08:00',
+      saida: '18:30',
+      entradaAlmoco: '12:00',
+      saidaAlmoco: '13:00',
+      horasTrabalhadas: 9.5,
+      horasExtras: 1.5,
+      obra: 'Edifício Centro',
+      status: 'hora-extra'
+    },
+    {
+      id: '3',
+      data: '2024-10-06',
+      entrada: '08:15',
+      saida: '17:00',
+      entradaAlmoco: '12:00',
+      saidaAlmoco: '13:00',
+      horasTrabalhadas: 7.75,
+      horasExtras: 0,
+      obra: 'Edifício Centro',
+      status: 'atraso',
+      observacoes: 'Atraso de 15 minutos justificado'
+    },
+    {
+      id: '4',
+      data: '2024-10-05',
+      entrada: '08:00',
+      saida: '17:00',
+      entradaAlmoco: '12:00',
+      saidaAlmoco: '13:00',
+      horasTrabalhadas: 8,
+      horasExtras: 0,
+      obra: 'Shopping Sul',
+      status: 'normal'
+    },
+    {
+      id: '5',
+      data: '2024-10-04',
+      entrada: '08:00',
+      saida: '19:00',
+      entradaAlmoco: '12:00',
+      saidaAlmoco: '13:00',
+      horasTrabalhadas: 10,
+      horasExtras: 2,
+      obra: 'Shopping Sul',
+      status: 'hora-extra'
+    }
+  ])
 
   // Carregar dados reais do funcionário
   useEffect(() => {
@@ -160,15 +362,39 @@ export default function FuncionarioDetalhesPage() {
       try {
         setLoading(true)
         const funcionarioId = parseInt(params.id as string)
-        const funcionarioData = await apiRH.buscarFuncionario(funcionarioId)
+        const response = await funcionariosApi.obterFuncionario(funcionarioId)
         
-        setFuncionario(funcionarioData)
-        
-        // TODO: Implementar carregamento de dados relacionados
-        // setSalarios([])
-        // setBeneficios([])
-        // setDocumentos([])
-        // setPontos([])
+        if (response.success && response.data) {
+          const func = response.data
+          
+          // Mapear dados do backend para o formato esperado
+          const funcionarioMapeado: FuncionarioRH = {
+            id: func.id,
+            nome: func.nome,
+            cpf: func.cpf || '',
+            cargo: func.cargo,
+            departamento: func.departamento || '',
+            salario: func.salario || 0,
+            data_admissao: func.data_admissao || '',
+            telefone: func.telefone,
+            email: func.email,
+            endereco: func.endereco,
+            cidade: func.cidade,
+            estado: func.estado,
+            cep: func.cep,
+            status: func.status,
+            turno: func.turno as any,
+            observacoes: func.observacoes,
+            created_at: func.created_at,
+            updated_at: func.updated_at,
+            usuario: func.usuario && func.usuario.length > 0 ? func.usuario[0] : undefined,
+            obra_atual: func.obra_atual || undefined
+          }
+          
+          setFuncionario(funcionarioMapeado)
+        } else {
+          throw new Error('Funcionário não encontrado')
+        }
         
       } catch (error) {
         console.error('Erro ao carregar funcionário:', error)
@@ -177,6 +403,7 @@ export default function FuncionarioDetalhesPage() {
           description: "Erro ao carregar dados do funcionário",
           variant: "destructive"
         })
+        router.push('/dashboard/rh')
       } finally {
         setLoading(false)
       }
@@ -185,7 +412,7 @@ export default function FuncionarioDetalhesPage() {
     if (params.id) {
       carregarFuncionario()
     }
-  }, [params.id, toast])
+  }, [params.id, toast, router])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -320,7 +547,7 @@ export default function FuncionarioDetalhesPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{funcionario.nome}</h1>
-            <p className="text-gray-600">{funcionario.cargo} • {funcionario.departamento}</p>
+            <p className="text-gray-600">{funcionario.cargo}{funcionario.departamento ? ` • ${funcionario.departamento}` : ''}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -364,7 +591,7 @@ export default function FuncionarioDetalhesPage() {
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Departamento</Label>
-                    <p className="text-sm">{funcionario.departamento}</p>
+                    <p className="text-sm">{funcionario.departamento || '-'}</p>
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -379,11 +606,11 @@ export default function FuncionarioDetalhesPage() {
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Data de Admissão</Label>
-                    <p className="text-sm">{format(new Date(funcionario.data_admissao), 'dd/MM/yyyy', { locale: ptBR })}</p>
+                    <p className="text-sm">{funcionario.data_admissao ? format(new Date(funcionario.data_admissao), 'dd/MM/yyyy', { locale: ptBR }) : '-'}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Salário</Label>
-                    <p className="text-sm font-semibold">R$ {funcionario.salario.toLocaleString('pt-BR')}</p>
+                    <p className="text-sm font-semibold">R$ {(funcionario.salario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Obra Atual</Label>
@@ -522,7 +749,7 @@ export default function FuncionarioDetalhesPage() {
                         <TableCell>
                           <div className="text-sm">
                             <div>{salario.horasExtras}h</div>
-                            <div className="text-orange-600">R$ {salario.valorHoraExtra.toFixed(2)}/h</div>
+                            <div className="text-orange-600">R$ {(salario.valorHoraExtra || 0).toFixed(2)}/h</div>
                           </div>
                         </TableCell>
                         <TableCell>

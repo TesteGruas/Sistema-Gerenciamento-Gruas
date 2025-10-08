@@ -500,7 +500,7 @@ export default function RemuneracaoPage() {
                       <TableCell>
                         <div className="text-sm">
                           <div>{salario.horasExtras}h</div>
-                          <div className="text-orange-600">R$ {salario.valorHoraExtra.toFixed(2)}/h</div>
+                          <div className="text-orange-600">R$ {(salario.valorHoraExtra || 0).toFixed(2)}/h</div>
                         </div>
                       </TableCell>
                       <TableCell>

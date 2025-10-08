@@ -569,7 +569,7 @@ export default function ObrasRHPage() {
                         <span className="font-medium">{alocacao.horasTrabalhadas}h</span>
                       </TableCell>
                       <TableCell>
-                        <span className="font-medium">R$ {alocacao.valorHora.toFixed(2)}</span>
+                        <span className="font-medium">R$ {(alocacao.valorHora || 0).toFixed(2)}</span>
                       </TableCell>
                       <TableCell>
                         <span className="font-bold text-green-600">

@@ -602,7 +602,7 @@ export default function RelatoriosPage() {
                     <Card>
                       <CardContent className="p-4">
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-green-600">{relatorioUtilizacao.totais.taxa_utilizacao_media.toFixed(1)}%</p>
+                          <p className="text-2xl font-bold text-green-600">{(relatorioUtilizacao.totais.taxa_utilizacao_media || 0).toFixed(1)}%</p>
                           <p className="text-sm text-gray-600">Taxa Média</p>
                         </div>
                       </CardContent>
@@ -655,7 +655,7 @@ export default function RelatoriosPage() {
                             <Badge className={item.taxa_utilizacao >= 80 ? 'bg-green-100 text-green-800' : 
                                              item.taxa_utilizacao >= 60 ? 'bg-yellow-100 text-yellow-800' : 
                                              'bg-red-100 text-red-800'}>
-                              {item.taxa_utilizacao.toFixed(1)}%
+                              {(item.taxa_utilizacao || 0).toFixed(1)}%
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -777,7 +777,7 @@ export default function RelatoriosPage() {
                     <Card>
                       <CardContent className="p-4">
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-indigo-600">{relatorioFinanceiro.totais.margem_lucro.toFixed(1)}%</p>
+                          <p className="text-2xl font-bold text-indigo-600">{(relatorioFinanceiro.totais.margem_lucro || 0).toFixed(1)}%</p>
                           <p className="text-sm text-gray-600">Margem de Lucro</p>
                         </div>
                       </CardContent>

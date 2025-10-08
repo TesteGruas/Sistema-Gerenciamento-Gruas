@@ -312,7 +312,7 @@ export default function HorasTrabalhadasPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Média Frequência</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {(horasFuncionarios.reduce((acc, h) => acc + h.percentualFrequencia, 0) / horasFuncionarios.length).toFixed(1)}%
+                  {(horasFuncionarios.reduce((acc, h) => acc + (h.percentualFrequencia || 0), 0) / horasFuncionarios.length).toFixed(1)}%
                 </p>
               </div>
               <div className="p-3 rounded-full bg-purple-500">
@@ -452,13 +452,13 @@ export default function HorasTrabalhadasPage() {
                       </TableCell>
                       <TableCell>
                         <Badge className={`${getFrequenciaColor(horas.percentualFrequencia)} border`}>
-                          {horas.percentualFrequencia.toFixed(1)}%
+                          {(horas.percentualFrequencia || 0).toFixed(1)}%
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
                           <div className="font-medium">R$ {horas.totalReceber.toLocaleString('pt-BR')}</div>
-                          <div className="text-gray-500">R$ {horas.valorHora.toFixed(2)}/h</div>
+                          <div className="text-gray-500">R$ {(horas.valorHora || 0).toFixed(2)}/h</div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -534,7 +534,7 @@ export default function HorasTrabalhadasPage() {
                       </TableCell>
                       <TableCell>
                         <Badge className={`${getFrequenciaColor(resumo.mediaFrequencia)} border`}>
-                          {resumo.mediaFrequencia.toFixed(1)}%
+                          {(resumo.mediaFrequencia || 0).toFixed(1)}%
                         </Badge>
                       </TableCell>
                       <TableCell>

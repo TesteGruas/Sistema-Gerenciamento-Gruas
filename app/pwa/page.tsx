@@ -28,6 +28,8 @@ export default function PWAMainPage() {
   // Verificar autenticação
   useEffect(() => {
     const checkAuth = () => {
+      if (typeof window === 'undefined') return
+      
       const token = localStorage.getItem('access_token')
       const userData = localStorage.getItem('user_data')
       
@@ -55,6 +57,8 @@ export default function PWAMainPage() {
 
   // Verificar status de conexão
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
 
@@ -96,7 +100,7 @@ export default function PWAMainPage() {
   ]
 
   // Adicionar ação de encarregador se aplicável
-  const userData = localStorage.getItem('user_data')
+  const userData = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
   let isEncarregador = false
   if (userData) {
     try {

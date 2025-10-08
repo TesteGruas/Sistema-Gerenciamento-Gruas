@@ -30,6 +30,8 @@ export default function PWALayout({ children }: PWALayoutProps) {
 
   // Verificar status de conexão e carregar dados do usuário
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
 
@@ -61,6 +63,8 @@ export default function PWALayout({ children }: PWALayoutProps) {
   }, [])
 
   const handleLogout = () => {
+    if (typeof window === 'undefined') return
+    
     // Limpar dados do usuário e localStorage
     setUser(null)
     localStorage.removeItem('access_token')

@@ -59,6 +59,8 @@ export default function PWAEncarregadorPage() {
 
   // Carregar dados do usuário
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const userData = localStorage.getItem('user_data')
     if (userData) {
       try {

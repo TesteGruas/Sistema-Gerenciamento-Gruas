@@ -621,23 +621,23 @@ export default function PontoPage() {
                   <div>
                     <span className="text-gray-600">Horas Trabalhadas:</span>
                     <span className="ml-2 font-medium">
-                      {utilsPonto.calcularHorasTrabalhadas(
+                      {(utilsPonto.calcularHorasTrabalhadas(
                         dadosEdicao.entrada,
                         dadosEdicao.saida,
                         dadosEdicao.saida_almoco,
                         dadosEdicao.volta_almoco
-                      ).toFixed(2)}h
+                      ) || 0).toFixed(2)}h
                     </span>
                   </div>
                   <div>
                     <span className="text-gray-600">Horas Extras:</span>
                     <span className="ml-2 font-medium text-orange-600">
-                      +{Math.max(0, utilsPonto.calcularHorasTrabalhadas(
+                      +{(Math.max(0, utilsPonto.calcularHorasTrabalhadas(
                         dadosEdicao.entrada,
                         dadosEdicao.saida,
                         dadosEdicao.saida_almoco,
                         dadosEdicao.volta_almoco
-                      ) - 8).toFixed(2)}h
+                      ) - 8) || 0).toFixed(2)}h
                     </span>
                   </div>
                 </div>
@@ -1393,7 +1393,7 @@ export default function PontoPage() {
                         <div className="space-y-2">
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Horas Trabalhadas:</span>
-                            <span className="font-medium">{totalHoras.toFixed(1)}h</span>
+                            <span className="font-medium">{(totalHoras || 0).toFixed(1)}h</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Dias Presentes:</span>
