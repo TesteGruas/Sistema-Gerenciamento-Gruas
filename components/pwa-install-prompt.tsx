@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { X, Download, Smartphone, CheckCircle } from "lucide-react"
+import { X, Download, Smartphone, CheckCircle, Share, Plus } from "lucide-react"
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[]
@@ -18,8 +18,24 @@ export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
   const [isInstalled, setIsInstalled] = useState(false)
+  const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'desktop' | 'unknown'>('unknown')
 
   useEffect(() => {
+    // Detectar tipo de dispositivo
+    const detectDevice = () => {
+      const userAgent = navigator.userAgent.toLowerCase()
+      
+      if (/iphone|ipad|ipod/.test(userAgent)) {
+        setDeviceType('ios')
+      } else if (/android/.test(userAgent)) {
+        setDeviceType('android')
+      } else if (/windows|mac|linux/.test(userAgent)) {
+        setDeviceType('desktop')
+      } else {
+        setDeviceType('unknown')
+      }
+    }
+
     // Verificar se já está instalado
     const checkIfInstalled = () => {
       if (window.matchMedia('(display-mode: standalone)').matches) {
@@ -34,6 +50,7 @@ export default function PWAInstallPrompt() {
       }
     }
 
+    detectDevice()
     checkIfInstalled()
 
     // Listener para o evento beforeinstallprompt
@@ -49,6 +66,17 @@ export default function PWAInstallPrompt() {
       setShowInstallPrompt(false)
       setDeferredPrompt(null)
     }
+
+    // Mostrar prompt sempre na página de login (após 2 segundos)
+    const showPromptAfterDelay = () => {
+      setTimeout(() => {
+        if (!isInstalled) {
+          setShowInstallPrompt(true)
+        }
+      }, 2000)
+    }
+
+    showPromptAfterDelay()
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
     window.addEventListener('appinstalled', handleAppInstalled)
@@ -85,8 +113,8 @@ export default function PWAInstallPrompt() {
     return null
   }
 
-  // Não mostrar se não houver prompt disponível
-  if (!showInstallPrompt || !deferredPrompt) {
+  // Não mostrar se não estiver no prompt
+  if (!showInstallPrompt) {
     return null
   }
 
@@ -107,15 +135,55 @@ export default function PWAInstallPrompt() {
                 Adicione o aplicativo à sua tela inicial para acesso rápido e funcionalidade offline.
               </p>
               
+              {/* Instruções específicas por dispositivo */}
+              {deviceType === 'ios' && (
+                <div className="bg-blue-100 rounded-lg p-3 mb-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Share className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">No iOS:</span>
+                  </div>
+                  <ol className="text-xs text-blue-800 space-y-1">
+                    <li>1. Toque no botão <strong>Compartilhar</strong> (□↑) na parte inferior</li>
+                    <li>2. Role para baixo e toque em <strong>"Adicionar à Tela de Início"</strong></li>
+                    <li>3. Toque em <strong>"Adicionar"</strong> no canto superior direito</li>
+                  </ol>
+                </div>
+              )}
+              
+              {deviceType === 'android' && (
+                <div className="bg-blue-100 rounded-lg p-3 mb-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Plus className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">No Android:</span>
+                  </div>
+                  <ol className="text-xs text-blue-800 space-y-1">
+                    <li>1. Toque no menu (⋮) no navegador</li>
+                    <li>2. Selecione <strong>"Adicionar à tela inicial"</strong> ou <strong>"Instalar app"</strong></li>
+                    <li>3. Confirme a instalação</li>
+                  </ol>
+                </div>
+              )}
+              
               <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleInstallClick}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Instalar
-                </Button>
+                {deferredPrompt ? (
+                  <Button
+                    size="sm"
+                    onClick={handleInstallClick}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    Instalar
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Siga as instruções acima
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"

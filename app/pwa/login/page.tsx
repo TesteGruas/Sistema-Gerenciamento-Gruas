@@ -18,6 +18,7 @@ import {
   Clock
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import PWAInstallPrompt from "@/components/pwa-install-prompt"
 
 export default function PWALoginPage() {
   const [formData, setFormData] = useState({
@@ -27,8 +28,27 @@ export default function PWALoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const router = useRouter()
   const { toast } = useToast()
+
+  // Verificar se já está autenticado
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('access_token')
+      const userData = localStorage.getItem('user_data')
+      
+      if (token && userData) {
+        // Já está autenticado, redirecionar para dashboard
+        router.push('/pwa')
+        return
+      }
+      
+      setIsCheckingAuth(false)
+    }
+
+    checkAuth()
+  }, [router])
 
   // Verificar status de conexão
   useEffect(() => {
@@ -94,6 +114,18 @@ export default function PWALoginPage() {
       ...formData,
       [e.target.name]: e.target.value
     })
+  }
+
+  // Mostrar loading enquanto verifica autenticação
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Verificando autenticação...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -202,40 +234,8 @@ export default function PWALoginPage() {
           </CardContent>
         </Card>
 
-        {/* Informações de teste */}
-        <Card className="mt-6 bg-blue-50 border-blue-200">
-          <CardContent className="p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">Credenciais de Teste</h3>
-            <div className="space-y-1 text-sm text-blue-800">
-              <p><strong>Admin:</strong> usuario: admin | senha: 123456</p>
-              <p><strong>Operador:</strong> usuario: operador | senha: 123456</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Funcionalidades do PWA */}
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          <Card className="bg-white">
-            <CardContent className="p-4 text-center">
-              <Clock className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-              <h3 className="font-semibold text-sm">Ponto Eletrônico</h3>
-              <p className="text-xs text-gray-500">Registre sua entrada e saída</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-white">
-            <CardContent className="p-4 text-center">
-              <User className="w-8 h-8 text-green-600 mx-auto mb-2" />
-              <h3 className="font-semibold text-sm">Assinatura Digital</h3>
-              <p className="text-xs text-gray-500">Assine documentos digitalmente</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-8 text-center text-xs text-gray-500">
-          <p>Sistema IRBANA - Versão PWA</p>
-          <p>Funciona offline após o primeiro acesso</p>
-        </div>
+        {/* PWA Install Prompt */}
+        <PWAInstallPrompt />
       </div>
     </div>
   )

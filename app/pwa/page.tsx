@@ -21,7 +21,28 @@ import {
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+
+  // Verificar autenticação
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('access_token')
+      const userData = localStorage.getItem('user_data')
+      
+      if (!token || !userData) {
+        // Não há credenciais, redirecionar para login
+        router.push('/pwa/login')
+        return
+      }
+      
+      setIsAuthenticated(true)
+      setIsLoading(false)
+    }
+
+    checkAuth()
+  }, [router])
 
   // Atualizar relógio
   useEffect(() => {
@@ -89,6 +110,23 @@ export default function PWAMainPage() {
       color: "text-orange-600"
     }
   ]
+
+  // Mostrar loading enquanto verifica autenticação
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Verificando autenticação...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Se não estiver autenticado, não mostrar nada (já redirecionou)
+  if (!isAuthenticated) {
+    return null
+  }
 
   return (
     <div className="space-y-6">
