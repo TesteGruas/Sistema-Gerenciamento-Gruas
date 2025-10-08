@@ -389,8 +389,8 @@ export default function EstoquePage() {
         estoqueAtual,
         item.unidade_medida,
         estoqueMinimo,
-        `R$ ${item.valor_unitario.toFixed(2)}`,
-        `R$ ${valorTotal.toFixed(2)}`,
+        `R$ ${(item.valor_unitario || 0).toFixed(2)}`,
+        `R$ ${(valorTotal || 0).toFixed(2)}`,
         item.codigo_barras || "",
         item.localizacao || "",
         getEstoqueData(item.id)?.ultima_movimentacao ? new Date(getEstoqueData(item.id)!.ultima_movimentacao).toLocaleDateString("pt-BR") : "",
@@ -954,8 +954,8 @@ export default function EstoquePage() {
                             </div>
                           </TableCell>
                           <TableCell>{getStatusBadge(item)}</TableCell>
-                          <TableCell>R$ {item.valor_unitario.toFixed(2)}</TableCell>
-                          <TableCell>R$ {valorTotal.toFixed(2)}</TableCell>
+                          <TableCell>R$ {(item.valor_unitario || 0).toFixed(2)}</TableCell>
+                          <TableCell>R$ {(valorTotal || 0).toFixed(2)}</TableCell>
                           <TableCell>{item.localizacao || "-"}</TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -1168,8 +1168,8 @@ export default function EstoquePage() {
                               <p className="text-xs text-gray-500">{(mov as any).produtos?.unidade_medida || ""}</p>
                             </div>
                           </TableCell>
-                          <TableCell>R$ {mov.valor_unitario.toFixed(2)}</TableCell>
-                          <TableCell>R$ {mov.valor_total.toFixed(2)}</TableCell>
+                          <TableCell>R$ {(mov.valor_unitario || 0).toFixed(2)}</TableCell>
+                          <TableCell>R$ {(mov.valor_total || 0).toFixed(2)}</TableCell>
                           <TableCell>
                             <span className="text-sm text-gray-600">{mov.motivo}</span>
                           </TableCell>
