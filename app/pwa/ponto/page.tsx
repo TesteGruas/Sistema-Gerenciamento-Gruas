@@ -15,7 +15,9 @@ import {
   Calendar,
   MapPin,
   Wifi,
-  WifiOff
+  WifiOff,
+  Navigation,
+  RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -29,6 +31,10 @@ export default function PWAPontoPage() {
     saida: null as string | null
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [location, setLocation] = useState<{lat: number, lng: number, address?: string} | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -55,43 +61,224 @@ export default function PWAPontoPage() {
     }
   }, [])
 
+  // Carregar dados do usuário
+  useEffect(() => {
+    const userData = localStorage.getItem('user_data')
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData)
+        setUser(parsedUser)
+      } catch (error) {
+        console.error('Erro ao carregar dados do usuário:', error)
+      }
+    }
+  }, [])
+
   // Carregar registros do dia
   useEffect(() => {
-    // Simular carregamento de registros (em produção, viria da API)
-    const registros = {
-      entrada: "08:30",
-      saida_almoco: null,
-      volta_almoco: null,
-      saida: null
+    if (user?.id) {
+      carregarRegistrosHoje()
     }
-    setRegistrosHoje(registros)
-  }, [])
+  }, [user])
+
+  // Obter localização atual
+  const obterLocalizacao = async () => {
+    setIsGettingLocation(true)
+    setLocationError(null)
+    
+    try {
+      if (!navigator.geolocation) {
+        throw new Error('Geolocalização não é suportada por este navegador')
+      }
+
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutos
+        })
+      })
+
+      const { latitude, longitude } = position.coords
+      setLocation({ lat: latitude, lng: longitude })
+
+      // Tentar obter endereço (opcional)
+      try {
+        const response = await fetch(
+          `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=YOUR_API_KEY&language=pt&pretty=1`
+        )
+        if (response.ok) {
+          const data = await response.json()
+          if (data.results && data.results.length > 0) {
+            setLocation(prev => ({
+              ...prev!,
+              address: data.results[0].formatted
+            }))
+          }
+        }
+      } catch (error) {
+        console.log('Erro ao obter endereço:', error)
+      }
+
+      toast({
+        title: "Localização obtida!",
+        description: "Sua localização foi capturada com sucesso",
+        variant: "default"
+      })
+    } catch (error: any) {
+      console.error('Erro ao obter localização:', error)
+      setLocationError(error.message)
+      toast({
+        title: "Erro na localização",
+        description: error.message || "Não foi possível obter sua localização",
+        variant: "destructive"
+      })
+    } finally {
+      setIsGettingLocation(false)
+    }
+  }
+
+  // Carregar registros do dia
+  const carregarRegistrosHoje = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) return
+
+      const hoje = new Date().toISOString().split('T')[0]
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.data && data.data.length > 0) {
+          const registro = data.data[0]
+          setRegistrosHoje({
+            entrada: registro.entrada,
+            saida_almoco: registro.saida_almoco,
+            volta_almoco: registro.volta_almoco,
+            saida: registro.saida
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar registros:', error)
+    }
+  }
 
   const registrarPonto = async (tipo: string) => {
     setIsLoading(true)
     
     try {
-      // Simular delay da API
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Faça login novamente",
+          variant: "destructive"
+        })
+        return
+      }
+
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
+      const hoje = agora.toISOString().split('T')[0]
       
-      // Atualizar registros localmente
-      setRegistrosHoje(prev => ({
-        ...prev,
-        [tipo.toLowerCase().replace(' ', '_')]: horaAtual
-      }))
+      // Preparar dados para envio
+      const dadosRegistro = {
+        funcionario_id: user.id,
+        data: hoje,
+        [tipo.toLowerCase().replace(' ', '_')]: horaAtual,
+        localizacao: location ? `${location.lat}, ${location.lng}` : null
+      }
 
-      toast({
-        title: "Ponto registrado!",
-        description: `${tipo} registrada às ${horaAtual}`,
-        variant: "default"
-      })
-    } catch (error) {
+      // Verificar se já existe registro para hoje
+      const responseExistente = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      let response
+      if (responseExistente.ok) {
+        const dataExistente = await responseExistente.json()
+        if (dataExistente.data && dataExistente.data.length > 0) {
+          // Atualizar registro existente
+          const registroId = dataExistente.data[0].id
+          response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros/${registroId}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                ...dadosRegistro,
+                justificativa_alteracao: `Registro ${tipo} via PWA`
+              })
+            }
+          )
+        } else {
+          // Criar novo registro
+          response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(dadosRegistro)
+            }
+          )
+        }
+      } else {
+        // Criar novo registro
+        response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(dadosRegistro)
+          }
+        )
+      }
+
+      if (response.ok) {
+        // Atualizar registros localmente
+        setRegistrosHoje(prev => ({
+          ...prev,
+          [tipo.toLowerCase().replace(' ', '_')]: horaAtual
+        }))
+
+        toast({
+          title: "Ponto registrado!",
+          description: `${tipo} registrada às ${horaAtual}`,
+          variant: "default"
+        })
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Erro ao registrar ponto')
+      }
+    } catch (error: any) {
+      console.error('Erro ao registrar ponto:', error)
       toast({
         title: "Erro ao registrar ponto",
-        description: "Tente novamente em alguns instantes",
+        description: error.message || "Tente novamente em alguns instantes",
         variant: "destructive"
       })
     } finally {
@@ -293,6 +480,58 @@ export default function PWAPontoPage() {
         </CardContent>
       </Card>
 
+      {/* Localização */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Navigation className="w-5 h-5" />
+            Localização
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {location ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Localização capturada</span>
+                </div>
+                <div className="text-xs text-gray-600">
+                  <p>Lat: {location.lat.toFixed(6)}</p>
+                  <p>Lng: {location.lng.toFixed(6)}</p>
+                  {location.address && <p>Endereço: {location.address}</p>}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Localização não capturada</span>
+                </div>
+                <Button
+                  onClick={obterLocalizacao}
+                  disabled={isGettingLocation}
+                  size="sm"
+                  variant="outline"
+                >
+                  {isGettingLocation ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Navigation className="w-4 h-4 mr-2" />
+                  )}
+                  {isGettingLocation ? 'Obtendo...' : 'Capturar Localização'}
+                </Button>
+              </div>
+            )}
+            {locationError && (
+              <div className="text-xs text-red-600">
+                <p>Erro: {locationError}</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Informações do funcionário */}
       <Card>
         <CardHeader>
@@ -308,13 +547,13 @@ export default function PWAPontoPage() {
                 <User className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="font-medium">João Silva</p>
-                <p className="text-sm text-gray-500">Operador</p>
+                <p className="font-medium">{user?.nome || 'Carregando...'}</p>
+                <p className="text-sm text-gray-500">{user?.cargo || user?.role || 'Carregando...'}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <MapPin className="w-4 h-4" />
-              <span>Localização: Sistema PWA</span>
+              <span>Localização: {location ? 'Capturada' : 'Não capturada'}</span>
             </div>
           </div>
         </CardContent>

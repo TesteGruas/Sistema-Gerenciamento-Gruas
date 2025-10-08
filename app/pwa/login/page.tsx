@@ -74,31 +74,44 @@ export default function PWALoginPage() {
     setIsLoading(true)
 
     try {
-      // Simular autenticação (em produção, isso seria uma chamada real à API)
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Fazer login real com a API
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.usuario,
+          password: formData.senha
+        })
+      })
 
-      if (formData.usuario === "admin" && formData.senha === "123456") {
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        // Salvar dados de autenticação
+        localStorage.setItem('access_token', data.data.access_token)
+        localStorage.setItem('user_data', JSON.stringify(data.data.user))
+        if (data.data.refresh_token) {
+          localStorage.setItem('refresh_token', data.data.refresh_token)
+        }
+
         toast({
           title: "Login realizado com sucesso!",
-          description: "Bem-vindo ao sistema IRBANA PWA",
+          description: `Bem-vindo, ${data.data.user.nome}!`,
           variant: "default"
         })
-        router.push("/pwa/ponto")
-      } else if (formData.usuario === "operador" && formData.senha === "123456") {
-        toast({
-          title: "Login realizado com sucesso!",
-          description: "Bem-vindo ao sistema IRBANA PWA",
-          variant: "default"
-        })
-        router.push("/pwa/ponto")
+        
+        router.push("/pwa")
       } else {
         toast({
           title: "Credenciais inválidas",
-          description: "Verifique seu usuário e senha",
+          description: data.message || "Verifique seu usuário e senha",
           variant: "destructive"
         })
       }
     } catch (error) {
+      console.error('Erro no login:', error)
       toast({
         title: "Erro no login",
         description: "Tente novamente em alguns instantes",

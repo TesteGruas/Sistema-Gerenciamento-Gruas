@@ -28,7 +28,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string } | null>(null)
   const router = useRouter()
 
-  // Verificar status de conexão
+  // Verificar status de conexão e carregar dados do usuário
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
@@ -39,12 +39,20 @@ export default function PWALayout({ children }: PWALayoutProps) {
     // Verificar status inicial
     setIsOnline(navigator.onLine)
 
-    // Simular usuário logado (em produção, isso viria do contexto de autenticação)
-    setUser({
-      id: 1,
-      nome: "João Silva",
-      cargo: "Operador"
-    })
+    // Carregar dados do usuário do localStorage
+    const userData = localStorage.getItem('user_data')
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData)
+        setUser({
+          id: parsedUser.id,
+          nome: parsedUser.nome,
+          cargo: parsedUser.cargo || parsedUser.role
+        })
+      } catch (error) {
+        console.error('Erro ao carregar dados do usuário:', error)
+      }
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline)
@@ -53,8 +61,11 @@ export default function PWALayout({ children }: PWALayoutProps) {
   }, [])
 
   const handleLogout = () => {
-    // Limpar dados do usuário
+    // Limpar dados do usuário e localStorage
     setUser(null)
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('user_data')
+    localStorage.removeItem('refresh_token')
     // Redirecionar para login
     router.push('/pwa/login')
   }
@@ -67,12 +78,32 @@ export default function PWALayout({ children }: PWALayoutProps) {
       description: "Registrar ponto"
     },
     {
-      name: "Assinatura",
-      href: "/pwa/assinatura",
+      name: "Gruas",
+      href: "/pwa/gruas",
+      icon: User,
+      description: "Minhas gruas"
+    },
+    {
+      name: "Documentos",
+      href: "/pwa/documentos",
       icon: FileSignature,
       description: "Assinar documentos"
     }
   ]
+
+  // Adicionar item de encarregador se o usuário for encarregador
+  const isEncarregador = user?.cargo?.toLowerCase().includes('encarregador') || 
+                        user?.cargo?.toLowerCase().includes('supervisor') ||
+                        user?.cargo?.toLowerCase().includes('chefe')
+
+  if (isEncarregador) {
+    navigationItems.push({
+      name: "Encarregador",
+      href: "/pwa/encarregador",
+      icon: User,
+      description: "Gerenciar funcionários"
+    })
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

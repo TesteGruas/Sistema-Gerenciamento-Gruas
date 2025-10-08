@@ -78,14 +78,47 @@ export default function PWAMainPage() {
       bgColor: "bg-blue-50"
     },
     {
-      title: "Assinatura Digital",
+      title: "Minhas Gruas",
+      description: "Ver gruas sob responsabilidade",
+      icon: User,
+      href: "/pwa/gruas",
+      color: "bg-purple-600",
+      bgColor: "bg-purple-50"
+    },
+    {
+      title: "Documentos",
       description: "Assinar documentos",
       icon: FileSignature,
-      href: "/pwa/assinatura",
+      href: "/pwa/documentos",
       color: "bg-green-600",
       bgColor: "bg-green-50"
     }
   ]
+
+  // Adicionar ação de encarregador se aplicável
+  const userData = localStorage.getItem('user_data')
+  let isEncarregador = false
+  if (userData) {
+    try {
+      const parsedUser = JSON.parse(userData)
+      isEncarregador = parsedUser?.cargo?.toLowerCase().includes('encarregador') || 
+                      parsedUser?.cargo?.toLowerCase().includes('supervisor') ||
+                      parsedUser?.cargo?.toLowerCase().includes('chefe')
+    } catch (error) {
+      console.error('Erro ao parsear dados do usuário:', error)
+    }
+  }
+
+  if (isEncarregador) {
+    quickActions.push({
+      title: "Encarregador",
+      description: "Gerenciar funcionários e horas",
+      icon: User,
+      href: "/pwa/encarregador",
+      color: "bg-orange-600",
+      bgColor: "bg-orange-50"
+    })
+  }
 
   const stats = [
     {
@@ -170,7 +203,7 @@ export default function PWAMainPage() {
       {/* Ações rápidas */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {quickActions.map((action) => {
             const Icon = action.icon
             return (
