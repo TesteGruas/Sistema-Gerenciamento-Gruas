@@ -51,6 +51,10 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const pathname = usePathname()
+  
+  useEffect(() => {
+    console.log('Layout carregado')
+  }, [])
 
   useEffect(() => {
     // Verificar se o usuário é admin
@@ -174,7 +178,9 @@ export default function DashboardLayout({
         </div>
 
         {/* Page content */}
-        <main className="flex-1 p-6 overflow-auto">{children}</main>
+        <main className="flex-1 p-6 overflow-auto">
+          {children}
+        </main>
       </div>
     </div>
   )

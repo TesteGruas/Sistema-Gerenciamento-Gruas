@@ -223,13 +223,13 @@ export default function RHPage() {
         })
         
         // Recarregar lista de funcionários
-        const response = await apiRH.listarFuncionarios({
-          page: 1,
-          limit: 100
-        })
+      const response = await apiRH.listarFuncionarios({
+        page: 1,
+        limit: 100
+      })
         
         if (response.success) {
-          setFuncionarios(response.data)
+      setFuncionarios(response.data)
         }
         
         // Resetar formulário e fechar dialog
@@ -593,25 +593,25 @@ export default function RHPage() {
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Novo Funcionário
-          </Button>
+        </Button>
         </div>
       </div>
 
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
                 <p className="text-sm font-medium text-gray-600">Total Funcionários</p>
                 <p className="text-2xl font-bold text-gray-900">{funcionarios.length}</p>
-              </div>
+                </div>
               <div className="p-3 rounded-full bg-blue-500">
                 <Users className="w-6 h-6 text-white" />
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
         <Card>
           <CardContent className="p-6">
@@ -621,7 +621,7 @@ export default function RHPage() {
                 <p className="text-2xl font-bold text-gray-900">
                   0h
                 </p>
-              </div>
+      </div>
               <div className="p-3 rounded-full bg-green-500">
                 <Clock className="w-6 h-6 text-white" />
               </div>
@@ -629,8 +629,8 @@ export default function RHPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
+      <Card>
+        <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Salários</p>
@@ -832,22 +832,22 @@ export default function RHPage() {
           ) : (
             <Card>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[120px]">Funcionário</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[120px]">Funcionário</TableHead>
                       <TableHead className="w-[150px]">Cargo</TableHead>
                       <TableHead className="w-[120px]">Departamento</TableHead>
                       <TableHead className="w-[180px]">Obra Atual</TableHead>
                       <TableHead className="w-[100px]">Status</TableHead>
                       <TableHead className="w-[100px]">Admissão</TableHead>
                       <TableHead className="w-[120px] text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredFuncionarios.map((funcionario) => (
-                      <TableRow key={funcionario.id}>
-                        <TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredFuncionarios.map((funcionario) => (
+                  <TableRow key={funcionario.id}>
+                    <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="w-8 h-8">
                               <AvatarImage src={`/api/avatar/${funcionario.id}`} />
@@ -859,22 +859,22 @@ export default function RHPage() {
                               <div className="font-medium truncate">{funcionario.nome}</div>
                               <div className="text-sm text-gray-500 truncate">{funcionario.email || '-'}</div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
+                      </div>
+                    </TableCell>
+                    <TableCell>
                           <Badge className={`${getStatusColor(funcionario.cargo)} border`}>
                             {getStatusIcon(funcionario.cargo)}
-                            <span className="ml-1">{funcionario.cargo}</span>
-                          </Badge>
-                        </TableCell>
+                        <span className="ml-1">{funcionario.cargo}</span>
+                      </Badge>
+                    </TableCell>
                         <TableCell>{funcionario.departamento}</TableCell>
                         <TableCell>{funcionario.obra_atual?.nome || '-'}</TableCell>
-                        <TableCell>
+                    <TableCell>
                           <Badge className={`${getStatusColor(funcionario.status)} border`}>
                             {getStatusIcon(funcionario.status)}
                             <span className="ml-1">{funcionario.status}</span>
                           </Badge>
-                        </TableCell>
+                    </TableCell>
                         <TableCell>{format(new Date(funcionario.data_admissao), 'dd/MM/yyyy', { locale: ptBR })}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -935,7 +935,7 @@ export default function RHPage() {
                   <TableBody>
                     {salarios.map((salario) => (
                       <TableRow key={salario.id}>
-                        <TableCell>
+                    <TableCell>
                           <div className="flex items-center gap-2">
                             <Avatar className="w-8 h-8">
                               <AvatarImage src={`/api/avatar/${salario.funcionario.id}`} />
@@ -948,8 +948,8 @@ export default function RHPage() {
                               <div className="text-sm text-gray-500">{salario.funcionario.cargo}</div>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
+                    </TableCell>
+                    <TableCell>
                           <span className="font-medium">R$ {salario.salarioBase.toLocaleString('pt-BR')}</span>
                         </TableCell>
                         <TableCell>
@@ -977,8 +977,8 @@ export default function RHPage() {
                           <Badge className={`${getStatusColor(salario.status)} border`}>
                             {getStatusIcon(salario.status)}
                             <span className="ml-1">{salario.status}</span>
-                          </Badge>
-                        </TableCell>
+                      </Badge>
+                    </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
@@ -1087,7 +1087,7 @@ export default function RHPage() {
                 <TableBody>
                   {pontos.length > 0 ? pontos.map((ponto) => (
                     <TableRow key={ponto.id}>
-                      <TableCell>
+                    <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="w-8 h-8">
                             <AvatarImage src={`/api/avatar/${ponto.funcionario.id}`} />
@@ -1136,19 +1136,19 @@ export default function RHPage() {
                           {getStatusIcon(ponto.status)}
                           <span className="ml-1">{ponto.status}</span>
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
                             onClick={() => handleEditPonto(ponto)}
-                          >
+                        >
                             <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                             onClick={() => handleDeletePonto(ponto.id)}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1242,11 +1242,11 @@ export default function RHPage() {
                             </Button>
                           )}
                           <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                   )) : (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-gray-500">
@@ -1539,11 +1539,11 @@ export default function RHPage() {
                         </Badge>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                ))}
+              </TableBody>
+            </Table>
+        </CardContent>
+      </Card>
         </TabsContent>
 
         {/* Tab Histórico */}
