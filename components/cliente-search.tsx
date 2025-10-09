@@ -16,7 +16,7 @@ interface ClienteSearchProps {
   className?: string
 }
 
-export default function ClienteSearch({ 
+export function ClienteSearch({ 
   onClienteSelect, 
   selectedCliente, 
   placeholder = "Buscar cliente por nome ou CNPJ...",
@@ -199,3 +199,5 @@ export default function ClienteSearch({
     </div>
   )
 }
+
+export default ClienteSearch

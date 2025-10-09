@@ -18,7 +18,7 @@ interface FuncionarioSearchProps {
   allowedRoles?: string[]
 }
 
-export default function FuncionarioSearch({ 
+export function FuncionarioSearch({ 
   onFuncionarioSelect, 
   selectedFuncionario, 
   placeholder = "Buscar funcionário por nome ou cargo...",
@@ -284,3 +284,5 @@ export default function FuncionarioSearch({
     </div>
   )
 }
+
+export default FuncionarioSearch

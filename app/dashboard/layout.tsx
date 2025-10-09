@@ -21,12 +21,15 @@ import {
   Shield,
   UserCheck,
   History,
+  Bell,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 
 const baseNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell },
   { name: "Clientes", href: "/dashboard/clientes", icon: Users },
   { name: "Obras", href: "/dashboard/obras", icon: Building2 },
   { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane },
@@ -171,8 +174,9 @@ export default function DashboardLayout({
               <Menu className="w-5 h-5" />
             </Button>
 
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</span>
+            <div className="flex items-center gap-4 ml-auto">
+              <span className="text-sm text-gray-600 hidden md:block">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</span>
+              <NotificationsDropdown />
             </div>
           </div>
         </div>
