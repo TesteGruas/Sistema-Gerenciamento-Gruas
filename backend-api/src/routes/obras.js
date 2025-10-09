@@ -13,25 +13,25 @@ const obraSchema = Joi.object({
   cidade: Joi.string().required(),
   estado: Joi.string().min(2).max(2).required(),
   tipo: Joi.string().valid('Residencial', 'Comercial', 'Industrial', 'Infraestrutura').required(), // NOT NULL na tabela
-  cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).optional(),
-  contato_obra: Joi.string().allow('').optional(),
-  telefone_obra: Joi.string().allow('').optional(),
-  email_obra: Joi.string().email().allow('').optional(),
+  cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).allow(null, '').optional(),
+  contato_obra: Joi.string().allow('', null).optional(),
+  telefone_obra: Joi.string().allow('', null).optional(),
+  email_obra: Joi.string().email().allow('', null).optional(),
   status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').default('Planejamento'),
   // Novos campos adicionados - todos opcionais conforme tabela
-  descricao: Joi.string().allow('').optional(),
-  data_inicio: Joi.date().optional(),
-  data_fim: Joi.date().optional(),
-  orcamento: Joi.number().positive().optional(),
-  observacoes: Joi.string().allow('').optional(),
-  responsavel_id: Joi.number().integer().positive().optional(),
-  responsavel_nome: Joi.string().allow('').optional(),
+  descricao: Joi.string().allow('', null).optional(),
+  data_inicio: Joi.date().allow(null).optional(),
+  data_fim: Joi.date().allow(null).optional(),
+  orcamento: Joi.number().positive().allow(null).optional(),
+  observacoes: Joi.string().allow('', null).optional(),
+  responsavel_id: Joi.number().integer().positive().allow(null).optional(),
+  responsavel_nome: Joi.string().allow('', null).optional(),
   created_at: Joi.date().optional(),
   updated_at: Joi.date().optional(),
   // Dados da grua (mantido para compatibilidade)
-  grua_id: Joi.string().optional(),
-  grua_valor: Joi.number().positive().optional(),
-  grua_mensalidade: Joi.number().positive().optional(),
+  grua_id: Joi.string().allow(null, '').optional(),
+  grua_valor: Joi.number().positive().allow(null).optional(),
+  grua_mensalidade: Joi.number().positive().allow(null).optional(),
   // Múltiplas gruas
   gruas: Joi.array().items(
     Joi.object({
@@ -39,7 +39,7 @@ const obraSchema = Joi.object({
       valor_locacao: Joi.number().positive().required(),
       taxa_mensal: Joi.number().positive().required()
     })
-  ).optional(),
+  ).allow(null).optional(),
   // Dados dos funcionários
   funcionarios: Joi.array().items(
     Joi.object({
@@ -47,9 +47,9 @@ const obraSchema = Joi.object({
       userId: Joi.string().required(),
       role: Joi.string().required(),
       name: Joi.string().required(),
-      gruaId: Joi.string().optional()
+      gruaId: Joi.string().allow(null, '').optional()
     })
-  ).optional(),
+  ).allow(null).optional(),
   // Custos mensais
   custos_mensais: Joi.array().items(
     Joi.object({
@@ -62,12 +62,12 @@ const obraSchema = Joi.object({
       mes: Joi.string().pattern(/^\d{4}-\d{2}$/).required(),
       tipo: Joi.string().valid('contrato', 'aditivo').default('contrato')
     })
-  ).optional(),
+  ).allow(null).optional(),
   // Campos adicionais para criação automática de cliente
-  cliente_nome: Joi.string().optional(),
-  cliente_cnpj: Joi.string().optional(),
-  cliente_email: Joi.string().email().allow('').optional(),
-  cliente_telefone: Joi.string().allow('').optional()
+  cliente_nome: Joi.string().allow(null, '').optional(),
+  cliente_cnpj: Joi.string().allow(null, '').optional(),
+  cliente_email: Joi.string().email().allow('', null).optional(),
+  cliente_telefone: Joi.string().allow('', null).optional()
 })
 
 /**
@@ -938,8 +938,6 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
     if (value.funcionarios && value.funcionarios.length > 0) {
       console.log('👥 Processando dados dos funcionários...')
       try {
-        // Aqui você pode criar registros na tabela de funcionários da obra
-        // Por enquanto, vamos apenas logar os dados
         console.log('📝 Funcionários para processar:', value.funcionarios.map(f => ({
           obra_id: data.id,
           funcionario_id: f.userId,
@@ -947,31 +945,29 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
           nome: f.name
         })))
         
-        // Implementar criação dos registros de funcionários da obra
+        // Salvar funcionários na tabela funcionarios_obras
         for (const funcionario of value.funcionarios) {
-          const gruaFuncionarioData = {
-            grua_id: value.grua_id, // Usar a grua selecionada
+          const funcionarioObraData = {
             funcionario_id: parseInt(funcionario.userId),
             obra_id: data.id,
             data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
-            status: 'Ativo',
-            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            status: 'ativo',
+            horas_trabalhadas: 0,
+            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
           }
           
-          console.log('📝 Inserindo funcionário na tabela grua_funcionario:', gruaFuncionarioData)
+          console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
           
-          const { data: gruaFuncionarioResult, error: gruaFuncionarioError } = await supabaseAdmin
-            .from('grua_funcionario')
-            .insert(gruaFuncionarioData)
+          const { data: funcionarioObraResult, error: funcionarioObraError } = await supabaseAdmin
+            .from('funcionarios_obras')
+            .insert(funcionarioObraData)
             .select()
             .single()
           
-          if (gruaFuncionarioError) {
-            console.error('❌ Erro ao inserir funcionário na tabela grua_funcionario:', gruaFuncionarioError)
+          if (funcionarioObraError) {
+            console.error('❌ Erro ao inserir funcionário na tabela funcionarios_obras:', funcionarioObraError)
           } else {
-            console.log('✅ Funcionário inserido na tabela grua_funcionario:', gruaFuncionarioResult)
+            console.log('✅ Funcionário inserido na tabela funcionarios_obras:', funcionarioObraResult)
           }
         }
         
@@ -1173,6 +1169,135 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
         error: 'Erro ao atualizar obra',
         message: updateError.message
       })
+    }
+
+    // Processar dados dos funcionários (incluindo quando vier array vazio)
+    if (value.funcionarios !== undefined) {
+      console.log('👥 Atualizando funcionários da obra...')
+      try {
+        // Primeiro, remover funcionários existentes da obra
+        const { error: deleteError } = await supabaseAdmin
+          .from('funcionarios_obras')
+          .delete()
+          .eq('obra_id', id)
+        
+        if (deleteError) {
+          console.error('❌ Erro ao remover funcionários antigos:', deleteError)
+        } else {
+          console.log('✅ Funcionários antigos removidos')
+        }
+        
+        // Inserir novos funcionários se houver
+        if (value.funcionarios && value.funcionarios.length > 0) {
+          for (const funcionario of value.funcionarios) {
+          const funcionarioObraData = {
+            funcionario_id: parseInt(funcionario.userId),
+            obra_id: parseInt(id),
+            data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
+            status: 'ativo',
+            horas_trabalhadas: 0,
+            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
+          }
+          
+          console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
+          
+          const { data: funcionarioObraResult, error: funcionarioObraError } = await supabaseAdmin
+            .from('funcionarios_obras')
+            .insert(funcionarioObraData)
+            .select()
+            .single()
+          
+          if (funcionarioObraError) {
+            console.error('❌ Erro ao inserir funcionário:', funcionarioObraError)
+          } else {
+            console.log('✅ Funcionário inserido:', funcionarioObraResult)
+          }
+          }
+        }
+        
+      } catch (funcionarioError) {
+        console.error('❌ Erro ao processar funcionários:', funcionarioError)
+        // Não falhar a atualização da obra por causa dos funcionários
+      }
+    }
+
+    // Processar dados da grua se fornecidos
+    if (value.grua_id) {
+      console.log('🏗️ Atualizando grua da obra...')
+      try {
+        // Remover gruas antigas
+        await supabaseAdmin
+          .from('grua_obra')
+          .delete()
+          .eq('obra_id', id)
+        
+        // Inserir nova grua
+        const gruaObraData = {
+          obra_id: parseInt(id),
+          grua_id: value.grua_id,
+          valor_locacao_mensal: value.grua_mensalidade,
+          data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
+          status: 'Ativa'
+        }
+        
+        const { error: gruaError } = await supabaseAdmin
+          .from('grua_obra')
+          .insert(gruaObraData)
+        
+        if (gruaError) {
+          console.error('❌ Erro ao inserir grua:', gruaError)
+        } else {
+          console.log('✅ Grua atualizada')
+        }
+      } catch (gruaError) {
+        console.error('❌ Erro ao processar grua:', gruaError)
+      }
+    }
+
+    // Processar custos mensais se fornecidos
+    if (value.custos_mensais !== undefined) {
+      console.log('💰 Atualizando custos mensais...')
+      try {
+        // Remover custos antigos
+        await supabaseAdmin
+          .from('custos_mensais')
+          .delete()
+          .eq('obra_id', id)
+        
+        // Inserir novos custos
+        if (value.custos_mensais && value.custos_mensais.length > 0) {
+          for (const custo of value.custos_mensais) {
+            const custoMensalData = {
+              obra_id: parseInt(id),
+              item: custo.item,
+              descricao: custo.descricao,
+              unidade: custo.unidade,
+              quantidade_orcamento: custo.quantidadeOrcamento,
+              valor_unitario: custo.valorUnitario,
+              total_orcamento: custo.totalOrcamento,
+              mes: custo.mes,
+              quantidade_realizada: 0,
+              valor_realizado: 0,
+              quantidade_acumulada: 0,
+              valor_acumulado: 0,
+              quantidade_saldo: custo.quantidadeOrcamento,
+              valor_saldo: custo.totalOrcamento,
+              tipo: custo.tipo || 'contrato'
+            }
+            
+            const { error: custoError } = await supabaseAdmin
+              .from('custos_mensais')
+              .insert(custoMensalData)
+            
+            if (custoError) {
+              console.error('❌ Erro ao inserir custo mensal:', custoError)
+            }
+          }
+          console.log('✅ Custos mensais atualizados')
+        }
+      } catch (custoError) {
+        console.error('❌ Erro ao processar custos mensais:', custoError)
+      }
     }
 
     res.json({

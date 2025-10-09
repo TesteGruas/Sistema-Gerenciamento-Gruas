@@ -30,11 +30,20 @@ const funcionarioSchema = Joi.object({
   usuario_senha: Joi.string().min(6).when('criar_usuario', { is: true, then: Joi.required(), otherwise: Joi.optional() })
 })
 
-// Schema para atualização (campos opcionais)
-const funcionarioUpdateSchema = funcionarioSchema.fork(
-  ['nome', 'cargo'], 
-  (schema) => schema.optional()
-)
+// Schema para atualização (campos opcionais e sem validação de senha)
+const funcionarioUpdateSchema = Joi.object({
+  nome: Joi.string().min(2).max(255).optional(),
+  cargo: Joi.string().valid('Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras').optional(),
+  telefone: Joi.string().max(20).allow(null, '').optional(),
+  email: Joi.string().email().allow(null, '').optional(),
+  cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/).allow(null, '').optional(),
+  turno: Joi.string().valid('Diurno', 'Noturno', 'Sob Demanda').optional(),
+  status: Joi.string().valid('Ativo', 'Inativo', 'Férias').optional(),
+  data_admissao: Joi.date().allow(null).optional(),
+  salario: Joi.number().min(0).allow(null).optional(),
+  observacoes: Joi.string().allow(null, '').optional()
+  // Não incluir criar_usuario e usuario_senha no update
+})
 
 /**
  * @swagger
@@ -129,6 +138,18 @@ router.get('/', async (req, res) => {
           nome,
           email,
           status
+        ),
+        funcionarios_obras(
+          id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          obras(
+            id,
+            nome,
+            status
+          )
         )
       `, { count: 'exact' })
 
@@ -159,12 +180,19 @@ router.get('/', async (req, res) => {
       })
     }
 
-    // Adicionar informações sobre usuário existente para cada funcionário
-    const funcionariosComUsuario = (data || []).map(funcionario => ({
-      ...funcionario,
-      usuario_existe: !!funcionario.usuario,
-      usuario_criado: !!funcionario.usuario
-    }))
+    // Adicionar informações sobre usuário existente e obra atual para cada funcionário
+    const funcionariosComUsuario = (data || []).map(funcionario => {
+      const alocacoesAtivas = funcionario.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
+      const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
+      
+      return {
+        ...funcionario,
+        usuario_existe: !!funcionario.usuario,
+        usuario_criado: !!funcionario.usuario,
+        obra_atual: obraAtual,
+        obras_vinculadas: alocacoesAtivas
+      }
+    })
 
     const totalPages = Math.ceil(count / limit)
 
@@ -338,6 +366,23 @@ router.get('/:id', async (req, res) => {
           nome,
           email,
           status
+        ),
+        funcionarios_obras(
+          id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          horas_trabalhadas,
+          valor_hora,
+          total_receber,
+          obras(
+            id,
+            nome,
+            cidade,
+            estado,
+            status
+          )
         )
       `)
       .eq('id', id)
@@ -356,11 +401,17 @@ router.get('/:id', async (req, res) => {
       })
     }
 
-    // Adicionar informações sobre o usuário vinculado
+    // Filtrar apenas alocações ativas
+    const alocacoesAtivas = data.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
+    const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
+
+    // Adicionar informações sobre o usuário vinculado e obra atual
     const responseData = {
       ...data,
       usuario_existe: !!data.usuario,
-      usuario_criado: !!data.usuario
+      usuario_criado: !!data.usuario,
+      obra_atual: obraAtual,
+      obras_vinculadas: alocacoesAtivas
     }
 
     res.json({

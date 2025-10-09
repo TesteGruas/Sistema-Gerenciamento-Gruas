@@ -269,10 +269,18 @@ export const obrasApi = {
 
   // Atualizar obra
   async atualizarObra(id: number, data: ObraUpdateData): Promise<ObraResponse> {
+    // Remover campos com valor null ou undefined
+    const cleanData = Object.entries(data).reduce((acc, [key, value]) => {
+      if (value !== null && value !== undefined) {
+        acc[key] = value
+      }
+      return acc
+    }, {} as any)
+    
     const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${id}`)
     return apiRequest(url, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(cleanData),
     })
   },
 
@@ -305,19 +313,24 @@ export const obrasApi = {
   // Buscar funcionários vinculados a uma obra
   async buscarFuncionariosVinculados(obraId: number): Promise<{ success: boolean; data: any[] }> {
     try {
-      const url = buildApiUrl(`relacionamentos/grua-funcionario?obra_id=${obraId}`)
+      const url = buildApiUrl(`funcionarios-obras?obra_id=${obraId}`)
       const response = await apiRequest(url)
       
       if (response.success) {
         // Converter dados para o formato esperado pelo frontend
         const funcionariosConvertidos = response.data.map((item: any) => ({
-          id: item.id,
-          gruaId: item.grua_id,
+          id: item.id.toString(),
+          userId: item.funcionario_id.toString(),
           funcionarioId: item.funcionario_id,
           obraId: item.obra_id,
+          name: item.funcionarios?.nome || 'Funcionário',
+          role: item.funcionarios?.cargo || 'Cargo não informado',
           dataInicio: item.data_inicio,
           dataFim: item.data_fim,
           status: item.status,
+          horasTrabalhadas: item.horas_trabalhadas,
+          valorHora: item.valor_hora,
+          totalReceber: item.total_receber,
           observacoes: item.observacoes,
           createdAt: item.created_at,
           updatedAt: item.updated_at

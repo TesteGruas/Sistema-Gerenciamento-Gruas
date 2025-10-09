@@ -63,7 +63,7 @@ export default function PontoPage() {
   const [filtroFuncionario, setFiltroFuncionario] = useState("todos")
   const [filtroDataInicio, setFiltroDataInicio] = useState("")
   const [filtroDataFim, setFiltroDataFim] = useState("")
-  const [ordenacaoHorasExtras, setOrdenacaoHorasExtras] = useState("maior")
+  const [ordenacaoHorasExtras, setOrdenacaoHorasExtras] = useState("data") // Ordenar por data (mais recente primeiro)
   const [filtroStatus, setFiltroStatus] = useState("todos")
   
   // Estados para edição de registros
@@ -94,6 +94,15 @@ export default function PontoPage() {
     carregarDados()
   }, [])
 
+  // Debug dos registros e filtros (apenas uma vez após carregar)
+  useEffect(() => {
+    if (data.registrosPonto.length > 0) {
+      console.log('🔍 Debug após carregamento:')
+      console.log('  Total registros:', data.registrosPonto.length)
+      console.log('  Filtros:', { filtroFuncionario, filtroStatus, filtroDataInicio, filtroDataFim, searchTerm })
+    }
+  }, [data.registrosPonto.length])
+
   // Função para carregar dados da API
   const carregarDados = async () => {
     setData(prev => ({ ...prev, loading: true, error: null }))
@@ -105,7 +114,7 @@ export default function PontoPage() {
       // Carregar funcionários com verificação de admin e outros dados em paralelo
       const [funcionariosResponse, registrosResponse, justificativasResponse] = await Promise.all([
         apiFuncionarios.listarParaPonto(usuarioId),
-        apiRegistrosPonto.listar({ limit: 100 }),
+        apiRegistrosPonto.listar({ limit: 500 }), // Aumentado para 500 registros
         apiJustificativas.listar({})
       ])
 
@@ -118,10 +127,20 @@ export default function PontoPage() {
         ? null 
         : funcionarios[0] || null
 
+      const registros = registrosResponse.data || []
+      console.log('📊 Total de registros carregados:', registros.length)
+      console.log('📅 Primeiros 5 registros:', registros.slice(0, 5).map(r => ({
+        id: r.id,
+        funcionario: r.funcionario?.nome,
+        data: r.data,
+        entrada: r.entrada,
+        status: r.status
+      })))
+      
       setData(prev => ({
         ...prev,
         funcionarios: funcionarios,
-        registrosPonto: registrosResponse.data || [],
+        registrosPonto: registros,
         justificativas: justificativasResponse.data || [],
         isAdmin: isAdmin,
         usuarioAtual,
@@ -1013,7 +1032,7 @@ export default function PontoPage() {
                       setFiltroDataInicio("")
                       setFiltroDataFim("")
                       setFiltroStatus("todos")
-                      setOrdenacaoHorasExtras("maior")
+                      setOrdenacaoHorasExtras("data") // Ordenar por data (padrão)
                       setSearchTerm("")
                     }}
                   >

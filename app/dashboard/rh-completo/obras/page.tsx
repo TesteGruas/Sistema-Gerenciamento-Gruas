@@ -34,6 +34,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { getFuncionariosObras, type FuncionarioObra } from "@/lib/api-funcionarios-obras"
 
 interface ObraFuncionario {
   id: string
@@ -81,110 +82,69 @@ export default function ObrasRHPage() {
   const [isAlocacaoDialogOpen, setIsAlocacaoDialogOpen] = useState(false)
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
+  // Carregar alocações
   useEffect(() => {
-    setAlocacoes([
-      {
-        id: "1",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes",
-          cargo: "Supervisor"
-        },
-        obra: {
-          id: 1,
-          nome: "Residencial Atlântica",
-          endereco: "Rua das Flores, 123 - Centro",
-          cliente: "Construtora Atlântica",
-          status: "ativa"
-        },
-        dataInicio: "2024-10-01",
-        dataFim: undefined,
-        horasTrabalhadas: 160,
-        valorHora: 25.00,
-        totalReceber: 4000.00,
-        status: "ativo",
-        observacoes: "Supervisor responsável pela obra"
-      },
-      {
-        id: "2",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva",
-          cargo: "Sinaleiro"
-        },
-        obra: {
-          id: 1,
-          nome: "Residencial Atlântica",
-          endereco: "Rua das Flores, 123 - Centro",
-          cliente: "Construtora Atlântica",
-          status: "ativa"
-        },
-        dataInicio: "2024-10-15",
-        dataFim: undefined,
-        horasTrabalhadas: 80,
-        valorHora: 18.00,
-        totalReceber: 1440.00,
-        status: "ativo"
-      },
-      {
-        id: "3",
-        funcionario: {
-          id: 3,
-          nome: "Ana Paula",
-          cargo: "Supervisor"
-        },
-        obra: {
-          id: 2,
-          nome: "Shopping Center",
-          endereco: "Av. Principal, 456 - Zona Sul",
-          cliente: "Grupo Shopping",
-          status: "pausada"
-        },
-        dataInicio: "2024-09-01",
-        dataFim: "2024-11-01",
-        horasTrabalhadas: 320,
-        valorHora: 28.00,
-        totalReceber: 8960.00,
-        status: "finalizado"
-      }
-    ])
-
-    setObras([
-      {
-        id: 1,
-        nome: "Residencial Atlântica",
-        endereco: "Rua das Flores, 123 - Centro",
-        cliente: "Construtora Atlântica",
-        status: "ativa",
-        funcionarios: 15,
-        dataInicio: "2024-10-01",
-        valorTotal: 2500000
-      },
-      {
-        id: 2,
-        nome: "Shopping Center",
-        endereco: "Av. Principal, 456 - Zona Sul",
-        cliente: "Grupo Shopping",
-        status: "pausada",
-        funcionarios: 8,
-        dataInicio: "2024-09-01",
-        dataFim: "2024-11-01",
-        valorTotal: 5000000
-      },
-      {
-        id: 3,
-        nome: "Condomínio Residencial",
-        endereco: "Rua das Palmeiras, 789 - Norte",
-        cliente: "Construtora Norte",
-        status: "concluida",
-        funcionarios: 12,
-        dataInicio: "2024-06-01",
-        dataFim: "2024-10-31",
-        valorTotal: 1800000
-      }
-    ])
+    carregarDados()
   }, [])
+  const carregarDados = async () => {
+    setLoading(true)
+    try {
+      const { data } = await getFuncionariosObras({ limit: 100 })
+      
+      // Transformar dados para o formato esperado pelo componente
+      const alocacoesFormatadas = (data || []).map((alocacao: FuncionarioObra) => ({
+        id: alocacao.id.toString(),
+        funcionario: {
+          id: alocacao.funcionario_id,
+          nome: alocacao.funcionarios?.nome || 'Desconhecido',
+          cargo: alocacao.funcionarios?.cargo || 'N/A'
+        },
+        obra: {
+          id: alocacao.obra_id,
+          nome: alocacao.obras?.nome || 'Desconhecido',
+          endereco: alocacao.obras?.endereco || '',
+          cliente: 'Cliente',
+          status: alocacao.obras?.status === 'ativa' ? 'ativa' as const : 'pausada' as const
+        },
+        dataInicio: alocacao.data_inicio,
+        dataFim: alocacao.data_fim,
+        horasTrabalhadas: alocacao.horas_trabalhadas,
+        valorHora: alocacao.valor_hora || 0,
+        totalReceber: alocacao.total_receber || 0,
+        status: alocacao.status as 'ativo' | 'finalizado' | 'transferido',
+        observacoes: alocacao.observacoes
+      }))
+      
+      setAlocacoes(alocacoesFormatadas)
+
+      // Extrair obras únicas
+      const obrasUnicas = Array.from(
+        new Map(alocacoesFormatadas.map(a => [a.obra.id, a.obra])).values()
+      ).map(obra => ({
+        id: obra.id,
+        nome: obra.nome,
+        endereco: obra.endereco,
+        cliente: obra.cliente,
+        status: obra.status,
+        funcionarios: alocacoesFormatadas.filter(a => a.obra.id === obra.id).length,
+        dataInicio: alocacoesFormatadas.filter(a => a.obra.id === obra.id)[0]?.dataInicio || '',
+        dataFim: undefined,
+        valorTotal: 0
+      }))
+      
+      setObras(obrasUnicas)
+      
+    } catch (error: any) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar alocações",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {

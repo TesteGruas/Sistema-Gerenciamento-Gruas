@@ -27,6 +27,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { apiRegistrosPonto, apiFuncionarios, utilsPonto } from "@/lib/api-ponto-eletronico"
 
 interface PontoRegistro {
   id: string
@@ -70,101 +71,91 @@ export default function PontoEletronicoPage() {
   const [filtroStatus, setFiltroStatus] = useState("all")
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
+  // Carregar registros de ponto
   useEffect(() => {
-    setRegistros([
-      {
-        id: "1",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes"
-        },
-        data: "2024-11-15",
-        entrada: "08:00",
-        saida: "17:00",
-        entradaAlmoco: "12:00",
-        saidaAlmoco: "13:00",
-        horasTrabalhadas: 8,
-        horasExtras: 0,
-        obra: {
-          id: 1,
-          nome: "Residencial Atlântica"
-        },
-        status: "normal"
-      },
-      {
-        id: "2",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva"
-        },
-        data: "2024-11-15",
-        entrada: "08:15",
-        saida: "17:30",
-        entradaAlmoco: "12:00",
-        saidaAlmoco: "13:00",
-        horasTrabalhadas: 8.25,
-        horasExtras: 0.25,
-        obra: {
-          id: 1,
-          nome: "Residencial Atlântica"
-        },
-        status: "atraso"
-      },
-      {
-        id: "3",
-        funcionario: {
-          id: 3,
-          nome: "Ana Paula"
-        },
-        data: "2024-11-15",
-        entrada: "08:00",
-        saida: "18:00",
-        entradaAlmoco: "12:00",
-        saidaAlmoco: "13:00",
-        horasTrabalhadas: 9,
-        horasExtras: 1,
-        obra: {
-          id: 2,
-          nome: "Shopping Center"
-        },
-        status: "hora-extra"
-      }
-    ])
+    carregarDados()
+  }, [filtroFuncionario, filtroData, filtroStatus])
 
-    setFuncionarios([
-      {
-        id: 1,
-        nome: "Carlos Eduardo Menezes",
-        cargo: "Supervisor",
-        totalHoras: 160,
-        horasExtras: 8,
-        faltas: 0,
-        atrasos: 2,
-        ultimoPonto: "2024-11-15"
-      },
-      {
-        id: 2,
-        nome: "João Marcos Ferreira da Silva",
-        cargo: "Sinaleiro",
-        totalHoras: 158,
-        horasExtras: 6,
-        faltas: 1,
-        atrasos: 5,
-        ultimoPonto: "2024-11-15"
-      },
-      {
-        id: 3,
-        nome: "Ana Paula",
-        cargo: "Supervisor",
-        totalHoras: 165,
-        horasExtras: 15,
-        faltas: 0,
-        atrasos: 1,
-        ultimoPonto: "2024-11-15"
+  const carregarDados = async () => {
+    setLoading(true)
+    try {
+      const hoje = new Date()
+      const filtros: any = {
+        data_inicio: filtroData || format(hoje, 'yyyy-MM-dd'),
+        data_fim: filtroData || format(hoje, 'yyyy-MM-dd'),
       }
-    ])
-  }, [])
+
+      if (filtroFuncionario) {
+        filtros.funcionario_id = parseInt(filtroFuncionario)
+      }
+
+      if (filtroStatus !== 'all') {
+        filtros.status = filtroStatus
+      }
+
+      const { data: registrosData } = await apiRegistrosPonto.listar(filtros)
+      
+      // Transformar dados da API para o formato esperado pelo componente
+      const registrosFormatados = registrosData.map((reg: any) => ({
+        id: reg.id,
+        funcionario: {
+          id: reg.funcionario_id,
+          nome: reg.funcionario?.nome || 'Desconhecido'
+        },
+        data: reg.data,
+        entrada: reg.entrada || '',
+        saida: reg.saida || '',
+        entradaAlmoco: reg.volta_almoco || '',
+        saidaAlmoco: reg.saida_almoco || '',
+        horasTrabalhadas: reg.horas_trabalhadas || 0,
+        horasExtras: reg.horas_extras || 0,
+        status: mapearStatus(reg.status),
+        observacoes: reg.observacoes
+      }))
+
+      setRegistros(registrosFormatados)
+
+      // Carregar resumo dos funcionários (simplificado)
+      const funcionariosUnicos = Array.from(new Set(registrosFormatados.map((r: any) => r.funcionario.id)))
+      const funcionariosResumo = await Promise.all(
+        funcionariosUnicos.map(async (id: any) => {
+          const regs = registrosFormatados.filter((r: any) => r.funcionario.id === id)
+          return {
+            id,
+            nome: regs[0].funcionario.nome,
+            cargo: 'Funcionário',
+            totalHoras: regs.reduce((sum: number, r: any) => sum + r.horasTrabalhadas, 0),
+            horasExtras: regs.reduce((sum: number, r: any) => sum + r.horasExtras, 0),
+            faltas: regs.filter((r: any) => r.status === 'falta').length,
+            atrasos: regs.filter((r: any) => r.status === 'atraso').length,
+            ultimoPonto: regs[0].data
+          }
+        })
+      )
+
+      setFuncionarios(funcionariosResumo)
+    } catch (error: any) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar registros de ponto",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const mapearStatus = (status: string): 'normal' | 'atraso' | 'falta' | 'hora-extra' => {
+    const statusMap: Record<string, 'normal' | 'atraso' | 'falta' | 'hora-extra'> = {
+      'Completo': 'normal',
+      'Atraso': 'atraso',
+      'Falta': 'falta',
+      'Aprovado': 'hora-extra',
+      'Pendente Aprovação': 'hora-extra',
+    }
+    return statusMap[status] || 'normal'
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {

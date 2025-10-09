@@ -782,15 +782,13 @@ export default function ObrasPage() {
       // Preencher dados dos funcionários se existirem
       const funcionarios = funcionariosResponse.data?.map((func: any) => ({
         id: func.id.toString(),
-        userId: func.funcionarioId.toString(),
-        role: func.observacoes?.includes('(') ? 
-          func.observacoes.split('(')[1]?.split(')')[0] || 'Funcionário' : 
-          'Funcionário',
-        name: func.observacoes?.includes('Funcionário') ? 
-          func.observacoes.split('Funcionário ')[1]?.split(' (')[0] || 'Funcionário' : 
-          'Funcionário',
+        userId: func.userId || func.funcionarioId.toString(),
+        role: func.role || 'Cargo não informado',
+        name: func.name || 'Funcionário',
         gruaId: func.gruaId
       })) || []
+      
+      console.log('✅ Funcionários carregados:', funcionarios)
       
       // Preencher formulário com dados da obra
       setObraFormData({
@@ -886,6 +884,23 @@ export default function ObrasPage() {
         // Dados do responsável
         responsavelId: obraFormData.responsavelId,
         responsavelName: obraFormData.responsavelName,
+        // Dados da grua
+        gruaId: obraFormData.gruaId || null,
+        gruaValue: obraFormData.gruaValue ? parseFloat(obraFormData.gruaValue) : null,
+        monthlyFee: obraFormData.monthlyFee ? parseFloat(obraFormData.monthlyFee) : null,
+        // Funcionários
+        funcionarios: funcionariosSelecionados && funcionariosSelecionados.length > 0 ? funcionariosSelecionados : [],
+        // Custos mensais
+        custos_mensais: custosMensais && custosMensais.length > 0 ? custosMensais.map(custo => ({
+          item: custo.item,
+          descricao: custo.descricao,
+          unidade: custo.unidade,
+          quantidadeOrcamento: custo.quantidadeOrcamento,
+          valorUnitario: custo.valorUnitario,
+          totalOrcamento: custo.totalOrcamento,
+          mes: custo.mes,
+          tipo: custo.tipo || 'contrato'
+        })) : [],
         // Campos específicos do backend
         cidade: obraFormData.location?.split(',')[0]?.trim() || 'São Paulo',
         estado: obraFormData.location?.split(',')[1]?.trim() || 'SP',
@@ -893,14 +908,19 @@ export default function ObrasPage() {
         endereco: obraFormData.location || 'Endereço não informado'
       }
 
+      console.log('📋 Dados preparados para o backend:', obraData)
+      console.log('👥 Funcionários selecionados:', funcionariosSelecionados)
+      console.log('💰 Custos mensais:', custosMensais)
+      
       // Converter para formato do backend
       const obraBackendData = converterObraFrontendParaBackend(obraData)
+      
+      console.log('🔄 Dados após conversão:', obraBackendData)
       
       // Atualizar obra no backend
       const response = await obrasApi.atualizarObra(parseInt(editingObra.id), obraBackendData)
       
-      console.log('Obra atualizada no backend:', response.data)
-      console.log('Funcionários:', obraFormData.funcionarios)
+      console.log('✅ Obra atualizada no backend:', response.data)
       
       // Recarregar lista de obras
       await carregarObras()

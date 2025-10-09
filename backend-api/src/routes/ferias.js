@@ -225,6 +225,16 @@ router.post('/ferias/:id/aprovar', async (req, res) => {
     const { id } = req.params
     const { aprovado_por } = req.body
 
+    // Buscar dados das férias
+    const { data: feriasData, error: fetchError } = await supabaseAdmin
+      .from('ferias')
+      .select('funcionario_id, data_inicio, data_fim')
+      .eq('id', id)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    // Atualizar status das férias
     const { data, error } = await supabaseAdmin
       .from('ferias')
       .update({
@@ -236,6 +246,21 @@ router.post('/ferias/:id/aprovar', async (req, res) => {
       .single()
 
     if (error) throw error
+
+    // Verificar se as férias já começaram (data_inicio <= hoje)
+    const hoje = new Date()
+    const dataInicio = new Date(feriasData.data_inicio)
+    const dataFim = new Date(feriasData.data_fim)
+
+    if (dataInicio <= hoje && dataFim >= hoje) {
+      // Férias já estão em andamento, atualizar status do funcionário
+      await supabaseAdmin
+        .from('funcionarios')
+        .update({ status: 'Férias' })
+        .eq('id', feriasData.funcionario_id)
+      
+      console.log(`✅ Funcionário ${feriasData.funcionario_id} marcado como em Férias`)
+    }
 
     res.json({
       success: true,
@@ -439,6 +464,16 @@ router.post('/afastamentos/:id/aprovar', async (req, res) => {
     const { id } = req.params
     const { aprovado_por } = req.body
 
+    // Buscar dados do afastamento
+    const { data: afastamentoData, error: fetchError } = await supabaseAdmin
+      .from('afastamentos')
+      .select('funcionario_id, data_inicio, data_fim')
+      .eq('id', id)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    // Atualizar status do afastamento
     const { data, error } = await supabaseAdmin
       .from('afastamentos')
       .update({
@@ -451,6 +486,21 @@ router.post('/afastamentos/:id/aprovar', async (req, res) => {
 
     if (error) throw error
 
+    // Verificar se o afastamento já começou
+    const hoje = new Date()
+    const dataInicio = new Date(afastamentoData.data_inicio)
+    const dataFim = afastamentoData.data_fim ? new Date(afastamentoData.data_fim) : null
+
+    if (dataInicio <= hoje && (!dataFim || dataFim >= hoje)) {
+      // Afastamento em andamento, atualizar status do funcionário para Inativo
+      await supabaseAdmin
+        .from('funcionarios')
+        .update({ status: 'Inativo' })
+        .eq('id', afastamentoData.funcionario_id)
+      
+      console.log(`✅ Funcionário ${afastamentoData.funcionario_id} marcado como Inativo (afastamento)`)
+    }
+
     res.json({
       success: true,
       data,
@@ -461,6 +511,106 @@ router.post('/afastamentos/:id/aprovar', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erro ao aprovar afastamento',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * POST /api/ferias/:id/finalizar
+ * Finalizar férias e retornar funcionário ao trabalho
+ */
+router.post('/ferias/:id/finalizar', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Buscar dados das férias
+    const { data: feriasData, error: fetchError } = await supabaseAdmin
+      .from('ferias')
+      .select('funcionario_id')
+      .eq('id', id)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    // Atualizar status das férias
+    const { data, error } = await supabaseAdmin
+      .from('ferias')
+      .update({ status: 'Finalizado' })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Retornar funcionário ao trabalho
+    await supabaseAdmin
+      .from('funcionarios')
+      .update({ status: 'Ativo' })
+      .eq('id', feriasData.funcionario_id)
+    
+    console.log(`✅ Funcionário ${feriasData.funcionario_id} retornou ao trabalho`)
+
+    res.json({
+      success: true,
+      data,
+      message: 'Férias finalizadas com sucesso. Funcionário retornou ao trabalho.'
+    })
+  } catch (error) {
+    console.error('Erro ao finalizar férias:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao finalizar férias',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * POST /api/afastamentos/:id/finalizar
+ * Finalizar afastamento e retornar funcionário ao trabalho
+ */
+router.post('/afastamentos/:id/finalizar', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Buscar dados do afastamento
+    const { data: afastamentoData, error: fetchError } = await supabaseAdmin
+      .from('afastamentos')
+      .select('funcionario_id')
+      .eq('id', id)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    // Atualizar status do afastamento
+    const { data, error } = await supabaseAdmin
+      .from('afastamentos')
+      .update({ status: 'Finalizado' })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Retornar funcionário ao trabalho
+    await supabaseAdmin
+      .from('funcionarios')
+      .update({ status: 'Ativo' })
+      .eq('id', afastamentoData.funcionario_id)
+    
+    console.log(`✅ Funcionário ${afastamentoData.funcionario_id} retornou ao trabalho`)
+
+    res.json({
+      success: true,
+      data,
+      message: 'Afastamento finalizado com sucesso. Funcionário retornou ao trabalho.'
+    })
+  } catch (error) {
+    console.error('Erro ao finalizar afastamento:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao finalizar afastamento',
       error: error.message
     })
   }

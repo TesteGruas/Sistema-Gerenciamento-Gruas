@@ -30,7 +30,8 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { rhApi, AuditoriaRH, PerfilUsuario, PermissaoRH } from "@/lib/api-rh-completo"
+import rhApi, { type AuditoriaRH, type PerfilUsuario, type PermissaoRH } from "@/lib/api-rh-completo"
+import { apiPerfis, apiPermissoes, type Perfil, type Permissao } from "@/lib/api-permissoes"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -75,26 +76,29 @@ export default function AuditoriaPage() {
       const auditoriaResponse = await rhApi.obterAuditoria()
       setAuditoria(auditoriaResponse.data || [])
       
-      // Simular carregamento de perfis e permissões
+      // Carregar perfis e permissões
+      const perfisData = await apiPerfis.listar()
+      const permissoesData = await apiPermissoes.listar()
+      
+      setPerfis(perfisData.map((p: Perfil) => ({
+        id: p.id,
+        nome: p.nome,
+        descricao: p.descricao || '',
+        permissoes: [],
+        ativo: p.status === 'Ativo',
+        created_at: p.created_at,
+        updated_at: p.updated_at
+      })))
+      
+      setPermissoes(permissoesData.map((p: Permissao) => ({
+        id: p.id,
+        modulo: p.modulo as any,
+        acao: p.acao as any,
+        descricao: p.descricao || ''
+      })))
+      
+      /* Dados de exemplo removidos
       const perfisSimulados: PerfilUsuario[] = [
-        {
-          id: 1,
-          nome: 'Administrador RH',
-          descricao: 'Acesso total ao módulo de RH',
-          permissoes: [],
-          ativo: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        {
-          id: 2,
-          nome: 'Gestor RH',
-          descricao: 'Acesso para gestão de funcionários e relatórios',
-          permissoes: [],
-          ativo: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
         {
           id: 3,
           nome: 'Operador RH',

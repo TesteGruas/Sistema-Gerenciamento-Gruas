@@ -31,7 +31,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { rhApi, Ferias, Afastamento } from "@/lib/api-rh-completo"
+import { getFerias, getAfastamentos, createFerias, createAfastamento, aprovarFerias, aprovarAfastamento, type Ferias, type Afastamento } from "@/lib/api-ferias"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -84,48 +84,29 @@ export default function FeriasPage() {
     try {
       setLoading(true)
       
-      // Carregar funcionários
-      const funcionariosResponse = await rhApi.listarFuncionariosCompletos({ limit: 100 })
-      setFuncionarios(funcionariosResponse.data || [])
+      // Carregar férias
+      const feriasResponse = await getFerias({ limit: 100 })
+      setFerias(feriasResponse.data || [])
       
-      // Simular carregamento de férias e afastamentos
-      const feriasSimuladas: Ferias[] = [
-        {
-          id: 1,
-          funcionario_id: 1,
-          data_inicio: '2024-01-15',
-          data_fim: '2024-01-30',
-          dias_solicitados: 15,
-          saldo_anterior: 30,
-          saldo_restante: 15,
-          status: 'Aprovado',
-          observacoes: 'Férias de verão',
-          aprovado_por: 1,
-          data_aprovacao: '2024-01-10',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ]
-      setFerias(feriasSimuladas)
+      // Carregar afastamentos
+      const afastamentosResponse = await getAfastamentos({ limit: 100 })
+      setAfastamentos(afastamentosResponse.data || [])
       
-      const afastamentosSimulados: Afastamento[] = [
-        {
-          id: 1,
-          funcionario_id: 1,
-          tipo: 'Licença Médica',
-          data_inicio: '2024-02-01',
-          data_fim: '2024-02-15',
-          dias_solicitados: 15,
-          status: 'Aprovado',
-          observacoes: 'Atestado médico',
-          documento_anexo: 'atestado.pdf',
-          aprovado_por: 1,
-          data_aprovacao: '2024-01-30',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ]
-      setAfastamentos(afastamentosSimulados)
+      // Carregar funcionários (simplificado - você pode criar uma API específica se necessário)
+      // Por enquanto, vamos extrair dos dados de férias/afastamentos
+      const todosIds = new Set([
+        ...feriasResponse.data.map(f => f.funcionario_id),
+        ...afastamentosResponse.data.map(a => a.funcionario_id)
+      ])
+      
+      const funcTemp = Array.from(todosIds).map(id => ({
+        id,
+        nome: feriasResponse.data.find(f => f.funcionario_id === id)?.funcionarios?.nome || 
+              afastamentosResponse.data.find(a => a.funcionario_id === id)?.funcionarios?.nome || 
+              `Funcionário ${id}`,
+        cargo: ''
+      }))
+      setFuncionarios(funcTemp)
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
