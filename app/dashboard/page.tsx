@@ -399,69 +399,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Alerts */}
-      {dashboardData && dashboardData.alertas.length > 0 && (
-        <div className="space-y-4">
-          {dashboardData.alertas.map((alerta, index) => (
-            <Card 
-              key={index} 
-              className={`border-2 ${
-                alerta.prioridade === 'alta' 
-                  ? 'border-red-200 bg-red-50' 
-                  : alerta.prioridade === 'media'
-                  ? 'border-yellow-200 bg-yellow-50'
-                  : 'border-green-200 bg-green-50'
-              }`}
-            >
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className={`w-5 h-5 ${
-                    alerta.prioridade === 'alta' 
-                      ? 'text-red-600' 
-                      : alerta.prioridade === 'media'
-                      ? 'text-yellow-600'
-                      : 'text-green-600'
-                  }`} />
-                  <div>
-                    <p className={`font-medium ${
-                      alerta.prioridade === 'alta' 
-                        ? 'text-red-800' 
-                        : alerta.prioridade === 'media'
-                        ? 'text-yellow-800'
-                        : 'text-green-800'
-                    }`}>
-                      {alerta.tipo === 'manutencao' ? 'Manutenção' : 
-                       alerta.tipo === 'utilizacao' ? 'Utilização' : 
-                       alerta.tipo === 'status' ? 'Status' : 'Alerta'}
-                    </p>
-                    <p className={`text-sm ${
-                      alerta.prioridade === 'alta' 
-                        ? 'text-red-700' 
-                        : alerta.prioridade === 'media'
-                        ? 'text-yellow-700'
-                        : 'text-green-700'
-                    }`}>
-                      {alerta.mensagem}
-                    </p>
-                    {alerta.acao && (
-                      <p className={`text-xs mt-1 ${
-                        alerta.prioridade === 'alta' 
-                          ? 'text-red-600' 
-                          : alerta.prioridade === 'media'
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                      }`}>
-                        Ação: {alerta.acao}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

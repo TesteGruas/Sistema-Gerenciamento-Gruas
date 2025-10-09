@@ -11,6 +11,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  LineChart,
+  Line,
+  BarChart as RechartsBarChart,
+  Bar,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+  ComposedChart
+} from 'recharts'
 import { 
   FileBarChart, 
   Plus, 
@@ -48,6 +66,88 @@ import { custosApi } from "@/lib/api-custos"
 import { getVendas } from "@/lib/api-financial"
 import { locacoesApi } from "@/lib/api-locacoes"
 import { estoqueAPI } from "@/lib/api-estoque"
+
+// Cores para gráficos
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+
+// Mock data para demonstração
+const mockRelatorioFinanceiro = [
+  {
+    mes: "Janeiro 2024",
+    receitas: 250000,
+    despesas: 180000,
+    saldo: 70000,
+    crescimento: 15
+  },
+  {
+    mes: "Fevereiro 2024",
+    receitas: 280000,
+    despesas: 195000,
+    saldo: 85000,
+    crescimento: 12
+  }
+]
+
+const mockRelatorioVendas = [
+  {
+    cliente: "Construtora ABC Ltda",
+    totalVendas: 150000,
+    quantidade: 5,
+    ticketMedio: 30000,
+    ultimaVenda: "2024-01-15"
+  },
+  {
+    cliente: "Engenharia XYZ S/A",
+    totalVendas: 120000,
+    quantidade: 3,
+    ticketMedio: 40000,
+    ultimaVenda: "2024-01-14"
+  }
+]
+
+const mockRelatorioContratos = [
+  {
+    numero: "CT-001",
+    cliente: "Construtora ABC Ltda",
+    valorTotal: 180000,
+    valorMensal: 15000,
+    inicio: "2024-01-01",
+    fim: "2024-12-31",
+    status: "ativo"
+  }
+]
+
+const mockRelatorioFaturamento = [
+  {
+    mes: "Janeiro 2024",
+    vendas: 150000,
+    locacoes: 100000,
+    servicos: 50000,
+    total: 300000
+  }
+]
+
+const mockRelatorioLocacoes = [
+  {
+    equipamento: "Grua 25t",
+    cliente: "Construtora ABC Ltda",
+    diasLocados: 30,
+    valorTotal: 15000,
+    aditivos: 2500,
+    status: "ativa"
+  }
+]
+
+const mockRelatorioEstoque = [
+  {
+    produto: "Grua 25t",
+    categoria: "equipamentos",
+    estoque: 3,
+    valorUnitario: 15000,
+    valorTotal: 45000,
+    ultimaMovimentacao: "2024-01-15"
+  }
+]
 
 export default function RelatoriosPage() {
   const [activeTab, setActiveTab] = useState('financeiro')
@@ -731,6 +831,95 @@ export default function RelatoriosPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Gráficos Consolidados */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Receitas vs Despesas
+            </CardTitle>
+            <CardDescription>Evolução mensal</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <ComposedChart data={mockRelatorioFinanceiro}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <RechartsTooltip 
+                  formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+                <Bar dataKey="receitas" fill="#10b981" name="Receitas" />
+                <Bar dataKey="despesas" fill="#ef4444" name="Despesas" />
+                <Line type="monotone" dataKey="saldo" stroke="#3b82f6" strokeWidth={2} name="Saldo" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              Faturamento por Categoria
+            </CardTitle>
+            <CardDescription>Distribuição mensal</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <RechartsBarChart data={mockRelatorioFaturamento}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <RechartsTooltip 
+                  formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+                <Bar dataKey="vendas" stackId="a" fill="#3b82f6" name="Vendas" />
+                <Bar dataKey="locacoes" stackId="a" fill="#10b981" name="Locações" />
+                <Bar dataKey="servicos" stackId="a" fill="#f59e0b" name="Serviços" />
+              </RechartsBarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PieChart className="w-5 h-5" />
+              Top Clientes
+            </CardTitle>
+            <CardDescription>Por volume de vendas</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <RechartsPieChart>
+                <Pie
+                  data={mockRelatorioVendas.map(v => ({ 
+                    name: v.cliente.split(' ')[0], 
+                    value: v.totalVendas 
+                  }))}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={70}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {mockRelatorioVendas.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`} />
+              </RechartsPieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Tabs Navigation */}
