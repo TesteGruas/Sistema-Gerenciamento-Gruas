@@ -76,6 +76,73 @@ export interface FuncionarioResponse {
   data: FuncionarioBackend
 }
 
+// ========================================
+// INTERFACES PARA DOCUMENTOS
+// ========================================
+
+export interface FuncionarioDocumento {
+  id: number
+  funcionario_id: number
+  tipo: 'rg' | 'cpf' | 'ctps' | 'pis' | 'pasep' | 'titulo_eleitor' | 'certificado_reservista' | 
+        'cnh' | 'certificado_aso' | 'certificado_nr' | 'comprovante_residencia' | 
+        'certidao_nascimento' | 'certidao_casamento' | 'outros'
+  nome: string
+  numero: string
+  orgao_emissor?: string
+  data_emissao?: string
+  data_vencimento?: string
+  arquivo_url?: string
+  observacoes?: string
+  created_at: string
+  updated_at: string
+  // Dados do funcionário (se retornado pela API)
+  funcionarios?: {
+    nome: string
+    cpf?: string
+    cargo?: string
+  }
+}
+
+export interface DocumentoCreateData {
+  funcionario_id: number
+  tipo: string
+  nome: string
+  numero: string
+  orgao_emissor?: string
+  data_emissao?: string
+  data_vencimento?: string
+  arquivo_url?: string
+  observacoes?: string
+}
+
+export interface DocumentoUpdateData {
+  nome?: string
+  numero?: string
+  orgao_emissor?: string
+  data_emissao?: string
+  data_vencimento?: string
+  arquivo_url?: string
+  observacoes?: string
+}
+
+export interface DocumentosResponse {
+  success: boolean
+  data: FuncionarioDocumento[]
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+  funcionario?: string
+}
+
+export interface DocumentoResponse {
+  success: boolean
+  data: FuncionarioDocumento
+  message?: string
+}
+
 // Função para obter token de autenticação
 const getAuthToken = (): string | null => {
   if (typeof window !== 'undefined') {
@@ -233,6 +300,66 @@ export const funcionariosApi = {
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}/${id}/desassociar-gruas`)
     return apiRequest(url, {
       method: 'POST',
+    })
+  },
+
+  // ========================================
+  // FUNÇÕES PARA DOCUMENTOS
+  // ========================================
+
+  // Listar documentos (todos ou filtrados)
+  async listarDocumentos(params?: {
+    page?: number
+    limit?: number
+    funcionario_id?: number
+    tipo?: string
+  }): Promise<DocumentosResponse> {
+    const searchParams = new URLSearchParams()
+    
+    if (params?.page) searchParams.append('page', params.page.toString())
+    if (params?.limit) searchParams.append('limit', params.limit.toString())
+    if (params?.funcionario_id) searchParams.append('funcionario_id', params.funcionario_id.toString())
+    if (params?.tipo) searchParams.append('tipo', params.tipo)
+
+    const url = buildApiUrl(`funcionarios/documentos?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  // Listar documentos de um funcionário específico
+  async listarDocumentosFuncionario(funcionarioId: number): Promise<DocumentosResponse> {
+    const url = buildApiUrl(`funcionarios/documentos/funcionario/${funcionarioId}`)
+    return apiRequest(url)
+  },
+
+  // Obter documento específico
+  async obterDocumento(id: number): Promise<DocumentoResponse> {
+    const url = buildApiUrl(`funcionarios/documentos/${id}`)
+    return apiRequest(url)
+  },
+
+  // Criar novo documento
+  async criarDocumento(data: DocumentoCreateData): Promise<DocumentoResponse> {
+    const url = buildApiUrl('funcionarios/documentos')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  // Atualizar documento
+  async atualizarDocumento(id: number, data: DocumentoUpdateData): Promise<DocumentoResponse> {
+    const url = buildApiUrl(`funcionarios/documentos/${id}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  // Excluir documento
+  async excluirDocumento(id: number): Promise<{ success: boolean; message: string }> {
+    const url = buildApiUrl(`funcionarios/documentos/${id}`)
+    return apiRequest(url, {
+      method: 'DELETE',
     })
   }
 }

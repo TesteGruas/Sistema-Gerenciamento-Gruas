@@ -33,46 +33,50 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { rhApi, Vale, BeneficioFuncionario as BeneficioAPI } from "@/lib/api-rh-completo"
 
 interface ValeFuncionario {
-  id: string
-  funcionario: {
+  id: number
+  funcionario_id: number
+  funcionario?: {
     id: number
     nome: string
-    cargo: string
-    avatar?: string
+    cargo?: string
   }
   tipo: 'vale-transporte' | 'vale-refeicao' | 'vale-alimentacao' | 'vale-combustivel' | 'outros'
   descricao: string
   valor: number
-  dataSolicitacao: string
-  dataAprovacao?: string
-  dataPagamento?: string
+  data_solicitacao: string
+  data_aprovacao?: string
+  data_pagamento?: string
   status: 'solicitado' | 'aprovado' | 'pago' | 'rejeitado'
-  aprovadoPor?: string
+  aprovado_por?: number
   observacoes?: string
 }
 
 interface BeneficioFuncionario {
-  id: string
-  funcionario: {
-    id: number
+  id: number
+  funcionario_id: number
+  beneficio_tipo_id: number
+  funcionario?: {
     nome: string
-    cargo: string
-    avatar?: string
+    cargo?: string
   }
-  tipo: 'plano-saude' | 'plano-odonto' | 'seguro-vida' | 'auxilio-creche' | 'outros'
-  descricao: string
-  valor: number
-  dataInicio: string
-  dataFim?: string
-  status: 'ativo' | 'inativo' | 'suspenso'
+  beneficios_tipo?: {
+    tipo: string
+    descricao: string
+    valor: number
+  }
+  data_inicio: string
+  data_fim?: string
+  status: string
   observacoes?: string
 }
 
 export default function ValesBeneficiosPage() {
   const [vales, setVales] = useState<ValeFuncionario[]>([])
   const [beneficios, setBeneficios] = useState<BeneficioFuncionario[]>([])
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [filtroFuncionario, setFiltroFuncionario] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("all")
@@ -81,98 +85,91 @@ export default function ValesBeneficiosPage() {
   const [isBeneficioDialogOpen, setIsBeneficioDialogOpen] = useState(false)
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
-  useEffect(() => {
-    setVales([
-      {
-        id: "1",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes",
-          cargo: "Supervisor"
-        },
-        tipo: "vale-transporte",
-        descricao: "Vale Transporte - Novembro 2024",
-        valor: 200.00,
-        dataSolicitacao: "2024-11-01",
-        dataAprovacao: "2024-11-02",
-        dataPagamento: "2024-11-05",
-        status: "pago",
-        aprovadoPor: "Ana Silva",
-        observacoes: "Aprovado conforme política da empresa"
-      },
-      {
-        id: "2",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva",
-          cargo: "Sinaleiro"
-        },
-        tipo: "vale-refeicao",
-        descricao: "Vale Refeição - Novembro 2024",
-        valor: 300.00,
-        dataSolicitacao: "2024-11-01",
-        dataAprovacao: "2024-11-02",
-        status: "aprovado",
-        aprovadoPor: "Ana Silva"
-      },
-      {
-        id: "3",
-        funcionario: {
-          id: 3,
-          nome: "Ana Paula",
-          cargo: "Supervisor"
-        },
-        tipo: "vale-alimentacao",
-        descricao: "Vale Alimentação - Novembro 2024",
-        valor: 400.00,
-        dataSolicitacao: "2024-11-01",
-        status: "solicitado"
-      }
-    ])
+  // Formulário de vale
+  const [valeForm, setValeForm] = useState({
+    funcionario_id: '',
+    tipo: 'vale-transporte' as 'vale-transporte' | 'vale-refeicao' | 'vale-alimentacao' | 'vale-combustivel' | 'outros',
+    descricao: '',
+    valor: '',
+    observacoes: ''
+  })
 
-    setBeneficios([
-      {
-        id: "1",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes",
-          cargo: "Supervisor"
-        },
-        tipo: "plano-saude",
-        descricao: "Plano de Saúde Unimed",
-        valor: 200.00,
-        dataInicio: "2024-01-01",
-        status: "ativo"
-      },
-      {
-        id: "2",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva",
-          cargo: "Sinaleiro"
-        },
-        tipo: "plano-odonto",
-        descricao: "Plano Odontológico Sorriso",
-        valor: 50.00,
-        dataInicio: "2024-01-01",
-        status: "ativo"
-      },
-      {
-        id: "3",
-        funcionario: {
-          id: 3,
-          nome: "Ana Paula",
-          cargo: "Supervisor"
-        },
-        tipo: "auxilio-creche",
-        descricao: "Auxílio Creche",
-        valor: 300.00,
-        dataInicio: "2024-06-01",
-        status: "ativo"
+  // Formulário de benefício
+  const [beneficioForm, setBeneficioForm] = useState({
+    funcionario_id: '',
+    tipo: 'plano-saude',
+    descricao: '',
+    valor: '',
+    data_inicio: ''
+  })
+
+  const handleCriarBeneficio = async () => {
+    try {
+      if (!beneficioForm.funcionario_id || !beneficioForm.tipo || !beneficioForm.descricao || !beneficioForm.valor) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
       }
-    ])
+
+      setLoading(true)
+      
+      // TODO: Implementar quando houver endpoint de benefícios de funcionários
+      // Por enquanto, apenas feedback ao usuário
+      toast({
+        title: "Info",
+        description: "Funcionalidade em desenvolvimento. Endpoint de benefícios será implementado em breve.",
+      })
+      
+      setIsBeneficioDialogOpen(false)
+      resetBeneficioForm()
+      
+    } catch (error: any) {
+      console.error('Erro ao criar benefício:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao adicionar benefício",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Carregar dados
+  useEffect(() => {
+    carregarDados()
   }, [])
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true)
+      
+      // Carregar funcionários
+      const funcionariosResponse = await rhApi.listarFuncionariosCompletos({ limit: 100 })
+      setFuncionarios(funcionariosResponse.data || [])
+      
+      // Carregar vales
+      const valesResponse = await rhApi.listarVales()
+      setVales(valesResponse.data || [])
+      
+      // Carregar benefícios dos funcionários
+      const beneficiosResponse = await rhApi.listarBeneficiosFuncionarios({ limit: 100 })
+      setBeneficios(beneficiosResponse.data || [])
+      
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados de vales e benefícios",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getTipoValeColor = (tipo: string) => {
     switch (tipo) {
@@ -226,20 +223,43 @@ export default function ValesBeneficiosPage() {
     return nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
-  const aprovarVale = async (valeId: string) => {
-    setLoading(true)
+  const handleCriarVale = async () => {
     try {
-      // Simular aprovação
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      if (!valeForm.funcionario_id || !valeForm.descricao || !valeForm.valor) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
+      }
+
+      setLoading(true)
       
-      toast({
-        title: "Vale Aprovado",
-        description: "Vale aprovado com sucesso!",
-      })
-    } catch (error) {
+      const valeData = {
+        funcionario_id: parseInt(valeForm.funcionario_id),
+        tipo: valeForm.tipo,
+        descricao: valeForm.descricao,
+        valor: parseFloat(valeForm.valor),
+        observacoes: valeForm.observacoes
+      }
+
+      const response = await rhApi.criarVale(valeData)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Vale solicitado com sucesso!",
+        })
+        setIsValeDialogOpen(false)
+        resetValeForm()
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar vale:', error)
       toast({
         title: "Erro",
-        description: "Erro ao aprovar vale",
+        description: error.message || "Erro ao solicitar vale",
         variant: "destructive"
       })
     } finally {
@@ -247,20 +267,24 @@ export default function ValesBeneficiosPage() {
     }
   }
 
-  const pagarVale = async (valeId: string) => {
-    setLoading(true)
+  const aprovarVale = async (valeId: number) => {
     try {
-      // Simular pagamento
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      setLoading(true)
       
-      toast({
-        title: "Vale Pago",
-        description: "Vale pago com sucesso!",
-      })
-    } catch (error) {
+      const response = await rhApi.aprovarVale(valeId)
+      
+      if (response.success) {
+        toast({
+          title: "Vale Aprovado",
+          description: "Vale aprovado com sucesso!",
+        })
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao aprovar vale:', error)
       toast({
         title: "Erro",
-        description: "Erro ao pagar vale",
+        description: error.message || "Erro ao aprovar vale",
         variant: "destructive"
       })
     } finally {
@@ -268,10 +292,36 @@ export default function ValesBeneficiosPage() {
     }
   }
 
-  const ativarBeneficio = async (beneficioId: string) => {
+  const pagarVale = async (valeId: number) => {
+    try {
+      setLoading(true)
+      
+      const dataAtual = new Date().toISOString().split('T')[0]
+      const response = await rhApi.pagarVale(valeId, dataAtual)
+      
+      if (response.success) {
+        toast({
+          title: "Vale Pago",
+          description: "Vale pago com sucesso!",
+        })
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao pagar vale:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao pagar vale",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const ativarBeneficio = async (beneficioId: number) => {
     setLoading(true)
     try {
-      // Simular ativação
+      // Implementar quando houver endpoint de benefícios
       await new Promise(resolve => setTimeout(resolve, 1000))
       
       toast({
@@ -289,6 +339,26 @@ export default function ValesBeneficiosPage() {
     }
   }
 
+  const resetValeForm = () => {
+    setValeForm({
+      funcionario_id: '',
+      tipo: 'vale-transporte',
+      descricao: '',
+      valor: '',
+      observacoes: ''
+    })
+  }
+
+  const resetBeneficioForm = () => {
+    setBeneficioForm({
+      funcionario_id: '',
+      tipo: '',
+      descricao: '',
+      valor: '',
+      data_inicio: ''
+    })
+  }
+
   const exportarVales = () => {
     toast({
       title: "Exportar",
@@ -296,16 +366,29 @@ export default function ValesBeneficiosPage() {
     })
   }
 
+  const getFuncionarioNome = (funcionario_id: number) => {
+    const funcionario = funcionarios.find(f => f.id === funcionario_id)
+    return funcionario?.nome || 'Funcionário não encontrado'
+  }
+
+  const getFuncionarioCargo = (funcionario_id: number) => {
+    const funcionario = funcionarios.find(f => f.id === funcionario_id)
+    return funcionario?.cargo || 'N/A'
+  }
+
   const filteredVales = vales.filter(vale => {
-    const matchesFuncionario = !filtroFuncionario || vale.funcionario.nome.toLowerCase().includes(filtroFuncionario.toLowerCase())
+    const funcionarioNome = getFuncionarioNome(vale.funcionario_id)
+    const matchesFuncionario = !filtroFuncionario || funcionarioNome.toLowerCase().includes(filtroFuncionario.toLowerCase())
     const matchesTipo = filtroTipo === "all" || vale.tipo === filtroTipo
     const matchesStatus = filtroStatus === "all" || vale.status === filtroStatus
     return matchesFuncionario && matchesTipo && matchesStatus
   })
 
   const filteredBeneficios = beneficios.filter(beneficio => {
-    const matchesFuncionario = !filtroFuncionario || beneficio.funcionario.nome.toLowerCase().includes(filtroFuncionario.toLowerCase())
-    const matchesTipo = filtroTipo === "all" || beneficio.tipo === filtroTipo
+    const funcionarioNome = beneficio.funcionario?.nome || getFuncionarioNome(beneficio.funcionario_id)
+    const tipoBeneficio = beneficio.beneficios_tipo?.tipo || ''
+    const matchesFuncionario = !filtroFuncionario || funcionarioNome.toLowerCase().includes(filtroFuncionario.toLowerCase())
+    const matchesTipo = filtroTipo === "all" || tipoBeneficio === filtroTipo
     const matchesStatus = filtroStatus === "all" || beneficio.status === filtroStatus
     return matchesFuncionario && matchesTipo && matchesStatus
   })
@@ -336,21 +419,29 @@ export default function ValesBeneficiosPage() {
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="funcionario-vale">Funcionário</Label>
-                  <Select>
+                  <Label htmlFor="funcionario-vale">Funcionário *</Label>
+                  <Select 
+                    value={valeForm.funcionario_id}
+                    onValueChange={(value) => setValeForm({ ...valeForm, funcionario_id: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o funcionário" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">Carlos Eduardo Menezes</SelectItem>
-                      <SelectItem value="2">João Marcos Ferreira da Silva</SelectItem>
-                      <SelectItem value="3">Ana Paula</SelectItem>
+                      {funcionarios.map((funcionario) => (
+                        <SelectItem key={funcionario.id} value={funcionario.id.toString()}>
+                          {funcionario.nome}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="tipo-vale">Tipo de Vale</Label>
-                  <Select>
+                  <Label htmlFor="tipo-vale">Tipo de Vale *</Label>
+                  <Select 
+                    value={valeForm.tipo}
+                    onValueChange={(value) => setValeForm({ ...valeForm, tipo: value as any })}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o tipo" />
                     </SelectTrigger>
@@ -364,22 +455,49 @@ export default function ValesBeneficiosPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="descricao-vale">Descrição</Label>
-                  <Input id="descricao-vale" placeholder="Descrição do vale" />
+                  <Label htmlFor="descricao-vale">Descrição *</Label>
+                  <Input 
+                    id="descricao-vale" 
+                    placeholder="Descrição do vale"
+                    value={valeForm.descricao}
+                    onChange={(e) => setValeForm({ ...valeForm, descricao: e.target.value })}
+                  />
                 </div>
                 <div>
-                  <Label htmlFor="valor-vale">Valor (R$)</Label>
-                  <Input id="valor-vale" type="number" placeholder="0.00" />
+                  <Label htmlFor="valor-vale">Valor (R$) *</Label>
+                  <Input 
+                    id="valor-vale" 
+                    type="number" 
+                    step="0.01"
+                    placeholder="0.00"
+                    value={valeForm.valor}
+                    onChange={(e) => setValeForm({ ...valeForm, valor: e.target.value })}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="observacoes-vale">Observações</Label>
-                  <Textarea id="observacoes-vale" placeholder="Observações sobre o vale" />
+                  <Textarea 
+                    id="observacoes-vale" 
+                    placeholder="Observações sobre o vale"
+                    value={valeForm.observacoes}
+                    onChange={(e) => setValeForm({ ...valeForm, observacoes: e.target.value })}
+                  />
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsValeDialogOpen(false)}>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsValeDialogOpen(false)
+                      resetValeForm()
+                    }}
+                  >
                     Cancelar
                   </Button>
-                  <Button onClick={() => setIsValeDialogOpen(false)}>
+                  <Button 
+                    onClick={handleCriarVale}
+                    disabled={loading}
+                  >
+                    {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
                     Solicitar
                   </Button>
                 </div>
@@ -559,14 +677,14 @@ export default function ValesBeneficiosPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="w-8 h-8">
-                            <AvatarImage src={`/api/avatar/${vale.funcionario.id}`} />
+                            <AvatarImage src={`/api/avatar/${vale.funcionario_id}`} />
                             <AvatarFallback className="bg-blue-100 text-blue-800 text-xs">
-                              {getInitials(vale.funcionario.nome)}
+                              {getInitials(getFuncionarioNome(vale.funcionario_id))}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <div className="font-medium">{vale.funcionario.nome}</div>
-                            <div className="text-sm text-gray-500">{vale.funcionario.cargo}</div>
+                            <div className="font-medium">{getFuncionarioNome(vale.funcionario_id)}</div>
+                            <div className="text-sm text-gray-500">{getFuncionarioCargo(vale.funcionario_id)}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -583,7 +701,7 @@ export default function ValesBeneficiosPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {format(new Date(vale.dataSolicitacao), 'dd/MM/yyyy', { locale: ptBR })}
+                          {format(new Date(vale.data_solicitacao), 'dd/MM/yyyy', { locale: ptBR })}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -599,6 +717,7 @@ export default function ValesBeneficiosPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => aprovarVale(vale.id)}
+                              disabled={loading}
                             >
                               <CheckCircle className="w-4 h-4" />
                             </Button>
@@ -608,6 +727,7 @@ export default function ValesBeneficiosPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => pagarVale(vale.id)}
+                              disabled={loading}
                             >
                               <DollarSign className="w-4 h-4" />
                             </Button>
@@ -646,21 +766,29 @@ export default function ValesBeneficiosPage() {
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
-                        <Label htmlFor="funcionario-beneficio">Funcionário</Label>
-                        <Select>
+                        <Label htmlFor="funcionario-beneficio">Funcionário *</Label>
+                        <Select 
+                          value={beneficioForm.funcionario_id}
+                          onValueChange={(value) => setBeneficioForm({ ...beneficioForm, funcionario_id: value })}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Selecione o funcionário" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="1">Carlos Eduardo Menezes</SelectItem>
-                            <SelectItem value="2">João Marcos Ferreira da Silva</SelectItem>
-                            <SelectItem value="3">Ana Paula</SelectItem>
+                            {funcionarios.map((funcionario) => (
+                              <SelectItem key={funcionario.id} value={funcionario.id.toString()}>
+                                {funcionario.nome}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
-                        <Label htmlFor="tipo-beneficio">Tipo de Benefício</Label>
-                        <Select>
+                        <Label htmlFor="tipo-beneficio">Tipo de Benefício *</Label>
+                        <Select 
+                          value={beneficioForm.tipo}
+                          onValueChange={(value) => setBeneficioForm({ ...beneficioForm, tipo: value })}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Selecione o tipo" />
                           </SelectTrigger>
@@ -674,22 +802,49 @@ export default function ValesBeneficiosPage() {
                         </Select>
                       </div>
                       <div>
-                        <Label htmlFor="descricao-beneficio">Descrição</Label>
-                        <Input id="descricao-beneficio" placeholder="Descrição do benefício" />
+                        <Label htmlFor="descricao-beneficio">Descrição *</Label>
+                        <Input 
+                          id="descricao-beneficio" 
+                          placeholder="Descrição do benefício"
+                          value={beneficioForm.descricao}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, descricao: e.target.value })}
+                        />
                       </div>
                       <div>
-                        <Label htmlFor="valor-beneficio">Valor (R$)</Label>
-                        <Input id="valor-beneficio" type="number" placeholder="0.00" />
+                        <Label htmlFor="valor-beneficio">Valor (R$) *</Label>
+                        <Input 
+                          id="valor-beneficio" 
+                          type="number" 
+                          step="0.01"
+                          placeholder="0.00"
+                          value={beneficioForm.valor}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, valor: e.target.value })}
+                        />
                       </div>
                       <div>
-                        <Label htmlFor="data-inicio-beneficio">Data de Início</Label>
-                        <Input id="data-inicio-beneficio" type="date" />
+                        <Label htmlFor="data-inicio-beneficio">Data de Início *</Label>
+                        <Input 
+                          id="data-inicio-beneficio" 
+                          type="date"
+                          value={beneficioForm.data_inicio}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, data_inicio: e.target.value })}
+                        />
                       </div>
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setIsBeneficioDialogOpen(false)}>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setIsBeneficioDialogOpen(false)
+                            resetBeneficioForm()
+                          }}
+                        >
                           Cancelar
                         </Button>
-                        <Button onClick={() => setIsBeneficioDialogOpen(false)}>
+                        <Button 
+                          onClick={handleCriarBeneficio}
+                          disabled={loading}
+                        >
+                          {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
                           Adicionar
                         </Button>
                       </div>
@@ -717,46 +872,56 @@ export default function ValesBeneficiosPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="w-8 h-8">
-                            <AvatarImage src={`/api/avatar/${beneficio.funcionario.id}`} />
+                            <AvatarImage src={`/api/avatar/${beneficio.funcionario_id}`} />
                             <AvatarFallback className="bg-blue-100 text-blue-800 text-xs">
-                              {getInitials(beneficio.funcionario.nome)}
+                              {getInitials(getFuncionarioNome(beneficio.funcionario_id))}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <div className="font-medium">{beneficio.funcionario.nome}</div>
-                            <div className="text-sm text-gray-500">{beneficio.funcionario.cargo}</div>
+                            <div className="font-medium">{getFuncionarioNome(beneficio.funcionario_id)}</div>
+                            <div className="text-sm text-gray-500">{getFuncionarioCargo(beneficio.funcionario_id)}</div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={`${getTipoBeneficioColor(beneficio.tipo)} border`}>
-                          {beneficio.tipo}
+                        <Badge className={`${getTipoBeneficioColor(beneficio.beneficios_tipo?.tipo || '')} border`}>
+                          {beneficio.beneficios_tipo?.tipo || 'N/A'}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{beneficio.descricao}</span>
+                        <span className="text-sm">{beneficio.beneficios_tipo?.descricao || 'N/A'}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="font-medium">R$ {beneficio.valor.toLocaleString('pt-BR')}</span>
+                        <span className="font-medium">R$ {(beneficio.beneficios_tipo?.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {format(new Date(beneficio.dataInicio), 'dd/MM/yyyy', { locale: ptBR })}
+                          {format(new Date(beneficio.data_inicio), 'dd/MM/yyyy', { locale: ptBR })}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Badge className={`${getStatusColor(beneficio.status)} border`}>
-                          {getStatusIcon(beneficio.status)}
-                          <span className="ml-1">{beneficio.status}</span>
+                        <Badge className={`${beneficio.status === 'ativo' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'} border`}>
+                          {beneficio.status === 'ativo' ? (
+                            <>
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Ativo
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              Inativo
+                            </>
+                          )}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {beneficio.status === 'inativo' && (
+                          {beneficio.status !== 'ativo' && (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => ativarBeneficio(beneficio.id)}
+                              disabled={loading}
                             >
                               <CheckCircle className="w-4 h-4" />
                             </Button>

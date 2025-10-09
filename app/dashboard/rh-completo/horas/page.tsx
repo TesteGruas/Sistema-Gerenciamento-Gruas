@@ -29,40 +29,29 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { rhApi, HorasMensais } from "@/lib/api-rh-completo"
 
-interface HorasFuncionario {
-  id: string
-  funcionario: {
+interface HorasFuncionario extends HorasMensais {
+  funcionario?: {
     id: number
     nome: string
-    cargo: string
-    avatar?: string
+    cargo?: string
   }
-  mes: string
-  horasTrabalhadas: number
-  horasExtras: number
-  horasFaltas: number
-  horasAtrasos: number
-  diasTrabalhados: number
-  diasUteis: number
-  percentualFrequencia: number
-  valorHora: number
-  totalReceber: number
-  status: 'calculado' | 'pago' | 'pendente'
 }
 
 interface ResumoHoras {
   mes: string
-  totalFuncionarios: number
-  totalHoras: number
-  totalExtras: number
-  totalFaltas: number
-  mediaFrequencia: number
-  valorTotal: number
+  total_funcionarios: number
+  total_horas: number
+  total_extras: number
+  total_faltas: number
+  media_frequencia: number
+  valor_total: number
 }
 
 export default function HorasTrabalhadasPage() {
   const [horasFuncionarios, setHorasFuncionarios] = useState<HorasFuncionario[]>([])
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [resumos, setResumos] = useState<ResumoHoras[]>([])
   const [loading, setLoading] = useState(false)
   const [filtroFuncionario, setFiltroFuncionario] = useState("")
@@ -70,89 +59,190 @@ export default function HorasTrabalhadasPage() {
   const [filtroStatus, setFiltroStatus] = useState("all")
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
-  useEffect(() => {
-    setHorasFuncionarios([
-      {
-        id: "1",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes",
-          cargo: "Supervisor"
-        },
-        mes: "2024-11",
-        horasTrabalhadas: 176,
-        horasExtras: 8,
-        horasFaltas: 0,
-        horasAtrasos: 2,
-        diasTrabalhados: 22,
-        diasUteis: 22,
-        percentualFrequencia: 100,
-        valorHora: 25.00,
-        totalReceber: 4600.00,
-        status: "pago"
-      },
-      {
-        id: "2",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva",
-          cargo: "Sinaleiro"
-        },
-        mes: "2024-11",
-        horasTrabalhadas: 160,
-        horasExtras: 4,
-        horasFaltas: 16,
-        horasAtrasos: 8,
-        diasTrabalhados: 20,
-        diasUteis: 22,
-        percentualFrequencia: 90.9,
-        valorHora: 18.00,
-        totalReceber: 2952.00,
-        status: "pago"
-      },
-      {
-        id: "3",
-        funcionario: {
-          id: 3,
-          nome: "Ana Paula",
-          cargo: "Supervisor"
-        },
-        mes: "2024-11",
-        horasTrabalhadas: 176,
-        horasExtras: 12,
-        horasFaltas: 0,
-        horasAtrasos: 1,
-        diasTrabalhados: 22,
-        diasUteis: 22,
-        percentualFrequencia: 100,
-        valorHora: 28.00,
-        totalReceber: 5264.00,
-        status: "calculado"
-      }
-    ])
+  // Formulário de horas
+  const [horasForm, setHorasForm] = useState({
+    funcionario_id: '',
+    mes: '',
+    ano: '',
+    horas_trabalhadas: '',
+    horas_extras: '',
+    horas_faltas: '',
+    horas_atrasos: '',
+    dias_trabalhados: '',
+    dias_uteis: ''
+  })
 
-    setResumos([
-      {
-        mes: "2024-11",
-        totalFuncionarios: 25,
-        totalHoras: 4200,
-        totalExtras: 180,
-        totalFaltas: 120,
-        mediaFrequencia: 95.2,
-        valorTotal: 125000
-      },
-      {
-        mes: "2024-10",
-        totalFuncionarios: 24,
-        totalHoras: 4080,
-        totalExtras: 160,
-        totalFaltas: 80,
-        mediaFrequencia: 96.8,
-        valorTotal: 118000
+  // Carregar dados
+  useEffect(() => {
+    carregarDados()
+  }, [filtroMes])
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true)
+      
+      // Carregar funcionários
+      const funcionariosResponse = await rhApi.listarFuncionariosCompletos({ limit: 100 })
+      setFuncionarios(funcionariosResponse.data || [])
+      
+      // Carregar horas mensais
+      const params: any = {}
+      if (filtroMes) {
+        const [ano, mes] = filtroMes.split('-')
+        params.ano = parseInt(ano)
+        params.mes = parseInt(mes)
       }
-    ])
-  }, [])
+      
+      const horasResponse = await rhApi.listarHorasMensais(params)
+      setHorasFuncionarios(horasResponse.data || [])
+      
+      // Calcular resumos
+      calcularResumos(horasResponse.data || [])
+      
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados de horas trabalhadas",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calcularResumos = (horas: HorasFuncionario[]) => {
+    const resumosPorMes: { [key: string]: ResumoHoras } = {}
+    
+    horas.forEach(h => {
+      const mesAno = `${h.ano}-${String(h.mes).padStart(2, '0')}`
+      
+      if (!resumosPorMes[mesAno]) {
+        resumosPorMes[mesAno] = {
+          mes: mesAno,
+          total_funcionarios: 0,
+          total_horas: 0,
+          total_extras: 0,
+          total_faltas: 0,
+          media_frequencia: 0,
+          valor_total: 0
+        }
+      }
+      
+      resumosPorMes[mesAno].total_funcionarios++
+      resumosPorMes[mesAno].total_horas += h.horas_trabalhadas
+      resumosPorMes[mesAno].total_extras += h.horas_extras || 0
+      resumosPorMes[mesAno].total_faltas += h.horas_faltas || 0
+      resumosPorMes[mesAno].valor_total += h.total_a_receber || 0
+    })
+    
+    // Calcular média de frequência
+    Object.keys(resumosPorMes).forEach(mes => {
+      const total = resumosPorMes[mes].total_funcionarios
+      if (total > 0) {
+        const horasComFrequencia = horas.filter(h => `${h.ano}-${String(h.mes).padStart(2, '0')}` === mes)
+        const somaFrequencia = horasComFrequencia.reduce((sum, h) => sum + (h.percentual_frequencia || 0), 0)
+        resumosPorMes[mes].media_frequencia = somaFrequencia / total
+      }
+    })
+    
+    setResumos(Object.values(resumosPorMes))
+  }
+
+  const getFuncionarioNome = (funcionario_id: number) => {
+    const funcionario = funcionarios.find(f => f.id === funcionario_id)
+    return funcionario?.nome || 'Funcionário não encontrado'
+  }
+
+  const getFuncionarioCargo = (funcionario_id: number) => {
+    const funcionario = funcionarios.find(f => f.id === funcionario_id)
+    return funcionario?.cargo || 'N/A'
+  }
+
+  const handleCalcularHoras = async (horaId: number) => {
+    try {
+      setLoading(true)
+      const response = await rhApi.calcularHorasMensais(horaId)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Horas calculadas com sucesso!",
+        })
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao calcular horas:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao calcular horas",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCriarHoras = async () => {
+    try {
+      if (!horasForm.funcionario_id || !horasForm.mes || !horasForm.ano) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
+      }
+
+      setLoading(true)
+      
+      const horasData = {
+        funcionario_id: parseInt(horasForm.funcionario_id),
+        mes: parseInt(horasForm.mes),
+        ano: parseInt(horasForm.ano),
+        horas_trabalhadas: parseFloat(horasForm.horas_trabalhadas),
+        horas_extras: parseFloat(horasForm.horas_extras) || 0,
+        horas_faltas: parseFloat(horasForm.horas_faltas) || 0,
+        horas_atrasos: parseFloat(horasForm.horas_atrasos) || 0,
+        dias_trabalhados: parseInt(horasForm.dias_trabalhados),
+        dias_uteis: parseInt(horasForm.dias_uteis)
+      }
+
+      const response = await rhApi.criarHorasMensais(horasData)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Horas registradas com sucesso!",
+        })
+        resetHorasForm()
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar horas:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao registrar horas",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetHorasForm = () => {
+    setHorasForm({
+      funcionario_id: '',
+      mes: '',
+      ano: '',
+      horas_trabalhadas: '',
+      horas_extras: '',
+      horas_faltas: '',
+      horas_atrasos: '',
+      dias_trabalhados: '',
+      dias_uteis: ''
+    })
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -232,10 +322,11 @@ export default function HorasTrabalhadasPage() {
   }
 
   const filteredHoras = horasFuncionarios.filter(horas => {
-    const matchesFuncionario = !filtroFuncionario || horas.funcionario.nome.toLowerCase().includes(filtroFuncionario.toLowerCase())
-    const matchesMes = !filtroMes || horas.mes.includes(filtroMes)
-    const matchesStatus = filtroStatus === "all" || horas.status === filtroStatus
-    return matchesFuncionario && matchesMes && matchesStatus
+    const funcionarioNome = getFuncionarioNome(horas.funcionario_id)
+    const horaMesAno = `${horas.ano}-${String(horas.mes).padStart(2, '0')}`
+    const matchesFuncionario = !filtroFuncionario || funcionarioNome.toLowerCase().includes(filtroFuncionario.toLowerCase())
+    const matchesMes = !filtroMes || horaMesAno === filtroMes || horaMesAno.includes(filtroMes)
+    return matchesFuncionario && matchesMes
   })
 
   return (

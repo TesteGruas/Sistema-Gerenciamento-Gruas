@@ -37,6 +37,7 @@ import clientesRoutes from './routes/clientes.js'
 import obrasRoutes from './routes/obras.js'
 import contratosRoutes from './routes/contratos.js'
 import funcionariosRoutes from './routes/funcionarios.js'
+import funcionariosDocumentosRoutes from './routes/funcionarios-documentos.js'
 import equipamentosRoutes from './routes/equipamentos.js'
 import relacionamentosRoutes from './routes/relacionamentos.js'
 import gestaoGruasRoutes from './routes/gestao-gruas.js'
@@ -73,6 +74,14 @@ import receitasRoutes from './routes/receitas.js'
 import obraGruasRoutes from './routes/obra-gruas.js'
 import rhRoutes from './routes/rh.js'
 import historicoRoutes from './routes/historico.js'
+import cargosRoutes from './routes/cargos.js'
+import feriasRoutes from './routes/ferias.js'
+import remuneracaoRoutes from './routes/remuneracao.js'
+import valesRoutes from './routes/vales.js'
+import horasMensaisRoutes from './routes/horas-mensais.js'
+import funcionariosObrasRoutes from './routes/funcionarios-obras.js'
+import historicoRhRoutes from './routes/historico-rh.js'
+import relatoriosRhRoutes from './routes/relatorios-rh.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -220,6 +229,7 @@ app.use('/api/clientes', clientesRoutes)
 app.use('/api/obras', obrasRoutes)
 app.use('/api/contratos', contratosRoutes)
 app.use('/api/funcionarios', funcionariosRoutes)
+app.use('/api/funcionarios/documentos', funcionariosDocumentosRoutes)
 app.use('/api/equipamentos', equipamentosRoutes)
 app.use('/api/relacionamentos', relacionamentosRoutes)
 app.use('/api/gestao-gruas', gestaoGruasRoutes)
@@ -256,6 +266,14 @@ app.use('/api/receitas', receitasRoutes)
 app.use('/api/obra-gruas', obraGruasRoutes)
 app.use('/api/rh', rhRoutes)
 app.use('/api/historico', historicoRoutes)
+app.use('/api/cargos', cargosRoutes)
+app.use('/api/ferias', feriasRoutes)
+app.use('/api/remuneracao', remuneracaoRoutes)
+app.use('/api/vales', valesRoutes)
+app.use('/api/horas-mensais', horasMensaisRoutes)
+app.use('/api/funcionarios-obras', funcionariosObrasRoutes)
+app.use('/api/historico-rh', historicoRhRoutes)
+app.use('/api/relatorios-rh', relatoriosRhRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

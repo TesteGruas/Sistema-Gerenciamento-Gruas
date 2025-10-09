@@ -174,6 +174,142 @@ export interface RegistroPonto {
 }
 
 // ========================================
+// INTERFACES PARA VALES
+// ========================================
+
+export interface Vale {
+  id: number
+  funcionario_id: number
+  tipo: 'vale-transporte' | 'vale-refeicao' | 'vale-alimentacao' | 'vale-combustivel' | 'outros'
+  descricao: string
+  valor: number
+  data_solicitacao: string
+  data_aprovacao?: string
+  data_pagamento?: string
+  status: 'solicitado' | 'aprovado' | 'pago' | 'rejeitado'
+  aprovado_por?: number
+  observacoes?: string
+  created_at: string
+  updated_at: string
+}
+
+// ========================================
+// INTERFACES PARA HORAS MENSAIS
+// ========================================
+
+export interface HorasMensais {
+  id: number
+  funcionario_id: number
+  mes: string // formato YYYY-MM
+  horas_trabalhadas: number
+  horas_extras: number
+  dias_trabalhados: number
+  valor_hora: number
+  total_horas: number
+  total_valor: number
+  status: 'calculado' | 'pago' | 'pendente'
+  created_at: string
+  updated_at: string
+}
+
+// ========================================
+// INTERFACES PARA FOLHA DE PAGAMENTO
+// ========================================
+
+export interface FolhaPagamento {
+  id: number
+  funcionario_id: number
+  mes: string // formato YYYY-MM
+  salario_base: number
+  horas_trabalhadas: number
+  horas_extras: number
+  valor_hora_extra: number
+  total_proventos: number
+  total_descontos: number
+  salario_liquido: number
+  status: 'calculado' | 'pago' | 'pendente'
+  data_pagamento?: string
+  observacoes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TipoDesconto {
+  id: number
+  tipo: string
+  descricao: string
+  valor?: number
+  percentual?: number
+  obrigatorio: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface TipoBeneficio {
+  id: number
+  tipo: string
+  descricao: string
+  valor: number
+  ativo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface FuncionarioDesconto {
+  id: number
+  funcionario_id: number
+  folha_pagamento_id: number
+  tipo_desconto_id: number
+  valor: number
+  created_at: string
+  updated_at: string
+}
+
+export interface FuncionarioBeneficio {
+  id: number
+  funcionario_id: number
+  folha_pagamento_id: number
+  tipo_beneficio_id: number
+  valor: number
+  created_at: string
+  updated_at: string
+}
+
+// ========================================
+// INTERFACES PARA HISTÓRICO RH
+// ========================================
+
+export interface HistoricoRH {
+  id: number
+  funcionario_id: number
+  tipo: 'admissao' | 'promocao' | 'transferencia' | 'obra' | 'salario' | 'ferias' | 'demissao'
+  titulo: string
+  descricao: string
+  data: string
+  valor?: number
+  obra_id?: number
+  status: 'ativo' | 'inativo' | 'pendente'
+  created_at: string
+  updated_at: string
+}
+
+// ========================================
+// INTERFACES PARA RELATÓRIOS
+// ========================================
+
+export interface RelatorioRH {
+  id: number
+  tipo: string
+  periodo: string
+  parametros?: any
+  status: 'Gerado' | 'Processando' | 'Erro'
+  arquivo_url?: string
+  gerado_por: number
+  created_at: string
+  updated_at: string
+}
+
+// ========================================
 // INTERFACES PARA FÉRIAS E AFASTAMENTOS
 // ========================================
 
@@ -442,16 +578,49 @@ export const rhApi = {
   // CARGOS E SETORES
   // ========================================
   
-  async listarCargos() {
-    const url = buildApiUrl('rh/cargos')
+  async listarCargos(params?: {
+    page?: number
+    limit?: number
+    search?: string
+    nivel?: string
+    ativo?: boolean
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.page) searchParams.append('page', params.page.toString())
+    if (params?.limit) searchParams.append('limit', params.limit.toString())
+    if (params?.search) searchParams.append('search', params.search)
+    if (params?.nivel) searchParams.append('nivel', params.nivel)
+    if (params?.ativo !== undefined) searchParams.append('ativo', params.ativo.toString())
+
+    const url = buildApiUrl(`cargos?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  async obterCargo(id: number) {
+    const url = buildApiUrl(`cargos/${id}`)
     return apiRequest(url)
   },
 
   async criarCargo(data: Partial<Cargo>) {
-    const url = buildApiUrl('rh/cargos')
+    const url = buildApiUrl('cargos')
     return apiRequest(url, {
       method: 'POST',
       body: JSON.stringify(data),
+    })
+  },
+
+  async atualizarCargo(id: number, data: Partial<Cargo>) {
+    const url = buildApiUrl(`cargos/${id}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async excluirCargo(id: number) {
+    const url = buildApiUrl(`cargos/${id}`)
+    return apiRequest(url, {
+      method: 'DELETE',
     })
   },
 
@@ -632,6 +801,323 @@ export const rhApi = {
       method: 'POST',
       body: JSON.stringify(filtros || {}),
     })
+  },
+
+  // ========================================
+  // VALES
+  // ========================================
+  
+  async listarVales(params?: {
+    funcionario_id?: number
+    tipo?: string
+    status?: string
+    mes?: string
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.funcionario_id) searchParams.append('funcionario_id', params.funcionario_id.toString())
+    if (params?.tipo) searchParams.append('tipo', params.tipo)
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.mes) searchParams.append('mes', params.mes)
+
+    const url = buildApiUrl(`vales?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  async obterVale(id: number) {
+    const url = buildApiUrl(`vales/${id}`)
+    return apiRequest(url)
+  },
+
+  async criarVale(data: Partial<Vale>) {
+    const url = buildApiUrl('vales')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async aprovarVale(id: number) {
+    const url = buildApiUrl(`vales/${id}/aprovar`)
+    return apiRequest(url, {
+      method: 'POST',
+    })
+  },
+
+  async pagarVale(id: number, data_pagamento?: string) {
+    const url = buildApiUrl(`vales/${id}/pagar`)
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify({ data_pagamento }),
+    })
+  },
+
+  async rejeitarVale(id: number, motivo?: string) {
+    const url = buildApiUrl(`vales/${id}/rejeitar`)
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify({ motivo }),
+    })
+  },
+
+  // ========================================
+  // HORAS MENSAIS
+  // ========================================
+  
+  async listarHorasMensais(params?: {
+    funcionario_id?: number
+    mes?: string
+    status?: string
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.funcionario_id) searchParams.append('funcionario_id', params.funcionario_id.toString())
+    if (params?.mes) searchParams.append('mes', params.mes)
+    if (params?.status) searchParams.append('status', params.status)
+
+    const url = buildApiUrl(`horas-mensais?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  async obterHorasMensais(id: number) {
+    const url = buildApiUrl(`horas-mensais/${id}`)
+    return apiRequest(url)
+  },
+
+  async criarHorasMensais(data: Partial<HorasMensais>) {
+    const url = buildApiUrl('horas-mensais')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async atualizarHorasMensais(id: number, data: Partial<HorasMensais>) {
+    const url = buildApiUrl(`horas-mensais/${id}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async calcularHorasMensais(id: number) {
+    const url = buildApiUrl(`horas-mensais/${id}/calcular`)
+    return apiRequest(url, {
+      method: 'POST',
+    })
+  },
+
+  // ========================================
+  // FOLHA DE PAGAMENTO
+  // ========================================
+  
+  async listarFolhasPagamento(params?: {
+    funcionario_id?: number
+    mes?: string
+    status?: string
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.funcionario_id) searchParams.append('funcionario_id', params.funcionario_id.toString())
+    if (params?.mes) searchParams.append('mes', params.mes)
+    if (params?.status) searchParams.append('status', params.status)
+
+    const url = buildApiUrl(`remuneracao/folha-pagamento?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  async obterFolhaPagamento(id: number) {
+    const url = buildApiUrl(`remuneracao/folha-pagamento/${id}`)
+    return apiRequest(url)
+  },
+
+  async criarFolhaPagamento(data: Partial<FolhaPagamento>) {
+    const url = buildApiUrl('remuneracao/folha-pagamento')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async atualizarFolhaPagamento(id: number, data: Partial<FolhaPagamento>) {
+    const url = buildApiUrl(`remuneracao/folha-pagamento/${id}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async processarPagamentoFolha(id: number, data_pagamento: string) {
+    const url = buildApiUrl(`remuneracao/folha-pagamento/${id}/processar`)
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify({ data_pagamento }),
+    })
+  },
+
+  // Tipos de Descontos
+  async listarTiposDescontos() {
+    const url = buildApiUrl('remuneracao/descontos-tipo')
+    return apiRequest(url)
+  },
+
+  async criarTipoDesconto(data: Partial<TipoDesconto>) {
+    const url = buildApiUrl('remuneracao/descontos-tipo')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  // Tipos de Benefícios
+  async listarTiposBeneficios() {
+    const url = buildApiUrl('remuneracao/beneficios-tipo')
+    return apiRequest(url)
+  },
+
+  async criarTipoBeneficio(data: Partial<TipoBeneficio>) {
+    const url = buildApiUrl('remuneracao/beneficios-tipo')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  // Descontos do Funcionário
+  async adicionarDescontoFuncionario(data: Partial<FuncionarioDesconto>) {
+    const url = buildApiUrl('remuneracao/funcionario-descontos')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  // Benefícios do Funcionário
+  async listarBeneficiosFuncionarios(params?: {
+    page?: number
+    limit?: number
+    funcionario_id?: number
+    ativo?: boolean
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.page) searchParams.append('page', params.page.toString())
+    if (params?.limit) searchParams.append('limit', params.limit.toString())
+    if (params?.funcionario_id) searchParams.append('funcionario_id', params.funcionario_id.toString())
+    if (params?.ativo !== undefined) searchParams.append('ativo', params.ativo.toString())
+
+    const url = buildApiUrl(`remuneracao/funcionario-beneficios?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  async adicionarBeneficioFuncionario(data: Partial<FuncionarioBeneficio>) {
+    const url = buildApiUrl('remuneracao/funcionario-beneficios')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async atualizarBeneficioFuncionario(id: number, data: Partial<FuncionarioBeneficio>) {
+    const url = buildApiUrl(`remuneracao/funcionario-beneficios/${id}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async excluirBeneficioFuncionario(id: number) {
+    const url = buildApiUrl(`remuneracao/funcionario-beneficios/${id}`)
+    return apiRequest(url, {
+      method: 'DELETE',
+    })
+  },
+
+  // ========================================
+  // HISTÓRICO RH
+  // ========================================
+  
+  async listarHistoricoRH(params?: {
+    funcionario_id?: number
+    tipo?: string
+    data_inicio?: string
+    data_fim?: string
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.funcionario_id) searchParams.append('funcionario_id', params.funcionario_id.toString())
+    if (params?.tipo) searchParams.append('tipo', params.tipo)
+    if (params?.data_inicio) searchParams.append('data_inicio', params.data_inicio)
+    if (params?.data_fim) searchParams.append('data_fim', params.data_fim)
+
+    const url = buildApiUrl(`historico-rh?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  async obterHistoricoFuncionario(funcionarioId: number) {
+    const url = buildApiUrl(`historico-rh/funcionario/${funcionarioId}`)
+    return apiRequest(url)
+  },
+
+  async obterTimelineFuncionario(funcionarioId: number) {
+    const url = buildApiUrl(`historico-rh/timeline/${funcionarioId}`)
+    return apiRequest(url)
+  },
+
+  async criarHistoricoRH(data: Partial<HistoricoRH>) {
+    const url = buildApiUrl('historico-rh')
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async atualizarHistoricoRH(id: number, data: Partial<HistoricoRH>) {
+    const url = buildApiUrl(`historico-rh/${id}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async excluirHistoricoRH(id: number) {
+    const url = buildApiUrl(`historico-rh/${id}`)
+    return apiRequest(url, {
+      method: 'DELETE',
+    })
+  },
+
+  // ========================================
+  // RELATÓRIOS RH
+  // ========================================
+  
+  async listarRelatoriosRH(params?: {
+    tipo?: string
+    periodo?: string
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.tipo) searchParams.append('tipo', params.tipo)
+    if (params?.periodo) searchParams.append('periodo', params.periodo)
+
+    const url = buildApiUrl(`relatorios-rh?${searchParams.toString()}`)
+    return apiRequest(url)
+  },
+
+  async obterRelatorioRH(id: number) {
+    const url = buildApiUrl(`relatorios-rh/${id}`)
+    return apiRequest(url)
+  },
+
+  async gerarRelatorioRH(tipo: string, data: {
+    periodo: string
+    gerado_por: number
+    parametros?: any
+  }) {
+    const url = buildApiUrl(`relatorios-rh/gerar/${tipo}`)
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async exportarRelatorioRH(id: number, formato: 'pdf' | 'excel' | 'csv') {
+    const url = buildApiUrl(`relatorios-rh/${id}/exportar?formato=${formato}`)
+    return apiRequest(url)
   },
 
   // ========================================

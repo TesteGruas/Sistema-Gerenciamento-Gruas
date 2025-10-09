@@ -30,104 +30,134 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { rhApi, HistoricoRH } from "@/lib/api-rh-completo"
 
-interface HistoricoEvento {
-  id: string
-  tipo: 'admissao' | 'promocao' | 'transferencia' | 'obra' | 'salario' | 'ferias' | 'demissao'
-  titulo: string
-  descricao: string
-  data: string
-  funcionario: {
-    id: number
-    nome: string
-    avatar?: string
-  }
-  obra?: {
+interface HistoricoEvento extends HistoricoRH {
+  funcionario?: {
     id: number
     nome: string
   }
-  valor?: number
-  status: 'ativo' | 'inativo' | 'pendente'
 }
 
 export default function HistoricoRHPage() {
   const [eventos, setEventos] = useState<HistoricoEvento[]>([])
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [filtroTipo, setFiltroTipo] = useState("all")
   const [filtroFuncionario, setFiltroFuncionario] = useState("")
   const [filtroData, setFiltroData] = useState("")
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
+  // Formulário de novo evento
+  const [eventoForm, setEventoForm] = useState({
+    funcionario_id: '',
+    tipo_evento: 'promocao' as 'admissao' | 'demissao' | 'promocao' | 'transferencia' | 'ferias' | 'ajuste_salarial' | 'outros',
+    titulo: '',
+    descricao: '',
+    data_evento: '',
+    valor: '',
+    observacoes: ''
+  })
+
+  // Carregar dados
   useEffect(() => {
-    setEventos([
-      {
-        id: "1",
-        tipo: "admissao",
-        titulo: "Admissão de Funcionário",
-        descricao: "Carlos Eduardo Menezes foi admitido como Supervisor",
-        data: "2024-10-23",
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes"
-        },
-        status: "ativo"
-      },
-      {
-        id: "2",
-        tipo: "obra",
-        titulo: "Alocação em Obra",
-        descricao: "João Marcos foi alocado para a obra Residencial Atlântica",
-        data: "2024-11-01",
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva"
-        },
-        obra: {
-          id: 1,
-          nome: "Residencial Atlântica"
-        },
-        status: "ativo"
-      },
-      {
-        id: "3",
-        tipo: "salario",
-        titulo: "Ajuste Salarial",
-        descricao: "Aumento salarial de 8% para Ana Paula",
-        data: "2024-11-15",
-        funcionario: {
-          id: 3,
-          nome: "Ana Paula"
-        },
-        valor: 4500,
-        status: "ativo"
-      },
-      {
-        id: "4",
-        tipo: "promocao",
-        titulo: "Promoção",
-        descricao: "Roberto Silva promovido a Técnico Manutenção",
-        data: "2024-11-10",
-        funcionario: {
-          id: 4,
-          nome: "Roberto Silva"
-        },
-        status: "ativo"
-      },
-      {
-        id: "5",
-        tipo: "ferias",
-        titulo: "Início de Férias",
-        descricao: "Funcionário Teste Frontend iniciou período de férias",
-        data: "2024-11-20",
-        funcionario: {
-          id: 5,
-          nome: "Funcionário Teste Frontend"
-        },
-        status: "ativo"
+    carregarDados()
+  }, [filtroTipo, filtroData])
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true)
+      
+      // Carregar funcionários
+      const funcionariosResponse = await rhApi.listarFuncionariosCompletos({ limit: 100 })
+      setFuncionarios(funcionariosResponse.data || [])
+      
+      // Carregar histórico
+      const params: any = {}
+      if (filtroTipo && filtroTipo !== 'all') {
+        params.tipo_evento = filtroTipo
       }
-    ])
-  }, [])
+      if (filtroData) {
+        params.data_inicio = filtroData
+        params.data_fim = filtroData
+      }
+      
+      const historicoResponse = await rhApi.listarHistoricoRH(params)
+      setEventos(historicoResponse.data || [])
+      
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar histórico RH",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getFuncionarioNome = (funcionario_id: number) => {
+    const funcionario = funcionarios.find(f => f.id === funcionario_id)
+    return funcionario?.nome || 'Funcionário não encontrado'
+  }
+
+  const handleCriarEvento = async () => {
+    try {
+      if (!eventoForm.funcionario_id || !eventoForm.tipo_evento || !eventoForm.titulo || !eventoForm.data_evento) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
+      }
+
+      setLoading(true)
+      
+      const eventoData = {
+        funcionario_id: parseInt(eventoForm.funcionario_id),
+        tipo_evento: eventoForm.tipo_evento,
+        titulo: eventoForm.titulo,
+        descricao: eventoForm.descricao,
+        data_evento: eventoForm.data_evento,
+        valor: eventoForm.valor ? parseFloat(eventoForm.valor) : undefined,
+        observacoes: eventoForm.observacoes
+      }
+
+      const response = await rhApi.criarHistoricoRH(eventoData)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Evento registrado com sucesso!",
+        })
+        resetEventoForm()
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar evento:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao registrar evento",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetEventoForm = () => {
+    setEventoForm({
+      funcionario_id: '',
+      tipo_evento: 'promocao',
+      titulo: '',
+      descricao: '',
+      data_evento: '',
+      valor: '',
+      observacoes: ''
+    })
+  }
 
   const tiposEvento = [
     { value: "all", label: "Todos os Eventos" },
@@ -180,9 +210,10 @@ export default function HistoricoRHPage() {
   }
 
   const filteredEventos = eventos.filter(evento => {
-    const matchesTipo = filtroTipo === "all" || evento.tipo === filtroTipo
-    const matchesFuncionario = !filtroFuncionario || evento.funcionario.nome.toLowerCase().includes(filtroFuncionario.toLowerCase())
-    const matchesData = !filtroData || evento.data.includes(filtroData)
+    const funcionarioNome = getFuncionarioNome(evento.funcionario_id)
+    const matchesTipo = filtroTipo === "all" || evento.tipo_evento === filtroTipo
+    const matchesFuncionario = !filtroFuncionario || funcionarioNome.toLowerCase().includes(filtroFuncionario.toLowerCase())
+    const matchesData = !filtroData || evento.data_evento.includes(filtroData)
     return matchesTipo && matchesFuncionario && matchesData
   })
 

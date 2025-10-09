@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   ArrowLeft, 
   Edit, 
@@ -49,6 +50,8 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
 import { funcionariosApi } from "@/lib/api-funcionarios"
+import { rhApi } from "@/lib/api-rh-completo"
+import { apiRegistrosPonto } from "@/lib/api-ponto-eletronico"
 
 interface FuncionarioRH {
   id: number
@@ -87,34 +90,40 @@ interface FuncionarioRH {
 
 interface SalarioDetalhado {
   id: number
+  funcionario_id: number
   mes: string
-  salarioBase: number
-  horasTrabalhadas: number
-  horasExtras: number
-  valorHoraExtra: number
-  totalProventos: number
-  totalDescontos: number
-  salarioLiquido: number
-  status: 'calculado' | 'pago' | 'pendente'
-  dataPagamento?: string
-  descontos: {
-    inss: number
-    irrf: number
-    valeTransporte: number
-    valeRefeicao: number
-    outros: number
+  ano: number
+  salario_base: number
+  total_proventos: number
+  total_descontos: number
+  salario_liquido: number
+  status: string
+  data_pagamento?: string
+  created_at: string
+  updated_at: string
+  funcionario?: {
+    nome: string
+    cargo: string
   }
 }
 
 interface BeneficioFuncionario {
-  id: string
-  tipo: 'plano-saude' | 'plano-odonto' | 'seguro-vida' | 'vale-transporte' | 'vale-refeicao' | 'outros'
-  descricao: string
-  valor: number
-  dataInicio: string
-  dataFim?: string
-  ativo: boolean
+  id: number
+  funcionario_id: number
+  beneficio_tipo_id: number
+  data_inicio: string
+  data_fim?: string
+  status: string
   observacoes?: string
+  funcionario?: {
+    nome: string
+    cargo?: string
+  }
+  beneficios_tipo?: {
+    tipo: string
+    descricao: string
+    valor: number
+  }
 }
 
 interface DocumentoFuncionario {
@@ -130,16 +139,42 @@ interface DocumentoFuncionario {
 
 interface PontoDetalhado {
   id: string
+  funcionario_id: number
   data: string
-  entrada: string
-  saida: string
-  entradaAlmoco?: string
-  saidaAlmoco?: string
-  horasTrabalhadas: number
-  horasExtras: number
-  obra?: string
-  status: 'normal' | 'atraso' | 'falta' | 'hora-extra'
+  entrada?: string
+  saida?: string
+  saida_almoco?: string
+  volta_almoco?: string
+  horas_trabalhadas: number
+  horas_extras: number
+  status: string
+  aprovado_por?: number
+  data_aprovacao?: string
   observacoes?: string
+  localizacao?: string
+  created_at: string
+  updated_at: string
+  funcionario?: {
+    nome: string
+    cargo?: string
+  }
+}
+
+interface HistoricoEvento {
+  id: number
+  funcionario_id: number
+  tipo: string
+  titulo: string
+  descricao: string
+  obra_id?: number
+  valor?: number
+  status?: string
+  dados_adicionais?: any
+  created_at: string
+  funcionario?: {
+    nome: string
+    cargo?: string
+  }
 }
 
 export default function FuncionarioDetalhesPage() {
@@ -149,212 +184,105 @@ export default function FuncionarioDetalhesPage() {
   const [funcionario, setFuncionario] = useState<FuncionarioRH | null>(null)
   const [loading, setLoading] = useState(true)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [isBeneficioDialogOpen, setIsBeneficioDialogOpen] = useState(false)
+  const [isDocumentoDialogOpen, setIsDocumentoDialogOpen] = useState(false)
+  
+  // Estados para formulários
+  const [beneficioForm, setBeneficioForm] = useState({
+    tipo: '',
+    dataInicio: '',
+    observacoes: ''
+  })
+  
+  const [documentoForm, setDocumentoForm] = useState({
+    tipo: '',
+    nome: '',
+    numero: '',
+    orgaoEmissor: '',
+    dataEmissao: '',
+    dataVencimento: '',
+    observacoes: ''
+  })
 
-  // Dados mockados
-  const [salarios] = useState<SalarioDetalhado[]>([
-    {
-      id: 1,
-      mes: 'Outubro/2024',
-      salarioBase: 3500,
-      horasTrabalhadas: 220,
-      horasExtras: 20,
-      valorHoraExtra: 25.50,
-      totalProventos: 4010,
-      totalDescontos: 890.50,
-      salarioLiquido: 3119.50,
-      status: 'pago',
-      dataPagamento: '2024-10-05',
-      descontos: {
-        inss: 385,
-        irrf: 125.50,
-        valeTransporte: 280,
-        valeRefeicao: 100,
-        outros: 0
+  // Estados para dados das tabs
+  const [salarios, setSalarios] = useState<SalarioDetalhado[]>([])
+  const [beneficios, setBeneficios] = useState<BeneficioFuncionario[]>([])
+  const [pontos, setPontos] = useState<PontoDetalhado[]>([])
+  const [historico, setHistorico] = useState<HistoricoEvento[]>([])
+  const [tiposBeneficios, setTiposBeneficios] = useState<any[]>([])
+
+  // Documentos
+  const [documentos, setDocumentos] = useState<DocumentoFuncionario[]>([])
+
+  // Função para carregar dados das tabs
+  const carregarDadosTabs = async (funcionarioId: number) => {
+    try {
+      // Carregar salários/folhas de pagamento
+      const salariosResponse = await rhApi.listarFolhasPagamento({ 
+        funcionario_id: funcionarioId
+      })
+      setSalarios(salariosResponse.data || [])
+
+      // Carregar benefícios
+      const beneficiosResponse = await rhApi.listarBeneficiosFuncionarios({ 
+        funcionario_id: funcionarioId
+      })
+      setBeneficios(beneficiosResponse.data || [])
+
+      // Carregar registros de ponto (últimos 30 dias)
+      const hoje = new Date()
+      const dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+      const pontosResponse = await apiRegistrosPonto.listar({
+        funcionario_id: funcionarioId,
+        data_inicio: format(dataInicio, 'yyyy-MM-dd'),
+        data_fim: format(hoje, 'yyyy-MM-dd')
+      })
+      setPontos(pontosResponse.data || [])
+
+      // Carregar histórico
+      const historicoResponse = await rhApi.listarHistoricoRH({ 
+        funcionario_id: funcionarioId
+      })
+      setHistorico(historicoResponse.data || [])
+
+      // Carregar documentos
+      const documentosResponse = await funcionariosApi.listarDocumentosFuncionario(funcionarioId)
+      if (documentosResponse.data) {
+        // Converter formato do backend para o frontend
+        const docsFormatados = documentosResponse.data.map((doc: any) => ({
+          id: doc.id.toString(),
+          tipo: doc.tipo,
+          nome: doc.nome,
+          numero: doc.numero,
+          orgaoEmissor: doc.orgao_emissor,
+          dataEmissao: doc.data_emissao,
+          dataVencimento: doc.data_vencimento,
+          arquivoUrl: doc.arquivo_url,
+          observacoes: doc.observacoes
+        }))
+        setDocumentos(docsFormatados)
       }
-    },
-    {
-      id: 2,
-      mes: 'Setembro/2024',
-      salarioBase: 3500,
-      horasTrabalhadas: 220,
-      horasExtras: 15,
-      valorHoraExtra: 25.50,
-      totalProventos: 3882.50,
-      totalDescontos: 890.50,
-      salarioLiquido: 2992,
-      status: 'pago',
-      dataPagamento: '2024-09-05',
-      descontos: {
-        inss: 385,
-        irrf: 125.50,
-        valeTransporte: 280,
-        valeRefeicao: 100,
-        outros: 0
-      }
-    },
-    {
-      id: 3,
-      mes: 'Agosto/2024',
-      salarioBase: 3500,
-      horasTrabalhadas: 220,
-      horasExtras: 25,
-      valorHoraExtra: 25.50,
-      totalProventos: 4137.50,
-      totalDescontos: 890.50,
-      salarioLiquido: 3247,
-      status: 'pago',
-      dataPagamento: '2024-08-05',
-      descontos: {
-        inss: 385,
-        irrf: 125.50,
-        valeTransporte: 280,
-        valeRefeicao: 100,
-        outros: 0
+
+    } catch (error) {
+      console.error('Erro ao carregar dados das tabs:', error)
+      // Não mostrar erro para não atrapalhar se alguma tab falhar
+    }
+  }
+
+  // Carregar tipos de benefícios disponíveis
+  useEffect(() => {
+    const carregarTiposBeneficios = async () => {
+      try {
+        const response = await rhApi.listarTiposBeneficios()
+        if (response.success && response.data) {
+          setTiposBeneficios(response.data)
+        }
+      } catch (error) {
+        console.error('Erro ao carregar tipos de benefícios:', error)
       }
     }
-  ])
-
-  const [beneficios] = useState<BeneficioFuncionario[]>([
-    {
-      id: '1',
-      tipo: 'plano-saude',
-      descricao: 'Plano de Saúde Unimed - Enfermaria',
-      valor: 450,
-      dataInicio: '2024-01-01',
-      ativo: true,
-      observacoes: 'Plano familiar com 2 dependentes'
-    },
-    {
-      id: '2',
-      tipo: 'vale-transporte',
-      descricao: 'Vale Transporte',
-      valor: 280,
-      dataInicio: '2024-01-01',
-      ativo: true
-    },
-    {
-      id: '3',
-      tipo: 'vale-refeicao',
-      descricao: 'Vale Refeição Ticket',
-      valor: 100,
-      dataInicio: '2024-01-01',
-      ativo: true
-    },
-    {
-      id: '4',
-      tipo: 'seguro-vida',
-      descricao: 'Seguro de Vida em Grupo',
-      valor: 50,
-      dataInicio: '2024-01-01',
-      ativo: true,
-      observacoes: 'Cobertura de R$ 100.000'
-    }
-  ])
-
-  const [documentos] = useState<DocumentoFuncionario[]>([
-    {
-      id: '1',
-      tipo: 'rg',
-      nome: 'RG',
-      numero: '12.345.678-9',
-      dataEmissao: '2015-05-10',
-      observacoes: 'SSP/PE'
-    },
-    {
-      id: '2',
-      tipo: 'cpf',
-      nome: 'CPF',
-      numero: '123.456.789-00',
-      dataEmissao: '2000-01-01'
-    },
-    {
-      id: '3',
-      tipo: 'ctps',
-      nome: 'Carteira de Trabalho',
-      numero: '987654/001-2',
-      dataEmissao: '2018-03-15',
-      observacoes: 'Digital'
-    },
-    {
-      id: '4',
-      tipo: 'pis',
-      nome: 'PIS/PASEP',
-      numero: '123.45678.90-1',
-      dataEmissao: '2018-03-20'
-    },
-    {
-      id: '5',
-      tipo: 'comprovante-residencia',
-      nome: 'Comprovante de Residência',
-      numero: 'Conta de Luz',
-      dataEmissao: '2024-10-01',
-      observacoes: 'Atualizado mensalmente'
-    }
-  ])
-
-  const [pontos] = useState<PontoDetalhado[]>([
-    {
-      id: '1',
-      data: '2024-10-08',
-      entrada: '08:00',
-      saida: '17:00',
-      entradaAlmoco: '12:00',
-      saidaAlmoco: '13:00',
-      horasTrabalhadas: 8,
-      horasExtras: 0,
-      obra: 'Edifício Centro',
-      status: 'normal'
-    },
-    {
-      id: '2',
-      data: '2024-10-07',
-      entrada: '08:00',
-      saida: '18:30',
-      entradaAlmoco: '12:00',
-      saidaAlmoco: '13:00',
-      horasTrabalhadas: 9.5,
-      horasExtras: 1.5,
-      obra: 'Edifício Centro',
-      status: 'hora-extra'
-    },
-    {
-      id: '3',
-      data: '2024-10-06',
-      entrada: '08:15',
-      saida: '17:00',
-      entradaAlmoco: '12:00',
-      saidaAlmoco: '13:00',
-      horasTrabalhadas: 7.75,
-      horasExtras: 0,
-      obra: 'Edifício Centro',
-      status: 'atraso',
-      observacoes: 'Atraso de 15 minutos justificado'
-    },
-    {
-      id: '4',
-      data: '2024-10-05',
-      entrada: '08:00',
-      saida: '17:00',
-      entradaAlmoco: '12:00',
-      saidaAlmoco: '13:00',
-      horasTrabalhadas: 8,
-      horasExtras: 0,
-      obra: 'Shopping Sul',
-      status: 'normal'
-    },
-    {
-      id: '5',
-      data: '2024-10-04',
-      entrada: '08:00',
-      saida: '19:00',
-      entradaAlmoco: '12:00',
-      saidaAlmoco: '13:00',
-      horasTrabalhadas: 10,
-      horasExtras: 2,
-      obra: 'Shopping Sul',
-      status: 'hora-extra'
-    }
-  ])
+    carregarTiposBeneficios()
+  }, [])
 
   // Carregar dados reais do funcionário
   useEffect(() => {
@@ -368,30 +296,34 @@ export default function FuncionarioDetalhesPage() {
           const func = response.data
           
           // Mapear dados do backend para o formato esperado
+          const funcAny = func as any
           const funcionarioMapeado: FuncionarioRH = {
             id: func.id,
             nome: func.nome,
             cpf: func.cpf || '',
             cargo: func.cargo,
-            departamento: func.departamento || '',
+            departamento: funcAny.departamento || '',
             salario: func.salario || 0,
             data_admissao: func.data_admissao || '',
             telefone: func.telefone,
             email: func.email,
-            endereco: func.endereco,
-            cidade: func.cidade,
-            estado: func.estado,
-            cep: func.cep,
-            status: func.status,
-            turno: func.turno as any,
+            endereco: funcAny.endereco || '',
+            cidade: funcAny.cidade || '',
+            estado: funcAny.estado || '',
+            cep: funcAny.cep || '',
+            status: func.status as any,
+            turno: funcAny.turno as any,
             observacoes: func.observacoes,
             created_at: func.created_at,
             updated_at: func.updated_at,
-            usuario: func.usuario && func.usuario.length > 0 ? func.usuario[0] : undefined,
-            obra_atual: func.obra_atual || undefined
+            usuario: funcAny.usuario && Array.isArray(funcAny.usuario) && funcAny.usuario.length > 0 ? funcAny.usuario[0] : undefined,
+            obra_atual: funcAny.obra_atual || undefined
           }
           
           setFuncionario(funcionarioMapeado)
+          
+          // Carregar dados das tabs
+          await carregarDadosTabs(funcionarioId)
         } else {
           throw new Error('Funcionário não encontrado')
         }
@@ -489,6 +421,122 @@ export default function FuncionarioDetalhesPage() {
       title: "Salvo",
       description: "Informações atualizadas com sucesso!",
     })
+  }
+
+  const resetBeneficioForm = () => {
+    setBeneficioForm({
+      tipo: '',
+      dataInicio: '',
+      observacoes: ''
+    })
+  }
+  
+  const resetDocumentoForm = () => {
+    setDocumentoForm({
+      tipo: '',
+      nome: '',
+      numero: '',
+      orgaoEmissor: '',
+      dataEmissao: '',
+      dataVencimento: '',
+      observacoes: ''
+    })
+  }
+  
+  const handleCriarBeneficio = async () => {
+    try {
+      // Validação básica
+      if (!beneficioForm.tipo || !beneficioForm.dataInicio) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios (Tipo de Benefício e Data Início)",
+          variant: "destructive"
+        })
+        return
+      }
+      
+      const funcionarioId = parseInt(params.id as string)
+      
+      // Chamar API para adicionar benefício
+      const response = await rhApi.adicionarBeneficioFuncionario({
+        funcionario_id: funcionarioId,
+        beneficio_tipo_id: parseInt(beneficioForm.tipo),
+        data_inicio: beneficioForm.dataInicio,
+        observacoes: beneficioForm.observacoes || undefined
+      } as any)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Benefício adicionado com sucesso!",
+        })
+        
+        // Recarregar benefícios
+        await carregarDadosTabs(funcionarioId)
+        
+        setIsBeneficioDialogOpen(false)
+        resetBeneficioForm()
+      } else {
+        throw new Error(response.message || 'Erro ao adicionar benefício')
+      }
+    } catch (error) {
+      console.error('Erro ao criar benefício:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao adicionar benefício",
+        variant: "destructive"
+      })
+    }
+  }
+  
+  const handleCriarDocumento = async () => {
+    try {
+      // Validação básica
+      if (!documentoForm.tipo || !documentoForm.nome || !documentoForm.numero) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios (Tipo, Nome e Número)",
+          variant: "destructive"
+        })
+        return
+      }
+      
+      const funcionarioId = parseInt(params.id as string)
+      
+      // Chamar API para adicionar documento
+      const response = await funcionariosApi.criarDocumento({
+        funcionario_id: funcionarioId,
+        tipo: documentoForm.tipo,
+        nome: documentoForm.nome,
+        numero: documentoForm.numero,
+        orgao_emissor: documentoForm.orgaoEmissor || undefined,
+        data_emissao: documentoForm.dataEmissao || undefined,
+        data_vencimento: documentoForm.dataVencimento || undefined,
+        observacoes: documentoForm.observacoes || undefined
+      })
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Documento adicionado com sucesso!",
+        })
+        
+        // Recarregar documentos
+        await carregarDadosTabs(funcionarioId)
+        
+        setIsDocumentoDialogOpen(false)
+        resetDocumentoForm()
+      } else {
+        throw new Error(response.message || 'Erro ao adicionar documento')
+      }
+    } catch (error) {
+      console.error('Erro ao criar documento:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao adicionar documento",
+        variant: "destructive"
+      })
+    }
   }
 
   const calcularSalario = async () => {
@@ -725,13 +773,13 @@ export default function FuncionarioDetalhesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mês</TableHead>
+                      <TableHead>Mês/Ano</TableHead>
                       <TableHead>Salário Base</TableHead>
-                      <TableHead>Horas Extras</TableHead>
                       <TableHead>Proventos</TableHead>
                       <TableHead>Descontos</TableHead>
                       <TableHead>Líquido</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Data Pagamento</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -740,31 +788,25 @@ export default function FuncionarioDetalhesPage() {
                       <TableRow key={salario.id}>
                         <TableCell>
                           <span className="font-medium">
-                            {format(new Date(salario.mes + '-01'), 'MMM/yyyy', { locale: ptBR })}
+                            {salario.mes}/{salario.ano}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">R$ {salario.salarioBase.toLocaleString('pt-BR')}</span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            <div>{salario.horasExtras}h</div>
-                            <div className="text-orange-600">R$ {(salario.valorHoraExtra || 0).toFixed(2)}/h</div>
-                          </div>
+                          <span className="font-medium">R$ {(salario.salario_base || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                         </TableCell>
                         <TableCell>
                           <span className="font-medium text-green-600">
-                            R$ {salario.totalProventos.toLocaleString('pt-BR')}
+                            R$ {(salario.total_proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </TableCell>
                         <TableCell>
                           <span className="font-medium text-red-600">
-                            R$ {salario.totalDescontos.toLocaleString('pt-BR')}
+                            R$ {(salario.total_descontos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </TableCell>
                         <TableCell>
                           <span className="font-bold text-blue-600">
-                            R$ {salario.salarioLiquido.toLocaleString('pt-BR')}
+                            R$ {(salario.salario_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -772,6 +814,11 @@ export default function FuncionarioDetalhesPage() {
                             {getStatusIcon(salario.status)}
                             <span className="ml-1">{salario.status}</span>
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {salario.data_pagamento ? format(new Date(salario.data_pagamento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                          </span>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -807,10 +854,76 @@ export default function FuncionarioDetalhesPage() {
                   <CardTitle>Benefícios do Funcionário</CardTitle>
                   <CardDescription>Benefícios oferecidos ao funcionário</CardDescription>
                 </div>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Novo Benefício
-                </Button>
+                <Dialog open={isBeneficioDialogOpen} onOpenChange={setIsBeneficioDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Novo Benefício
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Adicionar Benefício</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="tipo-beneficio">Tipo de Benefício *</Label>
+                        <Select
+                          value={beneficioForm.tipo}
+                          onValueChange={(value) => setBeneficioForm({ ...beneficioForm, tipo: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {tiposBeneficios.length === 0 ? (
+                              <SelectItem value="loading" disabled>Carregando tipos...</SelectItem>
+                            ) : (
+                              tiposBeneficios.map((tipo) => (
+                                <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                                  {tipo.tipo} - R$ {parseFloat(tipo.valor || '0').toFixed(2)}
+                                  {tipo.descricao && ` (${tipo.descricao})`}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="data-inicio-beneficio">Data de Início *</Label>
+                        <Input
+                          id="data-inicio-beneficio"
+                          type="date"
+                          value={beneficioForm.dataInicio}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, dataInicio: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="observacoes-beneficio">Observações</Label>
+                        <Textarea
+                          id="observacoes-beneficio"
+                          placeholder="Informações adicionais sobre o benefício"
+                          value={beneficioForm.observacoes}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, observacoes: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsBeneficioDialogOpen(false)
+                            resetBeneficioForm()
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button onClick={handleCriarBeneficio}>
+                          Adicionar Benefício
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -821,23 +934,35 @@ export default function FuncionarioDetalhesPage() {
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                           <Gift className="w-5 h-5" />
-                          {beneficio.descricao}
+                          {beneficio.beneficios_tipo?.descricao || 'Benefício'}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
                           <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Tipo:</span>
+                            <Badge className="bg-blue-100 text-blue-800">
+                              {beneficio.beneficios_tipo?.tipo || 'N/A'}
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Valor:</span>
-                            <span className="font-semibold">R$ {beneficio.valor.toLocaleString('pt-BR')}</span>
+                            <span className="font-semibold">R$ {(beneficio.beneficios_tipo?.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Data Início:</span>
-                            <span className="text-sm">{format(new Date(beneficio.dataInicio), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                            <span className="text-sm">{format(new Date(beneficio.data_inicio), 'dd/MM/yyyy', { locale: ptBR })}</span>
                           </div>
+                          {beneficio.data_fim && (
+                            <div className="flex justify-between">
+                              <span className="text-sm text-gray-600">Data Fim:</span>
+                              <span className="text-sm">{format(new Date(beneficio.data_fim), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Status:</span>
-                            <Badge className={beneficio.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                              {beneficio.ativo ? 'Ativo' : 'Inativo'}
+                            <Badge className={beneficio.status === 'ativo' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                              {beneficio.status}
                             </Badge>
                           </div>
                           {beneficio.observacoes && (
@@ -855,7 +980,6 @@ export default function FuncionarioDetalhesPage() {
                 <div className="text-center py-8 text-gray-500">
                   <Gift className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>Nenhum benefício cadastrado</p>
-                  <p className="text-sm">Os benefícios serão implementados em breve</p>
                 </div>
               )}
             </CardContent>
@@ -871,10 +995,112 @@ export default function FuncionarioDetalhesPage() {
                   <CardTitle>Documentos do Funcionário</CardTitle>
                   <CardDescription>Documentos pessoais e profissionais</CardDescription>
                 </div>
-                <Button>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Novo Documento
-                </Button>
+                <Dialog open={isDocumentoDialogOpen} onOpenChange={setIsDocumentoDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Novo Documento
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Adicionar Documento</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="tipo-documento">Tipo de Documento *</Label>
+                        <Select
+                          value={documentoForm.tipo}
+                          onValueChange={(value) => setDocumentoForm({ ...documentoForm, tipo: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="rg">RG</SelectItem>
+                            <SelectItem value="cpf">CPF</SelectItem>
+                            <SelectItem value="ctps">Carteira de Trabalho</SelectItem>
+                            <SelectItem value="pis">PIS/PASEP</SelectItem>
+                            <SelectItem value="titulo-eleitor">Título de Eleitor</SelectItem>
+                            <SelectItem value="certificado-reservista">Certificado de Reservista</SelectItem>
+                            <SelectItem value="comprovante-residencia">Comprovante de Residência</SelectItem>
+                            <SelectItem value="outros">Outros</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="nome-documento">Nome do Documento *</Label>
+                        <Input
+                          id="nome-documento"
+                          placeholder="Ex: RG, CPF, etc"
+                          value={documentoForm.nome}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, nome: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="numero-documento">Número do Documento *</Label>
+                        <Input
+                          id="numero-documento"
+                          placeholder="Ex: 12.345.678-9"
+                          value={documentoForm.numero}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, numero: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="orgao-emissor">Órgão Emissor</Label>
+                        <Input
+                          id="orgao-emissor"
+                          placeholder="Ex: SSP/PE, Receita Federal, etc"
+                          value={documentoForm.orgaoEmissor}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, orgaoEmissor: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="data-emissao">Data de Emissão *</Label>
+                          <Input
+                            id="data-emissao"
+                            type="date"
+                            value={documentoForm.dataEmissao}
+                            onChange={(e) => setDocumentoForm({ ...documentoForm, dataEmissao: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="data-vencimento">Data de Vencimento</Label>
+                          <Input
+                            id="data-vencimento"
+                            type="date"
+                            value={documentoForm.dataVencimento}
+                            onChange={(e) => setDocumentoForm({ ...documentoForm, dataVencimento: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="observacoes-documento">Observações</Label>
+                        <Textarea
+                          id="observacoes-documento"
+                          placeholder="Informações adicionais sobre o documento"
+                          value={documentoForm.observacoes}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, observacoes: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsDocumentoDialogOpen(false)
+                            resetDocumentoForm()
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button onClick={handleCriarDocumento}>
+                          Adicionar Documento
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -935,7 +1161,7 @@ export default function FuncionarioDetalhesPage() {
                 <div className="text-center py-8 text-gray-500">
                   <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>Nenhum documento cadastrado</p>
-                  <p className="text-sm">Os documentos serão implementados em breve</p>
+                  <p className="text-sm">Adicione documentos usando o botão acima</p>
                 </div>
               )}
             </CardContent>
@@ -972,31 +1198,31 @@ export default function FuncionarioDetalhesPage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm">{ponto.entrada}</span>
+                          <span className="text-sm">{ponto.entrada || '-'}</span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm">{ponto.saida}</span>
+                          <span className="text-sm">{ponto.saida || '-'}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm">
-                            {ponto.entradaAlmoco && ponto.saidaAlmoco 
-                              ? `${ponto.entradaAlmoco} - ${ponto.saidaAlmoco}`
+                            {ponto.saida_almoco && ponto.volta_almoco 
+                              ? `${ponto.saida_almoco} - ${ponto.volta_almoco}`
                               : '-'
                             }
                           </span>
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <div>{ponto.horasTrabalhadas}h</div>
-                            {ponto.horasExtras > 0 && (
-                              <div className="text-orange-600">+{ponto.horasExtras}h extra</div>
+                            <div>{ponto.horas_trabalhadas.toFixed(1)}h</div>
+                            {ponto.horas_extras > 0 && (
+                              <div className="text-orange-600">+{ponto.horas_extras.toFixed(1)}h extra</div>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1 text-sm text-gray-600">
                             <Building2 className="w-3 h-3" />
-                            <span>{ponto.obra || '-'}</span>
+                            <span>{ponto.localizacao || '-'}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -1028,10 +1254,41 @@ export default function FuncionarioDetalhesPage() {
               <CardDescription>Timeline de eventos e mudanças</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-gray-500">
-                <History className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p>Histórico de eventos será implementado em breve</p>
-              </div>
+              {historico.length > 0 ? (
+                <div className="space-y-4">
+                  {historico.map((evento) => (
+                    <div key={evento.id} className="flex gap-4 p-4 border rounded-lg">
+                      <div className="flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <History className="w-5 h-5 text-blue-600" />
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-semibold text-gray-900">{evento.titulo}</h4>
+                            <Badge className="bg-purple-100 text-purple-800 mb-2">
+                              {evento.tipo}
+                            </Badge>
+                            <p className="text-sm text-gray-600 mt-1">{evento.descricao}</p>
+                          </div>
+                          <Badge className="bg-gray-100 text-gray-800">
+                            {format(new Date(evento.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-gray-400 mt-2">
+                          Registrado em {format(new Date(evento.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <History className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhum evento registrado no histórico</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

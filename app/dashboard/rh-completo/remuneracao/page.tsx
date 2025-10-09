@@ -33,49 +33,34 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { 
+  rhApi, 
+  FolhaPagamento, 
+  TipoDesconto, 
+  TipoBeneficio,
+  FuncionarioDesconto,
+  FuncionarioBeneficio 
+} from "@/lib/api-rh-completo"
 
-interface SalarioFuncionario {
-  id: number
-  funcionario: {
+interface SalarioFuncionario extends FolhaPagamento {
+  funcionario?: {
     id: number
     nome: string
-    cargo: string
-    avatar?: string
+    cargo?: string
   }
-  salarioBase: number
-  horasTrabalhadas: number
-  horasExtras: number
-  valorHoraExtra: number
-  totalProventos: number
-  totalDescontos: number
-  salarioLiquido: number
-  mes: string
-  status: 'calculado' | 'pago' | 'pendente'
-  dataPagamento?: string
 }
 
-interface Desconto {
-  id: string
-  tipo: 'inss' | 'irrf' | 'vale-transporte' | 'vale-refeicao' | 'plano-saude' | 'outros'
-  descricao: string
-  valor: number
-  percentual?: number
-  obrigatorio: boolean
-}
+interface Desconto extends TipoDesconto {}
 
-interface Beneficio {
-  id: string
-  tipo: 'vale-transporte' | 'vale-refeicao' | 'plano-saude' | 'plano-odonto' | 'seguro-vida' | 'outros'
-  descricao: string
-  valor: number
-  percentual?: number
-  ativo: boolean
-}
+interface Beneficio extends TipoBeneficio {}
 
 export default function RemuneracaoPage() {
   const [salarios, setSalarios] = useState<SalarioFuncionario[]>([])
   const [descontos, setDescontos] = useState<Desconto[]>([])
   const [beneficios, setBeneficios] = useState<Beneficio[]>([])
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
+  const [funcionariosDescontos, setFuncionariosDescontos] = useState<FuncionarioDesconto[]>([])
+  const [funcionariosBeneficios, setFuncionariosBeneficios] = useState<FuncionarioBeneficio[]>([])
   const [loading, setLoading] = useState(false)
   const [filtroFuncionario, setFiltroFuncionario] = useState("")
   const [filtroMes, setFiltroMes] = useState("")
@@ -84,123 +69,303 @@ export default function RemuneracaoPage() {
   const [isBeneficioDialogOpen, setIsBeneficioDialogOpen] = useState(false)
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
+  // Formulários
+  const [folhaForm, setFolhaForm] = useState({
+    funcionario_id: '',
+    mes: '',
+    ano: '',
+    salario_base: '',
+    horas_trabalhadas: '',
+    horas_extras: '',
+    adicional_noturno: '',
+    adicional_periculosidade: '',
+    adicional_insalubridade: ''
+  })
+
+  const [descontoForm, setDescontoForm] = useState({
+    nome: '',
+    descricao: '',
+    tipo_calculo: 'fixo' as 'fixo' | 'percentual',
+    valor: '',
+    percentual: '',
+    obrigatorio: false
+  })
+
+  const [beneficioForm, setBeneficioForm] = useState({
+    nome: '',
+    descricao: '',
+    tipo_calculo: 'fixo' as 'fixo' | 'percentual',
+    valor: '',
+    percentual: '',
+    ativo: true
+  })
+
+  // Carregar dados
   useEffect(() => {
-    setSalarios([
-      {
-        id: 1,
-        funcionario: {
-          id: 1,
-          nome: "Carlos Eduardo Menezes",
-          cargo: "Supervisor"
-        },
-        salarioBase: 5000,
-        horasTrabalhadas: 176,
-        horasExtras: 8,
-        valorHoraExtra: 28.41,
-        totalProventos: 5227.28,
-        totalDescontos: 1045.46,
-        salarioLiquido: 4181.82,
-        mes: "2024-11",
-        status: "pago",
-        dataPagamento: "2024-11-05"
-      },
-      {
-        id: 2,
-        funcionario: {
-          id: 2,
-          nome: "João Marcos Ferreira da Silva",
-          cargo: "Sinaleiro"
-        },
-        salarioBase: 3500,
-        horasTrabalhadas: 176,
-        horasExtras: 4,
-        valorHoraExtra: 19.89,
-        totalProventos: 3579.56,
-        totalDescontos: 715.91,
-        salarioLiquido: 2863.65,
-        mes: "2024-11",
-        status: "pago",
-        dataPagamento: "2024-11-05"
-      },
-      {
-        id: 3,
-        funcionario: {
-          id: 3,
-          nome: "Ana Paula",
-          cargo: "Supervisor"
-        },
-        salarioBase: 4500,
-        horasTrabalhadas: 176,
-        horasExtras: 12,
-        valorHoraExtra: 25.57,
-        totalProventos: 4806.84,
-        totalDescontos: 961.37,
-        salarioLiquido: 3845.47,
-        mes: "2024-11",
-        status: "calculado"
-      }
-    ])
+    carregarDados()
+  }, [filtroMes])
 
-    setDescontos([
-      {
-        id: "1",
-        tipo: "inss",
-        descricao: "INSS",
-        valor: 0,
-        percentual: 11,
-        obrigatorio: true
-      },
-      {
-        id: "2",
-        tipo: "irrf",
-        descricao: "IRRF",
-        valor: 0,
-        percentual: 0,
-        obrigatorio: true
-      },
-      {
-        id: "3",
-        tipo: "vale-transporte",
-        descricao: "Vale Transporte",
-        valor: 0,
-        percentual: 6,
-        obrigatorio: false
-      },
-      {
-        id: "4",
-        tipo: "vale-refeicao",
-        descricao: "Vale Refeição",
-        valor: 0,
-        percentual: 8,
-        obrigatorio: false
+  const carregarDados = async () => {
+    try {
+      setLoading(true)
+      
+      // Carregar funcionários
+      const funcionariosResponse = await rhApi.listarFuncionariosCompletos({ limit: 100 })
+      setFuncionarios(funcionariosResponse.data || [])
+      
+      // Carregar folhas de pagamento
+      const params: any = {}
+      if (filtroMes) {
+        const [ano, mes] = filtroMes.split('-')
+        params.ano = parseInt(ano)
+        params.mes = parseInt(mes)
       }
-    ])
+      
+      const folhasResponse = await rhApi.listarFolhasPagamento(params)
+      setSalarios(folhasResponse.data || [])
+      
+      // Carregar tipos de descontos
+      const descontosResponse = await rhApi.listarTiposDescontos()
+      setDescontos(descontosResponse.data || [])
+      
+      // Carregar tipos de benefícios
+      const beneficiosResponse = await rhApi.listarTiposBeneficios()
+      setBeneficios(beneficiosResponse.data || [])
+      
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados de remuneração",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
-    setBeneficios([
-      {
-        id: "1",
-        tipo: "plano-saude",
-        descricao: "Plano de Saúde",
-        valor: 200,
-        ativo: true
-      },
-      {
-        id: "2",
-        tipo: "plano-odonto",
-        descricao: "Plano Odontológico",
-        valor: 50,
-        ativo: true
-      },
-      {
-        id: "3",
-        tipo: "seguro-vida",
-        descricao: "Seguro de Vida",
-        valor: 30,
-        ativo: true
+  const getFuncionarioNome = (funcionario_id: number) => {
+    const funcionario = funcionarios.find(f => f.id === funcionario_id)
+    return funcionario?.nome || 'Funcionário não encontrado'
+  }
+
+  const getFuncionarioCargo = (funcionario_id: number) => {
+    const funcionario = funcionarios.find(f => f.id === funcionario_id)
+    return funcionario?.cargo || 'N/A'
+  }
+
+  const handleCriarFolha = async () => {
+    try {
+      if (!folhaForm.funcionario_id || !folhaForm.mes || !folhaForm.ano || !folhaForm.salario_base) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
       }
-    ])
-  }, [])
+
+      setLoading(true)
+      
+      const folhaData = {
+        funcionario_id: parseInt(folhaForm.funcionario_id),
+        mes: parseInt(folhaForm.mes),
+        ano: parseInt(folhaForm.ano),
+        salario_base: parseFloat(folhaForm.salario_base),
+        horas_trabalhadas: parseFloat(folhaForm.horas_trabalhadas) || 0,
+        horas_extras: parseFloat(folhaForm.horas_extras) || 0,
+        adicional_noturno: parseFloat(folhaForm.adicional_noturno) || 0,
+        adicional_periculosidade: parseFloat(folhaForm.adicional_periculosidade) || 0,
+        adicional_insalubridade: parseFloat(folhaForm.adicional_insalubridade) || 0
+      }
+
+      const response = await rhApi.criarFolhaPagamento(folhaData)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Folha de pagamento criada com sucesso!",
+        })
+        resetFolhaForm()
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar folha:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar folha de pagamento",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleProcessarPagamento = async (folhaId: number) => {
+    try {
+      setLoading(true)
+      const response = await rhApi.processarPagamento(folhaId)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Pagamento processado com sucesso!",
+        })
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao processar pagamento:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao processar pagamento",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetFolhaForm = () => {
+    setFolhaForm({
+      funcionario_id: '',
+      mes: '',
+      ano: '',
+      salario_base: '',
+      horas_trabalhadas: '',
+      horas_extras: '',
+      adicional_noturno: '',
+      adicional_periculosidade: '',
+      adicional_insalubridade: ''
+    })
+  }
+
+  const resetDescontoForm = () => {
+    setDescontoForm({
+      nome: '',
+      descricao: '',
+      tipo_calculo: 'fixo',
+      valor: '',
+      percentual: '',
+      obrigatorio: false
+    })
+  }
+
+  const resetBeneficioForm = () => {
+    setBeneficioForm({
+      nome: '',
+      descricao: '',
+      tipo_calculo: 'fixo',
+      valor: '',
+      percentual: '',
+      ativo: true
+    })
+  }
+
+  const handleCriarDesconto = async () => {
+    try {
+      if (!descontoForm.nome || !descontoForm.descricao) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (descontoForm.tipo_calculo === 'fixo' && !descontoForm.valor) {
+        toast({
+          title: "Erro",
+          description: "Informe o valor do desconto",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (descontoForm.tipo_calculo === 'percentual' && !descontoForm.percentual) {
+        toast({
+          title: "Erro",
+          description: "Informe o percentual do desconto",
+          variant: "destructive"
+        })
+        return
+      }
+
+      setLoading(true)
+      
+      // TODO: Implementar endpoint de criar tipo de desconto
+      // Por enquanto, apenas feedback
+      toast({
+        title: "Info",
+        description: "Funcionalidade em desenvolvimento. Endpoint será implementado em breve.",
+      })
+      
+      setIsDescontoDialogOpen(false)
+      resetDescontoForm()
+      
+    } catch (error: any) {
+      console.error('Erro ao criar desconto:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar desconto",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCriarBeneficio = async () => {
+    try {
+      if (!beneficioForm.nome || !beneficioForm.descricao) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (beneficioForm.tipo_calculo === 'fixo' && !beneficioForm.valor) {
+        toast({
+          title: "Erro",
+          description: "Informe o valor do benefício",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (beneficioForm.tipo_calculo === 'percentual' && !beneficioForm.percentual) {
+        toast({
+          title: "Erro",
+          description: "Informe o percentual do benefício",
+          variant: "destructive"
+        })
+        return
+      }
+
+      setLoading(true)
+      
+      // TODO: Implementar endpoint de criar tipo de benefício
+      // Por enquanto, apenas feedback
+      toast({
+        title: "Info",
+        description: "Funcionalidade em desenvolvimento. Endpoint será implementado em breve.",
+      })
+      
+      setIsBeneficioDialogOpen(false)
+      resetBeneficioForm()
+      
+    } catch (error: any) {
+      console.error('Erro ao criar benefício:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar benefício",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -294,9 +459,11 @@ export default function RemuneracaoPage() {
   }
 
   const filteredSalarios = salarios.filter(salario => {
-    const matchesFuncionario = !filtroFuncionario || salario.funcionario.nome.toLowerCase().includes(filtroFuncionario.toLowerCase())
-    const matchesMes = !filtroMes || salario.mes.includes(filtroMes)
-    const matchesStatus = filtroStatus === "all" || salario.status === filtroStatus
+    const funcionarioNome = getFuncionarioNome(salario.funcionario_id)
+    const salarioMesAno = `${salario.ano}-${String(salario.mes).padStart(2, '0')}`
+    const matchesFuncionario = !filtroFuncionario || funcionarioNome.toLowerCase().includes(filtroFuncionario.toLowerCase())
+    const matchesMes = !filtroMes || salarioMesAno === filtroMes || salarioMesAno.includes(filtroMes)
+    const matchesStatus = filtroStatus === "all" || (salario.data_pagamento && filtroStatus === "pago") || (!salario.data_pagamento && filtroStatus === "calculado")
     return matchesFuncionario && matchesMes && matchesStatus
   })
 
@@ -573,40 +740,87 @@ export default function RemuneracaoPage() {
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
-                        <Label htmlFor="tipo">Tipo de Desconto</Label>
-                        <Select>
+                        <Label htmlFor="nome-desconto">Nome do Desconto *</Label>
+                        <Input 
+                          id="nome-desconto" 
+                          placeholder="Ex: INSS, IRRF, etc"
+                          value={descontoForm.nome}
+                          onChange={(e) => setDescontoForm({ ...descontoForm, nome: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="descricao">Descrição *</Label>
+                        <Input 
+                          id="descricao" 
+                          placeholder="Descrição do desconto"
+                          value={descontoForm.descricao}
+                          onChange={(e) => setDescontoForm({ ...descontoForm, descricao: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="tipo-calculo">Tipo de Cálculo *</Label>
+                        <Select 
+                          value={descontoForm.tipo_calculo}
+                          onValueChange={(value: 'fixo' | 'percentual') => setDescontoForm({ ...descontoForm, tipo_calculo: value })}
+                        >
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione o tipo" />
+                            <SelectValue placeholder="Selecione" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="inss">INSS</SelectItem>
-                            <SelectItem value="irrf">IRRF</SelectItem>
-                            <SelectItem value="vale-transporte">Vale Transporte</SelectItem>
-                            <SelectItem value="vale-refeicao">Vale Refeição</SelectItem>
-                            <SelectItem value="plano-saude">Plano de Saúde</SelectItem>
-                            <SelectItem value="outros">Outros</SelectItem>
+                            <SelectItem value="fixo">Valor Fixo</SelectItem>
+                            <SelectItem value="percentual">Percentual</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <div>
-                        <Label htmlFor="descricao">Descrição</Label>
-                        <Input id="descricao" placeholder="Descrição do desconto" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      {descontoForm.tipo_calculo === 'fixo' ? (
                         <div>
-                          <Label htmlFor="valor">Valor Fixo (R$)</Label>
-                          <Input id="valor" type="number" placeholder="0.00" />
+                          <Label htmlFor="valor">Valor Fixo (R$) *</Label>
+                          <Input 
+                            id="valor" 
+                            type="number" 
+                            step="0.01"
+                            placeholder="0.00"
+                            value={descontoForm.valor}
+                            onChange={(e) => setDescontoForm({ ...descontoForm, valor: e.target.value })}
+                          />
                         </div>
+                      ) : (
                         <div>
-                          <Label htmlFor="percentual">Percentual (%)</Label>
-                          <Input id="percentual" type="number" placeholder="0" />
+                          <Label htmlFor="percentual">Percentual (%) *</Label>
+                          <Input 
+                            id="percentual" 
+                            type="number" 
+                            step="0.01"
+                            placeholder="0"
+                            value={descontoForm.percentual}
+                            onChange={(e) => setDescontoForm({ ...descontoForm, percentual: e.target.value })}
+                          />
                         </div>
+                      )}
+                      <div className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id="obrigatorio"
+                          checked={descontoForm.obrigatorio}
+                          onChange={(e) => setDescontoForm({ ...descontoForm, obrigatorio: e.target.checked })}
+                        />
+                        <Label htmlFor="obrigatorio">Desconto Obrigatório</Label>
                       </div>
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setIsDescontoDialogOpen(false)}>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setIsDescontoDialogOpen(false)
+                            resetDescontoForm()
+                          }}
+                        >
                           Cancelar
                         </Button>
-                        <Button onClick={() => setIsDescontoDialogOpen(false)}>
+                        <Button 
+                          onClick={handleCriarDesconto}
+                          disabled={loading}
+                        >
+                          {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
                           Salvar
                         </Button>
                       </div>
@@ -686,34 +900,87 @@ export default function RemuneracaoPage() {
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
-                        <Label htmlFor="tipo-beneficio">Tipo de Benefício</Label>
-                        <Select>
+                        <Label htmlFor="nome-beneficio">Nome do Benefício *</Label>
+                        <Input 
+                          id="nome-beneficio" 
+                          placeholder="Ex: Plano de Saúde, Vale Refeição, etc"
+                          value={beneficioForm.nome}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, nome: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="descricao-beneficio">Descrição *</Label>
+                        <Input 
+                          id="descricao-beneficio" 
+                          placeholder="Descrição do benefício"
+                          value={beneficioForm.descricao}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, descricao: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="tipo-calculo-beneficio">Tipo de Cálculo *</Label>
+                        <Select 
+                          value={beneficioForm.tipo_calculo}
+                          onValueChange={(value: 'fixo' | 'percentual') => setBeneficioForm({ ...beneficioForm, tipo_calculo: value })}
+                        >
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione o tipo" />
+                            <SelectValue placeholder="Selecione" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="plano-saude">Plano de Saúde</SelectItem>
-                            <SelectItem value="plano-odonto">Plano Odontológico</SelectItem>
-                            <SelectItem value="seguro-vida">Seguro de Vida</SelectItem>
-                            <SelectItem value="vale-transporte">Vale Transporte</SelectItem>
-                            <SelectItem value="vale-refeicao">Vale Refeição</SelectItem>
-                            <SelectItem value="outros">Outros</SelectItem>
+                            <SelectItem value="fixo">Valor Fixo</SelectItem>
+                            <SelectItem value="percentual">Percentual</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <div>
-                        <Label htmlFor="descricao-beneficio">Descrição</Label>
-                        <Input id="descricao-beneficio" placeholder="Descrição do benefício" />
-                      </div>
-                      <div>
-                        <Label htmlFor="valor-beneficio">Valor (R$)</Label>
-                        <Input id="valor-beneficio" type="number" placeholder="0.00" />
+                      {beneficioForm.tipo_calculo === 'fixo' ? (
+                        <div>
+                          <Label htmlFor="valor-beneficio">Valor (R$) *</Label>
+                          <Input 
+                            id="valor-beneficio" 
+                            type="number" 
+                            step="0.01"
+                            placeholder="0.00"
+                            value={beneficioForm.valor}
+                            onChange={(e) => setBeneficioForm({ ...beneficioForm, valor: e.target.value })}
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <Label htmlFor="percentual-beneficio">Percentual (%) *</Label>
+                          <Input 
+                            id="percentual-beneficio" 
+                            type="number" 
+                            step="0.01"
+                            placeholder="0"
+                            value={beneficioForm.percentual}
+                            onChange={(e) => setBeneficioForm({ ...beneficioForm, percentual: e.target.value })}
+                          />
+                        </div>
+                      )}
+                      <div className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id="ativo"
+                          checked={beneficioForm.ativo}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, ativo: e.target.checked })}
+                        />
+                        <Label htmlFor="ativo">Benefício Ativo</Label>
                       </div>
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setIsBeneficioDialogOpen(false)}>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setIsBeneficioDialogOpen(false)
+                            resetBeneficioForm()
+                          }}
+                        >
                           Cancelar
                         </Button>
-                        <Button onClick={() => setIsBeneficioDialogOpen(false)}>
+                        <Button 
+                          onClick={handleCriarBeneficio}
+                          disabled={loading}
+                        >
+                          {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
                           Salvar
                         </Button>
                       </div>

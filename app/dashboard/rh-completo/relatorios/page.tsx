@@ -24,17 +24,11 @@ import {
   RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { rhApi, RelatorioRH } from "@/lib/api-rh-completo"
+import { format } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
-interface RelatorioData {
-  id: string
-  tipo: string
-  periodo: string
-  funcionarios: number
-  totalHoras: number
-  totalSalarios: number
-  status: 'Gerado' | 'Processando' | 'Erro'
-  dataGeracao: string
-}
+interface RelatorioData extends RelatorioRH {}
 
 export default function RelatoriosRHPage() {
   const [relatorios, setRelatorios] = useState<RelatorioData[]>([])
@@ -43,41 +37,116 @@ export default function RelatoriosRHPage() {
   const [filtroPeriodo, setFiltroPeriodo] = useState("")
   const { toast } = useToast()
 
-  // Dados mockados para demonstração
+  // Formulário de novo relatório
+  const [relatorioForm, setRelatorioForm] = useState({
+    tipo_relatorio: 'folha_pagamento' as 'folha_pagamento' | 'horas_trabalhadas' | 'beneficios' | 'vales' | 'ferias' | 'obras' | 'pontos' | 'completo',
+    periodo_inicio: '',
+    periodo_fim: '',
+    formato: 'pdf' as 'pdf' | 'excel' | 'csv',
+    titulo: '',
+    parametros: {}
+  })
+
+  // Carregar dados
   useEffect(() => {
-    setRelatorios([
-      {
-        id: "1",
-        tipo: "Folha de Pagamento",
-        periodo: "Novembro 2024",
-        funcionarios: 25,
-        totalHoras: 2000,
-        totalSalarios: 125000,
-        status: "Gerado",
-        dataGeracao: "2024-11-15"
-      },
-      {
-        id: "2",
-        tipo: "Horas Trabalhadas",
-        periodo: "Novembro 2024",
-        funcionarios: 25,
-        totalHoras: 2000,
-        totalSalarios: 0,
-        status: "Gerado",
-        dataGeracao: "2024-11-14"
-      },
-      {
-        id: "3",
-        tipo: "Benefícios e Vales",
-        periodo: "Novembro 2024",
-        funcionarios: 25,
-        totalHoras: 0,
-        totalSalarios: 15000,
-        status: "Processando",
-        dataGeracao: "2024-11-16"
+    carregarDados()
+  }, [filtroTipo, filtroPeriodo])
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true)
+      
+      const params: any = {}
+      if (filtroTipo && filtroTipo !== 'all') {
+        params.tipo_relatorio = filtroTipo
       }
-    ])
-  }, [])
+      if (filtroPeriodo) {
+        params.data_inicio = filtroPeriodo
+      }
+      
+      const response = await rhApi.listarRelatoriosRH(params)
+      setRelatorios(response.data || [])
+      
+    } catch (error) {
+      console.error('Erro ao carregar relatórios:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar relatórios",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGerarRelatorio = async () => {
+    try {
+      if (!relatorioForm.tipo_relatorio || !relatorioForm.periodo_inicio) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios",
+          variant: "destructive"
+        })
+        return
+      }
+
+      setLoading(true)
+      
+      const response = await rhApi.gerarRelatorioRH(relatorioForm)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Relatório gerado com sucesso!",
+        })
+        resetRelatorioForm()
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao gerar relatório:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao gerar relatório",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleExportar = async (relatorioId: number, formato: 'pdf' | 'excel' | 'csv') => {
+    try {
+      setLoading(true)
+      const response = await rhApi.exportarRelatorioRH(relatorioId, formato)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: `Relatório exportado em ${formato.toUpperCase()}!`,
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao exportar relatório:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao exportar relatório",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetRelatorioForm = () => {
+    setRelatorioForm({
+      tipo_relatorio: 'folha_pagamento',
+      periodo_inicio: '',
+      periodo_fim: '',
+      formato: 'pdf',
+      titulo: '',
+      parametros: {}
+    })
+  }
 
   const tiposRelatorio = [
     { value: "all", label: "Todos os Relatórios" },

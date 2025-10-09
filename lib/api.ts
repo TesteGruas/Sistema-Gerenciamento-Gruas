@@ -67,7 +67,18 @@ export const API_ENDPOINTS = {
   RELACIONAMENTOS: 'relacionamentos',
   USERS: 'users',
   AUTH: 'auth',
-  CUSTOS_MENSAIS: 'custos-mensais'
+  CUSTOS_MENSAIS: 'custos-mensais',
+  CARGOS: 'cargos',
+  FERIAS: 'ferias',
+  AFASTAMENTOS: 'afastamentos',
+  FOLHA_PAGAMENTO: 'folha-pagamento',
+  DESCONTOS_TIPO: 'descontos-tipo',
+  BENEFICIOS_TIPO: 'beneficios-tipo',
+  VALES: 'vales',
+  HORAS_MENSAIS: 'horas-mensais',
+  FUNCIONARIOS_OBRAS: 'funcionarios-obras',
+  HISTORICO_RH: 'historico-rh',
+  RELATORIOS_RH: 'relatorios-rh'
 } as const
 
 export { API_BASE_URL }
