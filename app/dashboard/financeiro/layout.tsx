@@ -12,7 +12,8 @@ import {
   TrendingDown,
   BarChart3,
   Menu,
-  X
+  X,
+  Home
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -42,6 +43,11 @@ const financeiroNavItems = [
     title: "Custos",
     href: "/dashboard/financeiro/custos",
     icon: TrendingDown,
+  },
+  {
+    title: "Aluguéis",
+    href: "/dashboard/financeiro/alugueis",
+    icon: Home,
   },
   {
     title: "Relatórios",

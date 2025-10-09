@@ -91,6 +91,16 @@ const financeiroModules = [
     ]
   },
   {
+    id: 'alugueis',
+    title: 'Aluguéis de Residências',
+    icon: Building2,
+    color: 'bg-indigo-500',
+    description: 'Gestão de residências e aluguéis para funcionários',
+    submodules: [
+      { name: 'Gestão de Aluguéis', href: '/dashboard/financeiro/alugueis' }
+    ]
+  },
+  {
     id: 'impostos',
     title: 'Impostos',
     icon: Calculator,
@@ -440,6 +450,8 @@ export default function FinanceiroPage() {
                         router.push('/dashboard/financeiro/compras')
                       } else if (module.id === 'locacoes') {
                         router.push('/dashboard/financeiro/locacoes')
+                      } else if (module.id === 'alugueis') {
+                        router.push('/dashboard/financeiro/alugueis')
                       } else if (module.id === 'impostos') {
                         router.push('/dashboard/financeiro/impostos')
                       } else if (module.id === 'logistica') {
