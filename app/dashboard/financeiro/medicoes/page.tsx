@@ -35,44 +35,14 @@ import { useToast } from "@/hooks/use-toast"
 import { medicoesApi, Medicao, MedicaoCreate } from "@/lib/api-medicoes"
 import { medicoesUtils } from "@/lib/medicoes-utils"
 import { locacoesApi, Locacao } from "@/lib/api-locacoes"
+import { receitasApi, Receita, ReceitaCreate } from "@/lib/api-receitas"
+import { custosApi, Custo, CustoCreate } from "@/lib/api-custos"
+import { obrasApi } from "@/lib/api-obras"
 
-// Tipos para receitas e custos (mantidos para compatibilidade)
-
-interface Receita {
-  id: string
-  obra_id: string
-  tipo: 'locacao' | 'servico' | 'venda'
-  descricao: string
-  valor: number
-  data_receita: string
-  status: 'pendente' | 'confirmada' | 'cancelada'
-  observacoes?: string
-  created_at: string
-  obras?: {
-    id: string
-    nome: string
-  }
-}
-
-interface Custo {
-  id: string
-  obra_id: string
-  tipo: 'salario' | 'material' | 'servico' | 'manutencao'
-  descricao: string
-  valor: number
-  data_custo: string
-  funcionario_id?: string
-  status: 'pendente' | 'confirmado' | 'cancelado'
-  observacoes?: string
-  created_at: string
-  obras?: {
-    id: string
-    nome: string
-  }
-  funcionarios?: {
-    id: string
-    nome: string
-  }
+// Interface para obras (para os selects)
+interface ObraSimples {
+  id: number
+  nome: string
 }
 
 export default function MedicoesPage() {
@@ -104,6 +74,9 @@ export default function MedicoesPage() {
   // Estados para custos
   const [custos, setCustos] = useState<Custo[]>([])
   const [isCreateCustoDialogOpen, setIsCreateCustoDialogOpen] = useState(false)
+
+  // Estados para obras
+  const [obras, setObras] = useState<ObraSimples[]>([])
 
   // Formulários
   const [medicaoForm, setMedicaoForm] = useState({
@@ -164,61 +137,17 @@ export default function MedicoesPage() {
       const locacoesData = await locacoesApi.list({ limit: 100 })
       setLocacoes(locacoesData.data || [])
       
-      // Dados mockados para receitas e custos (manter por enquanto)
-      const mockReceitas: Receita[] = [
-        {
-          id: '1',
-          obra_id: '1',
-          tipo: 'locacao',
-          descricao: 'Locação mensal da grua STT293',
-          valor: 30000,
-          data_receita: '2025-01-15',
-          status: 'confirmada',
-          created_at: new Date().toISOString(),
-          obras: { id: '1', nome: 'Obra Jardim das Flores' }
-        },
-        {
-          id: '2',
-          obra_id: '1',
-          tipo: 'servico',
-          descricao: 'Serviço de montagem adicional',
-          valor: 5000,
-          data_receita: '2025-01-20',
-          status: 'pendente',
-          created_at: new Date().toISOString(),
-          obras: { id: '1', nome: 'Obra Jardim das Flores' }
-        }
-      ]
+      // Carregar receitas
+      const receitasData = await receitasApi.list({ limit: 100 })
+      setReceitas(receitasData.receitas || [])
+      
+      // Carregar custos
+      const custosData = await custosApi.list({ limit: 100 })
+      setCustos(custosData.custos || [])
 
-      const mockCustos: Custo[] = [
-        {
-          id: '1',
-          obra_id: '1',
-          tipo: 'salario',
-          descricao: 'Salário do operador da grua',
-          valor: 8000,
-          data_custo: '2025-01-15',
-          funcionario_id: '1',
-          status: 'confirmado',
-          created_at: new Date().toISOString(),
-          obras: { id: '1', nome: 'Obra Jardim das Flores' },
-          funcionarios: { id: '1', nome: 'João Silva' }
-        },
-        {
-          id: '2',
-          obra_id: '1',
-          tipo: 'material',
-          descricao: 'Compra de peças de reposição',
-          valor: 2500,
-          data_custo: '2025-01-18',
-          status: 'confirmado',
-          created_at: new Date().toISOString(),
-          obras: { id: '1', nome: 'Obra Jardim das Flores' }
-        }
-      ]
-
-      setReceitas(mockReceitas)
-      setCustos(mockCustos)
+      // Carregar obras para os selects
+      const obrasData = await obrasApi.listarObras({ limit: 100 })
+      setObras(obrasData.data || [])
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -382,19 +311,17 @@ export default function MedicoesPage() {
 
   const handleCreateReceita = async () => {
     try {
-      const novaReceita: Receita = {
-        id: Date.now().toString(),
-        obra_id: receitaForm.obra_id,
+      const receitaData: ReceitaCreate = {
+        obra_id: parseInt(receitaForm.obra_id),
         tipo: receitaForm.tipo,
         descricao: receitaForm.descricao,
         valor: receitaForm.valor,
         data_receita: receitaForm.data_receita,
-        status: 'pendente',
-        observacoes: receitaForm.observacoes,
-        created_at: new Date().toISOString()
+        observacoes: receitaForm.observacoes || undefined
       }
 
-      setReceitas([...receitas, novaReceita])
+      const novaReceita = await receitasApi.create(receitaData)
+      setReceitas([novaReceita, ...receitas])
       setIsCreateReceitaDialogOpen(false)
       resetReceitaForm()
 
@@ -414,20 +341,18 @@ export default function MedicoesPage() {
 
   const handleCreateCusto = async () => {
     try {
-      const novoCusto: Custo = {
-        id: Date.now().toString(),
-        obra_id: custoForm.obra_id,
+      const custoData: CustoCreate = {
+        obra_id: parseInt(custoForm.obra_id),
         tipo: custoForm.tipo,
         descricao: custoForm.descricao,
         valor: custoForm.valor,
         data_custo: custoForm.data_custo,
-        funcionario_id: custoForm.funcionario_id || undefined,
-        status: 'pendente',
-        observacoes: custoForm.observacoes,
-        created_at: new Date().toISOString()
+        funcionario_id: custoForm.funcionario_id ? parseInt(custoForm.funcionario_id) : undefined,
+        observacoes: custoForm.observacoes || undefined
       }
 
-      setCustos([...custos, novoCusto])
+      const novoCusto = await custosApi.create(custoData)
+      setCustos([novoCusto, ...custos])
       setIsCreateCustoDialogOpen(false)
       resetCustoForm()
 
@@ -1322,8 +1247,17 @@ export default function MedicoesPage() {
                     <SelectValue placeholder="Selecione a obra" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Obra Jardim das Flores</SelectItem>
-                    <SelectItem value="2">Shopping Center Norte</SelectItem>
+                    {obras.length === 0 ? (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        Nenhuma obra disponível
+                      </div>
+                    ) : (
+                      obras.map(obra => (
+                        <SelectItem key={obra.id} value={obra.id.toString()}>
+                          {obra.nome}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1424,8 +1358,17 @@ export default function MedicoesPage() {
                     <SelectValue placeholder="Selecione a obra" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Obra Jardim das Flores</SelectItem>
-                    <SelectItem value="2">Shopping Center Norte</SelectItem>
+                    {obras.length === 0 ? (
+                      <div className="p-2 text-sm text-gray-500 text-center">
+                        Nenhuma obra disponível
+                      </div>
+                    ) : (
+                      obras.map(obra => (
+                        <SelectItem key={obra.id} value={obra.id.toString()}>
+                          {obra.nome}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

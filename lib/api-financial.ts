@@ -1,4 +1,4 @@
-import api from './api'
+import api, { apiWithRetry } from './api'
 
 // Interfaces para os dados financeiros
 export interface FinancialData {
@@ -178,29 +178,39 @@ export const getFinancialData = async (): Promise<FinancialData> => {
   return response.data.data
 }
 
-// Vendas
+// Vendas (com retry logic)
 export const getVendas = async (): Promise<Venda[]> => {
-  const response = await api.get('/vendas')
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.get('/vendas')
+    return response.data.data
+  })
 }
 
 export const getVenda = async (id: number): Promise<Venda> => {
-  const response = await api.get(`/vendas/${id}`)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.get(`/vendas/${id}`)
+    return response.data.data
+  })
 }
 
 export const createVenda = async (venda: Omit<Venda, 'id' | 'created_at' | 'updated_at'>): Promise<Venda> => {
-  const response = await api.post('/vendas', venda)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.post('/vendas', venda)
+    return response.data.data
+  }, { maxRetries: 2 }) // Menos retries para operações de escrita
 }
 
 export const updateVenda = async (id: number, venda: Partial<Venda>): Promise<Venda> => {
-  const response = await api.put(`/vendas/${id}`, venda)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.put(`/vendas/${id}`, venda)
+    return response.data.data
+  }, { maxRetries: 2 })
 }
 
 export const deleteVenda = async (id: number): Promise<void> => {
-  await api.delete(`/vendas/${id}`)
+  return apiWithRetry(async () => {
+    await api.delete(`/vendas/${id}`)
+  }, { maxRetries: 1 }) // Apenas 1 retry para delete
 }
 
 
@@ -359,34 +369,46 @@ export interface CreateVendaItemData {
   valor_unitario: number
 }
 
-// Funções para gerenciar itens de venda
+// Funções para gerenciar itens de venda (com retry logic)
 export const getVendaItens = async (vendaId: number): Promise<VendaItem[]> => {
-  const response = await api.get(`/vendas/${vendaId}/itens`)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.get(`/vendas/${vendaId}/itens`)
+    return response.data.data
+  })
 }
 
 export const addVendaItem = async (vendaId: number, item: CreateVendaItemData): Promise<VendaItem> => {
-  const response = await api.post(`/vendas/${vendaId}/itens`, item)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.post(`/vendas/${vendaId}/itens`, item)
+    return response.data.data
+  }, { maxRetries: 2 })
 }
 
 export const updateVendaItem = async (vendaId: number, itemId: number, item: Partial<CreateVendaItemData>): Promise<VendaItem> => {
-  const response = await api.put(`/vendas/${vendaId}/itens/${itemId}`, item)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.put(`/vendas/${vendaId}/itens/${itemId}`, item)
+    return response.data.data
+  }, { maxRetries: 2 })
 }
 
 export const deleteVendaItem = async (vendaId: number, itemId: number): Promise<void> => {
-  await api.delete(`/vendas/${vendaId}/itens/${itemId}`)
+  return apiWithRetry(async () => {
+    await api.delete(`/vendas/${vendaId}/itens/${itemId}`)
+  }, { maxRetries: 1 })
 }
 
-// Função para confirmar venda e criar movimentações
+// Função para confirmar venda e criar movimentações (com retry logic)
 export const confirmarVenda = async (vendaId: number): Promise<{ venda: Venda; movimentacoes: any[] }> => {
-  const response = await api.post(`/vendas/${vendaId}/confirmar`)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.post(`/vendas/${vendaId}/confirmar`)
+    return response.data.data
+  }, { maxRetries: 2 })
 }
 
-// Função para criar venda a partir de orçamento
+// Função para criar venda a partir de orçamento (com retry logic)
 export const createVendaFromOrcamento = async (orcamentoId: number): Promise<Venda> => {
-  const response = await api.post(`/vendas/from-orcamento/${orcamentoId}`)
-  return response.data.data
+  return apiWithRetry(async () => {
+    const response = await api.post(`/vendas/from-orcamento/${orcamentoId}`)
+    return response.data.data
+  }, { maxRetries: 2 })
 }

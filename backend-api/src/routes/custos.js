@@ -82,6 +82,10 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
   try {
     const { obra_id, tipo, status, data_inicio, data_fim, page = 1, limit = 50 } = req.query
     const offset = (page - 1) * limit
+    
+    // Converter datas para string ISO se forem objetos Date
+    const dataInicioStr = data_inicio instanceof Date ? data_inicio.toISOString().split('T')[0] : data_inicio
+    const dataFimStr = data_fim instanceof Date ? data_fim.toISOString().split('T')[0] : data_fim
 
     let query = supabaseAdmin
       .from('custos')
@@ -107,8 +111,8 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
     if (obra_id) query = query.eq('obra_id', obra_id)
     if (tipo) query = query.eq('tipo', tipo)
     if (status) query = query.eq('status', status)
-    if (data_inicio) query = query.gte('data_custo', data_inicio)
-    if (data_fim) query = query.lte('data_custo', data_fim)
+    if (dataInicioStr) query = query.gte('data_custo', dataInicioStr)
+    if (dataFimStr) query = query.lte('data_custo', dataFimStr)
 
     query = query
       .range(offset, offset + limit - 1)
@@ -202,6 +206,10 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
 router.get('/export', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
     const { format = 'csv', obra_id, tipo, status, data_inicio, data_fim } = req.query
+    
+    // Converter datas para string ISO se forem objetos Date
+    const dataInicioStr = data_inicio instanceof Date ? data_inicio.toISOString().split('T')[0] : data_inicio
+    const dataFimStr = data_fim instanceof Date ? data_fim.toISOString().split('T')[0] : data_fim
 
     let query = supabaseAdmin
       .from('custos')
@@ -226,8 +234,8 @@ router.get('/export', authenticateToken, requirePermission('visualizar_obras'), 
     if (obra_id) query = query.eq('obra_id', obra_id)
     if (tipo) query = query.eq('tipo', tipo)
     if (status) query = query.eq('status', status)
-    if (data_inicio) query = query.gte('data_custo', data_inicio)
-    if (data_fim) query = query.lte('data_custo', data_fim)
+    if (dataInicioStr) query = query.gte('data_custo', dataInicioStr)
+    if (dataFimStr) query = query.lte('data_custo', dataFimStr)
 
     query = query.order('data_custo', { ascending: false })
 
@@ -695,14 +703,18 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), asy
 router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
     const { obra_id, data_inicio, data_fim } = req.query
+    
+    // Converter datas para string ISO se forem objetos Date
+    const dataInicioStr = data_inicio instanceof Date ? data_inicio.toISOString().split('T')[0] : data_inicio
+    const dataFimStr = data_fim instanceof Date ? data_fim.toISOString().split('T')[0] : data_fim
 
     let query = supabaseAdmin
       .from('custos')
       .select('tipo, status, valor')
 
     if (obra_id) query = query.eq('obra_id', obra_id)
-    if (data_inicio) query = query.gte('data_custo', data_inicio)
-    if (data_fim) query = query.lte('data_custo', data_fim)
+    if (dataInicioStr) query = query.gte('data_custo', dataInicioStr)
+    if (dataFimStr) query = query.lte('data_custo', dataFimStr)
 
     const { data, error } = await query
 
@@ -777,6 +789,10 @@ router.get('/obra/:obra_id', authenticateToken, requirePermission('visualizar_ob
   try {
     const { obra_id } = req.params
     const { data_inicio, data_fim } = req.query
+    
+    // Converter datas para string ISO se forem objetos Date
+    const dataInicioStr = data_inicio instanceof Date ? data_inicio.toISOString().split('T')[0] : data_inicio
+    const dataFimStr = data_fim instanceof Date ? data_fim.toISOString().split('T')[0] : data_fim
 
     let query = supabaseAdmin
       .from('custos')
@@ -790,8 +806,8 @@ router.get('/obra/:obra_id', authenticateToken, requirePermission('visualizar_ob
       `)
       .eq('obra_id', obra_id)
 
-    if (data_inicio) query = query.gte('data_custo', data_inicio)
-    if (data_fim) query = query.lte('data_custo', data_fim)
+    if (dataInicioStr) query = query.gte('data_custo', dataInicioStr)
+    if (dataFimStr) query = query.lte('data_custo', dataFimStr)
 
     query = query.order('data_custo', { ascending: false })
 

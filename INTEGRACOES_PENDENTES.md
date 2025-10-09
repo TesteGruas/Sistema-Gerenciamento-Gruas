@@ -1,745 +1,367 @@
-# 🔄 Integrações Pendentes - Sistema de Gerenciamento de Gruas
+# Relatório de Integrações Pendentes - Sistema de Gerenciamento de Gruas
+
+Este documento lista todos os módulos que ainda utilizam dados mockados/hardcoded e precisam de integração com o backend.
 
 ## 📊 Resumo Executivo
 
-**Última Atualização:** 09 de Outubro de 2025
-
-| Categoria | Total | Integrado | Parcial | Pendente |
-|-----------|-------|-----------|---------|----------|
-| **Financeiro** | 10 | 3 | 2 | 5 |
-| **RH** | 8 | 2 | 3 | 3 |
-| **Operacional** | 7 | 3 | 1 | 3 |
-| **PWA** | 5 | 2 | 2 | 1 |
-| **Novos Módulos** | 2 | 0 | 0 | 2 |
-| **TOTAL** | **32** | **10** | **8** | **14** |
-
-**Prioridade:** Alta para Financeiro, Notificações e Aluguéis
-
----
-
-## 🆕 NOVOS MÓDULOS IMPLEMENTADOS (AGUARDANDO BACKEND)
-
-### 1. **Sistema de Notificações** ⏳
-**Status:** Frontend Completo | Backend Pendente  
-**Localização:** `/dashboard/notificacoes`  
-**Documentação:** `NOTIFICACOES_README.md`
-
-**Frontend Implementado:**
-- ✅ Página de listagem de notificações com filtros
-- ✅ Dropdown de notificações no header
-- ✅ Criação de notificações (geral, por cliente, por funcionário, por obra)
-- ✅ Seleção múltipla de destinatários
-- ✅ Marcação de lida/não lida
-- ✅ Estatísticas e contadores
-- ✅ API Mock completa (`lib/api-notificacoes.ts`)
-
-**APIs Backend Necessárias:**
-
-#### 1.1 **GET** `/api/notificacoes`
-Listar notificações do usuário logado
-```typescript
-Query: { 
-  lida?: boolean
-  limit?: number
-  offset?: number
-}
-Response: {
-  success: boolean
-  data: Notificacao[]
-  total: number
-  naoLidas: number
-}
-```
-
-#### 1.2 **POST** `/api/notificacoes`
-Criar nova notificação
-```typescript
-Body: {
-  titulo: string
-  mensagem: string
-  tipo: 'info' | 'alerta' | 'sucesso' | 'erro'
-  prioridade: 'baixa' | 'media' | 'alta'
-  destinatarioTipo: 'geral' | 'cliente' | 'funcionario' | 'obra'
-  destinatarios?: Array<{
-    id: string
-    tipo: 'cliente' | 'funcionario' | 'obra'
-    nome: string
-    info?: string
-  }>
-}
-```
-
-#### 1.3 **PUT** `/api/notificacoes/:id/marcar-lida`
-Marcar notificação como lida
-
-#### 1.4 **DELETE** `/api/notificacoes/:id`
-Deletar notificação
-
-**Integrações Necessárias:**
-- 🔔 Sistema de push notifications
-- 📧 Envio de email para notificações importantes
-- 📱 Notificações PWA
-- 🔗 Integração com clientes, funcionários e obras
-
-**Prioridade:** 🔴 ALTA (sistema de comunicação essencial)
-
----
-
-### 2. **Aluguéis de Residências** ⏳
-**Status:** Frontend Completo | Backend Pendente  
-**Localização:** `/dashboard/financeiro/alugueis`  
-**Documentação:** `ALUGUEIS_RESIDENCIAS_README.md`
-
-**Frontend Implementado:**
-- ✅ Gestão de residências (CRUD)
-- ✅ Contratos de aluguel para funcionários
-- ✅ Cálculo automático de subsídios
-- ✅ Controle de pagamentos mensais
-- ✅ Integração com busca de funcionários
-- ✅ Estatísticas financeiras
-- ✅ 3 Tabs: Aluguéis | Residências | Novo Aluguel
-- ✅ API Mock completa (`lib/api-alugueis-residencias.ts`)
-
-**APIs Backend Necessárias (16 endpoints):**
-
-**Residências:**
-- GET `/api/residencias` - Listar todas
-- GET `/api/residencias/:id` - Buscar por ID
-- POST `/api/residencias` - Criar nova
-- PUT `/api/residencias/:id` - Atualizar
-- DELETE `/api/residencias/:id` - Deletar
-
-**Aluguéis:**
-- GET `/api/alugueis` - Listar todos
-- GET `/api/alugueis/:id` - Buscar por ID
-- POST `/api/alugueis` - Criar contrato
-- PUT `/api/alugueis/:id` - Atualizar
-- POST `/api/alugueis/:id/encerrar` - Encerrar contrato
-
-**Pagamentos:**
-- GET `/api/alugueis/:id/pagamentos` - Listar pagamentos
-- POST `/api/alugueis/:id/pagamentos` - Registrar pagamento
-- PUT `/api/alugueis/:id/pagamentos/:pagId` - Atualizar pagamento
-- GET `/api/alugueis/pagamentos/pendentes` - Listar pendentes
-
-**Relatórios:**
-- GET `/api/alugueis/estatisticas` - Dashboard
-- GET `/api/alugueis/relatorio-financeiro` - Relatório período
-
-**Integrações Necessárias:**
-- 👥 Funcionários (buscar dados do funcionário)
-- 💰 Folha de Pagamento (desconto em folha)
-- 📊 Financeiro (lançamentos contábeis)
-- 🔔 Notificações (alertas de vencimento)
-- 📁 Upload de documentos (fotos, comprovantes)
-
-**Banco de Dados Necessário:**
-- Tabela `residencias`
-- Tabela `alugueis_residencias`
-- Tabela `pagamentos_aluguel`
-- Tabela `residencias_fotos`
-
-**Prioridade:** 🔴 ALTA (módulo financeiro com impacto direto)
+*Total de Módulos Analisados:* 30+
+*Módulos com Dados Mockados:* 18
+*Prioridade:* Alta para módulos financeiros e RH
 
 ---
 
 ## 🔴 PRIORIDADE ALTA - Módulos Financeiros
 
-### 3. **Medições Financeiras**
-**Status:** ⚠️ Parcialmente Integrado  
-**Localização:** `/dashboard/financeiro/medicoes/page.tsx`
+### 1. *Medições Financeiras* (app/dashboard/financeiro/medicoes/page.tsx)
+*Status:* ⚠️ Parcialmente Integrado
+- ✅ *Integrado:* Medições e Locações
+- ❌ *Mockado:* 
+  - Receitas (linhas 168-191)
+  - Custos (linhas 193-218)
+  
+*Dados Mockados:*
+typescript
+const mockReceitas: Receita[] = [...]  // Receitas de obras
+const mockCustos: Custo[] = [...]      // Custos por obra
 
-- ✅ **Integrado:** Medições e Locações
-- ❌ **Pendente:** Receitas e Custos (linhas 168-218)
 
-**Ação:**
-- Integrar com `api-receitas.ts` (existe mas não usado)
-- Integrar com `api-custos.ts` (existe mas não usado)
-
----
-
-### 4. **Relatórios Financeiros**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/financeiro/relatorios/page.tsx`
-
-**Dados Mockados:**
-- Relatórios financeiros gerais
-- Vendas e contratos
-- Faturamento mensal
-- Locações e estoque
-
-**APIs Necessárias:**
-- `POST /api/relatorios/gerar` - Gerar relatório customizado
-- `GET /api/relatorios/faturamento` - Dados de faturamento
-- `GET /api/relatorios/vendas` - Relatório de vendas
-- `GET /api/relatorios/locacoes` - Relatório de locações
-
-**Prioridade:** 🔴 ALTA
+*Ação Necessária:*
+- Integrar com API de receitas (lib/api-receitas.ts)
+- Integrar com API de custos (lib/api-custos.ts)
 
 ---
 
-### 5. **Cadastro Financeiro**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/financeiro/cadastro/page.tsx`
+### 2. *Relatórios Financeiros* (app/dashboard/financeiro/relatorios/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Mockado:**
-- Clientes (existe API mas usa fallback)
-- Fornecedores (não existe API)
-- Produtos (não existe API)
-- Funcionários (existe API mas usa fallback)
+*Dados Mockados (linhas 44-163):*
+- mockRelatorioFinanceiro - Relatórios financeiros gerais
+- mockRelatorioVendas - Dados de vendas
+- mockRelatorioContratos - Contratos
+- mockRelatorioFaturamento - Faturamento mensal
+- mockRelatorioLocacoes - Locações
+- mockRelatorioEstoque - Estoque
+- obrasMock - Lista de obras
+- gruasMock - Lista de gruas
 
-**APIs Necessárias:**
-- `api-fornecedores.ts` (criar novo)
-- `api-produtos.ts` ou `api-catalogo.ts` (criar novo)
-
-**Prioridade:** 🟡 MÉDIA
-
----
-
-### 6. **Logística**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/financeiro/logistica/page.tsx`
-
-**Mockado:**
-- Manifestos de carga
-- CT-e (Conhecimento de Transporte)
-- Motoristas
-- Viagens
-
-**APIs Necessárias:**
-- `POST /api/logistica/manifestos` - Criar manifesto
-- `GET /api/logistica/manifestos` - Listar manifestos
-- `POST /api/logistica/cte` - Emitir CT-e
-- `GET /api/logistica/motoristas` - Listar motoristas
-- `POST /api/logistica/viagens` - Registrar viagem
-
-**Prioridade:** 🟡 MÉDIA
+*Ação Necessária:*
+- Criar endpoints de relatórios no backend
+- Integrar com api-relatorios.ts
+- Implementar geração de relatórios em PDF/Excel
 
 ---
 
-### 7. **Impostos**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/financeiro/impostos/page.tsx`
+### 3. *Cadastro Financeiro* (app/dashboard/financeiro/cadastro/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Mockado:**
-- Pagamentos de impostos
-- Relatórios mensais
-- Cálculos tributários
+*Dados Mockados (linhas 41-126):*
+- mockClientes - Lista de clientes
+- mockFornecedores - Lista de fornecedores
+- mockProdutos - Catálogo de produtos
+- mockFuncionarios - Lista de funcionários
 
-**APIs Necessárias:**
-- `GET /api/impostos` - Listar impostos
-- `POST /api/impostos/calcular` - Calcular impostos
-- `POST /api/impostos/pagar` - Registrar pagamento
-- `GET /api/impostos/relatorio` - Relatório mensal
-
-**Prioridade:** 🟡 MÉDIA
-
----
-
-### 8. **Compras**
-**Status:** ⚠️ Parcialmente Mockado  
-**Localização:** `/dashboard/financeiro/compras/page.tsx`
-
-- ✅ Módulo funcional
-- ❌ Fornecedores em fallback mockado
-
-**Ação:**
-- Criar `api-fornecedores.ts` completo
-
-**Prioridade:** 🟡 MÉDIA
+*Ação Necessária:*
+- Integrar com APIs existentes:
+  - lib/api-clientes.ts
+  - lib/api-funcionarios.ts
+- Criar API de fornecedores
+- Criar API de produtos/catálogo
 
 ---
 
-### 9. **Vendas**
-**Status:** ⚠️ Parcialmente Integrado  
-**Localização:** `/dashboard/financeiro/vendas/page.tsx`
+### 4. *Logística* (app/dashboard/financeiro/logistica/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-- ✅ Módulo funcional
-- ❌ Fallback para clientes mockados
+*Dados Mockados (linhas 42-132):*
+- mockManifestos - Manifestos de carga
+- mockCTe - Conhecimentos de Transporte Eletrônico
+- mockMotoristas - Cadastro de motoristas
+- mockViagens - Controle de viagens
 
-**Ação:**
-- Garantir API de clientes estável
-- Remover fallback
-
-**Prioridade:** 🟢 BAIXA
+*Ação Necessária:*
+- Criar módulo completo de logística no backend
+- Implementar API de manifestos e CT-e
+- Implementar controle de motoristas e viagens
 
 ---
 
-### 10. **Contas Bancárias**
-**Status:** ⚠️ Verificar Integração  
-**Localização:** `/dashboard/financeiro/contas-bancarias/page.tsx`
+### 5. *Impostos* (app/dashboard/financeiro/impostos/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Ação:**
-- Validar se está integrado com backend
-- Testar operações de CRUD
+*Dados Mockados (linhas 37-87):*
+- mockPagamentosImpostos - Pagamentos de impostos
+- mockRelatorioImpostos - Relatórios mensais de impostos
+
+*Ação Necessária:*
+- Criar API de impostos no backend
+- Implementar cálculo automático de impostos
+- Integrar com sistema de pagamentos
+
+---
+
+### 6. *Compras* (app/dashboard/financeiro/compras/page.tsx)
+*Status:* ⚠️ Parcialmente Mockado
+
+*Dados Mockados (linhas 664-668):*
+- fornecedoresMock - Lista de fornecedores (fallback)
+
+*Ação Necessária:*
+- Criar API completa de fornecedores
+- Implementar sistema de compras
+
+---
+
+### 7. *Vendas* (app/dashboard/financeiro/vendas/page.tsx)
+*Status:* ⚠️ Parcialmente Mockado
+
+*Dados Mockados (linhas 1232-1236):*
+- Fallback para clientes mockados em caso de erro
+
+*Ação Necessária:*
+- Garantir API de clientes sempre disponível
+- Remover fallback mockado
 
 ---
 
 ## 🟡 PRIORIDADE MÉDIA - Módulos de RH
 
-### 11. **Alocação Funcionários em Obras**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/rh-completo/obras/page.tsx`
+### 8. *Alocação de Funcionários em Obras* (app/dashboard/rh-completo/obras/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**APIs Necessárias:**
-- `GET /api/alocacoes` - Listar alocações
-- `POST /api/alocacoes` - Alocar funcionário
-- `DELETE /api/alocacoes/:id` - Remover alocação
-- `GET /api/alocacoes/obra/:obraId` - Por obra
+*Dados Mockados (linhas 86-186):*
+- Lista completa de alocações funcionário-obra
+- Dados de obras e funcionários
 
-**Prioridade:** 🟡 MÉDIA
-
----
-
-### 12. **Ponto Eletrônico (RH Completo)**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/rh-completo/ponto/page.tsx`
-
-**Mockado:**
-- Registros de ponto
-- Resumo de horas por funcionário
-
-**Ação:**
-- Integrar com `api-ponto-eletronico.ts` (existe)
-- Expandir funcionalidades
-
-**Prioridade:** 🟡 MÉDIA
+*Ação Necessária:*
+- Criar API de alocação de funcionários
+- Integrar com lib/api-funcionarios-obras.ts
 
 ---
 
-### 13. **Férias e Afastamentos**
-**Status:** ⚠️ Parcialmente Integrado  
-**Localização:** `/dashboard/rh-completo/ferias/page.tsx`
+### 9. *Ponto Eletrônico* (app/dashboard/rh-completo/ponto/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Mockado:**
-- Registros de férias
-- Registros de afastamentos
+*Dados Mockados (linhas 75-165):*
+- registros - Registros de ponto
+- funcionarios - Resumo de horas por funcionário
 
-**Ação:**
-- Integrar com `api-ferias.ts` (existe)
+*Ação Necessária:*
+- Integrar com lib/api-ponto-eletronico.ts
+- Implementar sistema completo de ponto
+
+---
+
+### 10. *Férias e Afastamentos* (app/dashboard/rh-completo/ferias/page.tsx)
+*Status:* ⚠️ Parcialmente Integrado
+
+*Dados Mockados (linhas 92-128):*
+- feriasSimuladas - Registros de férias
+- afastamentosSimulados - Registros de afastamentos
+
+*Ação Necessária:*
+- Criar endpoints de férias no backend
 - Criar endpoints de afastamentos
-
-**Prioridade:** 🟡 MÉDIA
+- Integrar com lib/api-ferias.ts
 
 ---
 
-### 14. **Auditoria e Permissões**
-**Status:** ⚠️ Parcialmente Mockado  
-**Localização:** `/dashboard/rh-completo/auditoria/page.tsx`
+### 11. *Auditoria e Permissões* (app/dashboard/rh-completo/auditoria/page.tsx)
+*Status:* ⚠️ Parcialmente Mockado
 
-**Mockado:**
-- Perfis de usuário
-- Permissões do sistema
+*Dados Mockados (linhas 79-127):*
+- perfisSimulados - Perfis de usuário
+- permissoesSimuladas - Permissões do sistema
 
-**Ação:**
+*Ação Necessária:*
 - Implementar sistema completo de permissões
-- Integrar com `api-permissoes.ts` (existe)
-
-**Prioridade:** 🟡 MÉDIA
-
----
-
-### 15. **Cargos**
-**Status:** ⚠️ Verificar  
-**Localização:** `/dashboard/rh-completo/cargos/page.tsx`
-
-**Ação:**
-- Validar integração com backend
-
----
-
-### 16. **Remuneração**
-**Status:** ⚠️ Verificar  
-**Localização:** `/dashboard/rh-completo/remuneracao/page.tsx`
-
-**Ação:**
-- Validar integração com backend
-
----
-
-### 17. **Vales**
-**Status:** ⚠️ Verificar  
-**Localização:** `/dashboard/rh-completo/vales/page.tsx`
-
-**Ação:**
-- Validar integração com backend
-
----
-
-### 18. **Histórico RH**
-**Status:** ⚠️ Verificar  
-**Localização:** `/dashboard/rh-completo/historico/page.tsx`
-
-**Ação:**
-- Validar integração com backend
+- Integrar com controle de acesso
 
 ---
 
 ## 🟢 PRIORIDADE BAIXA - Módulos Operacionais
 
-### 19. **Gruas por Mês**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/gruas-mes/page.tsx`
+### 12. *Gruas por Mês* (app/dashboard/gruas-mes/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Mockado:**
-- Controle mensal de gruas
-- Horas trabalhadas
-- Eficiência e custos
+*Dados Mockados (linhas 40-157):*
+- mockGruasMes - Controle mensal de gruas
+- Horas trabalhadas, eficiência, custos
 
-**APIs Necessárias:**
-- `GET /api/gruas/mensais` - Controle mensal
-- `POST /api/gruas/mensais` - Atualizar dados mensais
-
-**Prioridade:** 🟢 BAIXA
+*Ação Necessária:*
+- Criar API de controle mensal de gruas
+- Implementar cálculos de eficiência e custos
 
 ---
 
-### 20. **Checklist de Devolução**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/dashboard/checklist-devolucao/page.tsx`
+### 13. *Checklist de Devolução* (app/dashboard/checklist-devolucao/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Mockado:**
-- Itens de devolução
-- Obras e gruas
+*Dados Mockados (linhas 110-187):*
+- mockItens - Itens de devolução de peças
+- obrasMock - Lista de obras
+- gruasMock - Lista de gruas
 
-**APIs Necessárias:**
-- `GET /api/checklist-devolucao` - Listar checklists
-- `POST /api/checklist-devolucao` - Criar checklist
-- `PUT /api/checklist-devolucao/:id` - Atualizar
-
-**Prioridade:** 🟢 BAIXA
+*Ação Necessária:*
+- Criar API de checklist de devolução
+- Integrar com controle de peças/componentes
 
 ---
 
-### 21. **Múltiplas Gruas por Obra**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `components/multiple-gruas-manager.tsx`
+### 14. *Múltiplas Gruas por Obra* (components/multiple-gruas-manager.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Mockado:**
-- Gruas alocadas
-- Gruas disponíveis
+*Dados Mockados (linhas 105-167):*
+- mockGruasObra - Gruas alocadas em obra
+- mockGruasDisponiveis - Gruas disponíveis
 
-**Ação:**
-- Integrar com `api-grua-obra.ts` ou `api-obra-gruas.ts`
-
-**Prioridade:** 🟢 BAIXA
-
----
-
-### 22. **Livro de Grua**
-**Status:** ✅ Integrado  
-**Localização:** `lib/api-livro-grua.ts`
-
-- ✅ CRUD completo implementado
-
----
-
-### 23. **Gruas**
-**Status:** ✅ Integrado  
-**Localização:** `/dashboard/gruas`
-
-- ✅ Listagem e gestão de gruas
-
----
-
-### 24. **Obras**
-**Status:** ✅ Integrado  
-**Localização:** `/dashboard/obras`
-
-- ✅ CRUD completo de obras
-
----
-
-### 25. **Funcionários**
-**Status:** ✅ Integrado  
-**Localização:** `/dashboard/funcionarios`
-
-- ✅ CRUD completo de funcionários
-
----
-
-### 26. **Clientes**
-**Status:** ✅ Integrado  
-**Localização:** `/dashboard/clientes`
-
-- ✅ CRUD completo de clientes
-
----
-
-### 27. **Estoque**
-**Status:** ✅ Integrado  
-**Localização:** `/dashboard/estoque`
-
-- ✅ Gestão de estoque
+*Ação Necessária:*
+- Integrar com lib/api-grua-obra.ts ou lib/api-obra-gruas.ts
+- Implementar gestão de múltiplas gruas
 
 ---
 
 ## 📱 PWA - Aplicativo Mobile
 
-### 28. **PWA - Encarregador**
-**Status:** ⚠️ Fallback Mockado  
-**Localização:** `/app/pwa/encarregador/page.tsx`
+### 15. *PWA - Encarregador* (app/pwa/encarregador/page.tsx)
+*Status:* ⚠️ Fallback Mockado
 
-**Ação:**
+*Dados Mockados (linhas 135-164):*
+- Fallback para lista de funcionários
+- Fallback para registros pendentes
+
+*Ação Necessária:*
+- Garantir endpoints sempre disponíveis
 - Remover fallbacks mockados
-- Garantir APIs estáveis
-
-**Prioridade:** 🟡 MÉDIA
 
 ---
 
-### 29. **PWA - Documentos**
-**Status:** ⚠️ Fallback Mockado  
-**Localização:** `/app/pwa/documentos/page.tsx`
+### 16. *PWA - Documentos* (app/pwa/documentos/page.tsx)
+*Status:* ⚠️ Fallback Mockado
 
-**Ação:**
-- Garantir API de documentos
+*Dados Mockados (linhas 108-130):*
+- Fallback para documentos do funcionário
+
+*Ação Necessária:*
+- Garantir API de documentos funcionando
 - Remover fallback
 
-**Prioridade:** 🟡 MÉDIA
-
 ---
 
-### 30. **PWA - Assinatura**
-**Status:** ❌ Totalmente Mockado  
-**Localização:** `/app/pwa/assinatura/page.tsx`
+### 17. *PWA - Assinatura* (app/pwa/assinatura/page.tsx)
+*Status:* ❌ Totalmente Mockado
 
-**Mockado:**
-- Lista completa de documentos
+*Dados Mockados (linhas 61-90):*
+- docs - Lista completa de documentos para assinatura
 
-**Ação:**
+*Ação Necessária:*
 - Integrar com sistema de assinaturas
 - Conectar com API de documentos
-
-**Prioridade:** 🟢 BAIXA
-
----
-
-### 31. **PWA - Ponto**
-**Status:** ✅ Integrado  
-**Localização:** `/app/pwa/ponto`
-
-- ✅ Sistema de ponto funcionando
-
----
-
-### 32. **PWA - Gruas**
-**Status:** ✅ Integrado  
-**Localização:** `/app/pwa/gruas`
-
-- ✅ Visualização de gruas
 
 ---
 
 ## 📚 Biblioteca de Dados Mock
 
-### **Mock Data Central**
-**Localização:** `lib/mock-data.ts`
+### 18. *Mock Data Central* (lib/mock-data.ts)
+*Status:* ⚠️ Arquivo Completo de Mocks
 
-**Contém:**
-- Clientes
-- Usuários
-- Obras
-- Gruas
-- Documentos
-- Custos
-- Custos mensais
+*Contém:*
+- mockClientes (178-256)
+- mockUsers (258-341)
+- mockObras (343-407)
+- mockGruas (409-474)
+- mockDocumentos (476-569)
+- mockCustos (571-596)
+- mockCustosMensais (599-783)
+- Funções utilitárias de acesso
 
-**Ação:**
-- ⚠️ Manter apenas para testes/desenvolvimento
-- ❌ Remover todas importações em produção
-- ✅ Migrar módulos para APIs reais
-
----
-
-## 🔧 Novas APIs que Precisam Ser Criadas
-
-### Backend APIs - Ordem de Prioridade
-
-#### 🔴 PRIORIDADE ALTA (Implementar Primeiro)
-
-1. **api-notificacoes** ⭐ NOVO
-   - Sistema completo de notificações
-   - Push notifications
-   - 4 endpoints principais
-
-2. **api-alugueis-residencias** ⭐ NOVO
-   - Gestão de residências
-   - Contratos de aluguel
-   - Pagamentos e relatórios
-   - 16 endpoints
-
-3. **api-relatorios-financeiros**
-   - Geração de relatórios
-   - Exportação PDF/Excel
-   - Dashboards financeiros
-
-#### 🟡 PRIORIDADE MÉDIA
-
-4. **api-fornecedores**
-   - CRUD de fornecedores
-   - Integração com compras
-
-5. **api-produtos** ou **api-catalogo**
-   - Catálogo de produtos
-   - Preços e estoque
-
-6. **api-logistica**
-   - Manifestos e CT-e
-   - Motoristas e viagens
-
-7. **api-impostos**
-   - Cálculo automático
-   - Controle de pagamentos
-
-8. **api-alocacao-funcionarios**
-   - Alocação em obras
-   - Controle de horas
-
-#### 🟢 PRIORIDADE BAIXA
-
-9. **api-ferias-afastamentos**
-   - Expandir API existente
-   - Afastamentos médicos
-
-10. **api-gruas-mensais**
-    - Controle mensal
-    - Eficiência e custos
-
-11. **api-checklist-devolucao**
-    - Gestão de devoluções
+*Ação Necessária:*
+- Este arquivo deve ser mantido apenas para testes
+- Remover todas as importações deste arquivo do código de produção
+- Migrar todos os módulos para APIs reais
 
 ---
 
 ## 📋 Plano de Ação Recomendado
 
-### 🔴 Fase 1 - NOVOS MÓDULOS (2-3 semanas)
-**Prioridade Máxima**
+### Fase 1 - Financeiro (2-3 semanas)
+1. ✅ Medições (receitas e custos)
+2. ✅ Relatórios financeiros
+3. ✅ Cadastros (clientes, fornecedores, produtos)
+4. ✅ Impostos
 
-1. ✅ Sistema de Notificações (backend)
-   - Implementar 4 endpoints principais
-   - Sistema de push notifications
-   - Integração com email
+### Fase 2 - RH (2-3 semanas)
+1. ✅ Ponto eletrônico completo
+2. ✅ Alocação funcionários-obras
+3. ✅ Férias e afastamentos
+4. ✅ Permissões e auditoria
 
-2. ✅ Aluguéis de Residências (backend)
-   - Implementar 16 endpoints
-   - Estrutura de banco de dados
-   - Integração com folha de pagamento
+### Fase 3 - Operacional (1-2 semanas)
+1. ✅ Gruas por mês
+2. ✅ Checklist devolução
+3. ✅ Múltiplas gruas
+4. ✅ Logística
 
-### 🔴 Fase 2 - FINANCEIRO (2-3 semanas)
-
-3. ✅ Relatórios Financeiros
-4. ✅ Integrar Receitas/Custos em Medições
-5. ✅ API de Fornecedores
-6. ✅ API de Produtos/Catálogo
-7. ✅ Impostos
-
-### 🟡 Fase 3 - RH (2 semanas)
-
-8. ✅ Ponto eletrônico (expandir)
-9. ✅ Alocação funcionários-obras
-10. ✅ Férias e afastamentos completo
-11. ✅ Permissões e auditoria
-
-### 🟡 Fase 4 - LOGÍSTICA E OPERACIONAL (1-2 semanas)
-
-12. ✅ Logística (manifestos, CT-e, viagens)
-13. ✅ Gruas por mês
-14. ✅ Checklist devolução
-15. ✅ Múltiplas gruas
-
-### 🟢 Fase 5 - PWA E LIMPEZA (1 semana)
-
-16. ✅ Remover todos os fallbacks PWA
-17. ✅ Garantir funcionamento offline
-18. ✅ Remover imports de mock-data.ts
-19. ✅ Testes finais
+### Fase 4 - PWA (1 semana)
+1. ✅ Remover todos os fallbacks
+2. ✅ Garantir funcionamento offline
+3. ✅ Sincronização de dados
 
 ---
 
-## 📊 Estatísticas Gerais
+## 🔧 APIs que Precisam Ser Criadas
 
-| Métrica | Valor |
-|---------|-------|
-| **Módulos Totais** | 32 |
-| **Totalmente Integrados** | 10 (31%) |
-| **Parcialmente Integrados** | 8 (25%) |
-| **Pendentes** | 14 (44%) |
-| **Novos Módulos Frontend** | 2 |
-| **APIs a Criar** | 11 |
-| **APIs a Melhorar** | 5 |
-| **Linhas de Código Mock** | ~3.500+ |
-| **Tempo Estimado Total** | 8-12 semanas |
+### Novas APIs Necessárias:
+1. *api-receitas-custos.ts* - Receitas e custos por obra
+2. *api-relatorios-financeiros.ts* - Geração de relatórios
+3. *api-fornecedores.ts* - Gestão de fornecedores
+4. *api-produtos.ts* - Catálogo de produtos
+5. *api-logistica.ts* - Manifestos, CT-e, motoristas, viagens
+6. *api-impostos.ts* - Cálculo e controle de impostos
+7. *api-alocacao-funcionarios.ts* - Alocação em obras
+8. *api-ferias-afastamentos.ts* - Gestão de férias e afastamentos
+9. *api-gruas-mensais.ts* - Controle mensal de gruas
+10. *api-checklist-devolucao.ts* - Checklist de peças
+
+### APIs Existentes que Precisam Ser Melhoradas:
+1. *api-ponto-eletronico.ts* - Expandir funcionalidades
+2. *api-grua-obra.ts* - Suporte a múltiplas gruas
+3. *api-permissoes.ts* - Sistema completo de permissões
 
 ---
 
-## ✅ Checklist de Integração
+## 📊 Estatísticas
+
+- *Total de Arquivos com Mock:* 18
+- *Linhas de Código Mock:* ~2.500+
+- *APIs a Criar:* 10
+- *APIs a Melhorar:* 3
+- *Tempo Estimado:* 6-9 semanas
+
+---
+
+## ✅ Checklist de Verificação
 
 Para cada módulo integrado, verificar:
-
 - [ ] Substituir dados mock por chamadas de API
 - [ ] Implementar tratamento de erros adequado
 - [ ] Adicionar loading states
-- [ ] Implementar validações frontend e backend
+- [ ] Implementar validações
 - [ ] Testar CRUD completo
-- [ ] Documentar endpoints (Swagger/OpenAPI)
-- [ ] Remover imports de `mock-data.ts`
-- [ ] Adicionar testes unitários
-- [ ] Adicionar testes de integração
-- [ ] Testar em ambiente de staging
-- [ ] Deploy em produção
-- [ ] Monitoramento e logs
+- [ ] Documentar endpoints
+- [ ] Remover imports de mock-data.ts
+- [ ] Testar em produção
 
 ---
 
-## 🔐 Considerações de Segurança
+## 📝 Notas Importantes
 
-Para todas as novas APIs:
-
-1. **Autenticação:** JWT com refresh token
-2. **Autorização:** Sistema de permissões por módulo
-3. **Validação:** Joi/Zod para validação de dados
-4. **Rate Limiting:** Limitar requisições por IP/usuário
-5. **Logs:** Auditoria completa de operações
-6. **Sanitização:** Prevenir SQL Injection e XSS
-7. **HTTPS:** Apenas conexões seguras
-8. **CORS:** Configuração adequada
+1. *Priorização:* Focar primeiro nos módulos financeiros (impacto direto no negócio)
+2. *Testes:* Manter dados mock apenas para ambiente de testes/desenvolvimento
+3. *Migração:* Fazer migração gradual, módulo por módulo
+4. *Documentação:* Documentar cada API criada
+5. *Versionamento:* Criar branches específicas para cada módulo
 
 ---
 
-## 📝 Documentação Relacionada
-
-- 📄 `NOTIFICACOES_README.md` - Documentação completa do sistema de notificações
-- 📄 `ALUGUEIS_RESIDENCIAS_README.md` - Documentação completa de aluguéis
-- 📄 `PWA_README.md` - Documentação do PWA
-- 📄 `MANUAL_DO_USUARIO.md` - Manual do usuário
-
----
-
-## 🎯 Próximos Passos Imediatos
-
-### Esta Semana:
-1. ⭐ Implementar backend de **Notificações**
-2. ⭐ Implementar backend de **Aluguéis de Residências**
-3. 📋 Criar estrutura de banco de dados para ambos
-
-### Próxima Semana:
-1. Testar notificações em produção
-2. Testar aluguéis em produção
-3. Iniciar Fase 2 (Relatórios Financeiros)
-
----
-
-**Data do Relatório:** 09 de Outubro de 2025  
-**Próxima Revisão:** Após conclusão da Fase 1  
-**Responsável:** Time de Desenvolvimento
-
----
-
-## 📞 Suporte
-
-Para dúvidas sobre integrações:
-- Consultar arquivos mock nas pastas `lib/api-*.ts`
-- Ver componentes frontend em `app/dashboard/`
-- Revisar documentação específica de cada módulo
-
+*Data do Relatório:* 09 de Outubro de 2025  
+*Próxima Revisão:* Após conclusão da Fase 1

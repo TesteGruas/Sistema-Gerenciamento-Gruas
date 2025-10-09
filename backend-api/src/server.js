@@ -82,6 +82,9 @@ import horasMensaisRoutes from './routes/horas-mensais.js'
 import funcionariosObrasRoutes from './routes/funcionarios-obras.js'
 import historicoRhRoutes from './routes/historico-rh.js'
 import relatoriosRhRoutes from './routes/relatorios-rh.js'
+import fornecedoresRoutes from './routes/fornecedores.js'
+import produtosRoutes from './routes/produtos.js'
+import impostosFinanceirosRoutes from './routes/impostos-financeiros.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -274,6 +277,9 @@ app.use('/api/horas-mensais', horasMensaisRoutes)
 app.use('/api/funcionarios-obras', funcionariosObrasRoutes)
 app.use('/api/historico-rh', historicoRhRoutes)
 app.use('/api/relatorios-rh', relatoriosRhRoutes)
+app.use('/api/fornecedores', fornecedoresRoutes)
+app.use('/api/produtos', produtosRoutes)
+app.use('/api/impostos', impostosFinanceirosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

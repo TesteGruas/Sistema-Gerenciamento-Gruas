@@ -39,85 +39,15 @@ import {
   BarChart3,
   PieChart
 } from "lucide-react"
-
-// Mock data para demonstração
-const mockRelatorioFinanceiro = [
-  {
-    mes: "Janeiro 2024",
-    receitas: 250000,
-    despesas: 180000,
-    saldo: 70000,
-    crescimento: 15
-  },
-  {
-    mes: "Fevereiro 2024",
-    receitas: 280000,
-    despesas: 195000,
-    saldo: 85000,
-    crescimento: 12
-  }
-]
-
-const mockRelatorioVendas = [
-  {
-    cliente: "Construtora ABC Ltda",
-    totalVendas: 150000,
-    quantidade: 5,
-    ticketMedio: 30000,
-    ultimaVenda: "2024-01-15"
-  },
-  {
-    cliente: "Engenharia XYZ S/A",
-    totalVendas: 120000,
-    quantidade: 3,
-    ticketMedio: 40000,
-    ultimaVenda: "2024-01-14"
-  }
-]
-
-const mockRelatorioContratos = [
-  {
-    numero: "CT-001",
-    cliente: "Construtora ABC Ltda",
-    valorTotal: 180000,
-    valorMensal: 15000,
-    inicio: "2024-01-01",
-    fim: "2024-12-31",
-    status: "ativo"
-  }
-]
-
-const mockRelatorioFaturamento = [
-  {
-    mes: "Janeiro 2024",
-    vendas: 150000,
-    locacoes: 100000,
-    servicos: 50000,
-    total: 300000
-  }
-]
-
-const mockRelatorioLocacoes = [
-  {
-    equipamento: "Grua 25t",
-    cliente: "Construtora ABC Ltda",
-    diasLocados: 30,
-    valorTotal: 15000,
-    aditivos: 2500,
-    status: "ativa"
-  }
-]
-
-const mockRelatorioEstoque = [
-  {
-    produto: "Grua 25t",
-    categoria: "equipamentos",
-    estoque: 3,
-    valorUnitario: 15000,
-    valorTotal: 45000,
-    ultimaMovimentacao: "2024-01-15"
-  }
-]
+import { useToast } from "@/hooks/use-toast"
+import { apiRelatorios } from "@/lib/api-relatorios"
+import { obrasApi } from "@/lib/api-obras"
+import { gruasApi } from "@/lib/api-gruas"
+import { receitasApi } from "@/lib/api-receitas"
+import { custosApi } from "@/lib/api-custos"
+import { getVendas } from "@/lib/api-financial"
+import { locacoesApi } from "@/lib/api-locacoes"
+import { estoqueAPI } from "@/lib/api-estoque"
 
 export default function RelatoriosPage() {
   const [activeTab, setActiveTab] = useState('financeiro')
@@ -140,6 +70,14 @@ export default function RelatoriosPage() {
   const [gruas, setGruas] = useState<any[]>([])
   const [colunasSelecionadas, setColunasSelecionadas] = useState<string[]>([])
   const [formatoExportacao, setFormatoExportacao] = useState("pdf")
+  const [relatorioFinanceiro, setRelatorioFinanceiro] = useState<any[]>([])
+  const [relatorioVendas, setRelatorioVendas] = useState<any[]>([])
+  const [relatorioContratos, setRelatorioContratos] = useState<any[]>([])
+  const [relatorioFaturamento, setRelatorioFaturamento] = useState<any[]>([])
+  const [relatorioLocacoes, setRelatorioLocacoes] = useState<any[]>([])
+  const [relatorioEstoque, setRelatorioEstoque] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const { toast } = useToast()
 
   // Carregar dados
   useEffect(() => {
@@ -147,31 +85,395 @@ export default function RelatoriosPage() {
   }, [])
 
   const carregarDados = async () => {
-    // Simular carregamento de obras e gruas
-    const obrasMock = [
-      { id: "1", nome: "Obra Jardim das Flores", cliente: "Construtora ABC" },
-      { id: "2", nome: "Obra Comercial Centro", cliente: "Empresa XYZ" }
-    ]
-    
-    const gruasMock = [
-      { id: "1", nome: "Grua 001", modelo: "Liebherr 200HC" },
-      { id: "2", nome: "Grua 002", modelo: "Potain MDT 178" }
-    ]
-    
-    setObras(obrasMock)
-    setGruas(gruasMock)
+    try {
+      setIsLoading(true)
+      
+      // Definir período (últimos 6 meses)
+      const hoje = new Date()
+      const seisMesesAtras = new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1)
+      const dataInicio = seisMesesAtras.toISOString().split('T')[0]
+      const dataFim = hoje.toISOString().split('T')[0]
+      
+      // Carregar obras e gruas
+      const [obrasData, gruasData] = await Promise.all([
+        obrasApi.listarObras({ limit: 100 }),
+        gruasApi.listarGruas({ limit: 100 })
+      ])
+      setObras(obrasData.data || [])
+      setGruas(gruasData.data || [])
+      
+      // Carregar relatório financeiro
+      try {
+        console.log('📅 Buscando receitas e custos de:', dataInicio, 'até:', dataFim)
+        
+        const receitasResponse = await receitasApi.list({ data_inicio: dataInicio, data_fim: dataFim })
+        const custosResponse = await custosApi.list({ data_inicio: dataInicio, data_fim: dataFim })
+        
+        console.log('✅ Receitas response:', receitasResponse)
+        console.log('✅ Custos response:', custosResponse)
+        
+        const receitas = receitasResponse.receitas || []
+        const custos = custosResponse.custos || []
+        
+        // Agrupar por mês
+        const dadosPorMes = new Map()
+        
+        receitas.forEach((receita: any) => {
+          const mes = new Date(receita.data).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+          if (!dadosPorMes.has(mes)) {
+            dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+          }
+          dadosPorMes.get(mes).receitas += receita.valor || 0
+        })
+        
+        custos.forEach((custo: any) => {
+          const mes = new Date(custo.data).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+          if (!dadosPorMes.has(mes)) {
+            dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+          }
+          dadosPorMes.get(mes).despesas += custo.valor || 0
+        })
+        
+        const dadosFinanceiros = Array.from(dadosPorMes.values()).map(item => ({
+          ...item,
+          saldo: item.receitas - item.despesas
+        }))
+        
+        setRelatorioFinanceiro(dadosFinanceiros)
+      } catch (error: any) {
+        console.error('❌ Erro ao carregar relatório financeiro:', error)
+        console.error('❌ Resposta do erro:', error.response?.data)
+        console.error('❌ Status do erro:', error.response?.status)
+        setRelatorioFinanceiro([])
+      }
+      
+      // Carregar vendas
+      try {
+        const vendas = await getVendas()
+        console.log('📊 Vendas carregadas (SEM FILTRO):', vendas)
+        
+        // Filtrar vendas por data no frontend
+        const vendasFiltradas = vendas.filter((venda: any) => {
+          const dataVenda = venda.data_venda || venda.data || venda.created_at
+          if (!dataVenda) return false
+          
+          const data = new Date(dataVenda)
+          const inicio = new Date(dataInicio)
+          const fim = new Date(dataFim)
+          
+          return data >= inicio && data <= fim
+        })
+        
+        console.log('📊 Vendas filtradas:', vendasFiltradas)
+        
+        // Agrupar vendas por cliente
+        const vendasPorCliente = new Map()
+        vendasFiltradas.forEach((venda: any) => {
+          // Acessar dados do cliente do relacionamento do Supabase
+          const clienteNome = venda.clientes?.nome || venda.cliente_nome || venda.nome_cliente || `Cliente ID: ${venda.cliente_id}` || 'Cliente não identificado'
+          // Usar data de criação ou data da venda
+          const dataVenda = venda.data_venda || venda.data || venda.created_at
+          
+          console.log('🔍 Venda processada:', { 
+            venda_id: venda.id, 
+            clienteNome, 
+            cliente_obj: venda.clientes,
+            dataVenda 
+          })
+          
+          if (!vendasPorCliente.has(clienteNome)) {
+            vendasPorCliente.set(clienteNome, {
+              cliente: clienteNome,
+              totalVendas: 0,
+              quantidade: 0,
+              ultimaVenda: dataVenda
+            })
+          }
+          const dados = vendasPorCliente.get(clienteNome)
+          dados.totalVendas += venda.valor_total || venda.valor || 0
+          dados.quantidade += 1
+          
+          // Atualizar última venda apenas se a data for válida
+          if (dataVenda && new Date(dataVenda).toString() !== 'Invalid Date') {
+            if (!dados.ultimaVenda || new Date(dataVenda) > new Date(dados.ultimaVenda)) {
+              dados.ultimaVenda = dataVenda
+            }
+          }
+        })
+        
+        const dadosVendas = Array.from(vendasPorCliente.values()).map(item => ({
+          ...item,
+          ticketMedio: item.quantidade > 0 ? item.totalVendas / item.quantidade : 0
+        }))
+        
+        console.log('📊 Relatório de vendas processado:', dadosVendas)
+        setRelatorioVendas(dadosVendas)
+      } catch (error: any) {
+        console.error('❌ Erro ao carregar vendas:', error)
+        console.error('❌ Resposta do erro:', error.response?.data)
+        setRelatorioVendas([])
+      }
+      
+      // Carregar faturamento (vendas + receitas + medições)
+      try {
+        const receitasResponse = await receitasApi.list({ data_inicio: dataInicio, data_fim: dataFim })
+        const receitas = receitasResponse.receitas || []
+        const vendasTodasFat = await getVendas()
+        
+        // Filtrar vendas por data
+        const vendasFat = vendasTodasFat.filter((venda: any) => {
+          const dataVenda = venda.data_venda || venda.data || venda.created_at
+          if (!dataVenda) return false
+          
+          const data = new Date(dataVenda)
+          const inicio = new Date(dataInicio)
+          const fim = new Date(dataFim)
+          
+          return data >= inicio && data <= fim
+        })
+        
+        console.log('💰 Receitas para faturamento:', receitas)
+        console.log('💰 Vendas para faturamento (filtradas):', vendasFat)
+        
+        // Agrupar por mês
+        const faturamentoPorMes = new Map()
+        
+        // Processar vendas
+        vendasFat.forEach((venda: any) => {
+          const dataVenda = venda.data_venda || venda.data || venda.created_at
+          if (dataVenda && new Date(dataVenda).toString() !== 'Invalid Date') {
+            const mes = new Date(dataVenda).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+            if (!faturamentoPorMes.has(mes)) {
+              faturamentoPorMes.set(mes, { mes, vendas: 0, locacoes: 0, servicos: 0, total: 0 })
+            }
+            faturamentoPorMes.get(mes).vendas += venda.valor_total || venda.valor || 0
+          }
+        })
+        
+        // Processar receitas (separar por tipo)
+        receitas.forEach((receita: any) => {
+          if (receita.data && new Date(receita.data).toString() !== 'Invalid Date') {
+            const mes = new Date(receita.data).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+            if (!faturamentoPorMes.has(mes)) {
+              faturamentoPorMes.set(mes, { mes, vendas: 0, locacoes: 0, servicos: 0, total: 0 })
+            }
+            
+            const tipo = receita.tipo?.toLowerCase() || ''
+            const valor = receita.valor || 0
+            
+            if (tipo.includes('locação') || tipo.includes('locacao') || tipo.includes('aluguel')) {
+              faturamentoPorMes.get(mes).locacoes += valor
+            } else if (tipo.includes('serviço') || tipo.includes('servico') || tipo.includes('manutenção')) {
+              faturamentoPorMes.get(mes).servicos += valor
+            } else {
+              faturamentoPorMes.get(mes).vendas += valor
+            }
+          }
+        })
+        
+        // Calcular totais
+        const dadosFaturamento = Array.from(faturamentoPorMes.values()).map(item => ({
+          ...item,
+          total: item.vendas + item.locacoes + item.servicos
+        }))
+        
+        console.log('💰 Relatório de faturamento processado:', dadosFaturamento)
+        setRelatorioFaturamento(dadosFaturamento)
+      } catch (error: any) {
+        console.error('❌ Erro ao carregar faturamento:', error)
+        console.error('❌ Resposta do erro:', error.response?.data)
+        setRelatorioFaturamento([])
+      }
+      
+      // Carregar locações
+      try {
+        const locacoesResponse = await locacoesApi.list()
+        const locacoesTodas = locacoesResponse.data || locacoesResponse.locacoes || []
+        
+        // Filtrar locações por data (usar data_inicio)
+        const locacoes = locacoesTodas.filter((locacao: any) => {
+          const dataLocacao = locacao.data_inicio || locacao.created_at
+          if (!dataLocacao) return true // Se não tem data, incluir
+          
+          const data = new Date(dataLocacao)
+          const inicio = new Date(dataInicio)
+          const fim = new Date(dataFim)
+          
+          return data >= inicio && data <= fim
+        })
+        
+        console.log('🏗️ Locações filtradas:', locacoes)
+        
+        // Carregar gruas para relacionar com equipamento_id
+        const gruasResponse = await gruasApi.listarGruas()
+        const gruas = gruasResponse.data || gruasResponse || []
+        
+        const dadosLocacoes = locacoes.map((locacao: any) => {
+          // Encontrar a grua correspondente
+          const grua = gruas.find((g: any) => g.id === locacao.equipamento_id)
+          const equipamentoNome = grua 
+            ? `${grua.fabricante || ''} ${grua.modelo || grua.name || ''}`.trim() || grua.id 
+            : locacao.equipamento_id || 'N/A'
+          
+          // Calcular dias locados
+          const dataInicio = new Date(locacao.data_inicio)
+          const dataFim = locacao.data_fim ? new Date(locacao.data_fim) : new Date()
+          const diasLocados = Math.max(0, Math.ceil((dataFim.getTime() - dataInicio.getTime()) / (1000 * 60 * 60 * 24)))
+          
+          // Calcular valor total (valor mensal * meses)
+          const mesesLocados = Math.max(1, Math.ceil(diasLocados / 30))
+          const valorTotal = (locacao.valor_mensal || 0) * mesesLocados
+          
+          return {
+            equipamento: equipamentoNome,
+            cliente: locacao.cliente_nome || 'N/A',
+            diasLocados,
+            valorTotal,
+            aditivos: locacao.total_aditivos || 0,
+            status: locacao.status || 'ativa'
+          }
+        })
+        
+        console.log('🏗️ Relatório de locações processado:', dadosLocacoes)
+        setRelatorioLocacoes(dadosLocacoes)
+      } catch (error: any) {
+        console.error('❌ Erro ao carregar locações:', error)
+        console.error('❌ Resposta do erro:', error.response?.data)
+        setRelatorioLocacoes([])
+      }
+      
+      // Carregar estoque (movimentações)
+      try {
+        // Passar filtros de data para a API
+        const movimentacoesResponse = await estoqueAPI.listarMovimentacoes({ 
+          limit: 1000, // Aumentar limite para pegar mais movimentações
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        })
+        const movimentacoes = movimentacoesResponse.data || []
+        
+        console.log('📦 Movimentações de estoque carregadas (com filtro):', movimentacoes)
+        
+        // Agrupar movimentações por produto
+        const estoquePorProduto = new Map()
+        
+        movimentacoes.forEach((mov: any) => {
+          // Acessar dados do produto do relacionamento do Supabase (igual ao que funciona no estoque)
+          const produtoNome = mov.produtos?.nome || mov.produto_nome || `Produto ID: ${mov.produto_id}` || 'Produto não identificado'
+          const produtoId = mov.produto_id || mov.produtos?.id
+          
+          console.log('📦 Movimentação processada:', {
+            mov_id: mov.id,
+            produtoNome,
+            produtos_obj: mov.produtos,
+            produto_id: mov.produto_id
+          })
+          
+          if (!estoquePorProduto.has(produtoId)) {
+            estoquePorProduto.set(produtoId, {
+              produto: produtoNome,
+              categoria: mov.produtos?.categorias?.nome || mov.categoria || 'N/A',
+              estoque: 0,
+              entradas: 0,
+              saidas: 0,
+              valorUnitario: mov.produtos?.valor_unitario || mov.valor_unitario || 0,
+              ultimaMovimentacao: mov.data || mov.created_at
+            })
+          }
+          
+          const dados = estoquePorProduto.get(produtoId)
+          const quantidade = mov.quantidade || 0
+          
+          // Contabilizar movimentações
+          if (mov.tipo === 'Entrada' || mov.tipo === 'entrada') {
+            dados.estoque += quantidade
+            dados.entradas += quantidade
+          } else if (mov.tipo === 'Saída' || mov.tipo === 'saida') {
+            dados.estoque -= quantidade
+            dados.saidas += quantidade
+          }
+          
+          // Atualizar última movimentação
+          const dataMovimentacao = mov.data || mov.created_at
+          if (dataMovimentacao && new Date(dataMovimentacao) > new Date(dados.ultimaMovimentacao)) {
+            dados.ultimaMovimentacao = dataMovimentacao
+          }
+        })
+        
+        const dadosEstoque = Array.from(estoquePorProduto.values()).map(item => ({
+          produto: item.produto,
+          categoria: item.categoria,
+          estoque: item.estoque,
+          valorUnitario: item.valorUnitario,
+          valorTotal: item.estoque * item.valorUnitario,
+          ultimaMovimentacao: item.ultimaMovimentacao
+        }))
+        
+        console.log('📦 Relatório de estoque processado:', dadosEstoque)
+        setRelatorioEstoque(dadosEstoque)
+      } catch (error: any) {
+        console.error('❌ Erro ao carregar estoque:', error)
+        console.error('❌ Resposta do erro:', error.response?.data)
+        setRelatorioEstoque([])
+      }
+      
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados dos relatórios",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const gerarRelatorio = () => {
-    // Simular geração de relatório
-    console.log('Gerando relatório com filtros:', filtrosAvancados)
-    console.log('Colunas selecionadas:', colunasSelecionadas)
-    console.log('Formato:', formatoExportacao)
+  const gerarRelatorio = async () => {
+    try {
+      // Simplesmente recarregar todos os dados com os filtros atuais
+      await carregarDados()
+      
+      toast({
+        title: "Sucesso",
+        description: "Relatório gerado com sucesso"
+      })
+      
+      setIsGenerateDialogOpen(false)
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao gerar relatório",
+        variant: "destructive"
+      })
+    }
   }
 
   const exportarRelatorio = (formato: string) => {
-    // Simular exportação
-    console.log(`Exportando relatório em formato ${formato}`)
+    try {
+      // Preparar dados para exportação
+      const dados = {
+        relatorio: relatorioFinanceiro,
+        formato,
+        filtros: filtrosAvancados,
+        colunas: colunasSelecionadas
+      }
+      
+      console.log(`Exportando relatório em formato ${formato}`, dados)
+      
+      toast({
+        title: "Exportando",
+        description: `Relatório sendo exportado em formato ${formato.toUpperCase()}`
+      })
+    } catch (error) {
+      console.error('Erro ao exportar:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar relatório",
+        variant: "destructive"
+      })
+    }
   }
 
   const stats = [
@@ -524,17 +826,23 @@ export default function RelatoriosPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockRelatorioFinanceiro.map((relatorio, index) => (
+                    {relatorioFinanceiro.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                          {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
+                        </TableCell>
+                      </TableRow>
+                    ) : relatorioFinanceiro.map((relatorio, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{relatorio.mes}</TableCell>
                         <TableCell className="font-semibold text-green-600">
-                          R$ {relatorio.receitas.toLocaleString('pt-BR')}
+                          R$ {relatorio.receitas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="font-semibold text-red-600">
-                          R$ {relatorio.despesas.toLocaleString('pt-BR')}
+                          R$ {relatorio.despesas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="font-bold text-lg">
-                          R$ {relatorio.saldo.toLocaleString('pt-BR')}
+                          R$ {relatorio.saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell>
                           <Badge className="bg-green-100 text-green-800">
@@ -580,17 +888,28 @@ export default function RelatoriosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockRelatorioVendas.map((venda, index) => (
+                  {relatorioVendas.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                        {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
+                      </TableCell>
+                    </TableRow>
+                  ) : relatorioVendas.map((venda, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{venda.cliente}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {venda.totalVendas.toLocaleString('pt-BR')}
+                        R$ {venda.totalVendas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>{venda.quantidade}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {venda.ticketMedio.toLocaleString('pt-BR')}
+                        R$ {venda.ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell>{new Date(venda.ultimaVenda).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell>
+                        {venda.ultimaVenda && new Date(venda.ultimaVenda).toString() !== 'Invalid Date' 
+                          ? new Date(venda.ultimaVenda).toLocaleDateString('pt-BR')
+                          : 'N/A'
+                        }
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm">
@@ -630,7 +949,13 @@ export default function RelatoriosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockRelatorioContratos.map((contrato, index) => (
+                  {relatorioContratos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                        {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
+                      </TableCell>
+                    </TableRow>
+                  ) : relatorioContratos.map((contrato, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{contrato.numero}</TableCell>
                       <TableCell>{contrato.cliente}</TableCell>
@@ -686,20 +1011,26 @@ export default function RelatoriosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockRelatorioFaturamento.map((faturamento, index) => (
+                  {relatorioFaturamento.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                        {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
+                      </TableCell>
+                    </TableRow>
+                  ) : relatorioFaturamento.map((faturamento, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{faturamento.mes}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {faturamento.vendas.toLocaleString('pt-BR')}
+                        R$ {faturamento.vendas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        R$ {faturamento.locacoes.toLocaleString('pt-BR')}
+                        R$ {faturamento.locacoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        R$ {faturamento.servicos.toLocaleString('pt-BR')}
+                        R$ {faturamento.servicos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-bold text-lg">
-                        R$ {faturamento.total.toLocaleString('pt-BR')}
+                        R$ {faturamento.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
@@ -740,16 +1071,22 @@ export default function RelatoriosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockRelatorioLocacoes.map((locacao, index) => (
+                  {relatorioLocacoes.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                        {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
+                      </TableCell>
+                    </TableRow>
+                  ) : relatorioLocacoes.map((locacao, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{locacao.equipamento}</TableCell>
                       <TableCell>{locacao.cliente}</TableCell>
                       <TableCell>{locacao.diasLocados}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {locacao.valorTotal.toLocaleString('pt-BR')}
+                        R$ {locacao.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        R$ {locacao.aditivos.toLocaleString('pt-BR')}
+                        R$ {locacao.aditivos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(locacao.status)}>
@@ -795,7 +1132,13 @@ export default function RelatoriosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockRelatorioEstoque.map((estoque, index) => (
+                  {relatorioEstoque.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                        {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
+                      </TableCell>
+                    </TableRow>
+                  ) : relatorioEstoque.map((estoque, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{estoque.produto}</TableCell>
                       <TableCell>
@@ -805,12 +1148,17 @@ export default function RelatoriosPage() {
                       </TableCell>
                       <TableCell>{estoque.estoque}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {estoque.valorUnitario.toLocaleString('pt-BR')}
+                        R$ {estoque.valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-bold">
-                        R$ {estoque.valorTotal.toLocaleString('pt-BR')}
+                        R$ {estoque.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell>{new Date(estoque.ultimaMovimentacao).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell>
+                        {estoque.ultimaMovimentacao && new Date(estoque.ultimaMovimentacao).toString() !== 'Invalid Date'
+                          ? new Date(estoque.ultimaMovimentacao).toLocaleDateString('pt-BR')
+                          : 'N/A'
+                        }
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm">

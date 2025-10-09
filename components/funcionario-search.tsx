@@ -9,6 +9,9 @@ import { Search, User, X, CheckCircle, AlertCircle, Clock } from "lucide-react"
 import { funcionariosApi, converterFuncionarioBackendParaFrontend, FuncionarioBackend } from "@/lib/api-funcionarios"
 import { InlineLoader } from "@/components/ui/loader"
 
+// Array padrão de cargos permitidos (fora do componente para evitar recriação)
+const DEFAULT_ALLOWED_ROLES = ['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']
+
 interface FuncionarioSearchProps {
   onFuncionarioSelect: (funcionario: any) => void
   selectedFuncionario?: any
@@ -24,8 +27,10 @@ export function FuncionarioSearch({
   placeholder = "Buscar funcionário por nome ou cargo...",
   className = "",
   onlyActive = true,
-  allowedRoles = ['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']
+  allowedRoles
 }: FuncionarioSearchProps) {
+  // Usar array padrão se não fornecido
+  const rolesFilter = allowedRoles || DEFAULT_ALLOWED_ROLES
   const [searchTerm, setSearchTerm] = useState("")
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -58,10 +63,10 @@ export function FuncionarioSearch({
           console.log('🔄 Funcionários convertidos:', funcionariosConvertidos)
           
           // Filtrar por cargos permitidos
-          if (allowedRoles.length > 0) {
-            console.log('🎯 Cargos permitidos:', allowedRoles)
+          if (rolesFilter.length > 0) {
+            console.log('🎯 Cargos permitidos:', rolesFilter)
             funcionariosConvertidos = funcionariosConvertidos.filter(funcionario => 
-              allowedRoles.includes(funcionario.role)
+              rolesFilter.includes(funcionario.role)
             )
             console.log('✅ Funcionários após filtro:', funcionariosConvertidos)
           }
@@ -85,7 +90,7 @@ export function FuncionarioSearch({
 
     const timeoutId = setTimeout(buscarFuncionarios, 300) // Debounce de 300ms
     return () => clearTimeout(timeoutId)
-  }, [searchTerm, onlyActive, allowedRoles])
+  }, [searchTerm, onlyActive, rolesFilter])
 
   // Fechar resultados quando clicar fora
   useEffect(() => {

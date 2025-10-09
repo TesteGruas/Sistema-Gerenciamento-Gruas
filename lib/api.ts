@@ -82,3 +82,51 @@ export const API_ENDPOINTS = {
 } as const
 
 export { API_BASE_URL }
+
+// Função utilitária para retry de requests
+export interface RetryOptions {
+  maxRetries?: number
+  retryDelay?: number
+  retryCondition?: (error: any) => boolean
+}
+
+export async function apiWithRetry<T>(
+  apiCall: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const {
+    maxRetries = 3,
+    retryDelay = 1000,
+    retryCondition = (error) => {
+      // Retry apenas em erros de rede ou 5xx
+      return (
+        !error.response ||
+        error.response?.status >= 500 ||
+        error.code === 'ECONNABORTED' ||
+        error.code === 'ETIMEDOUT'
+      )
+    }
+  } = options
+
+  let lastError: any
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiCall()
+    } catch (error: any) {
+      lastError = error
+
+      // Se não deve fazer retry ou é a última tentativa, lança o erro
+      if (!retryCondition(error) || attempt === maxRetries) {
+        throw error
+      }
+
+      // Aguardar antes de tentar novamente (exponential backoff)
+      const delay = retryDelay * Math.pow(2, attempt)
+      console.warn(`Tentativa ${attempt + 1} falhou. Tentando novamente em ${delay}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError
+}

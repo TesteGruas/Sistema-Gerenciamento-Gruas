@@ -37,68 +37,9 @@ import {
   Car,
   Route
 } from "lucide-react"
-
-// Mock data para demonstração
-const mockManifestos = [
-  {
-    id: 1,
-    numero: "MDF-001",
-    serie: "1",
-    data: "2024-01-15",
-    status: "emitido",
-    tipo: "entrada",
-    valor: 15000,
-    descricao: "Manifesto de entrada - Grua 25t"
-  },
-  {
-    id: 2,
-    numero: "MDF-002", 
-    serie: "1",
-    data: "2024-01-14",
-    status: "cancelado",
-    tipo: "saida",
-    valor: 8500,
-    descricao: "Manifesto de saída - Plataforma"
-  }
-]
-
-const mockCTe = [
-  {
-    id: 1,
-    numero: "CT-001",
-    serie: "1",
-    data: "2024-01-15",
-    status: "emitido",
-    tipo: "entrada",
-    valor: 15000,
-    descricao: "CT-e para transporte de grua"
-  }
-]
-
-const mockMotoristas = [
-  {
-    id: 1,
-    nome: "João Silva",
-    cpf: "123.456.789-00",
-    cnh: "12345678901",
-    telefone: "(11) 99999-9999",
-    email: "joao@email.com",
-    veiculo: "Caminhão ABC-1234",
-    status: "ativo",
-    ultimaViagem: "2024-01-15"
-  },
-  {
-    id: 2,
-    nome: "Maria Santos",
-    cpf: "987.654.321-00",
-    cnh: "98765432109",
-    telefone: "(11) 88888-8888",
-    email: "maria@email.com",
-    veiculo: "Caminhão XYZ-5678",
-    status: "ativo",
-    ultimaViagem: "2024-01-14"
-  }
-]
+import { useToast } from "@/hooks/use-toast"
+import { logisticaApi, type Manifesto, type Veiculo } from "@/lib/api-logistica"
+import { useEffect } from "react"
 
 const mockViagens = [
   {
@@ -138,6 +79,41 @@ export default function LogisticaPage() {
   const [selectedTipo, setSelectedTipo] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
+  const [manifestos, setManifestos] = useState<Manifesto[]>([])
+  const [veiculos, setVeiculos] = useState<Veiculo[]>([])
+  const [motoristas, setMotoristas] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const { toast } = useToast()
+
+  // Carregar dados ao montar o componente
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  const carregarDados = async () => {
+    try {
+      setIsLoading(true)
+      
+      const [manifestosData, veiculosData, motoristasData] = await Promise.all([
+        logisticaApi.listManifestos(),
+        logisticaApi.listVeiculos(),
+        logisticaApi.listMotoristas()
+      ])
+      
+      setManifestos(manifestosData)
+      setVeiculos(veiculosData)
+      setMotoristas(motoristasData)
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados de logística",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const stats = [
     { 

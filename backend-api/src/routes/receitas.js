@@ -147,16 +147,27 @@ const router = express.Router();
  */
 router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
+    console.log('📋 GET /api/receitas - Query params:', req.query);
+    
     const { error: validationError, value } = receitaFiltersSchema.validate(req.query);
     if (validationError) {
+      console.error('❌ Erro de validação:', validationError.details[0].message);
       return res.status(400).json({
         error: 'Parâmetros inválidos',
         message: validationError.details[0].message
       });
     }
 
+    console.log('✅ Parâmetros validados:', value);
+    
     const { obra_id, tipo, status, data_inicio, data_fim, page = 1, limit = 50 } = value;
     const offset = (page - 1) * limit;
+    
+    // Converter datas para string ISO se forem objetos Date
+    const dataInicioStr = data_inicio instanceof Date ? data_inicio.toISOString().split('T')[0] : data_inicio;
+    const dataFimStr = data_fim instanceof Date ? data_fim.toISOString().split('T')[0] : data_fim;
+    
+    console.log('📅 Datas convertidas:', { dataInicioStr, dataFimStr });
 
     let query = supabaseAdmin
       .from('receitas')
@@ -181,15 +192,20 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
     if (obra_id) query = query.eq('obra_id', obra_id);
     if (tipo) query = query.eq('tipo', tipo);
     if (status) query = query.eq('status', status);
-    if (data_inicio) query = query.gte('data_receita', data_inicio);
-    if (data_fim) query = query.lte('data_receita', data_fim);
+    if (dataInicioStr) query = query.gte('data_receita', dataInicioStr);
+    if (dataFimStr) query = query.lte('data_receita', dataFimStr);
 
     query = query.order('data_receita', { ascending: false })
                  .range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Erro do Supabase:', error);
+      throw error;
+    }
+
+    console.log(`✅ ${data.length} receitas encontradas`);
 
     res.json({
       success: true,
@@ -202,10 +218,11 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
       }
     });
   } catch (error) {
-    console.error('Erro ao buscar receitas:', error);
+    console.error('❌ Erro ao buscar receitas:', error);
     res.status(500).json({
       error: 'Erro ao buscar receitas',
-      message: error.message
+      message: error.message,
+      details: error.details || error.hint || 'Sem detalhes adicionais'
     });
   }
 });
@@ -280,6 +297,10 @@ router.get('/export', authenticateToken, requirePermission('visualizar_obras'), 
     }
 
     const { format = 'csv', obra_id, tipo, status, data_inicio, data_fim } = value;
+    
+    // Converter datas para string ISO se forem objetos Date
+    const dataInicioStr = data_inicio instanceof Date ? data_inicio.toISOString().split('T')[0] : data_inicio;
+    const dataFimStr = data_fim instanceof Date ? data_fim.toISOString().split('T')[0] : data_fim;
 
     let query = supabaseAdmin
       .from('receitas')
@@ -304,8 +325,8 @@ router.get('/export', authenticateToken, requirePermission('visualizar_obras'), 
     if (obra_id) query = query.eq('obra_id', obra_id);
     if (tipo) query = query.eq('tipo', tipo);
     if (status) query = query.eq('status', status);
-    if (data_inicio) query = query.gte('data_receita', data_inicio);
-    if (data_fim) query = query.lte('data_receita', data_fim);
+    if (dataInicioStr) query = query.gte('data_receita', dataInicioStr);
+    if (dataFimStr) query = query.lte('data_receita', dataFimStr);
 
     query = query.order('data_receita', { ascending: false });
 
@@ -791,6 +812,10 @@ router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), 
     }
 
     const { obra_id, data_inicio, data_fim } = value;
+    
+    // Converter datas para string ISO se forem objetos Date
+    const dataInicioStr = data_inicio instanceof Date ? data_inicio.toISOString().split('T')[0] : data_inicio;
+    const dataFimStr = data_fim instanceof Date ? data_fim.toISOString().split('T')[0] : data_fim;
 
     let query;
     if (obra_id) {
@@ -807,7 +832,7 @@ router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), 
     }
 
     // Aplicar filtros de data se fornecidos
-    if (data_inicio || data_fim) {
+    if (dataInicioStr || dataFimStr) {
       // Para filtros de data, usar a tabela principal
       let dataQuery = supabaseAdmin
         .from('receitas')
@@ -817,8 +842,8 @@ router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), 
           valor
         `);
 
-      if (data_inicio) dataQuery = dataQuery.gte('data_receita', data_inicio);
-      if (data_fim) dataQuery = dataQuery.lte('data_receita', data_fim);
+      if (dataInicioStr) dataQuery = dataQuery.gte('data_receita', dataInicioStr);
+      if (dataFimStr) dataQuery = dataQuery.lte('data_receita', dataFimStr);
 
       const { data: receitasData, error: dataError } = await dataQuery;
       if (dataError) throw dataError;

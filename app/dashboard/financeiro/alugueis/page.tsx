@@ -81,6 +81,7 @@ export default function AlugueisIntegradoPage() {
   const [funcionarioNome, setFuncionarioNome] = useState('')
   const [funcionarioCargo, setFuncionarioCargo] = useState('')
   const [funcionarioCpf, setFuncionarioCpf] = useState('')
+  const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<any>(null)
   const [dataInicio, setDataInicio] = useState('')
   const [valorMensal, setValorMensal] = useState('')
   const [diaVencimento, setDiaVencimento] = useState('5')
@@ -213,6 +214,7 @@ export default function AlugueisIntegradoPage() {
       setFuncionarioNome('')
       setFuncionarioCargo('')
       setFuncionarioCpf('')
+      setFuncionarioSelecionado(null)
       setDataInicio('')
       setValorMensal('')
       setDiaVencimento('5')
@@ -807,21 +809,24 @@ export default function AlugueisIntegradoPage() {
                   <div className="space-y-2">
                     <Label>Selecione o Funcionário *</Label>
                     <FuncionarioSearch
+                      selectedFuncionario={funcionarioSelecionado}
                       onFuncionarioSelect={(funcionario) => {
+                        if (!funcionario) {
+                          setFuncionarioId('')
+                          setFuncionarioNome('')
+                          setFuncionarioCargo('')
+                          setFuncionarioCpf('')
+                          setFuncionarioSelecionado(null)
+                          return
+                        }
+                        setFuncionarioSelecionado(funcionario)
                         setFuncionarioId(String(funcionario.id))
-                        setFuncionarioNome(funcionario.nome || '')
-                        setFuncionarioCargo(funcionario.cargo || '')
+                        setFuncionarioNome(funcionario.name || funcionario.nome || '')
+                        setFuncionarioCargo(funcionario.role || funcionario.cargo || '')
                         setFuncionarioCpf(funcionario.cpf || '')
                       }}
                     />
                   </div>
-
-                  {funcionarioNome && (
-                    <div className="bg-white border rounded-lg p-3 text-sm">
-                      <p className="font-medium">{funcionarioNome}</p>
-                      <p className="text-gray-600">{funcionarioCargo}</p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-4 p-4 bg-gray-50 rounded-lg">

@@ -1062,7 +1062,12 @@ router.get('/movimentacoes', authenticateToken, requirePermission('visualizar_es
         produtos (
           id,
           nome,
-          unidade_medida
+          unidade_medida,
+          valor_unitario,
+          categorias (
+            id,
+            nome
+          )
         )
       `, { count: 'exact' })
       .order('data_movimentacao', { ascending: false })
