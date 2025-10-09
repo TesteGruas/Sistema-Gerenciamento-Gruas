@@ -44,6 +44,7 @@ import GruaSearch from "@/components/grua-search"
 import FuncionarioSearch from "@/components/funcionario-search"
 import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
+import { ExportButton } from "@/components/export-button"
 
 export default function ObrasPage() {
   const router = useRouter()
@@ -957,13 +958,21 @@ export default function ObrasPage() {
           <p className="text-gray-600">Controle e acompanhamento de todas as obras</p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            className="flex items-center gap-2"
-            onClick={() => router.push('/dashboard/obras/nova')}
-          >
-            <Plus className="w-4 h-4" />
-            Nova Obra
-          </Button>
+          <div className="flex gap-2">
+            <ExportButton
+              dados={paginatedObras}
+              tipo="obras"
+              nomeArquivo="relatorio-obras"
+              titulo="Relatório de Obras"
+            />
+            <Button 
+              className="flex items-center gap-2"
+              onClick={() => router.push('/dashboard/obras/nova')}
+            >
+              <Plus className="w-4 h-4" />
+              Nova Obra
+            </Button>
+          </div>
         </div>
       </div>
 

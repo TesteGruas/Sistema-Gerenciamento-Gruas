@@ -36,6 +36,7 @@ import {
   FuncionarioBackend 
 } from "@/lib/api-funcionarios"
 import { useToast } from "@/hooks/use-toast"
+import { ExportButton } from "@/components/export-button"
 
 export default function FuncionariosPage() {
   const router = useRouter()
@@ -344,10 +345,18 @@ export default function FuncionariosPage() {
           <h1 className="text-3xl font-bold text-gray-900">Gerenciamento de Funcionários</h1>
           <p className="text-gray-600">Controle e acompanhamento de todos os funcionários</p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Funcionário
-        </Button>
+        <div className="flex gap-2">
+          <ExportButton
+            dados={filteredFuncionarios}
+            tipo="funcionarios"
+            nomeArquivo="relatorio-funcionarios"
+            titulo="Relatório de Funcionários"
+          />
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Funcionário
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}

@@ -13,6 +13,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 import { 
   DollarSign, 
   Plus, 
@@ -26,7 +41,7 @@ import {
   Eye,
   Edit,
   Trash2,
-  PieChart,
+  PieChart as PieChartIcon,
   BarChart3,
   CreditCard,
   ArrowUpRight,
@@ -57,6 +72,9 @@ import {
 // Interfaces já importadas do api-financial.ts
 
 // Dados financeiros serão carregados da API
+
+// Cores para gráficos
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 const financeiroModules = [
   {
@@ -294,40 +312,83 @@ export default function FinanceiroPage() {
                 <CardDescription>Entradas e saídas por mês</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {financialData.fluxoCaixa.length > 0 ? (
-                    financialData.fluxoCaixa.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <span className="text-sm font-medium">{item.mes}</span>
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                            <span className="text-sm">R$ {item.entrada.toLocaleString('pt-BR')}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                            <span className="text-sm">R$ {item.saida.toLocaleString('pt-BR')}</span>
-                          </div>
-                          <span className="text-sm font-bold text-blue-600">
-                            R$ {(item.entrada - item.saida).toLocaleString('pt-BR')}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-gray-500 py-8">
-                      <p>Nenhum dado de fluxo de caixa disponível</p>
-                      <p className="text-sm">Os dados serão carregados quando disponíveis</p>
-                    </div>
-                  )}
-                </div>
+                {financialData.fluxoCaixa.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={financialData.fluxoCaixa}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="mes" />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      />
+                      <Legend />
+                      <Bar dataKey="entrada" fill="#10b981" name="Entradas" />
+                      <Bar dataKey="saida" fill="#ef4444" name="Saídas" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center text-gray-500 py-8">
+                    <p>Nenhum dado de fluxo de caixa disponível</p>
+                    <p className="text-sm">Os dados serão carregados quando disponíveis</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <PieChart className="w-5 h-5" />
+                  <TrendingUp className="w-5 h-5" />
+                  Evolução Financeira
+                </CardTitle>
+                <CardDescription>Tendência de entradas e saídas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {financialData.fluxoCaixa.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={financialData.fluxoCaixa}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="mes" />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="entrada" 
+                        stroke="#10b981" 
+                        strokeWidth={2}
+                        name="Entradas"
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 6 }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="saida" 
+                        stroke="#ef4444" 
+                        strokeWidth={2}
+                        name="Saídas"
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center text-gray-500 py-8">
+                    <p>Nenhum dado disponível</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Segunda linha de gráficos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChartIcon className="w-5 h-5" />
                   Transferências Bancárias
                 </CardTitle>
                 <CardDescription>Últimas transferências realizadas</CardDescription>

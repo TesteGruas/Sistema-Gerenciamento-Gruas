@@ -12,6 +12,23 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart
+} from 'recharts'
 import { 
   Plus, 
   Search, 
@@ -34,12 +51,17 @@ import {
   User,
   Wrench,
   Package,
-  Briefcase
+  Briefcase,
+  BarChart3 as BarChartIcon,
+  PieChart as PieChartIcon
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { custosApi, useCustos, custosUtils, type Custo, type CustoCreate, type CustoUpdate, type CustoFilters } from "@/lib/api-custos"
 import apiObras from "@/lib/api-obras"
 import { funcionariosApi } from "@/lib/api-funcionarios"
+
+// Cores para gráficos
+const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899', '#10b981']
 
 // Tipos para obras e funcionários
 interface Obra {
@@ -498,6 +520,96 @@ export default function CustosPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Gráficos de Estatísticas */}
+      {custos.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChartIcon className="w-5 h-5" />
+                Custos por Mês
+              </CardTitle>
+              <CardDescription>Distribuição de custos mensais</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={(() => {
+                  const custosPorMes = custos
+                    .filter(c => c.status === 'confirmado')
+                    .reduce((acc: any, custo) => {
+                      const mes = new Date(custo.data_custo).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                      const existing = acc.find((item: any) => item.mes === mes)
+                      if (existing) {
+                        existing.valor += Number(custo.valor)
+                      } else {
+                        acc.push({ mes, valor: Number(custo.valor) })
+                      }
+                      return acc
+                    }, [])
+                  return custosPorMes.slice(-6)
+                })()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  />
+                  <Legend />
+                  <Bar dataKey="valor" fill="#ef4444" name="Custos (R$)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChartIcon className="w-5 h-5" />
+                Custos por Tipo
+              </CardTitle>
+              <CardDescription>Distribuição por tipo de custo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={(() => {
+                      const tipoCount = custos
+                        .filter(c => c.status === 'confirmado')
+                        .reduce((acc: any, custo) => {
+                          const tipo = custo.tipo === 'salario' ? 'Salário' : 
+                                     custo.tipo === 'material' ? 'Material' : 
+                                     custo.tipo === 'servico' ? 'Serviço' : 'Manutenção'
+                          const existing = acc.find((item: any) => item.name === tipo)
+                          if (existing) {
+                            existing.value += Number(custo.valor)
+                          } else {
+                            acc.push({ name: tipo, value: Number(custo.valor) })
+                          }
+                          return acc
+                        }, [])
+                      return tipoCount
+                    })()}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {custos.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filtros */}
       <Card>

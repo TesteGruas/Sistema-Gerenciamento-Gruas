@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2 } from "lucide-react"
 import { estoqueAPI, type Produto, type Categoria, type Movimentacao } from "@/lib/api-estoque"
 import { useToast } from "@/hooks/use-toast"
+import { ExportButton } from "@/components/export-button"
 
 // Dados simulados de obras e gruas (mantidos por enquanto)
 const obrasData = [
@@ -595,12 +596,20 @@ export default function EstoquePage() {
           </Button>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Item
-              </Button>
-            </DialogTrigger>
+            <div className="flex gap-2">
+              <ExportButton
+                dados={estoque}
+                tipo="estoque"
+                nomeArquivo="relatorio-estoque"
+                titulo="Relatório de Estoque"
+              />
+              <DialogTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Item
+                </Button>
+              </DialogTrigger>
+            </div>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>{editingItem ? "Editar Item" : "Cadastrar Novo Item"}</DialogTitle>
