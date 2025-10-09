@@ -12,6 +12,23 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart
+} from 'recharts'
 import { 
   Plus, 
   Search, 
@@ -29,13 +46,18 @@ import {
   XCircle,
   Clock,
   TrendingUp,
-  Receipt
+  Receipt,
+  BarChart3 as BarChartIcon,
+  PieChart as PieChartIcon
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { receitasApi, Receita, ReceitaCreate, ReceitaUpdate } from "@/lib/api-receitas"
 import { receitasUtils } from "@/lib/receitas-utils"
 import apiObras from "@/lib/api-obras"
 import { funcionariosApi } from "@/lib/api-funcionarios"
+
+// Cores para gráficos
+const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 // Interface local para obras com campos adicionais
 interface Obra {
@@ -447,6 +469,99 @@ export default function ReceitasPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Gráficos de Estatísticas */}
+      {receitas.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Evolução de Receitas
+              </CardTitle>
+              <CardDescription>Receitas ao longo dos últimos 6 meses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={(() => {
+                  const receitasPorMes = receitas
+                    .filter(r => r.status === 'confirmada')
+                    .reduce((acc: any, receita) => {
+                      const mes = new Date(receita.data_receita).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                      const existing = acc.find((item: any) => item.mes === mes)
+                      if (existing) {
+                        existing.valor += Number(receita.valor)
+                      } else {
+                        acc.push({ mes, valor: Number(receita.valor) })
+                      }
+                      return acc
+                    }, [])
+                  return receitasPorMes.slice(-6)
+                })()}>
+                  <defs>
+                    <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  />
+                  <Area type="monotone" dataKey="valor" stroke="#10b981" fillOpacity={1} fill="url(#colorReceita)" name="Receitas" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChartIcon className="w-5 h-5" />
+                Receitas por Tipo
+              </CardTitle>
+              <CardDescription>Distribuição por tipo de receita</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={(() => {
+                      const tipoCount = receitas
+                        .filter(r => r.status === 'confirmada')
+                        .reduce((acc: any, receita) => {
+                          const tipo = receita.tipo === 'locacao' ? 'Locação' : receita.tipo === 'servico' ? 'Serviço' : 'Venda'
+                          const existing = acc.find((item: any) => item.name === tipo)
+                          if (existing) {
+                            existing.value += Number(receita.valor)
+                          } else {
+                            acc.push({ name: tipo, value: Number(receita.valor) })
+                          }
+                          return acc
+                        }, [])
+                      return tipoCount
+                    })()}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {receitas.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filtros */}
       <Card>

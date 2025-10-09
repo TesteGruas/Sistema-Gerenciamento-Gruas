@@ -36,6 +36,7 @@ import {
 } from "lucide-react"
 import { mockObras, mockUsers } from "@/lib/mock-data"
 import { gruasApi, converterGruaBackendParaFrontend, converterGruaFrontendParaBackend, GruaBackend } from "@/lib/api-gruas"
+import { ExportButton } from "@/components/export-button"
 
 export default function GruasPage() {
   const { toast } = useToast()
@@ -392,13 +393,21 @@ export default function GruasPage() {
           <h1 className="text-3xl font-bold text-gray-900">Controle de Gruas</h1>
           <p className="text-gray-600">Gerenciamento de gruas e histórico de manutenção</p>
         </div>
-        <Button 
-          className="flex items-center gap-2"
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          Nova Grua
-        </Button>
+        <div className="flex gap-2">
+          <ExportButton
+            dados={filteredGruas}
+            tipo="gruas"
+            nomeArquivo="relatorio-gruas"
+            titulo="Relatório de Gruas"
+          />
+          <Button 
+            className="flex items-center gap-2"
+            onClick={() => setIsCreateDialogOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Nova Grua
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

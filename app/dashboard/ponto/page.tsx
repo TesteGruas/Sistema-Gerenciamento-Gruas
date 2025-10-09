@@ -32,6 +32,7 @@ import {
   type RegistroPonto,
   type Justificativa
 } from "@/lib/api-ponto-eletronico"
+import { ExportButton } from "@/components/export-button"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -485,14 +486,21 @@ export default function PontoPage() {
           <h1 className="text-3xl font-bold text-gray-900">Ponto Eletrônico</h1>
           <p className="text-gray-600">Sistema de controle de frequência dos funcionários</p>
         </div>
-        <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 bg-transparent">
-              <FileText className="w-4 h-4 mr-2" />
-              Justificativa
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
+        <div className="flex gap-2">
+          <ExportButton
+            dados={filteredRegistros}
+            tipo="ponto"
+            nomeArquivo="relatorio-ponto"
+            titulo="Relatório de Ponto Eletrônico"
+          />
+          <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 bg-transparent">
+                <FileText className="w-4 h-4 mr-2" />
+                Justificativa
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
             <DialogHeader>
               <DialogTitle>Registrar Justificativa</DialogTitle>
               <DialogDescription>Registre justificativas para atrasos, faltas ou saídas antecipadas</DialogDescription>
@@ -567,11 +575,13 @@ export default function PontoPage() {
                 </Button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
 
-        {/* Modal de Edição de Registro */}
-        <Dialog open={isEditarOpen} onOpenChange={setIsEditarOpen}>
+      {/* Modal de Edição de Registro */}
+      <Dialog open={isEditarOpen} onOpenChange={setIsEditarOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Editar Registro de Ponto</DialogTitle>
@@ -698,7 +708,6 @@ export default function PontoPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

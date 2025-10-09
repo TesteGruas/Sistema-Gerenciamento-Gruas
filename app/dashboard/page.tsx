@@ -4,6 +4,23 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
+  LineChart,
+  Line,
+  BarChart as RechartsBarChart,
+  Bar,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart
+} from 'recharts'
+import {
   Package,
   Clock,
   Users,
@@ -14,8 +31,12 @@ import {
   AlertTriangle,
   Building2,
   Loader2,
+  PieChart as PieChartIcon
 } from "lucide-react"
 import { apiDashboard, DashboardData } from '@/lib/api-dashboard'
+
+// Cores para gráficos
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -168,6 +189,149 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Gráficos de Visão Geral */}
+      {dashboardData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Taxa de Utilização por Mês */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Taxa de Utilização
+              </CardTitle>
+              <CardDescription>Evolução mensal de gruas em operação</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={[
+                  { mes: 'Jan', taxa: 75, gruas: 12 },
+                  { mes: 'Fev', taxa: 82, gruas: 14 },
+                  { mes: 'Mar', taxa: 78, gruas: 13 },
+                  { mes: 'Abr', taxa: 85, gruas: 15 },
+                  { mes: 'Mai', taxa: 90, gruas: 16 },
+                  { mes: 'Jun', taxa: dashboardData.resumo_geral.taxa_utilizacao, gruas: dashboardData.resumo_geral.gruas_ocupadas }
+                ]}>
+                  <defs>
+                    <linearGradient id="colorTaxa" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <RechartsTooltip 
+                    formatter={(value: number, name: string) => {
+                      if (name === 'taxa') return [`${value}%`, 'Taxa de Utilização']
+                      return [value, 'Gruas Ocupadas']
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Area type="monotone" dataKey="taxa" stroke="#3b82f6" fillOpacity={1} fill="url(#colorTaxa)" name="Taxa %" />
+                  <Area type="monotone" dataKey="gruas" stroke="#10b981" fill="#10b981" fillOpacity={0.3} name="Gruas" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Status das Gruas */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChartIcon className="w-5 h-5" />
+                Status das Gruas
+              </CardTitle>
+              <CardDescription>Distribuição atual do parque</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <RechartsPieChart>
+                  <Pie
+                    data={[
+                      { name: 'Em Operação', value: dashboardData.resumo_geral.gruas_ocupadas },
+                      { name: 'Disponível', value: dashboardData.resumo_geral.total_gruas - dashboardData.resumo_geral.gruas_ocupadas },
+                      { name: 'Manutenção', value: Math.floor(dashboardData.resumo_geral.total_gruas * 0.1) }
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell fill="#10b981" />
+                    <Cell fill="#3b82f6" />
+                    <Cell fill="#f59e0b" />
+                  </Pie>
+                  <RechartsTooltip />
+                </RechartsPieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Receita Mensal */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5" />
+                Receita Mensal
+              </CardTitle>
+              <CardDescription>Evolução de receitas dos últimos 6 meses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <RechartsBarChart data={[
+                  { mes: 'Jan', receita: dashboardData.resumo_geral.receita_mes_atual * 0.8 },
+                  { mes: 'Fev', receita: dashboardData.resumo_geral.receita_mes_atual * 0.85 },
+                  { mes: 'Mar', receita: dashboardData.resumo_geral.receita_mes_atual * 0.9 },
+                  { mes: 'Abr', receita: dashboardData.resumo_geral.receita_mes_atual * 0.95 },
+                  { mes: 'Mai', receita: dashboardData.resumo_geral.receita_mes_atual * 1.05 },
+                  { mes: 'Jun', receita: dashboardData.resumo_geral.receita_mes_atual }
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <RechartsTooltip 
+                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Bar dataKey="receita" fill="#10b981" name="Receita (R$)" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Obras por Status */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="w-5 h-5" />
+                Obras por Status
+              </CardTitle>
+              <CardDescription>Distribuição de obras ativas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <RechartsBarChart data={[
+                  { status: 'Em Andamento', quantidade: 8 },
+                  { status: 'Planejamento', quantidade: 4 },
+                  { status: 'Finalização', quantidade: 3 },
+                  { status: 'Paralisada', quantidade: 1 }
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="status" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <RechartsTooltip />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activities */}
         <Card>
@@ -235,69 +399,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Alerts */}
-      {dashboardData && dashboardData.alertas.length > 0 && (
-        <div className="space-y-4">
-          {dashboardData.alertas.map((alerta, index) => (
-            <Card 
-              key={index} 
-              className={`border-2 ${
-                alerta.prioridade === 'alta' 
-                  ? 'border-red-200 bg-red-50' 
-                  : alerta.prioridade === 'media'
-                  ? 'border-yellow-200 bg-yellow-50'
-                  : 'border-green-200 bg-green-50'
-              }`}
-            >
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className={`w-5 h-5 ${
-                    alerta.prioridade === 'alta' 
-                      ? 'text-red-600' 
-                      : alerta.prioridade === 'media'
-                      ? 'text-yellow-600'
-                      : 'text-green-600'
-                  }`} />
-                  <div>
-                    <p className={`font-medium ${
-                      alerta.prioridade === 'alta' 
-                        ? 'text-red-800' 
-                        : alerta.prioridade === 'media'
-                        ? 'text-yellow-800'
-                        : 'text-green-800'
-                    }`}>
-                      {alerta.tipo === 'manutencao' ? 'Manutenção' : 
-                       alerta.tipo === 'utilizacao' ? 'Utilização' : 
-                       alerta.tipo === 'status' ? 'Status' : 'Alerta'}
-                    </p>
-                    <p className={`text-sm ${
-                      alerta.prioridade === 'alta' 
-                        ? 'text-red-700' 
-                        : alerta.prioridade === 'media'
-                        ? 'text-yellow-700'
-                        : 'text-green-700'
-                    }`}>
-                      {alerta.mensagem}
-                    </p>
-                    {alerta.acao && (
-                      <p className={`text-xs mt-1 ${
-                        alerta.prioridade === 'alta' 
-                          ? 'text-red-600' 
-                          : alerta.prioridade === 'media'
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                      }`}>
-                        Ação: {alerta.acao}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

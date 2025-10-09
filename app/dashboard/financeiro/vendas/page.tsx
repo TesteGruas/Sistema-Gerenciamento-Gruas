@@ -43,6 +43,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 import { 
   Plus, 
   Search, 
@@ -64,11 +79,16 @@ import {
   ArrowLeft,
   ArrowRight,
   MoreHorizontal,
-  CheckCircle
+  CheckCircle,
+  TrendingUp,
+  BarChart3 as BarChartIcon
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { clientesApi } from "@/lib/api-clientes"
 import { estoqueAPI, type Produto } from "@/lib/api-estoque"
+
+// Cores para gráficos
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 // Função utilitária para cores de status
 const getStatusColor = (status: string) => {
@@ -326,6 +346,95 @@ export default function VendasPage() {
           )}
         </div>
       </div>
+
+      {/* Gráficos de Estatísticas */}
+      {activeTab === 'vendas' && vendas.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChartIcon className="w-5 h-5" />
+                Vendas por Mês
+              </CardTitle>
+              <CardDescription>Distribuição de vendas mensais</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={(() => {
+                  const vendasPorMes = vendas.reduce((acc: any, venda) => {
+                    const mes = new Date(venda.data_venda).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                    const existing = acc.find((item: any) => item.mes === mes)
+                    if (existing) {
+                      existing.valor += Number(venda.valor_total)
+                      existing.quantidade += 1
+                    } else {
+                      acc.push({ mes, valor: Number(venda.valor_total), quantidade: 1 })
+                    }
+                    return acc
+                  }, [])
+                  return vendasPorMes.slice(-6)
+                })()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    formatter={(value: number, name: string) => {
+                      if (name === 'valor') return [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Valor Total']
+                      return [value, 'Quantidade']
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="valor" fill="#10b981" name="Valor (R$)" />
+                  <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Vendas por Status
+              </CardTitle>
+              <CardDescription>Distribuição por status</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={(() => {
+                      const statusCount = vendas.reduce((acc: any, venda) => {
+                        const status = venda.status
+                        const existing = acc.find((item: any) => item.name === status)
+                        if (existing) {
+                          existing.value += 1
+                        } else {
+                          acc.push({ name: status, value: 1 })
+                        }
+                        return acc
+                      }, [])
+                      return statusCount
+                    })()}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {vendas.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

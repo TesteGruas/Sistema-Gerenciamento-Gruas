@@ -13,6 +13,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 import { 
   Plus, 
   Search, 
@@ -29,17 +41,26 @@ import {
   Download,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  TrendingUp,
+  BarChart3 as BarChartIcon
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { medicoesApi, Medicao, MedicaoCreate } from "@/lib/api-medicoes"
 import { medicoesUtils } from "@/lib/medicoes-utils"
 import { locacoesApi, Locacao } from "@/lib/api-locacoes"
-import { receitasApi, Receita, ReceitaCreate } from "@/lib/api-receitas"
-import { custosApi, Custo, CustoCreate } from "@/lib/api-custos"
+import { receitasApi } from "@/lib/api-receitas"
+import { custosApi } from "@/lib/api-custos"
 import { obrasApi } from "@/lib/api-obras"
 
-// Interface para obras (para os selects)
+// Cores para gráficos
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+
+// Tipos importados das APIs
+import type { Receita, ReceitaCreate } from "@/lib/api-receitas"
+import type { Custo, CustoCreate } from "@/lib/api-custos"
+
+// Interface para obras simplificada
 interface ObraSimples {
   id: number
   nome: string
@@ -460,6 +481,95 @@ export default function MedicoesPage() {
         </div>
       </div>
 
+      {/* Gráficos de Estatísticas */}
+      {activeTab === 'medicoes' && medicoes.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChartIcon className="w-5 h-5" />
+                Medições por Período
+              </CardTitle>
+              <CardDescription>Valor total das medições por mês</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={(() => {
+                  const medicoesPorPeriodo = medicoes
+                    .filter(m => m.status === 'finalizada')
+                    .reduce((acc: any, medicao) => {
+                      const periodo = medicao.periodo
+                      const existing = acc.find((item: any) => item.periodo === periodo)
+                      if (existing) {
+                        existing.valor += Number(medicao.valor_total)
+                      } else {
+                        acc.push({ periodo, valor: Number(medicao.valor_total) })
+                      }
+                      return acc
+                    }, [])
+                  return medicoesPorPeriodo.slice(-6)
+                })()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="periodo" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  />
+                  <Legend />
+                  <Bar dataKey="valor" fill="#3b82f6" name="Valor Total (R$)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Evolução das Medições
+              </CardTitle>
+              <CardDescription>Valor ao longo do tempo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={(() => {
+                  const medicoesPorPeriodo = medicoes
+                    .filter(m => m.status === 'finalizada')
+                    .reduce((acc: any, medicao) => {
+                      const periodo = medicao.periodo
+                      const existing = acc.find((item: any) => item.periodo === periodo)
+                      if (existing) {
+                        existing.valor += Number(medicao.valor_total)
+                      } else {
+                        acc.push({ periodo, valor: Number(medicao.valor_total) })
+                      }
+                      return acc
+                    }, [])
+                  return medicoesPorPeriodo.slice(-6)
+                })()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="periodo" />
+                  <YAxis />
+                  <RechartsTooltip 
+                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="valor" 
+                    stroke="#10b981" 
+                    strokeWidth={2}
+                    name="Valor (R$)"
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
@@ -769,8 +879,8 @@ export default function MedicoesPage() {
                           <Badge variant="outline">{custo.tipo}</Badge>
                         </TableCell>
                         <TableCell>{custo.descricao}</TableCell>
-                        <TableCell>{custo.obras?.nome || 'N/A'}</TableCell>
-                        <TableCell>{custo.funcionarios?.nome || 'N/A'}</TableCell>
+                        <TableCell>-</TableCell>
+                        <TableCell>-</TableCell>
                         <TableCell>
                           {new Date(custo.data_custo).toLocaleDateString('pt-BR')}
                         </TableCell>
