@@ -432,6 +432,31 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
 
     const { produto_id, tipo, quantidade, motivo, observacoes } = value
 
+    // Garantir que temos um responsavel_id inteiro válido
+    let responsavel_id = null
+    
+    // Se req.user.id é um número, usar diretamente
+    if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
+      responsavel_id = parseInt(req.user.id)
+    } else {
+      // Se é um UUID, buscar o ID inteiro da tabela usuarios pelo email
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+      
+      if (userData && !userError) {
+        responsavel_id = userData.id
+      } else {
+        console.warn('⚠️ Usuário não encontrado na tabela usuarios, usando ID 1 como fallback')
+        // Usar um ID padrão ou null (dependendo do seu esquema)
+        responsavel_id = 1 // Ou você pode deixar null se o campo permitir
+      }
+    }
+
+    console.log('🔍 DEBUG: responsavel_id para movimentação:', responsavel_id, 'tipo:', typeof responsavel_id)
+
     // Verificar se produto existe
     const { data: produto, error: produtoError } = await supabaseAdmin
       .from('produtos')
@@ -520,7 +545,7 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
       valor_unitario: produto.valor_unitario.toString(),
       valor_total: valorTotal.toString(),
       data_movimentacao: new Date().toISOString(),
-      responsavel_id: req.user.id,
+      responsavel_id: responsavel_id,
       observacoes: observacoes || null,
       status: 'Confirmada',
       motivo: motivo || null,
@@ -686,6 +711,25 @@ router.post('/reservar', authenticateToken, requirePermission('movimentar_estoqu
 
     const { produto_id, quantidade, motivo, observacoes } = value
 
+    // Garantir que temos um responsavel_id inteiro válido
+    let responsavel_id = null
+    
+    if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
+      responsavel_id = parseInt(req.user.id)
+    } else {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+      
+      if (userData && !userError) {
+        responsavel_id = userData.id
+      } else {
+        responsavel_id = 1
+      }
+    }
+
     // Verificar se produto existe
     const { data: produto, error: produtoError } = await supabaseAdmin
       .from('produtos')
@@ -754,7 +798,7 @@ router.post('/reservar', authenticateToken, requirePermission('movimentar_estoqu
         valor_unitario: produto.valor_unitario.toString(),
         valor_total: (quantidade * produto.valor_unitario).toString(),
         data_movimentacao: new Date().toISOString(),
-        responsavel_id: req.user.id,
+        responsavel_id: responsavel_id,
         observacoes,
         status: 'Confirmada',
         motivo,
@@ -833,6 +877,25 @@ router.post('/liberar-reserva', authenticateToken, requirePermission('movimentar
 
     const { produto_id, quantidade, motivo, observacoes } = value
 
+    // Garantir que temos um responsavel_id inteiro válido
+    let responsavel_id = null
+    
+    if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
+      responsavel_id = parseInt(req.user.id)
+    } else {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+      
+      if (userData && !userError) {
+        responsavel_id = userData.id
+      } else {
+        responsavel_id = 1
+      }
+    }
+
     // Verificar se produto existe
     const { data: produto, error: produtoError } = await supabaseAdmin
       .from('produtos')
@@ -901,7 +964,7 @@ router.post('/liberar-reserva', authenticateToken, requirePermission('movimentar
         valor_unitario: produto.valor_unitario?.toString() || '0',
         valor_total: (quantidade * (produto.valor_unitario || 0)).toString(),
         data_movimentacao: new Date().toISOString(),
-        responsavel_id: req.user.id,
+        responsavel_id: responsavel_id,
         observacoes,
         status: 'Confirmada',
         motivo,
