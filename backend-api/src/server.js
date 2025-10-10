@@ -85,6 +85,8 @@ import relatoriosRhRoutes from './routes/relatorios-rh.js'
 import fornecedoresRoutes from './routes/fornecedores.js'
 import produtosRoutes from './routes/produtos.js'
 import impostosFinanceirosRoutes from './routes/impostos-financeiros.js'
+import gruasMensaisRoutes from './routes/gruas-mensais.js'
+import checklistDevolucaoRoutes from './routes/checklist-devolucao.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -280,6 +282,8 @@ app.use('/api/relatorios-rh', relatoriosRhRoutes)
 app.use('/api/fornecedores', fornecedoresRoutes)
 app.use('/api/produtos', produtosRoutes)
 app.use('/api/impostos', impostosFinanceirosRoutes)
+app.use('/api/gruas-mensais', gruasMensaisRoutes)
+app.use('/api/checklist-devolucao', checklistDevolucaoRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

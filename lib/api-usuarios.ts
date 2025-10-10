@@ -288,6 +288,12 @@ export const utilsUsuarios = {
   }
 };
 
+// Funções de conveniência para compatibilidade
+export const getUsers = async (): Promise<Usuario[]> => {
+  const response = await apiUsuarios.listar({ limit: 1000 });
+  return response.data || [];
+};
+
 export default {
   apiUsuarios,
   utilsUsuarios

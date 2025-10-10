@@ -279,4 +279,12 @@ export const converterGruaFrontendParaBackend = (gruaFrontend: any): GruaCreateD
   }
 }
 
+// Funções de conveniência para compatibilidade
+export const getGruas = async (): Promise<GruaBackend[]> => {
+  const response = await gruasApi.listarGruas({ limit: 1000 });
+  return response.data || [];
+};
+
+export type Grua = GruaBackend;
+
 export default gruasApi

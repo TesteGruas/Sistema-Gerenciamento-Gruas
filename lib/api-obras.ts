@@ -652,4 +652,10 @@ export const ensureAuthenticated = async (): Promise<boolean> => {
   return true
 }
 
+// Funções de conveniência para compatibilidade
+export const getObras = async (): Promise<ObraBackend[]> => {
+  const response = await obrasApi.listarObras({ limit: 1000 });
+  return response.data || [];
+};
+
 export default obrasApi
