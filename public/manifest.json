@@ -1,13 +1,46 @@
 {
-  "name": "Sistema IRBANA - PWA",
-  "short_name": "IRBANA PWA",
-  "description": "Sistema de Gestão de Ponto e Assinatura - IRBANA",
+  "name": "IRBANA - Sistema de Gestão",
+  "short_name": "IRBANA",
+  "description": "Sistema completo de gestão de ponto, assinaturas digitais e gerenciamento de gruas",
   "start_url": "/pwa",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#3b82f6",
+  "background_color": "#f3f4f6",
+  "theme_color": "#2563eb",
   "orientation": "portrait-primary",
+  "dir": "ltr",
+  "lang": "pt-BR",
   "icons": [
+    {
+      "src": "/placeholder-logo.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/placeholder-logo.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/placeholder-logo.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/placeholder-logo.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/placeholder-logo.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/placeholder-logo.png",
       "sizes": "192x192",
@@ -16,18 +49,45 @@
     },
     {
       "src": "/placeholder-logo.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/placeholder-logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["business", "productivity"],
-  "screenshots": [
+  "categories": ["business", "productivity", "utilities"],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "shortcuts": [
     {
-      "src": "/placeholder.jpg",
-      "sizes": "1280x720",
-      "type": "image/jpeg",
-      "form_factor": "wide"
+      "name": "Registrar Ponto",
+      "short_name": "Ponto",
+      "description": "Registrar entrada ou saída",
+      "url": "/pwa/ponto",
+      "icons": [{ "src": "/placeholder-logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Documentos",
+      "short_name": "Docs",
+      "description": "Assinar documentos pendentes",
+      "url": "/pwa/documentos",
+      "icons": [{ "src": "/placeholder-logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Perfil",
+      "short_name": "Perfil",
+      "description": "Ver meu perfil",
+      "url": "/pwa/perfil",
+      "icons": [{ "src": "/placeholder-logo.png", "sizes": "192x192" }]
     }
-  ]
+  ],
+  "display_override": ["standalone", "minimal-ui"],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
 }
