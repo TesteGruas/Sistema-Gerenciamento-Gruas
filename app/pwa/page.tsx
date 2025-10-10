@@ -15,36 +15,20 @@ import {
   AlertCircle,
   Smartphone,
   Wifi,
-  WifiOff
+  WifiOff,
+  Bell,
+  UserCircle,
+  Briefcase
 } from "lucide-react"
+import { usePWAUser } from "@/hooks/use-pwa-user"
 
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+  const { user, pontoHoje, documentosPendentes, horasTrabalhadas, loading: userLoading } = usePWAUser()
 
-  // Verificar autenticação
-  useEffect(() => {
-    const checkAuth = () => {
-      if (typeof window === 'undefined') return
-      
-      const token = localStorage.getItem('access_token')
-      const userData = localStorage.getItem('user_data')
-      
-      if (!token || !userData) {
-        // Não há credenciais, redirecionar para login
-        router.push('/pwa/login')
-        return
-      }
-      
-      setIsAuthenticated(true)
-      setIsLoading(false)
-    }
-
-    checkAuth()
-  }, [router])
+  // Autenticação é gerenciada pelo PWAAuthGuard no layout
 
   // Atualizar relógio
   useEffect(() => {
@@ -84,7 +68,7 @@ export default function PWAMainPage() {
     {
       title: "Minhas Gruas",
       description: "Ver gruas sob responsabilidade",
-      icon: User,
+      icon: Briefcase,
       href: "/pwa/gruas",
       color: "bg-purple-600",
       bgColor: "bg-purple-50"
@@ -96,6 +80,22 @@ export default function PWAMainPage() {
       href: "/pwa/documentos",
       color: "bg-green-600",
       bgColor: "bg-green-50"
+    },
+    {
+      title: "Notificações",
+      description: "Ver alertas e lembretes",
+      icon: Bell,
+      href: "/pwa/notificacoes",
+      color: "bg-orange-600",
+      bgColor: "bg-orange-50"
+    },
+    {
+      title: "Meu Perfil",
+      description: "Ver e editar informações",
+      icon: UserCircle,
+      href: "/pwa/perfil",
+      color: "bg-indigo-600",
+      bgColor: "bg-indigo-50"
     }
   ]
 
@@ -127,42 +127,42 @@ export default function PWAMainPage() {
   const stats = [
     {
       title: "Ponto Hoje",
-      value: "08:30",
-      subtitle: "Entrada registrada",
+      value: pontoHoje?.entrada 
+        ? new Date(pontoHoje.entrada).toLocaleTimeString('pt-BR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })
+        : "--:--",
+      subtitle: pontoHoje?.entrada ? "Entrada registrada" : "Não registrado",
       icon: CheckCircle,
-      color: "text-green-600"
+      color: pontoHoje?.entrada ? "text-green-600" : "text-gray-400"
     },
     {
       title: "Horas Trabalhadas",
-      value: "6h 30min",
-      subtitle: "Tempo atual",
+      value: horasTrabalhadas,
+      subtitle: pontoHoje?.entrada ? "Tempo atual" : "Sem registro",
       icon: Clock,
       color: "text-blue-600"
     },
     {
       title: "Documentos Pendentes",
-      value: "3",
+      value: documentosPendentes.toString(),
       subtitle: "Aguardando assinatura",
       icon: AlertCircle,
-      color: "text-orange-600"
+      color: documentosPendentes > 0 ? "text-orange-600" : "text-green-600"
     }
   ]
 
-  // Mostrar loading enquanto verifica autenticação
-  if (isLoading) {
+  // Mostrar loading enquanto carrega dados do usuário
+  if (userLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Verificando autenticação...</p>
+          <p className="text-gray-600">Carregando dados...</p>
         </div>
       </div>
     )
-  }
-
-  // Se não estiver autenticado, não mostrar nada (já redirecionou)
-  if (!isAuthenticated) {
-    return null
   }
 
   return (

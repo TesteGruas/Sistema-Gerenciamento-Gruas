@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,15 +14,21 @@ import {
   X,
   Smartphone,
   Wifi,
-  WifiOff
+  WifiOff,
+  Bell,
+  UserCircle,
+  Briefcase
 } from "lucide-react"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
+import { PWAAuthGuard } from "@/components/pwa-auth-guard"
+import { OfflineSyncIndicator } from "@/components/offline-sync-indicator"
 
 interface PWALayoutProps {
   children: React.ReactNode
 }
 
 export default function PWALayout({ children }: PWALayoutProps) {
+  const pathname = usePathname()
   const [isOnline, setIsOnline] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string } | null>(null)
@@ -84,7 +90,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
     {
       name: "Gruas",
       href: "/pwa/gruas",
-      icon: User,
+      icon: Briefcase,
       description: "Minhas gruas"
     },
     {
@@ -92,6 +98,18 @@ export default function PWALayout({ children }: PWALayoutProps) {
       href: "/pwa/documentos",
       icon: FileSignature,
       description: "Assinar documentos"
+    },
+    {
+      name: "Notificações",
+      href: "/pwa/notificacoes",
+      icon: Bell,
+      description: "Ver notificações"
+    },
+    {
+      name: "Perfil",
+      href: "/pwa/perfil",
+      icon: UserCircle,
+      description: "Meu perfil"
     }
   ]
 
@@ -109,10 +127,16 @@ export default function PWALayout({ children }: PWALayoutProps) {
     })
   }
 
+  // Rotas que não precisam do layout (login e redirect)
+  const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
+  const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header PWA */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-50">
+    <PWAAuthGuard>
+      {shouldShowLayout ? (
+        <div className="min-h-screen bg-gray-50">
+          {/* Header PWA */}
+          <header className="bg-white shadow-sm border-b sticky top-0 z-50">
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Logo e título */}
@@ -181,16 +205,21 @@ export default function PWALayout({ children }: PWALayoutProps) {
       {/* Navegação principal */}
       <nav className="bg-white border-b">
         <div className="px-4 py-2">
-          <div className="flex gap-2">
+          <div className="flex gap-1 overflow-x-auto">
             {navigationItems.map((item) => {
               const Icon = item.icon
+              const isActive = pathname === item.href
               return (
                 <Button
                   key={item.name}
-                  variant="ghost"
+                  variant={isActive ? "default" : "ghost"}
                   size="sm"
                   onClick={() => router.push(item.href)}
-                  className="flex items-center gap-2 text-gray-700 hover:text-blue-600"
+                  className={`flex items-center gap-2 whitespace-nowrap ${
+                    isActive 
+                      ? "bg-blue-600 text-white hover:bg-blue-700" 
+                      : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+                  }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{item.name}</span>
@@ -202,7 +231,12 @@ export default function PWALayout({ children }: PWALayoutProps) {
       </nav>
 
       {/* Conteúdo principal */}
-      <main className="p-4">
+      <main className="p-4 pb-20">
+        {/* Indicador de sincronização offline */}
+        <div className="mb-4">
+          <OfflineSyncIndicator />
+        </div>
+        
         {children}
       </main>
 
@@ -278,6 +312,12 @@ export default function PWALayout({ children }: PWALayoutProps) {
           </Card>
         </div>
       )}
-    </div>
+        </div>
+      ) : (
+        <div className="min-h-screen">
+          {children}
+        </div>
+      )}
+    </PWAAuthGuard>
   )
 }

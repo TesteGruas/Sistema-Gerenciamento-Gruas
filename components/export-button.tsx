@@ -7,22 +7,21 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
-import { Download, FileSpreadsheet, FileText, Loader2, Table } from 'lucide-react'
+import { Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+import * as XLSX from 'xlsx'
 
 interface ExportButtonProps {
   dados: any[]
-  tipo: 'gruas' | 'obras' | 'funcionarios' | 'financeiro' | 'estoque' | 'ponto' | 'relatorios' | 'rh' | 'custos' | 'receitas' | 'orcamentos' | 'locacoes' | 'vendas' | 'compras'
+  tipo: 'gruas' | 'obras' | 'funcionarios' | 'clientes' | 'financeiro' | 'estoque' | 'ponto' | 'relatorios'
   nomeArquivo?: string
   filtros?: Record<string, any>
-  colunas?: string[]
+  colunas?: Array<{ key: string; label: string }>
   titulo?: string
   className?: string
-  variant?: 'default' | 'outline' | 'ghost' | 'secondary'
-  size?: 'default' | 'sm' | 'lg' | 'icon'
 }
 
 export function ExportButton({
@@ -32,231 +31,271 @@ export function ExportButton({
   filtros,
   colunas,
   titulo,
-  className,
-  variant = 'outline',
-  size = 'default'
+  className
 }: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false)
   const { toast } = useToast()
 
-  const handleExport = async (formato: 'pdf' | 'excel' | 'csv') => {
-    if (!dados || dados.length === 0) {
-      toast({
-        title: "Nenhum dado para exportar",
-        description: "Não há dados disponíveis para exportação.",
-        variant: "destructive"
-      })
-      return
-    }
+  // Definir colunas padrão por tipo se não forem fornecidas
+  const getColunasDefault = () => {
+    if (colunas) return colunas
 
+    switch (tipo) {
+      case 'gruas':
+        return [
+          { key: 'name', label: 'Nome' },
+          { key: 'model', label: 'Modelo' },
+          { key: 'fabricante', label: 'Fabricante' },
+          { key: 'capacity', label: 'Capacidade' },
+          { key: 'status', label: 'Status' }
+        ]
+      case 'obras':
+        return [
+          { key: 'name', label: 'Nome' },
+          { key: 'clienteName', label: 'Cliente' },
+          { key: 'status', label: 'Status' },
+          { key: 'startDate', label: 'Data Início' },
+          { key: 'budget', label: 'Orçamento' }
+        ]
+      case 'funcionarios':
+        return [
+          { key: 'nome', label: 'Nome' },
+          { key: 'cargo', label: 'Cargo' },
+          { key: 'telefone', label: 'Telefone' },
+          { key: 'email', label: 'Email' },
+          { key: 'status', label: 'Status' }
+        ]
+      case 'clientes':
+        return [
+          { key: 'nome', label: 'Nome' },
+          { key: 'cnpj', label: 'CNPJ' },
+          { key: 'telefone', label: 'Telefone' },
+          { key: 'email', label: 'Email' },
+          { key: 'cidade', label: 'Cidade' }
+        ]
+      default:
+        return Object.keys(dados[0] || {}).map(key => ({ key, label: key }))
+    }
+  }
+
+  const colunasExport = getColunasDefault()
+
+  const handleExportPDF = async () => {
     setIsExporting(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const doc = new jsPDF()
       
-      const response = await fetch(
-        `${apiUrl}/api/exportar/${tipo}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            formato,
-            dados,
-            filtros,
-            colunas,
-            titulo: titulo || `Relatório de ${tipo}`
-          })
-        }
-      )
-
-      if (!response.ok) {
-        // Se a API não existir, fazer exportação local
-        await exportarLocal(formato)
-        return
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
+      // Título
+      doc.setFontSize(18)
+      doc.text(titulo || `Relatório de ${tipo}`, 14, 22)
       
-      const extensao = formato === 'excel' ? 'xlsx' : formato
-      const dataAtual = new Date().toISOString().split('T')[0]
-      a.download = `${nomeArquivo || tipo}-${dataAtual}.${extensao}`
+      // Data de geração
+      doc.setFontSize(10)
+      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 30)
       
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      toast({
-        title: "Exportação concluída!",
-        description: `Arquivo ${formato.toUpperCase()} baixado com sucesso.`,
-      })
-    } catch (error) {
-      console.error('Erro ao exportar:', error)
-      
-      // Fallback para exportação local
-      try {
-        await exportarLocal(formato)
-      } catch (localError) {
-        console.error('Erro na exportação local:', localError)
-        toast({
-          title: "Erro na exportação",
-          description: "Não foi possível exportar os dados.",
-          variant: "destructive"
+      // Filtros aplicados
+      if (filtros && Object.keys(filtros).length > 0) {
+        doc.setFontSize(9)
+        let y = 36
+        Object.entries(filtros).forEach(([key, value]) => {
+          if (value) {
+            doc.text(`${key}: ${value}`, 14, y)
+            y += 5
+          }
         })
       }
+
+      // Preparar dados para a tabela
+      const headers = colunasExport.map(col => col.label)
+      const rows = dados.map(item => 
+        colunasExport.map(col => {
+          const valor = item[col.key]
+          if (valor === null || valor === undefined) return '-'
+          if (typeof valor === 'number') {
+            // Formatar números
+            if (col.key.includes('valor') || col.key.includes('preco') || col.key.includes('budget')) {
+              return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+            }
+            return valor.toString()
+          }
+          if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não'
+          if (col.key.includes('data') || col.key.includes('Date')) {
+            try {
+              return new Date(valor).toLocaleDateString('pt-BR')
+            } catch {
+              return valor
+            }
+          }
+          return valor.toString()
+        })
+      )
+
+      // Adicionar tabela
+      ;(doc as any).autoTable({
+        startY: filtros ? 50 : 40,
+        head: [headers],
+        body: rows,
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 247, 250] }
+      })
+
+      // Salvar
+      const nomeCompleto = `${nomeArquivo || tipo}-${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(nomeCompleto)
+
+      toast({
+        title: "PDF exportado com sucesso!",
+        description: `Arquivo ${nomeCompleto} foi baixado.`,
+      })
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error)
+      toast({
+        title: "Erro ao exportar PDF",
+        description: "Ocorreu um erro ao gerar o arquivo.",
+        variant: "destructive"
+      })
     } finally {
       setIsExporting(false)
     }
   }
 
-  const exportarLocal = async (formato: 'pdf' | 'excel' | 'csv') => {
-    if (formato === 'csv') {
-      exportarCSV()
-    } else if (formato === 'excel') {
-      await exportarExcel()
-    } else if (formato === 'pdf') {
-      await exportarPDF()
-    }
-  }
-
-  const exportarCSV = () => {
-    if (!dados || dados.length === 0) return
-
-    // Obter cabeçalhos
-    const headers = colunas || Object.keys(dados[0])
-    
-    // Criar CSV
-    let csv = headers.join(',') + '\n'
-    
-    dados.forEach(item => {
-      const row = headers.map(header => {
-        const value = item[header]
-        // Escapar valores com vírgula ou aspas
-        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-          return `"${value.replace(/"/g, '""')}"`
-        }
-        return value
-      })
-      csv += row.join(',') + '\n'
-    })
-
-    // Download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${nomeArquivo || tipo}-${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(a)
-    a.click()
-    window.URL.revokeObjectURL(url)
-    document.body.removeChild(a)
-
-    toast({
-      title: "Exportação concluída!",
-      description: "Arquivo CSV baixado com sucesso.",
-    })
-  }
-
-  const exportarExcel = async () => {
+  const handleExportExcel = async () => {
+    setIsExporting(true)
     try {
-      // Importar biblioteca dinamicamente
-      const XLSX = await import('xlsx')
-      
-      if (!dados || dados.length === 0) return
+      // Preparar dados
+      const dadosFormatados = dados.map(item => {
+        const linha: any = {}
+        colunasExport.forEach(col => {
+          const valor = item[col.key]
+          if (valor === null || valor === undefined) {
+            linha[col.label] = '-'
+          } else if (typeof valor === 'number') {
+            if (col.key.includes('valor') || col.key.includes('preco') || col.key.includes('budget')) {
+              linha[col.label] = valor
+            } else {
+              linha[col.label] = valor
+            }
+          } else if (typeof valor === 'boolean') {
+            linha[col.label] = valor ? 'Sim' : 'Não'
+          } else if (col.key.includes('data') || col.key.includes('Date')) {
+            try {
+              linha[col.label] = new Date(valor).toLocaleDateString('pt-BR')
+            } catch {
+              linha[col.label] = valor
+            }
+          } else {
+            linha[col.label] = valor
+          }
+        })
+        return linha
+      })
 
-      // Criar worksheet
-      const ws = XLSX.utils.json_to_sheet(dados)
-      
-      // Criar workbook
+      // Criar workbook e worksheet
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, titulo || 'Dados')
-      
-      // Download
-      XLSX.writeFile(wb, `${nomeArquivo || tipo}-${new Date().toISOString().split('T')[0]}.xlsx`)
+      const ws = XLSX.utils.json_to_sheet(dadosFormatados)
+
+      // Ajustar largura das colunas
+      const colWidths = colunasExport.map(col => ({ wch: Math.max(col.label.length, 15) }))
+      ws['!cols'] = colWidths
+
+      // Adicionar worksheet ao workbook
+      XLSX.utils.book_append_sheet(wb, ws, tipo)
+
+      // Salvar arquivo
+      const nomeCompleto = `${nomeArquivo || tipo}-${new Date().toISOString().split('T')[0]}.xlsx`
+      XLSX.writeFile(wb, nomeCompleto)
 
       toast({
-        title: "Exportação concluída!",
-        description: "Arquivo Excel baixado com sucesso.",
+        title: "Excel exportado com sucesso!",
+        description: `Arquivo ${nomeCompleto} foi baixado.`,
       })
     } catch (error) {
       console.error('Erro ao exportar Excel:', error)
       toast({
-        title: "Biblioteca não instalada",
-        description: "Instale a biblioteca xlsx: npm install xlsx",
+        title: "Erro ao exportar Excel",
+        description: "Ocorreu um erro ao gerar o arquivo.",
         variant: "destructive"
       })
+    } finally {
+      setIsExporting(false)
     }
   }
 
-  const exportarPDF = async () => {
+  const handleExportCSV = async () => {
+    setIsExporting(true)
     try {
-      // Importar biblioteca dinamicamente
-      const { default: jsPDF } = await import('jspdf')
-      const autoTable = (await import('jspdf-autotable')).default
+      // Preparar cabeçalhos
+      const headers = colunasExport.map(col => col.label).join(';')
       
-      if (!dados || dados.length === 0) return
-
-      // Criar documento
-      const doc = new jsPDF('l', 'mm', 'a4')
-      
-      // Título
-      doc.setFontSize(18)
-      doc.setFont('helvetica', 'bold')
-      doc.text(titulo || `Relatório de ${tipo}`, 14, 20)
-      
-      // Data
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 28)
-      doc.text(`Total de registros: ${dados.length}`, 14, 33)
-      
-      // Preparar dados para tabela
-      const headers = colunas || Object.keys(dados[0])
+      // Preparar linhas
       const rows = dados.map(item => 
-        headers.map(header => String(item[header] || '-'))
-      )
-      
-      // Adicionar tabela
-      autoTable(doc, {
-        head: [headers],
-        body: rows,
-        startY: 40,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] },
-      })
-      
-      // Download
-      doc.save(`${nomeArquivo || tipo}-${new Date().toISOString().split('T')[0]}.pdf`)
+        colunasExport.map(col => {
+          const valor = item[col.key]
+          if (valor === null || valor === undefined) return '-'
+          if (typeof valor === 'number') {
+            if (col.key.includes('valor') || col.key.includes('preco') || col.key.includes('budget')) {
+              return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+            }
+            return valor.toString()
+          }
+          if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não'
+          if (col.key.includes('data') || col.key.includes('Date')) {
+            try {
+              return new Date(valor).toLocaleDateString('pt-BR')
+            } catch {
+              return valor
+            }
+          }
+          // Escapar ponto e vírgula
+          const valorStr = valor.toString().replace(/;/g, ',')
+          return valorStr
+        }).join(';')
+      ).join('\n')
+
+      // Criar arquivo CSV
+      const csv = `${headers}\n${rows}`
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const nomeCompleto = `${nomeArquivo || tipo}-${new Date().toISOString().split('T')[0]}.csv`
+      link.download = nomeCompleto
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
 
       toast({
-        title: "Exportação concluída!",
-        description: "Arquivo PDF baixado com sucesso.",
+        title: "CSV exportado com sucesso!",
+        description: `Arquivo ${nomeCompleto} foi baixado.`,
       })
     } catch (error) {
-      console.error('Erro ao exportar PDF:', error)
+      console.error('Erro ao exportar CSV:', error)
       toast({
-        title: "Biblioteca não instalada",
-        description: "Instale as bibliotecas: npm install jspdf jspdf-autotable",
+        title: "Erro ao exportar CSV",
+        description: "Ocorreu um erro ao gerar o arquivo.",
         variant: "destructive"
       })
+    } finally {
+      setIsExporting(false)
     }
+  }
+
+  if (dados.length === 0) {
+    return (
+      <Button variant="outline" className={className} disabled>
+        <Download className="w-4 h-4 mr-2" />
+        Sem dados para exportar
+      </Button>
+    )
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button 
-          variant={variant} 
-          size={size}
-          className={className} 
-          disabled={isExporting || !dados || dados.length === 0}
-        >
+        <Button variant="outline" className={className} disabled={isExporting}>
           {isExporting ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -271,22 +310,19 @@ export function ExportButton({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Escolha o formato</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => handleExport('pdf')}>
+        <DropdownMenuItem onClick={handleExportPDF}>
           <FileText className="w-4 h-4 mr-2" />
           Exportar PDF
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleExport('excel')}>
+        <DropdownMenuItem onClick={handleExportExcel}>
           <FileSpreadsheet className="w-4 h-4 mr-2" />
           Exportar Excel
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleExport('csv')}>
-          <Table className="w-4 h-4 mr-2" />
+        <DropdownMenuItem onClick={handleExportCSV}>
+          <FileText className="w-4 h-4 mr-2" />
           Exportar CSV
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
-
