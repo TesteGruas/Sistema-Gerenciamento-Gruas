@@ -130,6 +130,7 @@ export default function AuditoriaPage() {
         { id: 16, modulo: 'relatorios', acao: 'excluir', descricao: 'Exportar relatórios' }
       ]
       setPermissoes(permissoesSimuladas)
+      */
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error)

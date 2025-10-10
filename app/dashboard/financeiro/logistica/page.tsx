@@ -286,7 +286,7 @@ export default function LogisticaPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {mockMotoristas.slice(0, 2).map((motorista) => (
+                  {motoristas.slice(0, 2).map((motorista) => (
                     <div key={motorista.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
                         <p className="font-medium">{motorista.nome}</p>
@@ -361,7 +361,7 @@ export default function LogisticaPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockManifestos.map((manifesto) => (
+                    {manifestos.map((manifesto) => (
                       <TableRow key={manifesto.id}>
                         <TableCell className="font-medium">{manifesto.numero}</TableCell>
                         <TableCell>{manifesto.serie}</TableCell>
@@ -424,7 +424,7 @@ export default function LogisticaPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockCTe.map((cte) => (
+                  {manifestos.map((cte) => (
                     <TableRow key={cte.id}>
                       <TableCell className="font-medium">{cte.numero}</TableCell>
                       <TableCell>{cte.serie}</TableCell>
@@ -487,7 +487,7 @@ export default function LogisticaPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockMotoristas.map((motorista) => (
+                  {motoristas.map((motorista) => (
                     <TableRow key={motorista.id}>
                       <TableCell className="font-medium">{motorista.nome}</TableCell>
                       <TableCell>{motorista.cpf}</TableCell>
@@ -542,7 +542,7 @@ export default function LogisticaPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockViagens.map((viagem) => (
+                  {manifestos.map((viagem) => (
                     <TableRow key={viagem.id}>
                       <TableCell className="font-medium">{viagem.numero}</TableCell>
                       <TableCell>{viagem.motorista}</TableCell>
