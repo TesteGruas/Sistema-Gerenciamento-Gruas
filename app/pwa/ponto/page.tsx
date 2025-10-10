@@ -17,9 +17,22 @@ import {
   Wifi,
   WifiOff,
   Navigation,
-  RefreshCw
+  RefreshCw,
+  MapPinOff,
+  Shield,
+  FileSignature
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { 
+  obterLocalizacaoAtual, 
+  validarProximidadeObra, 
+  formatarDistancia,
+  obrasMock,
+  type Coordenadas,
+  type Obra
+} from "@/lib/geolocation-validator"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SignaturePad } from "@/components/signature-pad"
 
 export default function PWAPontoPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
@@ -35,6 +48,12 @@ export default function PWAPontoPage() {
   const [location, setLocation] = useState<{lat: number, lng: number, address?: string} | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [obra, setObra] = useState<Obra | null>(null)
+  const [validacaoLocalizacao, setValidacaoLocalizacao] = useState<{valido: boolean, distancia: number, mensagem: string} | null>(null)
+  const [showAssinaturaDialog, setShowAssinaturaDialog] = useState(false)
+  const [assinaturaDataUrl, setAssinaturaDataUrl] = useState<string | null>(null)
+  const [tipoRegistroPendente, setTipoRegistroPendente] = useState<string | null>(null)
+  const [horasExtras, setHorasExtras] = useState<number>(0)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -61,7 +80,7 @@ export default function PWAPontoPage() {
     }
   }, [])
 
-  // Carregar dados do usuário
+  // Carregar dados do usuário e obra
   useEffect(() => {
     if (typeof window === 'undefined') return
     
@@ -70,6 +89,10 @@ export default function PWAPontoPage() {
       try {
         const parsedUser = JSON.parse(userData)
         setUser(parsedUser)
+        
+        // Carregar obra do usuário (mock por enquanto - substituir por API)
+        const obraUsuario = obrasMock[0] // Simular obra 1
+        setObra(obraUsuario)
       } catch (error) {
         console.error('Erro ao carregar dados do usuário:', error)
       }
@@ -83,50 +106,41 @@ export default function PWAPontoPage() {
     }
   }, [user])
 
-  // Obter localização atual
+  // Obter localização atual e validar proximidade com a obra
   const obterLocalizacao = async () => {
     setIsGettingLocation(true)
     setLocationError(null)
+    setValidacaoLocalizacao(null)
     
     try {
-      if (!navigator.geolocation) {
-        throw new Error('Geolocalização não é suportada por este navegador')
-      }
+      const coordenadas = await obterLocalizacaoAtual()
+      setLocation(coordenadas)
 
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000 // 5 minutos
-        })
-      })
+      // Validar proximidade com a obra
+      if (obra) {
+        const validacao = validarProximidadeObra(coordenadas, obra)
+        setValidacaoLocalizacao(validacao)
 
-      const { latitude, longitude } = position.coords
-      setLocation({ lat: latitude, lng: longitude })
-
-      // Tentar obter endereço (opcional)
-      try {
-        const response = await fetch(
-          `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=YOUR_API_KEY&language=pt&pretty=1`
-        )
-        if (response.ok) {
-          const data = await response.json()
-          if (data.results && data.results.length > 0) {
-            setLocation(prev => ({
-              ...prev!,
-              address: data.results[0].formatted
-            }))
-          }
+        if (validacao.valido) {
+          toast({
+            title: "✅ Localização validada!",
+            description: validacao.mensagem,
+            variant: "default"
+          })
+        } else {
+          toast({
+            title: "⚠️ Fora da área permitida",
+            description: validacao.mensagem,
+            variant: "destructive"
+          })
         }
-      } catch (error) {
-        console.log('Erro ao obter endereço:', error)
+      } else {
+        toast({
+          title: "Localização obtida!",
+          description: "Sua localização foi capturada com sucesso",
+          variant: "default"
+        })
       }
-
-      toast({
-        title: "Localização obtida!",
-        description: "Sua localização foi capturada com sucesso",
-        variant: "default"
-      })
     } catch (error: any) {
       console.error('Erro ao obter localização:', error)
       setLocationError(error.message)
@@ -175,6 +189,16 @@ export default function PWAPontoPage() {
   }
 
   const registrarPonto = async (tipo: string) => {
+    // Validar localização antes de registrar
+    if (!validacaoLocalizacao || !validacaoLocalizacao.valido) {
+      toast({
+        title: "⚠️ Validação de localização necessária",
+        description: "Capture sua localização e certifique-se de estar próximo à obra",
+        variant: "destructive"
+      })
+      return
+    }
+
     setIsLoading(true)
     
     try {
@@ -191,6 +215,31 @@ export default function PWAPontoPage() {
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
       const hoje = agora.toISOString().split('T')[0]
+      
+      // Calcular horas extras se for saída
+      if (tipo === 'saida' && registrosHoje.entrada) {
+        const entradaParts = registrosHoje.entrada.split(':')
+        const saidaParts = horaAtual.split(':')
+        
+        const entradaMinutos = parseInt(entradaParts[0]) * 60 + parseInt(entradaParts[1])
+        const saidaMinutos = parseInt(saidaParts[0]) * 60 + parseInt(saidaParts[1])
+        
+        // Considerar intervalo de almoço (1h)
+        const totalMinutos = saidaMinutos - entradaMinutos - 60
+        const horasTrabalhadas = totalMinutos / 60
+        
+        // Jornada normal é 8 horas
+        const horasExtrasCalculadas = Math.max(0, horasTrabalhadas - 8)
+        
+        if (horasExtrasCalculadas > 0) {
+          // Exigir assinatura para horas extras
+          setHorasExtras(horasExtrasCalculadas)
+          setTipoRegistroPendente(tipo)
+          setShowAssinaturaDialog(true)
+          setIsLoading(false)
+          return
+        }
+      }
       
       // Preparar dados para envio
       const dadosRegistro = {
@@ -275,6 +324,103 @@ export default function PWAPontoPage() {
       } else {
         const errorData = await response.json()
         throw new Error(errorData.message || 'Erro ao registrar ponto')
+      }
+    } catch (error: any) {
+      console.error('Erro ao registrar ponto:', error)
+      toast({
+        title: "Erro ao registrar ponto",
+        description: error.message || "Tente novamente em alguns instantes",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Confirmar assinatura e completar registro
+  const handleAssinaturaConfirmada = async (signatureDataUrl: string) => {
+    setAssinaturaDataUrl(signatureDataUrl)
+    setShowAssinaturaDialog(false)
+    
+    if (!tipoRegistroPendente) return
+    
+    await completarRegistroComAssinatura(tipoRegistroPendente, signatureDataUrl)
+  }
+
+  // Completar registro com assinatura de hora extra
+  const completarRegistroComAssinatura = async (tipo: string, assinatura: string) => {
+    setIsLoading(true)
+    
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) return
+
+      const agora = new Date()
+      const horaAtual = agora.toTimeString().slice(0, 5)
+      const hoje = agora.toISOString().split('T')[0]
+      
+      // Preparar dados para envio
+      const dadosRegistro = {
+        funcionario_id: user.id,
+        data: hoje,
+        [tipo.toLowerCase().replace(' ', '_')]: horaAtual,
+        localizacao: location ? `${location.lat}, ${location.lng}` : null,
+        horas_extras: horasExtras,
+        assinatura_funcionario: assinatura,
+        requer_aprovacao: true // Horas extras precisam de aprovação do encarregador
+      }
+
+      // Verificar se já existe registro para hoje
+      const responseExistente = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      let response
+      if (responseExistente.ok) {
+        const dataExistente = await responseExistente.json()
+        if (dataExistente.data && dataExistente.data.length > 0) {
+          // Atualizar registro existente
+          const registroId = dataExistente.data[0].id
+          response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros/${registroId}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                ...dadosRegistro,
+                justificativa_alteracao: `Registro ${tipo} com ${horasExtras.toFixed(1)}h extras via PWA`
+              })
+            }
+          )
+        }
+      }
+
+      if (response && response.ok) {
+        // Atualizar registros localmente
+        setRegistrosHoje(prev => ({
+          ...prev,
+          [tipo.toLowerCase().replace(' ', '_')]: horaAtual
+        }))
+
+        toast({
+          title: "✅ Ponto registrado com hora extra!",
+          description: `${tipo} às ${horaAtual} - ${horasExtras.toFixed(1)}h extras (aguardando aprovação)`,
+          variant: "default"
+        })
+        
+        // Resetar estados
+        setHorasExtras(0)
+        setTipoRegistroPendente(null)
+        setAssinaturaDataUrl(null)
       }
     } catch (error: any) {
       console.error('Erro ao registrar ponto:', error)
@@ -482,52 +628,96 @@ export default function PWAPontoPage() {
         </CardContent>
       </Card>
 
-      {/* Localização */}
-      <Card>
+      {/* Localização e Validação */}
+      <Card className={
+        validacaoLocalizacao?.valido 
+          ? "border-2 border-green-500 bg-green-50" 
+          : validacaoLocalizacao && !validacaoLocalizacao.valido
+          ? "border-2 border-red-500 bg-red-50"
+          : ""
+      }>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Navigation className="w-5 h-5" />
-            Localização
+            Validação de Localização
+            {validacaoLocalizacao?.valido && (
+              <Badge className="bg-green-600 text-white ml-2">
+                <Shield className="w-3 h-3 mr-1" />
+                Validado
+              </Badge>
+            )}
           </CardTitle>
+          {obra && (
+            <CardDescription>
+              Obra: {obra.nome} • Raio: {obra.raio_permitido}m
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {location ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-green-600">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Localização capturada</span>
+            {validacaoLocalizacao ? (
+              <div className="space-y-3">
+                <div className={`flex items-center gap-2 text-sm font-medium ${
+                  validacaoLocalizacao.valido ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  {validacaoLocalizacao.valido ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : (
+                    <MapPinOff className="w-5 h-5" />
+                  )}
+                  <span>{validacaoLocalizacao.mensagem}</span>
                 </div>
-                <div className="text-xs text-gray-600">
-                  <p>Lat: {location.lat.toFixed(6)}</p>
-                  <p>Lng: {location.lng.toFixed(6)}</p>
-                  {location.address && <p>Endereço: {location.address}</p>}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>Localização não capturada</span>
+                <div className="text-xs text-gray-700 bg-white p-3 rounded-md border">
+                  <p className="font-medium mb-1">Detalhes:</p>
+                  <p>• Distância da obra: {formatarDistancia(validacaoLocalizacao.distancia)}</p>
+                  <p>• Lat: {location?.lat.toFixed(6)}</p>
+                  <p>• Lng: {location?.lng.toFixed(6)}</p>
+                  {obra && (
+                    <>
+                      <p className="mt-2 font-medium">Obra: {obra.nome}</p>
+                      <p>• {obra.endereco}</p>
+                    </>
+                  )}
                 </div>
                 <Button
                   onClick={obterLocalizacao}
                   disabled={isGettingLocation}
                   size="sm"
                   variant="outline"
+                  className="w-full"
+                >
+                  {isGettingLocation ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Atualizar Localização
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 p-3 rounded-md">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Validação pendente - Capture sua localização para registrar ponto</span>
+                </div>
+                <Button
+                  onClick={obterLocalizacao}
+                  disabled={isGettingLocation}
+                  size="sm"
+                  className="w-full bg-blue-600 hover:bg-blue-700"
                 >
                   {isGettingLocation ? (
                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <Navigation className="w-4 h-4 mr-2" />
                   )}
-                  {isGettingLocation ? 'Obtendo...' : 'Capturar Localização'}
+                  {isGettingLocation ? 'Obtendo Localização...' : 'Validar Localização'}
                 </Button>
               </div>
             )}
             {locationError && (
-              <div className="text-xs text-red-600">
-                <p>Erro: {locationError}</p>
+              <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                <p><strong>Erro:</strong> {locationError}</p>
               </div>
             )}
           </div>
@@ -575,6 +765,66 @@ export default function PWAPontoPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Diálogo de Assinatura para Hora Extra */}
+      <Dialog open={showAssinaturaDialog} onOpenChange={setShowAssinaturaDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSignature className="w-5 h-5" />
+              Assinatura de Hora Extra
+            </DialogTitle>
+            <DialogDescription>
+              Você registrou <strong className="text-orange-600">{horasExtras.toFixed(1)} hora(s) extra(s)</strong>.
+              <br />
+              Para confirmar, assine digitalmente abaixo. Este registro será enviado para aprovação do encarregador.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Detalhes do Registro */}
+            <Card className="bg-blue-50 border-blue-200">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Funcionário</p>
+                    <p className="font-medium">{user?.nome}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Data</p>
+                    <p className="font-medium">{new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Entrada</p>
+                    <p className="font-medium">{registrosHoje.entrada || '--:--'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Saída</p>
+                    <p className="font-medium">{currentTime ? currentTime.toTimeString().slice(0, 5) : '--:--'}</p>
+                  </div>
+                  <div className="col-span-2 bg-orange-100 p-2 rounded">
+                    <p className="text-gray-600">Horas Extras</p>
+                    <p className="font-bold text-orange-700 text-lg">{horasExtras.toFixed(1)} horas</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Canvas de Assinatura */}
+            <SignaturePad
+              title="Assine Aqui"
+              description="Use seu dedo ou mouse para assinar"
+              onSave={handleAssinaturaConfirmada}
+              onCancel={() => {
+                setShowAssinaturaDialog(false)
+                setTipoRegistroPendente(null)
+                setHorasExtras(0)
+                setIsLoading(false)
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
