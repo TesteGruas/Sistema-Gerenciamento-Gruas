@@ -13,22 +13,11 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  Truck
+  Truck,
+  Building2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-interface Grua {
-  id: string
-  name: string
-  modelo: string
-  capacidade: string
-  status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
-  localizacao?: string
-  current_obra_name?: string
-  horas_operacao?: number
-  ultima_manutencao?: string
-  proxima_manutencao?: string
-}
+import { gruasApi, Grua } from "@/lib/api-gruas"
 
 export default function PWAGruasPage() {
   const [gruas, setGruas] = useState<Grua[]>([])
@@ -69,54 +58,73 @@ export default function PWAGruasPage() {
 
   // Carregar gruas do funcionário
   useEffect(() => {
-    carregarGruas()
-  }, [])
+    if (user?.id || isOnline) {
+      carregarGruas()
+    }
+  }, [user, isOnline])
 
   const carregarGruas = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) {
-        toast({
-          title: "Erro de autenticação",
-          description: "Faça login novamente",
-          variant: "destructive"
-        })
+      // Carregar do cache primeiro se offline
+      if (!isOnline) {
+        const cachedGruas = localStorage.getItem('cached_gruas')
+        
+        if (cachedGruas) {
+          setGruas(JSON.parse(cachedGruas))
+          toast({
+            title: "Modo Offline",
+            description: "Exibindo gruas em cache. Conecte-se para atualizar.",
+            variant: "default"
+          })
+        }
+        
         return
       }
 
-      // Buscar gruas associadas ao funcionário
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/gruas/funcionario/${user?.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      let data: Grua[] = []
 
-      if (response.ok) {
-        const data = await response.json()
-        setGruas(data.data || [])
-      } else {
-        // Se não houver endpoint específico, buscar todas as gruas em obra
-        const responseAll = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/gruas?status=em_obra`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (responseAll.ok) {
-          const dataAll = await responseAll.json()
-          setGruas(dataAll.data || [])
+      // Tentar buscar gruas do funcionário
+      if (user?.id) {
+        try {
+          const response = await gruasApi.listarGruasFuncionario(user.id)
+          data = response.data
+        } catch (error) {
+          console.log('Endpoint de funcionário não disponível, buscando gruas em obra')
         }
       }
-    } catch (error) {
+
+      // Se não encontrou, buscar todas as gruas em obra
+      if (data.length === 0) {
+        const response = await gruasApi.listarGruas({ status: 'em_obra' })
+        data = response.data
+      }
+
+      setGruas(data)
+      
+      // Salvar no cache
+      localStorage.setItem('cached_gruas', JSON.stringify(data))
+
+    } catch (error: any) {
       console.error('Erro ao carregar gruas:', error)
-      toast({
-        title: "Erro ao carregar gruas",
-        description: "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
+      
+      // Tentar carregar do cache em caso de erro
+      const cachedGruas = localStorage.getItem('cached_gruas')
+      
+      if (cachedGruas) {
+        setGruas(JSON.parse(cachedGruas))
+        toast({
+          title: "Erro ao carregar gruas",
+          description: "Exibindo gruas em cache. Verifique sua conexão.",
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Erro ao carregar gruas",
+          description: error.message || "Não foi possível carregar as gruas. Verifique sua conexão.",
+          variant: "destructive"
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -133,9 +141,15 @@ export default function PWAGruasPage() {
     return statusConfig[status as keyof typeof statusConfig] || statusConfig.inativa
   }
 
-  const formatarData = (data: string) => {
+  const formatarData = (data: string | undefined) => {
     if (!data) return 'Não informado'
-    return new Date(data).toLocaleDateString('pt-BR')
+    try {
+      const dataObj = new Date(data)
+      if (isNaN(dataObj.getTime())) return 'Não informado'
+      return dataObj.toLocaleDateString('pt-BR')
+    } catch {
+      return 'Não informado'
+    }
   }
 
   return (
@@ -207,12 +221,12 @@ export default function PWAGruasPage() {
 
             return (
               <Card key={grua.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
+                <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{grua.name}</CardTitle>
-                      <CardDescription>
-                        {grua.modelo} - {grua.capacidade}
+                    <div className="flex-1">
+                      <CardTitle className="text-lg mb-1">{grua.name || `Grua ${grua.id}`}</CardTitle>
+                      <CardDescription className="text-sm">
+                        {grua.modelo || 'Modelo não informado'} • {grua.capacidade || 'Capacidade não informada'}
                       </CardDescription>
                     </div>
                     <Badge className={statusConfig.className}>
@@ -221,42 +235,46 @@ export default function PWAGruasPage() {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {grua.current_obra_name && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>Obra: {grua.current_obra_name}</span>
-                      </div>
-                    )}
-                    
-                    {grua.localizacao && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>Local: {grua.localizacao}</span>
-                      </div>
-                    )}
+                <CardContent className="space-y-3">
+                  {/* Obra/Localização */}
+                  {grua.current_obra_name && (
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Building2 className="w-4 h-4 text-gray-500" />
+                      <span className="font-medium">Obra:</span>
+                      <span>{grua.current_obra_name}</span>
+                    </div>
+                  )}
+                  
+                  {grua.localizacao && (
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <MapPin className="w-4 h-4 text-gray-500" />
+                      <span className="font-medium">Localização:</span>
+                      <span>{grua.localizacao}</span>
+                    </div>
+                  )}
 
-                    {grua.horas_operacao && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Clock className="w-4 h-4" />
-                        <span>Horas de operação: {grua.horas_operacao}h</span>
-                      </div>
-                    )}
+                  {/* Horas de operação */}
+                  {grua.horas_operacao !== undefined && grua.horas_operacao !== null && (
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Clock className="w-4 h-4 text-gray-500" />
+                      <span className="font-medium">Horas de operação:</span>
+                      <span>{grua.horas_operacao}h</span>
+                    </div>
+                  )}
 
-                    <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                      <div>
-                        <p className="text-xs text-gray-500">Última manutenção</p>
-                        <p className="text-sm font-medium">
-                          {formatarData(grua.ultima_manutencao || '')}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Próxima manutenção</p>
-                        <p className="text-sm font-medium">
-                          {formatarData(grua.proxima_manutencao || '')}
-                        </p>
-                      </div>
+                  {/* Manutenções */}
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Última manutenção</p>
+                      <p className="text-sm font-medium text-gray-700">
+                        {formatarData(grua.ultima_manutencao)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Próxima manutenção</p>
+                      <p className="text-sm font-medium text-gray-700">
+                        {formatarData(grua.proxima_manutencao)}
+                      </p>
                     </div>
                   </div>
                 </CardContent>

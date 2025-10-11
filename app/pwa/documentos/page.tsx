@@ -17,23 +17,13 @@ import {
   WifiOff,
   PenTool,
   Trash2,
-  Save
+  Save,
+  RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import * as documentosApi from "@/lib/api-documentos"
 
-interface Documento {
-  id: string
-  nome: string
-  tipo: string
-  status: 'pendente' | 'assinado' | 'rejeitado'
-  data_criacao: string
-  data_vencimento?: string
-  descricao?: string
-  arquivo_url?: string
-  assinatura_url?: string
-  funcionario_id: number
-  funcionario_nome?: string
-}
+type Documento = documentosApi.DocumentoFuncionario
 
 export default function PWADocumentosPage() {
   const [documentos, setDocumentos] = useState<Documento[]>([])
@@ -84,58 +74,103 @@ export default function PWADocumentosPage() {
     }
   }, [user])
 
+  // Sincronizar fila quando ficar online
+  useEffect(() => {
+    if (isOnline && user?.id) {
+      sincronizarFilaDeAssinaturas()
+    }
+  }, [isOnline, user])
+
+  const sincronizarFilaDeAssinaturas = async () => {
+    const fila = JSON.parse(localStorage.getItem('fila_assinaturas_documentos') || '[]')
+    
+    if (fila.length === 0) return
+    
+    console.log(`Sincronizando ${fila.length} assinaturas de documentos pendentes...`)
+    
+    const filaComErros = []
+    
+    for (const item of fila) {
+      try {
+        await documentosApi.assinarDocumento(item.documentoId, {
+          assinatura: item.assinatura,
+          funcionario_id: item.funcionario_id,
+          geoloc: item.geoloc,
+          timestamp: item.timestamp
+        })
+      } catch (error) {
+        console.error(`Erro ao sincronizar assinatura do documento ${item.documentoId}:`, error)
+        filaComErros.push(item)
+      }
+    }
+    
+    // Atualizar fila apenas com itens que falharam
+    localStorage.setItem('fila_assinaturas_documentos', JSON.stringify(filaComErros))
+    
+    if (filaComErros.length === 0) {
+      toast({
+        title: "Sincronização completa",
+        description: `${fila.length} assinaturas sincronizadas com sucesso`,
+        variant: "default"
+      })
+      
+      // Recarregar dados atualizados
+      carregarDocumentos()
+    } else {
+      toast({
+        title: "Sincronização parcial",
+        description: `${fila.length - filaComErros.length} de ${fila.length} assinaturas sincronizadas`,
+        variant: "default"
+      })
+    }
+  }
+
   const carregarDocumentos = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) return
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/documentos/funcionario/${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+      // Carregar do cache primeiro se offline
+      if (!isOnline) {
+        const cachedDocumentos = localStorage.getItem('cached_documentos_funcionario')
+        
+        if (cachedDocumentos) {
+          setDocumentos(JSON.parse(cachedDocumentos))
+          toast({
+            title: "Modo Offline",
+            description: "Exibindo documentos em cache. Conecte-se para atualizar.",
+            variant: "default"
+          })
         }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        setDocumentos(data.data || [])
-      } else {
-        // Simular documentos para demonstração
-        setDocumentos([
-          {
-            id: '1',
-            nome: 'Termo de Responsabilidade',
-            tipo: 'Contrato',
-            status: 'pendente',
-            data_criacao: new Date().toISOString(),
-            data_vencimento: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            descricao: 'Termo de responsabilidade para operação de gruas',
-            funcionario_id: user.id,
-            funcionario_nome: user.nome
-          },
-          {
-            id: '2',
-            nome: 'Checklist de Segurança',
-            tipo: 'Formulário',
-            status: 'assinado',
-            data_criacao: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            descricao: 'Checklist de segurança para operação',
-            funcionario_id: user.id,
-            funcionario_nome: user.nome
-          }
-        ])
+        
+        return
       }
-    } catch (error) {
+
+      // Buscar documentos do funcionário
+      const data = await documentosApi.getDocumentosFuncionario(user.id)
+      setDocumentos(data)
+      
+      // Salvar no cache
+      localStorage.setItem('cached_documentos_funcionario', JSON.stringify(data))
+
+    } catch (error: any) {
       console.error('Erro ao carregar documentos:', error)
-      toast({
-        title: "Erro ao carregar documentos",
-        description: "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
+      
+      // Tentar carregar do cache em caso de erro
+      const cachedDocumentos = localStorage.getItem('cached_documentos_funcionario')
+      
+      if (cachedDocumentos) {
+        setDocumentos(JSON.parse(cachedDocumentos))
+        toast({
+          title: "Erro ao carregar documentos",
+          description: "Exibindo documentos em cache. Verifique sua conexão.",
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Erro ao carregar documentos",
+          description: error.message || "Não foi possível carregar os documentos. Verifique sua conexão.",
+          variant: "destructive"
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -212,51 +247,88 @@ export default function PWADocumentosPage() {
 
     setIsAssinando(true)
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) {
-        toast({
-          title: "Erro de autenticação",
-          description: "Faça login novamente",
-          variant: "destructive"
-        })
-        return
+      // Capturar geolocalização se disponível
+      let geoloc: string | undefined
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+          })
+          geoloc = `${position.coords.latitude}, ${position.coords.longitude}`
+        } catch (error) {
+          console.warn('Não foi possível obter geolocalização:', error)
+        }
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/documentos/${documentoSelecionado.id}/assinar`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            assinatura: signature,
-            funcionario_id: user.id
-          })
-        }
-      )
-
-      if (response.ok) {
-        toast({
-          title: "Documento assinado!",
-          description: "O documento foi assinado com sucesso",
-          variant: "default"
+      // Se offline, adicionar à fila de sincronização
+      if (!isOnline) {
+        const filaAssinaturas = JSON.parse(localStorage.getItem('fila_assinaturas_documentos') || '[]')
+        filaAssinaturas.push({
+          documentoId: documentoSelecionado.id,
+          assinatura: signature,
+          funcionario_id: user.id,
+          geoloc,
+          timestamp: new Date().toISOString()
         })
+        localStorage.setItem('fila_assinaturas_documentos', JSON.stringify(filaAssinaturas))
         
-        // Atualizar lista de documentos
+        // Atualizar UI localmente
         setDocumentos(prev => prev.map(doc => 
           doc.id === documentoSelecionado.id 
-            ? { ...doc, status: 'assinado', assinatura_url: signature }
+            ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
             : doc
         ))
         
+        // Atualizar cache
+        const documentosAtualizados = documentos.map(doc => 
+          doc.id === documentoSelecionado.id 
+            ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
+            : doc
+        )
+        localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosAtualizados))
+        
+        toast({
+          title: "Assinatura pendente",
+          description: "A assinatura será sincronizada quando você estiver online",
+          variant: "default"
+        })
+        
         setDocumentoSelecionado(null)
         setSignature(null)
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Erro ao assinar documento')
+        return
       }
+
+      await documentosApi.assinarDocumento(documentoSelecionado.id, {
+        assinatura: signature,
+        funcionario_id: user.id,
+        geoloc,
+        timestamp: new Date().toISOString()
+      })
+      
+      toast({
+        title: "Documento assinado!",
+        description: "O documento foi assinado com sucesso",
+        variant: "default"
+      })
+      
+      // Atualizar lista de documentos
+      setDocumentos(prev => prev.map(doc => 
+        doc.id === documentoSelecionado.id 
+          ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
+          : doc
+      ))
+      
+      // Atualizar cache
+      const documentosAtualizados = documentos.map(doc => 
+        doc.id === documentoSelecionado.id 
+          ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
+          : doc
+      )
+      localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosAtualizados))
+      
+      setDocumentoSelecionado(null)
+      setSignature(null)
+      
     } catch (error: any) {
       console.error('Erro ao assinar documento:', error)
       toast({
@@ -288,6 +360,33 @@ export default function PWADocumentosPage() {
     return new Date(dataVencimento) < new Date()
   }
 
+  const handleDownload = async (documento: Documento) => {
+    try {
+      const blob = await documentosApi.downloadDocumento(documento.id)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = documento.nome || 'documento.pdf'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Download iniciado",
+        description: `Baixando ${documento.nome}`,
+        variant: "default"
+      })
+    } catch (error: any) {
+      console.error('Erro ao baixar documento:', error)
+      toast({
+        title: "Erro ao baixar documento",
+        description: error.message || "Tente novamente",
+        variant: "destructive"
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -305,6 +404,14 @@ export default function PWADocumentosPage() {
           <span className="text-sm text-gray-600">
             {isOnline ? "Online" : "Offline"}
           </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={carregarDocumentos}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
       </div>
 
@@ -376,16 +483,15 @@ export default function PWADocumentosPage() {
                         </Button>
                       )}
                       
-                      {documento.arquivo_url && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open(documento.arquivo_url, '_blank')}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          Baixar
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(documento)}
+                        disabled={!isOnline}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Baixar
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

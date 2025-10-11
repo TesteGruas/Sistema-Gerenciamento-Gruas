@@ -29,7 +29,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { apiConfiguracoes, ConfiguracaoGrua } from "@/lib/api-configuracoes"
 import { apiComponentes, ComponenteGrua } from "@/lib/api-componentes"
-import apiGruas from "@/lib/api-gruas"
+import { gruasApi } from "@/lib/api-gruas"
 
 export default function ConfiguracoesGruaPage() {
   const params = useParams()
@@ -72,7 +72,7 @@ export default function ConfiguracoesGruaPage() {
       setLoading(true)
       
       // Carregar informações da grua
-      const gruaResponse = await apiGruas.obterGrua(gruaId)
+      const gruaResponse = await gruasApi.obterGrua(gruaId)
       setGruaInfo(gruaResponse.data)
       
       // Carregar configurações da grua

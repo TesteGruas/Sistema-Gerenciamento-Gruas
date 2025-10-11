@@ -4,6 +4,7 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { UserProvider } from '@/lib/user-context'
+import { ServiceWorkerProvider } from '@/components/service-worker-provider'
 
 export const metadata: Metadata = {
   title: 'Sistema IRBANA',
@@ -40,28 +41,13 @@ html {
   --font-mono: ${GeistMono.variable};
 }
         `}</style>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js')
-                    .then(function(registration) {
-                      console.log('SW registered: ', registration);
-                    })
-                    .catch(function(registrationError) {
-                      console.log('SW registration failed: ', registrationError);
-                    });
-                });
-              }
-            `,
-          }}
-        />
       </head>
       <body>
-        <UserProvider>
-          {children}
-        </UserProvider>
+        <ServiceWorkerProvider>
+          <UserProvider>
+            {children}
+          </UserProvider>
+        </ServiceWorkerProvider>
         <Toaster />
       </body>
     </html>

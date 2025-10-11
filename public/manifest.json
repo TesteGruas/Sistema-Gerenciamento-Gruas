@@ -1,33 +1,217 @@
 {
-  "name": "Sistema IRBANA - PWA",
-  "short_name": "IRBANA PWA",
-  "description": "Sistema de Gestão de Ponto e Assinatura - IRBANA",
+  "name": "Sistema IRBANA - Gestão Empresarial",
+  "short_name": "IRBANA",
+  "description": "Sistema completo de gestão de ponto eletrônico, assinatura de documentos, gestão de gruas e equipes para a IRBANA",
   "start_url": "/pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#ffffff",
   "theme_color": "#3b82f6",
   "orientation": "portrait-primary",
+  "dir": "ltr",
+  "lang": "pt-BR",
+  "categories": ["business", "productivity", "utilities"],
+  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/placeholder-logo.png",
-      "sizes": "192x192",
+      "src": "/icon-72x72.png",
+      "sizes": "72x72",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/placeholder-logo.png",
+      "src": "/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Registrar Ponto",
+      "short_name": "Ponto",
+      "description": "Registrar entrada, saída ou intervalo de trabalho",
+      "url": "/pwa/ponto",
+      "icons": [
+        {
+          "src": "/shortcut-ponto.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Documentos",
+      "short_name": "Docs",
+      "description": "Visualizar e assinar documentos pendentes",
+      "url": "/pwa/documentos",
+      "icons": [
+        {
+          "src": "/shortcut-docs.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Assinaturas",
+      "short_name": "Assinar",
+      "description": "Assinar documentos de obras pendentes",
+      "url": "/pwa/assinatura",
+      "icons": [
+        {
+          "src": "/shortcut-sign.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Notificações",
+      "short_name": "Avisos",
+      "description": "Ver notificações e alertas importantes",
+      "url": "/pwa/notificacoes",
+      "icons": [
+        {
+          "src": "/shortcut-notif.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
   "screenshots": [
     {
-      "src": "/placeholder.jpg",
-      "sizes": "1280x720",
-      "type": "image/jpeg",
-      "form_factor": "wide"
+      "src": "/screenshot-mobile-1.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "platform": "narrow",
+      "label": "Tela de login do IRBANA PWA"
+    },
+    {
+      "src": "/screenshot-mobile-2.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "platform": "narrow",
+      "label": "Registro de ponto eletrônico"
+    },
+    {
+      "src": "/screenshot-mobile-3.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "platform": "narrow",
+      "label": "Assinatura de documentos"
+    },
+    {
+      "src": "/screenshot-desktop-1.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "platform": "wide",
+      "label": "Dashboard principal IRBANA"
+    },
+    {
+      "src": "/screenshot-desktop-2.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "platform": "wide",
+      "label": "Gestão de documentos e assinaturas"
     }
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://irbana.com/manifest.json"
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+irbana",
+      "url": "/pwa?action=%s"
+    }
+  ],
+  "share_target": {
+    "action": "/pwa/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": ["image/*", "application/pdf"]
+        }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/pwa/documentos",
+      "accept": {
+        "application/pdf": [".pdf"],
+        "image/*": [".jpg", ".jpeg", ".png", ".webp"]
+      }
+    }
+  ],
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "handle_links": "preferred",
+  "scope_extensions": [
+    { "origin": "*.irbana.com" }
   ]
 }

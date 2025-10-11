@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiComponentes, ComponenteGrua, MovimentacaoComponente } from "@/lib/api-componentes"
-import apiGruas from "@/lib/api-gruas"
+import { gruasApi } from "@/lib/api-gruas"
 
 interface ConfiguracaoGrua {
   id: string
@@ -119,7 +119,7 @@ export default function ComponentesGruaPage() {
       setLoading(true)
       
       // Carregar informações da grua
-      const gruaResponse = await apiGruas.obterGrua(gruaId)
+      const gruaResponse = await gruasApi.obterGrua(gruaId)
       setGruaInfo(gruaResponse.data)
       
       // Carregar componentes da grua com filtros aplicados

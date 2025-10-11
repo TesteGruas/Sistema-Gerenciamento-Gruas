@@ -35,8 +35,26 @@ import {
   ChevronsRight
 } from "lucide-react"
 import { mockObras, mockUsers } from "@/lib/mock-data"
-import { gruasApi, converterGruaBackendParaFrontend, converterGruaFrontendParaBackend, GruaBackend } from "@/lib/api-gruas"
+import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
 import { ExportButton } from "@/components/export-button"
+
+// Interface para o formato da grua usado no componente
+interface GruaFrontend extends GruaBackend {
+  createdAt?: string
+  observacoes?: string
+}
+
+// Interface para a resposta da API com paginação
+interface GruasApiResponse {
+  success: boolean
+  data: any[]
+  pagination?: {
+    total: number
+    pages: number
+    page: number
+    limit: number
+  }
+}
 
 export default function GruasPage() {
   const { toast } = useToast()
@@ -45,12 +63,17 @@ export default function GruasPage() {
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedObra, setSelectedObra] = useState("all")
   const [selectedTipo, setSelectedTipo] = useState("all")
-  const [selectedGrua, setSelectedGrua] = useState<any>(null)
+  
+  // Verificação de segurança para API
+  if (!gruasApi) {
+    console.error('gruasApi não está definido!')
+  }
+  const [selectedGrua, setSelectedGrua] = useState<GruaFrontend | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [gruaToDelete, setGruaToDelete] = useState<any>(null)
-  const [gruaToEdit, setGruaToEdit] = useState<any>(null)
+  const [gruaToDelete, setGruaToDelete] = useState<GruaFrontend | null>(null)
+  const [gruaToEdit, setGruaToEdit] = useState<GruaFrontend | null>(null)
   
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
@@ -58,7 +81,17 @@ export default function GruasPage() {
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   
-  const [gruaFormData, setGruaFormData] = useState({
+  const [gruaFormData, setGruaFormData] = useState<{
+    name: string
+    model: string
+    fabricante: string
+    capacity: string
+    status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
+    tipo: string
+    obraId: string
+    observacoes: string
+    createdAt: string
+  }>({
     name: '',
     model: '',
     fabricante: '',
@@ -71,12 +104,33 @@ export default function GruasPage() {
   })
   
   // Estados para API
-  const [gruas, setGruas] = useState<any[]>([])
+  const [gruas, setGruas] = useState<GruaFrontend[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Função auxiliar para converter dados do backend para o formato do componente
+  const converterGruaBackend = (grua: any): GruaFrontend => {
+    return {
+      id: grua.id,
+      name: grua.name || grua.nome,
+      model: grua.model || grua.modelo,
+      modelo: grua.modelo || grua.model,
+      fabricante: grua.fabricante,
+      tipo: grua.tipo,
+      capacity: grua.capacity || grua.capacidade,
+      capacidade: grua.capacidade || grua.capacity,
+      status: grua.status || 'disponivel',
+      currentObraId: grua.obra_atual_id || grua.currentObraId || grua.obraId,
+      currentObraName: grua.obra_atual_nome || grua.currentObraName,
+      observacoes: grua.observacoes,
+      createdAt: grua.created_at || grua.createdAt,
+      created_at: grua.created_at || grua.createdAt,
+      updated_at: grua.updated_at || grua.updatedAt,
+    }
+  }
 
   // Função para carregar gruas da API
   const carregarGruas = async () => {
@@ -103,10 +157,10 @@ export default function GruasPage() {
       
       console.log('Parâmetros enviados para API:', params)
       
-      const response = await gruasApi.listarGruas(params)
+      const response = await gruasApi.listarGruas(params) as unknown as GruasApiResponse
       
       if (response.success) {
-        const gruasConvertidas = response.data.map(converterGruaBackendParaFrontend)
+        const gruasConvertidas = response.data.map(converterGruaBackend)
         setGruas(gruasConvertidas)
         
         // Atualizar informações de paginação se disponíveis na resposta
@@ -177,27 +231,43 @@ export default function GruasPage() {
     }
   }
 
-  const handleViewDetails = (grua: any) => {
+  const handleViewDetails = (grua: GruaFrontend) => {
     setSelectedGrua(grua)
   }
 
-  const handleEditGrua = (grua: any) => {
+  const handleEditGrua = (grua: GruaFrontend) => {
     setGruaToEdit(grua)
+    
+    // Normalizar status para os valores aceitos
+    const normalizarStatus = (status: any): 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' => {
+      const statusMap: Record<string, 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'> = {
+        'disponivel': 'disponivel',
+        'Disponível': 'disponivel',
+        'em_obra': 'em_obra',
+        'Operacional': 'em_obra',
+        'manutencao': 'manutencao',
+        'Manutenção': 'manutencao',
+        'inativa': 'inativa',
+        'Vendida': 'inativa',
+      }
+      return statusMap[status] || 'disponivel'
+    }
+    
     setGruaFormData({
       name: grua.name || '',
-      model: grua.model || '',
+      model: grua.model || grua.modelo || '',
       fabricante: grua.fabricante || '',
-      capacity: grua.capacity || '',
-      status: grua.status || 'disponivel',
+      capacity: grua.capacity || grua.capacidade || '',
+      status: normalizarStatus(grua.status),
       tipo: grua.tipo || '',
-      obraId: grua.currentObraId || '',
+      obraId: grua.currentObraId?.toString() || '',
       observacoes: grua.observacoes || '',
-      createdAt: grua.createdAt || ''
+      createdAt: grua.createdAt || grua.created_at || ''
     })
     setIsEditDialogOpen(true)
   }
 
-  const handleDeleteGrua = (grua: any) => {
+  const handleDeleteGrua = (grua: GruaFrontend) => {
     setGruaToDelete(grua)
     setIsDeleteDialogOpen(true)
   }
@@ -205,8 +275,11 @@ export default function GruasPage() {
   const confirmDeleteGrua = async () => {
     if (!gruaToDelete) return
 
+    // Normalizar o status para comparação
+    const statusNormalizado = gruaToDelete.status?.toLowerCase().replace(/\s/g, '_')
+    
     // Verificar se a grua está em obra
-    if (gruaToDelete.status === 'em_obra') {
+    if (statusNormalizado === 'em_obra' || gruaToDelete.status === 'Operacional') {
       toast({
         title: "Informação",
         description: `Não é possível excluir a grua "${gruaToDelete.name}" pois ela está atualmente em obra. Remova-a da obra primeiro.`,
@@ -219,7 +292,7 @@ export default function GruasPage() {
     try {
       setDeleting(true)
       
-      const response = await gruasApi.excluirGrua(gruaToDelete.id)
+      const response = await gruasApi.deletarGrua(gruaToDelete.id)
       
       if (response.success) {
         // Recarregar a lista de gruas
@@ -256,8 +329,19 @@ export default function GruasPage() {
     try {
       setCreating(true)
       
-      // Converter dados do frontend para o formato do backend
-      const gruaData = converterGruaFrontendParaBackend(gruaFormData)
+      // Converter dados do formulário para o formato do backend
+      const gruaData: Partial<GruaBackend> = {
+        name: gruaFormData.name,
+        model: gruaFormData.model,
+        modelo: gruaFormData.model,
+        fabricante: gruaFormData.fabricante,
+        capacity: gruaFormData.capacity,
+        capacidade: gruaFormData.capacity,
+        status: gruaFormData.status,
+        tipo: gruaFormData.tipo,
+        currentObraId: gruaFormData.obraId || undefined,
+        obra_atual_id: gruaFormData.obraId ? Number(gruaFormData.obraId) : undefined,
+      }
       
       const response = await gruasApi.criarGrua(gruaData)
       
@@ -311,8 +395,19 @@ export default function GruasPage() {
     try {
       setUpdating(true)
       
-      // Converter dados do frontend para o formato do backend
-      const gruaData = converterGruaFrontendParaBackend(gruaFormData)
+      // Converter dados do formulário para o formato do backend
+      const gruaData: Partial<GruaBackend> = {
+        name: gruaFormData.name,
+        model: gruaFormData.model,
+        modelo: gruaFormData.model,
+        fabricante: gruaFormData.fabricante,
+        capacity: gruaFormData.capacity,
+        capacidade: gruaFormData.capacity,
+        status: gruaFormData.status,
+        tipo: gruaFormData.tipo,
+        currentObraId: gruaFormData.obraId || undefined,
+        obra_atual_id: gruaFormData.obraId ? Number(gruaFormData.obraId) : undefined,
+      }
       
       const response = await gruasApi.atualizarGrua(gruaToEdit.id, gruaData)
       
@@ -555,12 +650,14 @@ export default function GruasPage() {
                     </div>
                   )}
                   
-                  <div className="text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>Criada em: {new Date(grua.createdAt).toLocaleDateString('pt-BR')}</span>
+                  {grua.createdAt && (
+                    <div className="text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>Criada em: {new Date(grua.createdAt).toLocaleDateString('pt-BR')}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                   <div className="space-y-2">
                     {/* Ações Principais */}
@@ -803,7 +900,7 @@ export default function GruasPage() {
                 <Label htmlFor="status">Status *</Label>
                 <Select
                   value={gruaFormData.status}
-                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value })}
+                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value as 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -953,7 +1050,7 @@ export default function GruasPage() {
                 <Label htmlFor="edit-status">Status *</Label>
                 <Select
                   value={gruaFormData.status}
-                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value })}
+                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value as 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' })}
                 >
                   <SelectTrigger>
                     <SelectValue />

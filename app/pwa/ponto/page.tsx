@@ -20,6 +20,7 @@ import {
   RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import * as pontoApi from "@/lib/api-ponto-eletronico"
 
 export default function PWAPontoPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
@@ -83,6 +84,58 @@ export default function PWAPontoPage() {
     }
   }, [user])
 
+  // Sincronizar fila quando ficar online
+  useEffect(() => {
+    if (isOnline && user?.id) {
+      sincronizarFilaDeRegistros()
+    }
+  }, [isOnline, user])
+
+  const sincronizarFilaDeRegistros = async () => {
+    const fila = JSON.parse(localStorage.getItem('fila_registros_ponto') || '[]')
+    
+    if (fila.length === 0) return
+    
+    console.log(`Sincronizando ${fila.length} registros de ponto pendentes...`)
+    
+    const filaComErros = []
+    
+    for (const item of fila) {
+      try {
+        if (item.registroId) {
+          // Atualizar registro existente
+          await pontoApi.atualizarRegistro(item.registroId, item.dados)
+        } else {
+          // Criar novo registro
+          await pontoApi.criarRegistro(item.dados)
+        }
+      } catch (error) {
+        console.error(`Erro ao sincronizar registro de ponto:`, error)
+        filaComErros.push(item)
+      }
+    }
+    
+    // Atualizar fila apenas com itens que falharam
+    localStorage.setItem('fila_registros_ponto', JSON.stringify(filaComErros))
+    
+    if (filaComErros.length === 0) {
+      toast({
+        title: "Sincronização completa",
+        description: `${fila.length} registros sincronizados com sucesso`,
+        variant: "default"
+      })
+      
+      // Recarregar dados atualizados
+      carregarRegistrosHoje()
+    } else {
+      toast({
+        title: "Sincronização parcial",
+        description: `${fila.length - filaComErros.length} de ${fila.length} registros sincronizados`,
+        variant: "default"
+      })
+    }
+  }
+
   // Obter localização atual
   const obterLocalizacao = async () => {
     setIsGettingLocation(true)
@@ -143,34 +196,67 @@ export default function PWAPontoPage() {
   // Carregar registros do dia
   const carregarRegistrosHoje = async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) return
-
-      const hoje = new Date().toISOString().split('T')[0]
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.data && data.data.length > 0) {
-          const registro = data.data[0]
-          setRegistrosHoje({
-            entrada: registro.entrada,
-            saida_almoco: registro.saida_almoco,
-            volta_almoco: registro.volta_almoco,
-            saida: registro.saida
+      // Carregar do cache primeiro se offline
+      if (!isOnline) {
+        const cachedRegistros = localStorage.getItem('cached_registros_ponto_hoje')
+        
+        if (cachedRegistros) {
+          const registros = JSON.parse(cachedRegistros)
+          setRegistrosHoje(registros)
+          toast({
+            title: "Modo Offline",
+            description: "Exibindo registros em cache.",
+            variant: "default"
           })
         }
+        
+        return
       }
-    } catch (error) {
+
+      const hoje = new Date().toISOString().split('T')[0]
+      const data = await pontoApi.getRegistros({
+        funcionario_id: user.id,
+        data_inicio: hoje,
+        data_fim: hoje
+      })
+
+      if (data && data.length > 0) {
+        const registro = data[0]
+        const registros = {
+          entrada: registro.entrada || null,
+          saida_almoco: registro.saida_almoco || null,
+          volta_almoco: registro.volta_almoco || null,
+          saida: registro.saida || null
+        }
+        setRegistrosHoje(registros)
+        
+        // Salvar no cache
+        localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(registros))
+      } else {
+        // Sem registros hoje
+        const registrosVazios = {
+          entrada: null,
+          saida_almoco: null,
+          volta_almoco: null,
+          saida: null
+        }
+        setRegistrosHoje(registrosVazios)
+        localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(registrosVazios))
+      }
+    } catch (error: any) {
       console.error('Erro ao carregar registros:', error)
+      
+      // Tentar carregar do cache em caso de erro
+      const cachedRegistros = localStorage.getItem('cached_registros_ponto_hoje')
+      
+      if (cachedRegistros) {
+        setRegistrosHoje(JSON.parse(cachedRegistros))
+        toast({
+          title: "Erro ao carregar registros",
+          description: "Exibindo registros em cache.",
+          variant: "destructive"
+        })
+      }
     }
   }
 
@@ -178,104 +264,109 @@ export default function PWAPontoPage() {
     setIsLoading(true)
     
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) {
-        toast({
-          title: "Erro de autenticação",
-          description: "Faça login novamente",
-          variant: "destructive"
-        })
-        return
-      }
-
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
       const hoje = agora.toISOString().split('T')[0]
       
       // Preparar dados para envio
-      const dadosRegistro = {
+      const campoTipo = tipo.toLowerCase().replace(' ', '_')
+      const dadosRegistro: any = {
         funcionario_id: user.id,
         data: hoje,
-        [tipo.toLowerCase().replace(' ', '_')]: horaAtual,
-        localizacao: location ? `${location.lat}, ${location.lng}` : null
+        [campoTipo]: horaAtual,
+        localizacao: location ? `${location.lat}, ${location.lng}` : undefined
+      }
+
+      // Se offline, adicionar à fila de sincronização
+      if (!isOnline) {
+        const filaRegistros = JSON.parse(localStorage.getItem('fila_registros_ponto') || '[]')
+        
+        // Verificar se já existe registro do dia no cache
+        const cachedRegistrosStr = localStorage.getItem('cached_registros_ponto_hoje')
+        let registroExistenteId = null
+        
+        if (cachedRegistrosStr) {
+          const cachedData = JSON.parse(cachedRegistrosStr)
+          // Se tem algum registro, provavelmente temos um ID
+          if (cachedData.entrada || cachedData.saida_almoco || cachedData.volta_almoco || cachedData.saida) {
+            const registrosCache = JSON.parse(localStorage.getItem('registros_ponto_completo') || '[]')
+            const registroHoje = registrosCache.find((r: any) => r.data === hoje && r.funcionario_id === user.id)
+            if (registroHoje) {
+              registroExistenteId = registroHoje.id
+            }
+          }
+        }
+        
+        filaRegistros.push({
+          registroId: registroExistenteId,
+          dados: {
+            ...dadosRegistro,
+            justificativa_alteracao: registroExistenteId ? `Registro ${tipo} via PWA - Sincronizado` : undefined
+          },
+          timestamp: new Date().toISOString()
+        })
+        localStorage.setItem('fila_registros_ponto', JSON.stringify(filaRegistros))
+        
+        // Atualizar UI localmente
+        setRegistrosHoje(prev => ({
+          ...prev,
+          [campoTipo]: horaAtual
+        }))
+        
+        // Atualizar cache
+        const novosRegistros = {
+          ...registrosHoje,
+          [campoTipo]: horaAtual
+        }
+        localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(novosRegistros))
+        
+        toast({
+          title: "Ponto registrado offline",
+          description: `${tipo} será sincronizada quando você estiver online`,
+          variant: "default"
+        })
+        
+        return
       }
 
       // Verificar se já existe registro para hoje
-      const responseExistente = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
+      const registrosExistentes = await pontoApi.getRegistros({
+        funcionario_id: user.id,
+        data_inicio: hoje,
+        data_fim: hoje
+      })
 
-      let response
-      if (responseExistente.ok) {
-        const dataExistente = await responseExistente.json()
-        if (dataExistente.data && dataExistente.data.length > 0) {
-          // Atualizar registro existente
-          const registroId = dataExistente.data[0].id
-          response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros/${registroId}`,
-            {
-              method: 'PUT',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                ...dadosRegistro,
-                justificativa_alteracao: `Registro ${tipo} via PWA`
-              })
-            }
-          )
-        } else {
-          // Criar novo registro
-          response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(dadosRegistro)
-            }
-          )
-        }
-      } else {
-        // Criar novo registro
-        response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(dadosRegistro)
-          }
-        )
-      }
-
-      if (response.ok) {
-        // Atualizar registros localmente
-        setRegistrosHoje(prev => ({
-          ...prev,
-          [tipo.toLowerCase().replace(' ', '_')]: horaAtual
-        }))
-
-        toast({
-          title: "Ponto registrado!",
-          description: `${tipo} registrada às ${horaAtual}`,
-          variant: "default"
+      if (registrosExistentes && registrosExistentes.length > 0) {
+        // Atualizar registro existente
+        const registroId = registrosExistentes[0].id!
+        await pontoApi.atualizarRegistro(registroId, {
+          ...dadosRegistro,
+          justificativa_alteracao: `Registro ${tipo} via PWA`
         })
       } else {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Erro ao registrar ponto')
+        // Criar novo registro
+        await pontoApi.criarRegistro(dadosRegistro)
       }
+
+      // Atualizar registros localmente
+      setRegistrosHoje(prev => ({
+        ...prev,
+        [campoTipo]: horaAtual
+      }))
+      
+      // Atualizar cache
+      const novosRegistros = {
+        ...registrosHoje,
+        [campoTipo]: horaAtual
+      }
+      localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(novosRegistros))
+
+      toast({
+        title: "Ponto registrado!",
+        description: `${tipo} registrada às ${horaAtual}`,
+        variant: "default"
+      })
+      
     } catch (error: any) {
       console.error('Erro ao registrar ponto:', error)
       toast({

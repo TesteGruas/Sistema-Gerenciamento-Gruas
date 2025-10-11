@@ -1,290 +1,314 @@
-// API client para gruas
-import { buildApiUrl, API_ENDPOINTS } from './api'
+import { api } from './api'
 
-// Interfaces baseadas no backend atualizado
+// ============================================
+// INTERFACES E TIPOS
+// ============================================
+
+export interface Grua {
+  id: string | number;
+  name: string;
+  modelo: string;
+  capacidade: string;
+  status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa';
+  localizacao?: string;
+  current_obra_name?: string;
+  horas_operacao?: number;
+  ultima_manutencao?: string;
+  proxima_manutencao?: string;
+  obra_id?: number;
+}
+
 export interface GruaBackend {
-  id: string
-  name: string
-  modelo: string
-  fabricante?: string
-  tipo?: string
-  capacidade: string
-  capacidade_ponta?: string
-  lanca?: string
-  altura_trabalho?: string
-  ano?: number
-  status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
-  localizacao?: string
-  horas_operacao?: number
-  valor_locacao?: number
-  valor_real?: number
-  valor_operacao?: number
-  valor_sinaleiro?: number
-  valor_manutencao?: number
-  ultima_manutencao?: string
-  proxima_manutencao?: string
-  observacoes?: string
-  created_at: string
-  updated_at: string
-  current_obra_id?: number
-  current_obra_name?: string
-  // Campos de compatibilidade com frontend
-  model?: string
-  capacity?: string
-  currentObraId?: string
-  currentObraName?: string
+  id: string | number;
+  name: string;
+  modelo: string;
+  model?: string;
+  fabricante?: string;
+  tipo?: string;
+  capacidade: string;
+  capacity?: string;
+  status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' | 'Disponível' | 'Operacional' | 'Manutenção' | 'Vendida';
+  localizacao?: string;
+  obra_atual_id?: number;
+  obra_atual_nome?: string;
+  currentObraId?: string | number;
+  currentObraName?: string;
+  horas_operacao?: number;
+  horasOperacao?: number;
+  ultima_manutencao?: string;
+  ultimaManutencao?: string;
+  proxima_manutencao?: string;
+  proximaManutencao?: string;
+  created_at?: string;
+  updated_at?: string;
+  ano?: number;
+  altura_trabalho?: string;
+  alturaTrabalho?: string;
+  capacidade_ponta?: string;
+  capacidadePonta?: string;
+  lanca?: string;
+  valor_locacao?: number;
+  valorLocacao?: number;
+  valor_operacao?: number;
+  valorOperacao?: number;
+  valor_sinaleiro?: number;
+  valorSinaleiro?: number;
+  valor_manutencao?: number;
+  valorManutencao?: number;
 }
 
-export interface GruaCreateData {
-  name: string
-  model: string
-  capacity: string
-  status?: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
-  obraId?: string
-  observacoes?: string
-  fabricante?: string
-  tipo?: string
-  capacidade_ponta?: string
-  lanca?: string
-  altura_trabalho?: string
-  ano?: number
-  localizacao?: string
-  horas_operacao?: number
-  valor_locacao?: number
-  valor_real?: number
-  valor_operacao?: number
-  valor_sinaleiro?: number
-  valor_manutencao?: number
-  ultima_manutencao?: string
-  proxima_manutencao?: string
+export interface GruaFiltros {
+  status?: string;
+  obra_id?: number;
+  funcionario_id?: number;
+  page?: number;
+  limit?: number;
 }
 
-export interface GruaUpdateData {
-  name?: string
-  model?: string
-  capacity?: string
-  status?: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
-  obraId?: string
-  observacoes?: string
-  fabricante?: string
-  tipo?: string
-  capacidade_ponta?: string
-  lanca?: string
-  altura_trabalho?: string
-  ano?: number
-  localizacao?: string
-  horas_operacao?: number
-  valor_locacao?: number
-  valor_real?: number
-  valor_operacao?: number
-  valor_sinaleiro?: number
-  valor_manutencao?: number
-  ultima_manutencao?: string
-  proxima_manutencao?: string
-}
+// ============================================
+// FUNÇÕES DE CONVERSÃO
+// ============================================
 
-export interface GruasResponse {
-  success: boolean
-  data: GruaBackend[]
-  pagination?: {
-    page: number
-    limit: number
-    total: number
-    pages: number
-  }
-}
-
-export interface GruaResponse {
-  success: boolean
-  data: GruaBackend
-}
-
-// Função para obter token de autenticação
-const getAuthToken = (): string | null => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('access_token')
-  }
-  return null
-}
-
-// Função para fazer requisições autenticadas
-const apiRequest = async (url: string, options: RequestInit = {}) => {
-  const token = getAuthToken()
-  
-  if (!token) {
-    console.warn('Token não encontrado, redirecionando para login...')
-    if (typeof window !== 'undefined') {
-      window.location.href = '/'
-    }
-    throw new Error('Token de acesso requerido')
-  }
-  
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
+/**
+ * Converter grua do formato backend para frontend
+ * Lida com ambos os formatos: camelCase e snake_case
+ */
+export function converterGruaBackendParaFrontend(grua: GruaBackend): Grua {
+  // Normalizar status
+  let statusNormalizado: Grua['status'] = 'disponivel';
+  if (grua.status) {
+    const statusMap: Record<string, Grua['status']> = {
+      'disponivel': 'disponivel',
+      'Disponível': 'disponivel',
+      'em_obra': 'em_obra',
+      'Operacional': 'em_obra',
+      'manutencao': 'manutencao',
+      'Manutenção': 'manutencao',
+      'inativa': 'inativa',
+      'Vendida': 'inativa',
+    };
+    statusNormalizado = statusMap[grua.status] || 'disponivel';
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    
-    // Tratar erro 403 com token inválido ou expirado
-    if (response.status === 403 && errorData.error === "Token inválido ou expirado" && errorData.code === "INVALID_TOKEN") {
-      console.warn('Token inválido ou expirado, removendo dados do localStorage e redirecionando para login...')
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('user_data')
-      localStorage.removeItem('refresh_token')
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
-      }
-    }
-    // Tratar outros erros 401/403
-    else if (response.status === 401 || response.status === 403) {
-      console.warn('Erro de autenticação, redirecionando para login...')
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('user_data')
-      localStorage.removeItem('refresh_token')
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
-      }
-    }
-    
-    throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`)
-  }
-
-  const responseData = await response.json()
-  return responseData
+  return {
+    id: grua.id,
+    name: grua.name,
+    modelo: grua.model || grua.modelo,
+    capacidade: grua.capacity || grua.capacidade,
+    status: statusNormalizado,
+    localizacao: grua.localizacao,
+    current_obra_name: grua.currentObraName || grua.obra_atual_nome,
+    horas_operacao: grua.horasOperacao || grua.horas_operacao,
+    ultima_manutencao: grua.ultimaManutencao || grua.ultima_manutencao,
+    proxima_manutencao: grua.proximaManutencao || grua.proxima_manutencao,
+    obra_id: grua.currentObraId ? Number(grua.currentObraId) : grua.obra_atual_id,
+  };
 }
 
-// API functions
+/**
+ * Converter grua do formato frontend para backend
+ */
+export function converterGruaFrontendParaBackend(grua: Grua): GruaBackend {
+  return {
+    id: grua.id,
+    name: grua.name,
+    modelo: grua.modelo,
+    capacidade: grua.capacidade,
+    status: grua.status,
+    localizacao: grua.localizacao,
+    obra_atual_id: grua.obra_id,
+    obra_atual_nome: grua.current_obra_name,
+    horas_operacao: grua.horas_operacao,
+    ultima_manutencao: grua.ultima_manutencao,
+    proxima_manutencao: grua.proxima_manutencao,
+  };
+}
+
+// ============================================
+// API OBJECT (Padrão do projeto)
+// ============================================
+
 export const gruasApi = {
-  // Listar todas as gruas
-  async listarGruas(params?: {
-    page?: number
-    limit?: number
-    status?: string
-    tipo?: string
-  }): Promise<GruasResponse> {
-    const searchParams = new URLSearchParams()
-    
-    if (params?.page) searchParams.append('page', params.page.toString())
-    if (params?.limit) searchParams.append('limit', params.limit.toString())
-    if (params?.status) searchParams.append('status', params.status)
-    if (params?.tipo) searchParams.append('tipo', params.tipo)
-
-    const url = buildApiUrl(`${API_ENDPOINTS.GRUAS}?${searchParams.toString()}`)
-    return apiRequest(url)
+  /**
+   * Listar gruas com filtros opcionais
+   */
+  listarGruas: async (filtros?: GruaFiltros): Promise<{ success: boolean; data: Grua[] }> => {
+    const response = await api.get('/gruas', { params: filtros });
+    const gruasBackend = response.data.data || response.data;
+    const gruasFrontend = Array.isArray(gruasBackend)
+      ? gruasBackend.map(converterGruaBackendParaFrontend)
+      : [];
+    return {
+      success: true,
+      data: gruasFrontend,
+    };
   },
 
-  // Buscar gruas disponíveis (para seleção em obras)
-  async buscarGruasDisponiveis(): Promise<{ success: boolean; data: GruaBackend[] }> {
-    const url = buildApiUrl(`${API_ENDPOINTS.GRUAS}?status=disponivel&limit=100`)
-    return apiRequest(url)
+  /**
+   * Buscar gruas de um funcionário específico
+   */
+  listarGruasFuncionario: async (funcionarioId: number): Promise<{ success: boolean; data: Grua[] }> => {
+    const response = await api.get(`/gruas/funcionario/${funcionarioId}`);
+    const gruasBackend = response.data.data || response.data;
+    const gruasFrontend = Array.isArray(gruasBackend)
+      ? gruasBackend.map(converterGruaBackendParaFrontend)
+      : [];
+    return {
+      success: true,
+      data: gruasFrontend,
+    };
   },
 
-  // Obter grua por ID
-  async obterGrua(id: string): Promise<GruaResponse> {
-    const url = buildApiUrl(`${API_ENDPOINTS.GRUAS}/${id}`)
-    return apiRequest(url)
+  /**
+   * Buscar uma grua específica por ID
+   */
+  obterGrua: async (gruaId: string | number): Promise<{ success: boolean; data: Grua }> => {
+    const response = await api.get(`/gruas/${gruaId}`);
+    const gruaBackend = response.data.data || response.data;
+    return {
+      success: true,
+      data: converterGruaBackendParaFrontend(gruaBackend),
+    };
   },
 
-  // Criar nova grua
-  async criarGrua(data: GruaCreateData): Promise<GruaResponse> {
-    const url = buildApiUrl(API_ENDPOINTS.GRUAS)
-    return apiRequest(url, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
+  /**
+   * Buscar gruas de uma obra específica
+   */
+  listarGruasObra: async (obraId: number): Promise<{ success: boolean; data: Grua[] }> => {
+    const response = await api.get(`/gruas/obra/${obraId}`);
+    const gruasBackend = response.data.data || response.data;
+    const gruasFrontend = Array.isArray(gruasBackend)
+      ? gruasBackend.map(converterGruaBackendParaFrontend)
+      : [];
+    return {
+      success: true,
+      data: gruasFrontend,
+    };
   },
 
-  // Atualizar grua
-  async atualizarGrua(id: string, data: GruaUpdateData): Promise<GruaResponse> {
-    const url = buildApiUrl(`${API_ENDPOINTS.GRUAS}/${id}`)
-    return apiRequest(url, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    })
+  /**
+   * Criar uma nova grua
+   */
+  criarGrua: async (dados: Partial<GruaBackend>): Promise<{ success: boolean; data: Grua; message: string }> => {
+    const response = await api.post('/gruas', dados);
+    const gruaBackend = response.data.data || response.data;
+    return {
+      success: true,
+      data: converterGruaBackendParaFrontend(gruaBackend),
+      message: 'Grua criada com sucesso',
+    };
   },
 
-  // Excluir grua
-  async excluirGrua(id: string): Promise<{ success: boolean; message: string }> {
-    const url = buildApiUrl(`${API_ENDPOINTS.GRUAS}/${id}`)
-    return apiRequest(url, {
-      method: 'DELETE',
-    })
-  }
-}
+  /**
+   * Atualizar uma grua existente
+   */
+  atualizarGrua: async (
+    gruaId: string | number,
+    dados: Partial<GruaBackend>
+  ): Promise<{ success: boolean; data: Grua; message: string }> => {
+    const response = await api.put(`/gruas/${gruaId}`, dados);
+    const gruaBackend = response.data.data || response.data;
+    return {
+      success: true,
+      data: converterGruaBackendParaFrontend(gruaBackend),
+      message: 'Grua atualizada com sucesso',
+    };
+  },
 
-// Funções utilitárias para converter dados entre frontend e backend
-export const converterGruaBackendParaFrontend = (gruaBackend: GruaBackend) => {
-  return {
-    id: gruaBackend.id,
-    name: gruaBackend.name || `Grua ${gruaBackend.id}`,
-    model: gruaBackend.model || gruaBackend.modelo,
-    capacity: gruaBackend.capacity || gruaBackend.capacidade,
-    status: gruaBackend.status,
-    currentObraId: gruaBackend.currentObraId || gruaBackend.current_obra_id?.toString(),
-    currentObraName: gruaBackend.currentObraName || gruaBackend.current_obra_name,
-    fabricante: gruaBackend.fabricante,
-    tipo: gruaBackend.tipo,
-    capacidade_ponta: gruaBackend.capacidade_ponta,
-    lanca: gruaBackend.lanca,
-    altura_trabalho: gruaBackend.altura_trabalho,
-    ano: gruaBackend.ano,
-    localizacao: gruaBackend.localizacao,
-    horas_operacao: gruaBackend.horas_operacao,
-    valor_locacao: gruaBackend.valor_locacao,
-    valor_real: gruaBackend.valor_real,
-    valor_operacao: gruaBackend.valor_operacao,
-    valor_sinaleiro: gruaBackend.valor_sinaleiro,
-    valor_manutencao: gruaBackend.valor_manutencao,
-    ultima_manutencao: gruaBackend.ultima_manutencao,
-    proxima_manutencao: gruaBackend.proxima_manutencao,
-    observacoes: gruaBackend.observacoes,
-    createdAt: gruaBackend.created_at,
-    updatedAt: gruaBackend.updated_at
-  }
-}
+  /**
+   * Atualizar status de uma grua
+   */
+  atualizarStatusGrua: async (
+    gruaId: string | number,
+    status: Grua['status']
+  ): Promise<{ success: boolean; data: Grua; message: string }> => {
+    const response = await api.patch(`/gruas/${gruaId}/status`, { status });
+    const gruaBackend = response.data.data || response.data;
+    return {
+      success: true,
+      data: converterGruaBackendParaFrontend(gruaBackend),
+      message: 'Status atualizado com sucesso',
+    };
+  },
 
-export const converterGruaFrontendParaBackend = (gruaFrontend: any): GruaCreateData => {
-  return {
-    name: gruaFrontend.name,
-    model: gruaFrontend.model,
-    capacity: gruaFrontend.capacity,
-    status: gruaFrontend.status || 'disponivel',
-    obraId: gruaFrontend.obraId || '',
-    observacoes: gruaFrontend.observacoes || '',
-    fabricante: gruaFrontend.fabricante || 'Não informado',
-    tipo: gruaFrontend.tipo || 'Grua Torre',
-    capacidade_ponta: gruaFrontend.capacidade_ponta || gruaFrontend.capacity || 'Não informado',
-    lanca: gruaFrontend.lanca || 'Não informado',
-    altura_trabalho: gruaFrontend.altura_trabalho || 'Não informado',
-    ano: gruaFrontend.ano || new Date().getFullYear(),
-    localizacao: gruaFrontend.localizacao || 'Não informado',
-    horas_operacao: gruaFrontend.horas_operacao || 0,
-    valor_locacao: gruaFrontend.valor_locacao || null, // Permitir null em vez de 0
-    valor_real: gruaFrontend.valor_real || 0,
-    valor_operacao: gruaFrontend.valor_operacao || 0,
-    valor_sinaleiro: gruaFrontend.valor_sinaleiro || 0,
-    valor_manutencao: gruaFrontend.valor_manutencao || 0,
-    ultima_manutencao: gruaFrontend.ultima_manutencao || null,
-    proxima_manutencao: gruaFrontend.proxima_manutencao || null
-  }
-}
+  /**
+   * Deletar uma grua
+   */
+  deletarGrua: async (gruaId: string | number): Promise<{ success: boolean; message: string }> => {
+    await api.delete(`/gruas/${gruaId}`);
+    return {
+      success: true,
+      message: 'Grua deletada com sucesso',
+    };
+  },
 
-// Funções de conveniência para compatibilidade
-export const getGruas = async (): Promise<GruaBackend[]> => {
-  const response = await gruasApi.listarGruas({ limit: 1000 });
-  return response.data || [];
+  /**
+   * Registrar manutenção de uma grua
+   */
+  registrarManutencao: async (
+    gruaId: string | number,
+    dados: {
+      tipo: string;
+      descricao: string;
+      data_manutencao: string;
+      proxima_manutencao?: string;
+    }
+  ): Promise<{ success: boolean; data: any; message: string }> => {
+    const response = await api.post(`/gruas/${gruaId}/manutencao`, dados);
+    return {
+      success: true,
+      data: response.data.data || response.data,
+      message: 'Manutenção registrada com sucesso',
+    };
+  },
+
+  /**
+   * Buscar histórico de manutenções de uma grua
+   */
+  listarHistoricoManutencao: async (gruaId: string | number): Promise<{ success: boolean; data: any[] }> => {
+    const response = await api.get(`/gruas/${gruaId}/manutencao/historico`);
+    return {
+      success: true,
+      data: response.data.data || response.data,
+    };
+  },
 };
 
-export type Grua = GruaBackend;
+// ============================================
+// EXPORTS DE COMPATIBILIDADE (para código antigo)
+// ============================================
 
-export default gruasApi
+/**
+ * @deprecated Use gruasApi.listarGruas() instead
+ */
+export const getGruas = gruasApi.listarGruas;
+
+/**
+ * @deprecated Use gruasApi.listarGruasFuncionario() instead
+ */
+export const getGruasFuncionario = gruasApi.listarGruasFuncionario;
+
+/**
+ * @deprecated Use gruasApi.obterGrua() instead
+ */
+export const getGruaById = gruasApi.obterGrua;
+
+/**
+ * @deprecated Use gruasApi.listarGruasObra() instead
+ */
+export const getGruasObra = gruasApi.listarGruasObra;
+
+/**
+ * @deprecated Use gruasApi.atualizarStatusGrua() instead
+ */
+export const atualizarStatusGrua = gruasApi.atualizarStatusGrua;
+
+/**
+ * @deprecated Use gruasApi.registrarManutencao() instead
+ */
+export const registrarManutencao = gruasApi.registrarManutencao;
+
+/**
+ * @deprecated Use gruasApi.listarHistoricoManutencao() instead
+ */
+export const getHistoricoManutencao = gruasApi.listarHistoricoManutencao;

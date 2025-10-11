@@ -20,31 +20,10 @@ import {
   Search
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import * as encarregadorApi from "@/lib/api-encarregador"
 
-interface Funcionario {
-  id: number
-  nome: string
-  cargo: string
-  turno: string
-  status: string
-}
-
-interface RegistroPonto {
-  id: string
-  funcionario_id: number
-  data: string
-  entrada?: string
-  saida_almoco?: string
-  volta_almoco?: string
-  saida?: string
-  horas_trabalhadas: number
-  horas_extras: number
-  status: string
-  aprovado_por?: number
-  data_aprovacao?: string
-  observacoes?: string
-  funcionario?: Funcionario
-}
+type Funcionario = encarregadorApi.FuncionarioEncarregador
+type RegistroPonto = encarregadorApi.RegistroPontoEncarregador
 
 export default function PWAEncarregadorPage() {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([])
@@ -94,80 +73,119 @@ export default function PWAEncarregadorPage() {
     }
   }, [user])
 
+  // Sincronizar fila quando ficar online
+  useEffect(() => {
+    if (isOnline && user?.id) {
+      sincronizarFilaDeAprovacoes()
+    }
+  }, [isOnline, user])
+
+  const sincronizarFilaDeAprovacoes = async () => {
+    const fila = JSON.parse(localStorage.getItem('fila_aprovacoes') || '[]')
+    
+    if (fila.length === 0) return
+    
+    console.log(`Sincronizando ${fila.length} aprovações pendentes...`)
+    
+    const filaComErros = []
+    
+    for (const item of fila) {
+      try {
+        if (item.tipo === 'aprovar') {
+          await encarregadorApi.aprovarRegistro(item.registroId, {
+            observacoes_aprovacao: 'Aprovado via PWA - Sincronizado'
+          })
+        } else if (item.tipo === 'rejeitar') {
+          await encarregadorApi.rejeitarRegistro(item.registroId, {
+            motivo_rejeicao: 'Rejeitado via PWA - Sincronizado'
+          })
+        }
+      } catch (error) {
+        console.error(`Erro ao sincronizar ${item.tipo} do registro ${item.registroId}:`, error)
+        filaComErros.push(item)
+      }
+    }
+    
+    // Atualizar fila apenas com itens que falharam
+    localStorage.setItem('fila_aprovacoes', JSON.stringify(filaComErros))
+    
+    if (filaComErros.length === 0) {
+      toast({
+        title: "Sincronização completa",
+        description: `${fila.length} aprovações sincronizadas com sucesso`,
+        variant: "default"
+      })
+      
+      // Recarregar dados atualizados
+      carregarDados()
+    } else {
+      toast({
+        title: "Sincronização parcial",
+        description: `${fila.length - filaComErros.length} de ${fila.length} aprovações sincronizadas`,
+        variant: "default"
+      })
+    }
+  }
+
   const carregarDados = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) return
+      // Carregar do cache primeiro se offline
+      if (!isOnline) {
+        const cachedFuncionarios = localStorage.getItem('cached_funcionarios')
+        const cachedRegistros = localStorage.getItem('cached_registros_pendentes')
+        
+        if (cachedFuncionarios) {
+          setFuncionarios(JSON.parse(cachedFuncionarios))
+        }
+        
+        if (cachedRegistros) {
+          setRegistrosPendentes(JSON.parse(cachedRegistros))
+        }
+        
+        toast({
+          title: "Modo Offline",
+          description: "Exibindo dados em cache. Conecte-se para atualizar.",
+          variant: "default"
+        })
+        
+        return
+      }
 
       // Carregar funcionários da obra
-      const responseFuncionarios = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/funcionarios/obra/${user.obra_id || 1}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
-
-      if (responseFuncionarios.ok) {
-        const dataFuncionarios = await responseFuncionarios.json()
-        setFuncionarios(dataFuncionarios.data || [])
-      }
+      const dataFuncionarios = await encarregadorApi.getFuncionariosDaObra(user.obra_id || 1)
+      setFuncionarios(dataFuncionarios)
+      
+      // Salvar no cache
+      localStorage.setItem('cached_funcionarios', JSON.stringify(dataFuncionarios))
 
       // Carregar registros pendentes de aprovação
-      const responseRegistros = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?status=Pendente Aprovação&aprovador_id=${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
+      const dataRegistros = await encarregadorApi.getRegistrosPendentes(user.id)
+      setRegistrosPendentes(dataRegistros)
+      
+      // Salvar no cache
+      localStorage.setItem('cached_registros_pendentes', JSON.stringify(dataRegistros))
 
-      if (responseRegistros.ok) {
-        const dataRegistros = await responseRegistros.json()
-        setRegistrosPendentes(dataRegistros.data || [])
-      } else {
-        // Simular dados para demonstração
-        setFuncionarios([
-          { id: 1, nome: 'João Silva', cargo: 'Operador', turno: 'Diurno', status: 'Ativo' },
-          { id: 2, nome: 'Maria Santos', cargo: 'Sinaleiro', turno: 'Diurno', status: 'Ativo' },
-          { id: 3, nome: 'Pedro Costa', cargo: 'Técnico', turno: 'Noturno', status: 'Ativo' }
-        ])
-        
-        setRegistrosPendentes([
-          {
-            id: '1',
-            funcionario_id: 1,
-            data: new Date().toISOString().split('T')[0],
-            entrada: '08:00',
-            saida: '18:30',
-            horas_trabalhadas: 10.5,
-            horas_extras: 2.5,
-            status: 'Pendente Aprovação',
-            funcionario: { id: 1, nome: 'João Silva', cargo: 'Operador', turno: 'Diurno', status: 'Ativo' }
-          },
-          {
-            id: '2',
-            funcionario_id: 2,
-            data: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            entrada: '08:00',
-            saida: '20:00',
-            horas_trabalhadas: 12,
-            horas_extras: 4,
-            status: 'Pendente Aprovação',
-            funcionario: { id: 2, nome: 'Maria Santos', cargo: 'Sinaleiro', turno: 'Diurno', status: 'Ativo' }
-          }
-        ])
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao carregar dados:', error)
+      
+      // Tentar carregar do cache em caso de erro
+      const cachedFuncionarios = localStorage.getItem('cached_funcionarios')
+      const cachedRegistros = localStorage.getItem('cached_registros_pendentes')
+      
+      if (cachedFuncionarios) {
+        setFuncionarios(JSON.parse(cachedFuncionarios))
+      }
+      
+      if (cachedRegistros) {
+        setRegistrosPendentes(JSON.parse(cachedRegistros))
+      }
+      
       toast({
         title: "Erro ao carregar dados",
-        description: "Tente novamente em alguns instantes",
+        description: cachedFuncionarios || cachedRegistros 
+          ? "Exibindo dados em cache. Tente atualizar mais tarde."
+          : "Não foi possível carregar os dados. Verifique sua conexão.",
         variant: "destructive"
       })
     } finally {
@@ -177,36 +195,45 @@ export default function PWAEncarregadorPage() {
 
   const aprovarRegistro = async (registroId: string) => {
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) return
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros/${registroId}/aprovar`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            observacoes_aprovacao: 'Aprovado via PWA - Encarregador'
-          })
-        }
-      )
-
-      if (response.ok) {
+      // Se offline, adicionar à fila de sincronização
+      if (!isOnline) {
+        const filaPendentes = JSON.parse(localStorage.getItem('fila_aprovacoes') || '[]')
+        filaPendentes.push({
+          tipo: 'aprovar',
+          registroId,
+          timestamp: new Date().toISOString()
+        })
+        localStorage.setItem('fila_aprovacoes', JSON.stringify(filaPendentes))
+        
+        // Atualizar UI localmente
+        setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
+        
         toast({
-          title: "Registro aprovado!",
-          description: "O registro foi aprovado com sucesso",
+          title: "Aprovação pendente",
+          description: "A aprovação será sincronizada quando você estiver online",
           variant: "default"
         })
         
-        // Atualizar lista
-        setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Erro ao aprovar registro')
+        return
       }
+
+      await encarregadorApi.aprovarRegistro(registroId, {
+        observacoes_aprovacao: 'Aprovado via PWA - Encarregador'
+      })
+      
+      toast({
+        title: "Registro aprovado!",
+        description: "O registro foi aprovado com sucesso",
+        variant: "default"
+      })
+      
+      // Atualizar lista
+      setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
+      
+      // Atualizar cache
+      const novosRegistros = registrosPendentes.filter(reg => reg.id !== registroId)
+      localStorage.setItem('cached_registros_pendentes', JSON.stringify(novosRegistros))
+      
     } catch (error: any) {
       console.error('Erro ao aprovar registro:', error)
       toast({
@@ -219,36 +246,45 @@ export default function PWAEncarregadorPage() {
 
   const rejeitarRegistro = async (registroId: string) => {
     try {
-      const token = localStorage.getItem('access_token')
-      if (!token) return
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros/${registroId}/rejeitar`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            motivo_rejeicao: 'Rejeitado via PWA - Encarregador'
-          })
-        }
-      )
-
-      if (response.ok) {
+      // Se offline, adicionar à fila de sincronização
+      if (!isOnline) {
+        const filaPendentes = JSON.parse(localStorage.getItem('fila_aprovacoes') || '[]')
+        filaPendentes.push({
+          tipo: 'rejeitar',
+          registroId,
+          timestamp: new Date().toISOString()
+        })
+        localStorage.setItem('fila_aprovacoes', JSON.stringify(filaPendentes))
+        
+        // Atualizar UI localmente
+        setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
+        
         toast({
-          title: "Registro rejeitado!",
-          description: "O registro foi rejeitado",
+          title: "Rejeição pendente",
+          description: "A rejeição será sincronizada quando você estiver online",
           variant: "default"
         })
         
-        // Atualizar lista
-        setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Erro ao rejeitar registro')
+        return
       }
+
+      await encarregadorApi.rejeitarRegistro(registroId, {
+        motivo_rejeicao: 'Rejeitado via PWA - Encarregador'
+      })
+      
+      toast({
+        title: "Registro rejeitado!",
+        description: "O registro foi rejeitado com sucesso",
+        variant: "default"
+      })
+      
+      // Atualizar lista
+      setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
+      
+      // Atualizar cache
+      const novosRegistros = registrosPendentes.filter(reg => reg.id !== registroId)
+      localStorage.setItem('cached_registros_pendentes', JSON.stringify(novosRegistros))
+      
     } catch (error: any) {
       console.error('Erro ao rejeitar registro:', error)
       toast({
