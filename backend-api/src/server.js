@@ -48,6 +48,7 @@ import arquivosRoutes from './routes/arquivos.js'
 import arquivosTestRoutes from './routes/arquivos-test.js'
 import custosMensaisRoutes from './routes/custos-mensais.js'
 import obrasDocumentosRoutes from './routes/obras-documentos.js'
+import assinaturasRoutes from './routes/assinaturas.js'
 import obrasArquivosRoutes from './routes/obras-arquivos.js'
 import vendasRoutes from './routes/vendas.js'
 import comprasRoutes from './routes/compras.js'
@@ -246,6 +247,7 @@ app.use('/api/arquivos', arquivosRoutes)
 app.use('/api/arquivos-test', arquivosTestRoutes)
 app.use('/api/custos-mensais', custosMensaisRoutes)
 app.use('/api/obras', obrasDocumentosRoutes)
+app.use('/api/assinaturas', assinaturasRoutes)
 app.use('/api/obras', obrasArquivosRoutes)
 app.use('/api/vendas', vendasRoutes)
 app.use('/api/compras', comprasRoutes)
