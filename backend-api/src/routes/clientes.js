@@ -1,7 +1,21 @@
 import express from 'express'
 import Joi from 'joi'
+import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+
+// Função auxiliar para gerar senha segura aleatória
+function generateSecurePassword(length = 12) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
+  let password = ''
+  const randomBytes = crypto.randomBytes(length)
+  
+  for (let i = 0; i < length; i++) {
+    password += chars[randomBytes[i] % chars.length]
+  }
+  
+  return password
+}
 
 const router = express.Router()
 
@@ -248,6 +262,7 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
 
     // Iniciar transação
     let usuarioId = null
+    let senhaTemporaria = null
 
     // Criar usuário se solicitado
     if (criar_usuario && value.contato && value.contato_email) {
@@ -266,7 +281,28 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
           })
         }
 
-        // Criar usuário
+        // Gerar senha temporária
+        senhaTemporaria = generateSecurePassword()
+
+        // 1. Criar usuário no Supabase Auth primeiro
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email: value.contato_email,
+          password: senhaTemporaria,
+          email_confirm: true, // Confirmar email automaticamente
+          user_metadata: {
+            nome: value.contato,
+            tipo: 'cliente'
+          }
+        })
+
+        if (authError) {
+          return res.status(500).json({
+            error: 'Erro ao criar usuário no sistema de autenticação',
+            message: authError.message
+          })
+        }
+
+        // 2. Criar usuário na tabela
         const usuarioData = {
           nome: value.contato,
           email: value.contato_email,
@@ -288,6 +324,9 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
           .single()
 
         if (usuarioError) {
+          // Se falhou ao criar na tabela, remover do Auth
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+          
           return res.status(500).json({
             error: 'Erro ao criar usuário',
             message: usuarioError.message
@@ -337,8 +376,19 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
       .single()
 
     if (insertError) {
-      // Se falhou ao criar cliente, tentar remover o usuário criado
-      if (usuarioId) {
+      // Se falhou ao criar cliente, remover usuário do Auth e da tabela
+      if (usuarioId && criar_usuario) {
+        // Buscar authData
+        try {
+          const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+          const authUser = users.find(u => u.email === value.contato_email)
+          if (authUser) {
+            await supabaseAdmin.auth.admin.deleteUser(authUser.id)
+          }
+        } catch (e) {
+          console.error('Erro ao remover usuário do Auth:', e)
+        }
+        
         await supabaseAdmin
           .from('usuarios')
           .delete()
@@ -351,14 +401,21 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
       })
     }
 
+    const responseData = {
+      ...data,
+      usuario_criado: !!usuarioId,
+      usuario_id: usuarioId
+    }
+
+    // Adicionar senha temporária se criou usuário
+    if (criar_usuario && usuarioId && senhaTemporaria) {
+      responseData.senha_temporaria = senhaTemporaria
+    }
+
     res.status(201).json({
       success: true,
-      data: {
-        ...data,
-        usuario_criado: !!usuarioId,
-        usuario_id: usuarioId
-      },
-      message: usuarioId ? 'Cliente e usuário criados com sucesso' : 'Cliente criado com sucesso'
+      data: responseData,
+      message: usuarioId ? 'Cliente e usuário criados com sucesso. Senha temporária gerada.' : 'Cliente criado com sucesso'
     })
   } catch (error) {
     console.error('Erro ao criar cliente:', error)

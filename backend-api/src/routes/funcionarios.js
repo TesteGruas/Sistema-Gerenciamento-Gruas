@@ -5,8 +5,22 @@
 
 import express from 'express'
 import Joi from 'joi'
+import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
+
+// Função auxiliar para gerar senha segura aleatória
+function generateSecurePassword(length = 12) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
+  let password = ''
+  const randomBytes = crypto.randomBytes(length)
+  
+  for (let i = 0; i < length; i++) {
+    password += chars[randomBytes[i] % chars.length]
+  }
+  
+  return password
+}
 
 const router = express.Router()
 
@@ -533,7 +547,35 @@ router.post('/', async (req, res) => {
           }
         }
 
-        // Criar usuário vinculado ao funcionário
+        // Gerar senha temporária
+        const senhaTemporaria = generateSecurePassword()
+
+        // 1. Criar usuário no Supabase Auth primeiro
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email: value.email,
+          password: senhaTemporaria,
+          email_confirm: true, // Confirmar email automaticamente
+          user_metadata: {
+            nome: value.nome,
+            cargo: value.cargo,
+            funcionario_id: novoFuncionario.id
+          }
+        })
+
+        if (authError) {
+          // Se falhou ao criar no Auth, remover o funcionário criado
+          await supabaseAdmin
+            .from('funcionarios')
+            .delete()
+            .eq('id', novoFuncionario.id)
+          
+          return res.status(500).json({
+            error: 'Erro ao criar usuário no sistema de autenticação',
+            message: authError.message
+          })
+        }
+
+        // 2. Criar usuário vinculado ao funcionário na tabela
         const usuarioData = {
           nome: value.nome,
           email: value.email,
@@ -556,7 +598,8 @@ router.post('/', async (req, res) => {
           .single()
 
         if (usuarioError) {
-          // Se falhou ao criar usuário, tentar remover o funcionário criado
+          // Se falhou ao criar na tabela, remover do Auth e o funcionário
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
           await supabaseAdmin
             .from('funcionarios')
             .delete()
@@ -604,9 +647,10 @@ router.post('/', async (req, res) => {
           data: {
             ...novoFuncionario,
             usuario_criado: true,
-            usuario_id: usuarioId
+            usuario_id: usuarioId,
+            senha_temporaria: senhaTemporaria // Retornar senha para o admin enviar ao funcionário
           },
-          message: 'Funcionário e usuário criados com sucesso'
+          message: 'Funcionário e usuário criados com sucesso. Senha temporária gerada.'
         })
 
       } catch (usuarioError) {

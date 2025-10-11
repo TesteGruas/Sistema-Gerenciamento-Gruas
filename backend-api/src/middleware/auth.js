@@ -124,7 +124,7 @@ export const requirePermission = (permission) => {
           'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
           'usuarios:visualizar', 'usuarios:criar', 'usuarios:editar', 'usuarios:deletar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes',
           'rh:visualizar', 'rh:criar', 'rh:editar', 'rh:deletar',
-          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar',
+            'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar',
           'criar_notificacoes', 'visualizar_notificacoes', 'editar_notificacoes', 'excluir_notificacoes'
         ],
         'gerente': [

@@ -1,9 +1,23 @@
 import express from 'express'
 import Joi from 'joi'
+import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 
 const router = express.Router()
+
+// Função auxiliar para gerar senha segura aleatória
+function generateSecurePassword(length = 12) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
+  let password = ''
+  const randomBytes = crypto.randomBytes(length)
+  
+  for (let i = 0; i < length; i++) {
+    password += chars[randomBytes[i] % chars.length]
+  }
+  
+  return password
+}
 
 // Schema de validação para usuários
 const userSchema = Joi.object({
@@ -271,6 +285,28 @@ router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (
     // Separar perfil_id dos dados do usuário
     const { perfil_id, ...userData } = value
     
+    // Gerar senha temporária
+    const senhaTemporaria = generateSecurePassword()
+
+    // 1. Criar usuário no Supabase Auth primeiro
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: userData.email,
+      password: senhaTemporaria,
+      email_confirm: true, // Confirmar email automaticamente
+      user_metadata: {
+        nome: userData.nome,
+        created_by: req.user.email
+      }
+    })
+
+    if (authError) {
+      return res.status(500).json({
+        error: 'Erro ao criar usuário no sistema de autenticação',
+        message: authError.message
+      })
+    }
+
+    // 2. Criar usuário na tabela
     const finalUserData = {
       ...userData,
       created_at: new Date().toISOString(),
@@ -284,13 +320,16 @@ router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (
       .single()
 
     if (insertError) {
+      // Se falhou ao criar na tabela, remover do Auth
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      
       return res.status(500).json({
         error: 'Erro ao criar usuário',
         message: insertError.message
       })
     }
 
-    // Se perfil_id foi fornecido, associar o usuário ao perfil
+    // 3. Se perfil_id foi fornecido, associar o usuário ao perfil
     if (perfil_id && data) {
       const { error: perfilError } = await supabaseAdmin
         .from('usuario_perfis')
@@ -311,8 +350,11 @@ router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (
 
     res.status(201).json({
       success: true,
-      data,
-      message: 'Usuário criado com sucesso'
+      data: {
+        ...data,
+        senha_temporaria: senhaTemporaria // Retornar senha para o admin enviar ao usuário
+      },
+      message: 'Usuário criado com sucesso. Senha temporária gerada.'
     })
   } catch (error) {
     console.error('Erro ao criar usuário:', error)
