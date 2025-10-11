@@ -1,4 +1,6 @@
-// API de Notificações com dados mockados
+// API de Notificações integrada com backend real
+
+import api, { apiWithRetry } from './api'
 
 export type NotificationType = 
   | 'info' 
@@ -32,249 +34,202 @@ export interface Notificacao {
   destinatario?: Destinatario; // Destinatário único (retrocompatibilidade)
   destinatarios?: Destinatario[]; // Array de destinatários (novo)
   remetente?: string; // Nome de quem criou a notificação
+  usuario_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-// Dados mockados
-const notificacoesMock: Notificacao[] = [
-  {
-    id: '1',
-    titulo: 'Grua #452 - Manutenção Agendada',
-    mensagem: 'A grua #452 está programada para manutenção preventiva amanhã às 08:00',
-    tipo: 'grua',
-    lida: false,
-    data: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 min atrás
-    link: '/dashboard/gruas/452',
-    destinatario: {
-      tipo: 'funcionario',
-      id: '1',
-      nome: 'João Silva - Operador de Grua',
-    },
-    remetente: 'Sistema de Manutenção',
-  },
-  {
-    id: '2',
-    titulo: 'Nova Obra Cadastrada',
-    mensagem: 'A obra "Edifício Residencial Solar" foi cadastrada com sucesso',
-    tipo: 'obra',
-    lida: false,
-    data: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 min atrás
-    link: '/dashboard/obras',
-    destinatario: {
-      tipo: 'geral',
-    },
-    remetente: 'Admin - Maria Costa',
-  },
-  {
-    id: '3',
-    titulo: 'Pagamento Aprovado',
-    mensagem: 'O pagamento da NF #12345 no valor de R$ 15.000,00 foi aprovado',
-    tipo: 'financeiro',
-    lida: false,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 horas atrás
-    link: '/dashboard/financeiro',
-    destinatario: {
-      tipo: 'cliente',
-      id: '5',
-      nome: 'ABC Construtora',
-    },
-    remetente: 'Financeiro - Carlos Santos',
-  },
-  {
-    id: '4',
-    titulo: 'Estoque Baixo - Cabos de Aço',
-    mensagem: 'O estoque de cabos de aço está abaixo do nível mínimo (5 unidades restantes)',
-    tipo: 'estoque',
-    lida: true,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), // 3 horas atrás
-    link: '/dashboard/estoque',
-    destinatario: {
-      tipo: 'obra',
-      id: '10',
-      nome: 'Obra Centro Empresarial',
-    },
-    remetente: 'Sistema de Estoque',
-  },
-  {
-    id: '5',
-    titulo: 'Férias Aprovadas',
-    mensagem: 'As férias de João Silva foram aprovadas para o período de 15/11 a 30/11',
-    tipo: 'rh',
-    lida: true,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 horas atrás
-    link: '/dashboard/rh-completo/ferias',
-    destinatario: {
-      tipo: 'funcionario',
-      id: '1',
-      nome: 'João Silva',
-    },
-    remetente: 'RH - Ana Paula',
-  },
-  {
-    id: '6',
-    titulo: 'Alerta de Segurança',
-    mensagem: 'Grua #301 detectou sobrecarga. Operação interrompida automaticamente',
-    tipo: 'error',
-    lida: true,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 dia atrás
-    link: '/dashboard/gruas/301',
-    destinatario: {
-      tipo: 'geral',
-    },
-    remetente: 'Sistema de Segurança',
-  },
-  {
-    id: '7',
-    titulo: 'Certificação Atualizada',
-    mensagem: 'A certificação NR-12 da Grua #105 foi renovada com sucesso',
-    tipo: 'success',
-    lida: true,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), // 2 dias atrás
-    link: '/dashboard/gruas/105',
-    destinatario: {
-      tipo: 'geral',
-    },
-    remetente: 'Sistema de Certificações',
-  },
-  {
-    id: '8',
-    titulo: 'Reunião Agendada',
-    mensagem: 'Reunião de planejamento agendada para segunda-feira às 10:00',
-    tipo: 'info',
-    lida: true,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 dias atrás
-    destinatario: {
-      tipo: 'geral',
-    },
-    remetente: 'Admin - Maria Costa',
-  },
-  {
-    id: '9',
-    titulo: 'Ponto Eletrônico - Pendência',
-    mensagem: 'Colaborador Maria Santos possui 2 registros de ponto pendentes de aprovação',
-    tipo: 'warning',
-    lida: true,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(), // 4 dias atrás
-    link: '/dashboard/ponto',
-    destinatario: {
-      tipo: 'funcionario',
-      id: '2',
-      nome: 'Maria Santos',
-    },
-    remetente: 'RH - Ana Paula',
-  },
-  {
-    id: '10',
-    titulo: 'Novo Orçamento Solicitado',
-    mensagem: 'Cliente ABC Construtora solicitou orçamento para locação de 3 gruas',
-    tipo: 'financeiro',
-    lida: true,
-    data: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 dias atrás
-    link: '/dashboard/financeiro/orcamentos',
-    destinatario: {
-      tipo: 'cliente',
-      id: '1',
-      nome: 'ABC Construtora',
-    },
-    remetente: 'Comercial - Pedro Oliveira',
-  },
-];
+export interface ListarNotificacoesParams {
+  page?: number;
+  limit?: number;
+  tipo?: NotificationType;
+  lida?: boolean;
+}
 
-// Simula chamadas de API
-let notificacoes = [...notificacoesMock];
+export interface ListarNotificacoesResponse {
+  success: boolean;
+  data: Notificacao[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface CriarNotificacaoInput {
+  titulo: string;
+  mensagem: string;
+  tipo: NotificationType;
+  link?: string;
+  icone?: string;
+  destinatarios?: Destinatario[];
+  remetente?: string;
+}
+
+// ============================================
+// FUNÇÕES DA API REAL
+// ============================================
 
 export const NotificacoesAPI = {
-  // Listar todas as notificações
-  listar: async (): Promise<Notificacao[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([...notificacoes].sort((a, b) => 
-          new Date(b.data).getTime() - new Date(a.data).getTime()
-        ));
-      }, 300);
-    });
+  /**
+   * Listar todas as notificações com paginação e filtros
+   */
+  listar: async (params?: ListarNotificacoesParams): Promise<Notificacao[]> => {
+    try {
+      const response = await apiWithRetry(
+        () => api.get<ListarNotificacoesResponse>('/notificacoes', { params }),
+        { maxRetries: 2 }
+      )
+      return response.data.data || []
+    } catch (error: any) {
+      console.error('Erro ao listar notificações:', error)
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data?.error || 
+        'Erro ao carregar notificações'
+      )
+    }
   },
 
-  // Listar apenas não lidas
+  /**
+   * Listar apenas notificações não lidas
+   */
   listarNaoLidas: async (): Promise<Notificacao[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(notificacoes.filter(n => !n.lida).sort((a, b) => 
-          new Date(b.data).getTime() - new Date(a.data).getTime()
-        ));
-      }, 300);
-    });
+    try {
+      const response = await apiWithRetry(
+        () => api.get<{ success: boolean; data: Notificacao[] }>('/notificacoes/nao-lidas'),
+        { maxRetries: 2 }
+      )
+      return response.data.data || []
+    } catch (error: any) {
+      console.error('Erro ao listar notificações não lidas:', error)
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data?.error || 
+        'Erro ao carregar notificações não lidas'
+      )
+    }
   },
 
-  // Contar não lidas
+  /**
+   * Contar notificações não lidas
+   */
   contarNaoLidas: async (): Promise<number> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(notificacoes.filter(n => !n.lida).length);
-      }, 100);
-    });
+    try {
+      const response = await apiWithRetry(
+        () => api.get<{ success: boolean; count: number }>('/notificacoes/count/nao-lidas'),
+        { maxRetries: 2 }
+      )
+      return response.data.count || 0
+    } catch (error: any) {
+      console.error('Erro ao contar notificações não lidas:', error)
+      // Retornar 0 em caso de erro para não quebrar a UI
+      return 0
+    }
   },
 
-  // Marcar como lida
+  /**
+   * Marcar notificação específica como lida
+   */
   marcarComoLida: async (id: string): Promise<void> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const notificacao = notificacoes.find(n => n.id === id);
-        if (notificacao) {
-          notificacao.lida = true;
-        }
-        resolve();
-      }, 200);
-    });
+    try {
+      await api.patch(`/notificacoes/${id}/marcar-lida`)
+    } catch (error: any) {
+      console.error('Erro ao marcar notificação como lida:', error)
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data?.error || 
+        'Erro ao marcar notificação como lida'
+      )
+    }
   },
 
-  // Marcar todas como lidas
+  /**
+   * Marcar todas as notificações como lidas
+   */
   marcarTodasComoLidas: async (): Promise<void> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        notificacoes.forEach(n => n.lida = true);
-        resolve();
-      }, 300);
-    });
+    try {
+      await api.patch('/notificacoes/marcar-todas-lidas')
+    } catch (error: any) {
+      console.error('Erro ao marcar todas as notificações como lidas:', error)
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data?.error || 
+        'Erro ao marcar todas as notificações como lidas'
+      )
+    }
   },
 
-  // Deletar notificação
+  /**
+   * Deletar notificação específica
+   */
   deletar: async (id: string): Promise<void> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        notificacoes = notificacoes.filter(n => n.id !== id);
-        resolve();
-      }, 200);
-    });
+    try {
+      await api.delete(`/notificacoes/${id}`)
+    } catch (error: any) {
+      console.error('Erro ao deletar notificação:', error)
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data?.error || 
+        'Erro ao deletar notificação'
+      )
+    }
   },
 
-  // Deletar todas
+  /**
+   * Deletar todas as notificações do usuário
+   */
   deletarTodas: async (): Promise<void> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        notificacoes = [];
-        resolve();
-      }, 300);
-    });
+    try {
+      await api.delete('/notificacoes/todas')
+    } catch (error: any) {
+      console.error('Erro ao deletar todas as notificações:', error)
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data?.error || 
+        'Erro ao deletar todas as notificações'
+      )
+    }
   },
 
-  // Criar nova notificação
-  criar: async (notificacao: Omit<Notificacao, 'id' | 'data' | 'lida'>): Promise<Notificacao> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const nova: Notificacao = {
-          ...notificacao,
-          id: String(Date.now()),
-          data: new Date().toISOString(),
-          lida: false,
-        };
-        notificacoes.unshift(nova);
-        resolve(nova);
-      }, 300);
-    });
+  /**
+   * Criar nova notificação
+   */
+  criar: async (notificacao: CriarNotificacaoInput): Promise<Notificacao> => {
+    try {
+      const response = await api.post<{ success: boolean; data: Notificacao | Notificacao[] }>(
+        '/notificacoes',
+        notificacao
+      )
+      
+      // Se o backend retornar um array (notificações para múltiplos usuários),
+      // retornar o primeiro item
+      const data = response.data.data
+      if (Array.isArray(data)) {
+        return data[0]
+      }
+      
+      return data
+    } catch (error: any) {
+      console.error('Erro ao criar notificação:', error)
+      throw new Error(
+        error.response?.data?.message || 
+        error.response?.data?.error || 
+        error.response?.data?.details ||
+        'Erro ao criar notificação'
+      )
+    }
   },
 };
 
-// Função auxiliar para formatar tempo relativo
+// ============================================
+// FUNÇÕES AUXILIARES
+// ============================================
+
+/**
+ * Função auxiliar para formatar tempo relativo
+ */
 export function formatarTempoRelativo(data: string): string {
   const agora = new Date();
   const dataNotificacao = new Date(data);
@@ -297,3 +252,85 @@ export function formatarTempoRelativo(data: string): string {
   return 'agora mesmo';
 }
 
+/**
+ * Função auxiliar para obter ícone baseado no tipo de notificação
+ */
+export function obterIconePorTipo(tipo: NotificationType): string {
+  const icones: Record<NotificationType, string> = {
+    info: '🔔',
+    warning: '⚠️',
+    error: '❌',
+    success: '✅',
+    grua: '🏗️',
+    obra: '🏢',
+    financeiro: '💰',
+    rh: '👥',
+    estoque: '📦'
+  }
+  
+  return icones[tipo] || '🔔'
+}
+
+/**
+ * Função auxiliar para obter cor baseado no tipo de notificação
+ */
+export function obterCorPorTipo(tipo: NotificationType): string {
+  const cores: Record<NotificationType, string> = {
+    info: 'bg-blue-100 text-blue-800',
+    warning: 'bg-yellow-100 text-yellow-800',
+    error: 'bg-red-100 text-red-800',
+    success: 'bg-green-100 text-green-800',
+    grua: 'bg-purple-100 text-purple-800',
+    obra: 'bg-indigo-100 text-indigo-800',
+    financeiro: 'bg-emerald-100 text-emerald-800',
+    rh: 'bg-pink-100 text-pink-800',
+    estoque: 'bg-orange-100 text-orange-800'
+  }
+  
+  return cores[tipo] || 'bg-gray-100 text-gray-800'
+}
+
+/**
+ * Validar dados de notificação antes de enviar
+ */
+export function validarNotificacao(notificacao: CriarNotificacaoInput): string[] {
+  const erros: string[] = []
+  
+  if (!notificacao.titulo || notificacao.titulo.trim() === '') {
+    erros.push('Título é obrigatório')
+  } else if (notificacao.titulo.length > 255) {
+    erros.push('Título deve ter no máximo 255 caracteres')
+  }
+  
+  if (!notificacao.mensagem || notificacao.mensagem.trim() === '') {
+    erros.push('Mensagem é obrigatória')
+  }
+  
+  if (!notificacao.tipo) {
+    erros.push('Tipo é obrigatório')
+  }
+  
+  const tiposValidos: NotificationType[] = [
+    'info', 'warning', 'error', 'success', 
+    'grua', 'obra', 'financeiro', 'rh', 'estoque'
+  ]
+  
+  if (notificacao.tipo && !tiposValidos.includes(notificacao.tipo)) {
+    erros.push('Tipo de notificação inválido')
+  }
+  
+  if (notificacao.destinatarios && notificacao.destinatarios.length > 0) {
+    notificacao.destinatarios.forEach((dest, index) => {
+      if (!dest.tipo) {
+        erros.push(`Destinatário ${index + 1}: tipo é obrigatório`)
+      }
+      
+      const tiposDestValidos: DestinatarioTipo[] = ['geral', 'cliente', 'funcionario', 'obra']
+      if (dest.tipo && !tiposDestValidos.includes(dest.tipo)) {
+        erros.push(`Destinatário ${index + 1}: tipo inválido`)
+      }
+    })
+  }
+  
+  return erros
+}

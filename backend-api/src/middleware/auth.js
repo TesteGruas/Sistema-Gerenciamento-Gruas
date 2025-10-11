@@ -124,14 +124,16 @@ export const requirePermission = (permission) => {
           'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
           'usuarios:visualizar', 'usuarios:criar', 'usuarios:editar', 'usuarios:deletar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes',
           'rh:visualizar', 'rh:criar', 'rh:editar', 'rh:deletar',
-          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar'
+          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar',
+          'criar_notificacoes', 'visualizar_notificacoes', 'editar_notificacoes', 'excluir_notificacoes'
         ],
         'gerente': [
           'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'movimentar_estoque',
           'visualizar_clientes', 'criar_clientes', 'editar_clientes',
           'usuarios:visualizar',
           'rh:visualizar', 'rh:criar', 'rh:editar',
-          'historico:visualizar', 'historico:criar', 'historico:editar'
+          'historico:visualizar', 'historico:criar', 'historico:editar',
+          'criar_notificacoes', 'visualizar_notificacoes'
         ],
         'supervisor': [
           'visualizar_estoque', 'visualizar_clientes', 'visualizar_obras',
@@ -154,7 +156,8 @@ export const requirePermission = (permission) => {
           'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
           'usuarios:visualizar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes',
           'rh:visualizar', 'rh:criar', 'rh:editar', 'rh:deletar',
-          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar'
+          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar',
+          'criar_notificacoes', 'visualizar_notificacoes', 'editar_notificacoes', 'excluir_notificacoes'
         ],
         'user': [
           'visualizar_estoque', 'visualizar_clientes'
