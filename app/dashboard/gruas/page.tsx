@@ -330,17 +330,15 @@ export default function GruasPage() {
       setCreating(true)
       
       // Converter dados do formulário para o formato do backend
-      const gruaData: Partial<GruaBackend> = {
+      const gruaData = {
         name: gruaFormData.name,
         model: gruaFormData.model,
-        modelo: gruaFormData.model,
-        fabricante: gruaFormData.fabricante,
         capacity: gruaFormData.capacity,
-        capacidade: gruaFormData.capacity,
         status: gruaFormData.status,
-        tipo: gruaFormData.tipo,
-        currentObraId: gruaFormData.obraId || undefined,
-        obra_atual_id: gruaFormData.obraId ? Number(gruaFormData.obraId) : undefined,
+        fabricante: gruaFormData.fabricante || undefined,
+        tipo: gruaFormData.tipo || undefined,
+        obraId: gruaFormData.obraId || undefined,
+        observacoes: gruaFormData.observacoes || undefined,
       }
       
       const response = await gruasApi.criarGrua(gruaData)
@@ -396,17 +394,15 @@ export default function GruasPage() {
       setUpdating(true)
       
       // Converter dados do formulário para o formato do backend
-      const gruaData: Partial<GruaBackend> = {
+      const gruaData = {
         name: gruaFormData.name,
         model: gruaFormData.model,
-        modelo: gruaFormData.model,
-        fabricante: gruaFormData.fabricante,
         capacity: gruaFormData.capacity,
-        capacidade: gruaFormData.capacity,
         status: gruaFormData.status,
-        tipo: gruaFormData.tipo,
-        currentObraId: gruaFormData.obraId || undefined,
-        obra_atual_id: gruaFormData.obraId ? Number(gruaFormData.obraId) : undefined,
+        fabricante: gruaFormData.fabricante || undefined,
+        tipo: gruaFormData.tipo || undefined,
+        obraId: gruaFormData.obraId || undefined,
+        observacoes: gruaFormData.observacoes || undefined,
       }
       
       const response = await gruasApi.atualizarGrua(gruaToEdit.id, gruaData)
@@ -877,9 +873,8 @@ export default function GruasPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                    <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                     <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
-                    <SelectItem value="Guincho">Guincho</SelectItem>
-                    <SelectItem value="Outros">Outros</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1027,9 +1022,8 @@ export default function GruasPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                    <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                     <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
-                    <SelectItem value="Guincho">Guincho</SelectItem>
-                    <SelectItem value="Outros">Outros</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
