@@ -8,6 +8,7 @@ import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { sendWelcomeEmail } from '../services/email.service.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -642,15 +643,32 @@ router.post('/', async (req, res) => {
           // Não falhar a criação do funcionário por causa disso
         }
 
+        // Enviar email de boas-vindas com senha temporária
+        console.log('📧 Tentando enviar email de boas-vindas para funcionário...')
+        console.log('📧 Dados:', { nome: value.nome, email: value.email, senha: '***' })
+        
+        try {
+          const emailResult = await sendWelcomeEmail({
+            nome: value.nome,
+            email: value.email,
+            senha_temporaria: senhaTemporaria
+          })
+          console.log(`✅ Email de boas-vindas enviado com sucesso para ${value.email}`, emailResult)
+        } catch (emailError) {
+          console.error('❌ Erro ao enviar email de boas-vindas:', emailError)
+          console.error('❌ Stack trace:', emailError.stack)
+          // Não falha a criação do funcionário se o email falhar
+        }
+
         res.status(201).json({
           success: true,
           data: {
             ...novoFuncionario,
             usuario_criado: true,
-            usuario_id: usuarioId,
-            senha_temporaria: senhaTemporaria // Retornar senha para o admin enviar ao funcionário
+            usuario_id: usuarioId
+            // Por segurança, NÃO retornar senha_temporaria - foi enviada por email
           },
-          message: 'Funcionário e usuário criados com sucesso. Senha temporária gerada.'
+          message: 'Funcionário e usuário criados com sucesso. Email com senha temporária enviado.'
         })
 
       } catch (usuarioError) {

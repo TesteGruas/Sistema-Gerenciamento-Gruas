@@ -2,6 +2,8 @@ import express from 'express'
 import Joi from 'joi'
 import { supabase } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { generateToken, hashToken, isTokenExpired, getTokenExpiry } from '../utils/token.js'
+import { sendResetPasswordEmail, sendPasswordChangedEmail } from '../services/email.service.js'
 
 const router = express.Router()
 
@@ -543,6 +545,384 @@ router.post('/refresh', authenticateToken, async (req, res) => {
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message
+    })
+  }
+})
+
+/**
+ * ==============================================
+ * RESET PASSWORD ENDPOINTS
+ * ==============================================
+ */
+
+// Schema para validação de redefinição de senha
+const forgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required()
+})
+
+const resetPasswordSchema = Joi.object({
+  token: Joi.string().required(),
+  password: Joi.string().min(6).required(),
+  confirmPassword: Joi.string().min(6).required().valid(Joi.ref('password'))
+})
+
+/**
+ * @swagger
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Solicitar redefinição de senha
+ *     tags: [Autenticação]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Email de redefinição enviado
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    // Validar dados
+    const { error, value } = forgotPasswordSchema.validate(req.body)
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    const { email } = value
+
+    // Buscar usuário pelo email
+    const { data: usuario, error: usuarioError } = await supabase
+      .from('usuarios')
+      .select('id, nome, email')
+      .eq('email', email)
+      .eq('status', 'Ativo')
+      .single()
+
+    // Por segurança, sempre retorna sucesso mesmo se o email não existir
+    if (usuarioError || !usuario) {
+      return res.json({
+        success: true,
+        message: 'Se o email existir, você receberá instruções para redefinir a senha'
+      })
+    }
+
+    // Gerar token único
+    const token = generateToken()
+    const hashedToken = hashToken(token)
+    
+    // Configurar expiração (1 hora)
+    const expiryMs = parseInt(process.env.PASSWORD_RESET_TOKEN_EXPIRY || '3600000')
+    const expiresAt = getTokenExpiry(expiryMs)
+
+    // Invalidar tokens anteriores do mesmo usuário
+    await supabase
+      .from('password_reset_tokens')
+      .update({ used: true, used_at: new Date().toISOString() })
+      .eq('usuario_id', usuario.id)
+      .eq('used', false)
+
+    // Salvar novo token no banco
+    const { error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .insert({
+        usuario_id: usuario.id,
+        email: usuario.email,
+        token: hashedToken,
+        expires_at: expiresAt.toISOString()
+      })
+
+    if (tokenError) {
+      console.error('Erro ao criar token:', tokenError)
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao processar solicitação'
+      })
+    }
+
+    // Enviar email com token (usar token original, não o hash)
+    try {
+      await sendResetPasswordEmail({
+        nome: usuario.nome,
+        email: usuario.email,
+        token: token // Token original para o link
+      })
+    } catch (emailError) {
+      console.error('Erro ao enviar email:', emailError)
+      // Não retornar erro para o usuário por segurança
+    }
+
+    res.json({
+      success: true,
+      message: 'Se o email existir, você receberá instruções para redefinir a senha'
+    })
+
+  } catch (error) {
+    console.error('Erro em forgot-password:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao processar solicitação'
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/auth/validate-reset-token/{token}:
+ *   get:
+ *     summary: Validar token de redefinição
+ *     tags: [Autenticação]
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Token válido
+ *       400:
+ *         description: Token inválido ou expirado
+ */
+router.get('/validate-reset-token/:token', async (req, res) => {
+  try {
+    const { token } = req.params
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: 'Token não fornecido'
+      })
+    }
+
+    // Hash do token para buscar no banco
+    const hashedToken = hashToken(token)
+
+    // Buscar token no banco
+    const { data: tokenData, error } = await supabase
+      .from('password_reset_tokens')
+      .select('*')
+      .eq('token', hashedToken)
+      .eq('used', false)
+      .single()
+
+    if (error || !tokenData) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: 'Token inválido ou já utilizado'
+      })
+    }
+
+    // Verificar se está expirado
+    if (isTokenExpired(tokenData.expires_at)) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: 'Token expirado'
+      })
+    }
+
+    res.json({
+      success: true,
+      valid: true,
+      email: tokenData.email
+    })
+
+  } catch (error) {
+    console.error('Erro em validate-reset-token:', error)
+    res.status(500).json({
+      success: false,
+      valid: false,
+      error: 'Erro ao validar token'
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Redefinir senha com token
+ *     tags: [Autenticação]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - password
+ *               - confirmPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *               confirmPassword:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Senha redefinida com sucesso
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    // Validar dados
+    const { error, value } = resetPasswordSchema.validate(req.body)
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    const { token, password } = value
+
+    // Hash do token
+    const hashedToken = hashToken(token)
+
+    // Buscar token no banco
+    const { data: tokenData, error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .select('*')
+      .eq('token', hashedToken)
+      .eq('used', false)
+      .single()
+
+    if (tokenError || !tokenData) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token inválido ou já utilizado'
+      })
+    }
+
+    // Verificar expiração
+    if (isTokenExpired(tokenData.expires_at)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token expirado. Solicite uma nova redefinição de senha'
+      })
+    }
+
+    // Buscar usuário
+    const { data: usuario, error: usuarioError } = await supabase
+      .from('usuarios')
+      .select('*')
+      .eq('id', tokenData.usuario_id)
+      .single()
+
+    if (usuarioError || !usuario) {
+      return res.status(404).json({
+        success: false,
+        error: 'Usuário não encontrado'
+      })
+    }
+
+    // Atualizar senha no Supabase Auth
+    try {
+      const { data: authData, error: authError } = await supabase.auth.admin.updateUserById(
+        usuario.id.toString(),
+        { password: password }
+      )
+
+      if (authError) {
+        throw authError
+      }
+    } catch (authError) {
+      console.error('Erro ao atualizar senha no Supabase Auth:', authError)
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao atualizar senha'
+      })
+    }
+
+    // Marcar token como usado
+    await supabase
+      .from('password_reset_tokens')
+      .update({ 
+        used: true, 
+        used_at: new Date().toISOString() 
+      })
+      .eq('id', tokenData.id)
+
+    // Enviar email de confirmação
+    try {
+      await sendPasswordChangedEmail({
+        nome: usuario.nome,
+        email: usuario.email
+      })
+    } catch (emailError) {
+      console.error('Erro ao enviar email de confirmação:', emailError)
+      // Não falhar a operação por causa do email
+    }
+
+    res.json({
+      success: true,
+      message: 'Senha redefinida com sucesso'
+    })
+
+  } catch (error) {
+    console.error('Erro em reset-password:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao redefinir senha'
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/auth/reset-tokens:
+ *   delete:
+ *     summary: Limpar tokens expirados (Admin)
+ *     tags: [Autenticação]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Tokens expirados removidos
+ */
+router.delete('/reset-tokens', authenticateToken, async (req, res) => {
+  try {
+    // Verificar se é admin (implementar verificação de permissão)
+    
+    // Deletar tokens expirados
+    const { data, error } = await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .lt('expires_at', new Date().toISOString())
+
+    if (error) {
+      throw error
+    }
+
+    res.json({
+      success: true,
+      message: 'Tokens expirados removidos',
+      deleted_count: data?.length || 0
+    })
+
+  } catch (error) {
+    console.error('Erro ao limpar tokens:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao limpar tokens'
     })
   }
 })

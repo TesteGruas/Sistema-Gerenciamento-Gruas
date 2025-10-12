@@ -89,6 +89,7 @@ import impostosFinanceirosRoutes from './routes/impostos-financeiros.js'
 import gruasMensaisRoutes from './routes/gruas-mensais.js'
 import checklistDevolucaoRoutes from './routes/checklist-devolucao.js'
 import notificacoesRoutes from './routes/notificacoes.js'
+import emailConfigRoutes from './routes/email-config.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -288,6 +289,7 @@ app.use('/api/impostos', impostosFinanceirosRoutes)
 app.use('/api/gruas-mensais', gruasMensaisRoutes)
 app.use('/api/checklist-devolucao', checklistDevolucaoRoutes)
 app.use('/api/notificacoes', notificacoesRoutes)
+app.use('/api/email-config', emailConfigRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

@@ -22,6 +22,8 @@ import {
   UserCheck,
   History,
   Bell,
+  Settings,
+  Mail,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -44,6 +46,7 @@ const baseNavigation = [
 
 const adminNavigation = [
   { name: "Usuários", href: "/dashboard/usuarios", icon: Shield },
+  { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail },
 ]
 
 export default function DashboardLayout({

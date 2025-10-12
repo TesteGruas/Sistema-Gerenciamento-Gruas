@@ -2,6 +2,7 @@ import express from 'express'
 import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
+import { sendWelcomeEmail } from '../services/email.service.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -348,13 +349,32 @@ router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (
       }
     }
 
+    // 4. Enviar email de boas-vindas com senha temporária
+    console.log('📧 Tentando enviar email de boas-vindas...')
+    console.log('📧 Dados:', { nome: data.nome, email: data.email, senha: '***' })
+    
+    try {
+      const emailResult = await sendWelcomeEmail({
+        nome: data.nome,
+        email: data.email,
+        senha_temporaria: senhaTemporaria
+      })
+      console.log(`✅ Email de boas-vindas enviado com sucesso para ${data.email}`, emailResult)
+    } catch (emailError) {
+      console.error('❌ Erro ao enviar email de boas-vindas:', emailError)
+      console.error('❌ Stack trace:', emailError.stack)
+      // Não falha a criação do usuário se o email falhar
+      // O usuário foi criado com sucesso, apenas o email que falhou
+    }
+
     res.status(201).json({
       success: true,
       data: {
-        ...data,
-        senha_temporaria: senhaTemporaria // Retornar senha para o admin enviar ao usuário
+        ...data
+        // Por segurança, não retornar a senha no response
+        // A senha foi enviada por email para o usuário
       },
-      message: 'Usuário criado com sucesso. Senha temporária gerada.'
+      message: 'Usuário criado com sucesso. Email de boas-vindas enviado com a senha temporária.'
     })
   } catch (error) {
     console.error('Erro ao criar usuário:', error)
