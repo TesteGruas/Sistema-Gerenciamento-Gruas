@@ -17,7 +17,9 @@ import {
   WifiOff,
   Bell,
   UserCircle,
-  Briefcase
+  Briefcase,
+  Home,
+  Building2
 } from "lucide-react"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import { PWAAuthGuard } from "@/components/pwa-auth-guard"
@@ -134,111 +136,86 @@ export default function PWALayout({ children }: PWALayoutProps) {
   return (
     <PWAAuthGuard>
       {shouldShowLayout ? (
-        <div className="min-h-screen bg-gray-50">
-          {/* Header PWA */}
-          <header className="bg-white shadow-sm border-b sticky top-0 z-50">
-        <div className="px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Logo e título */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Smartphone className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="font-bold text-lg text-gray-900">IRBANA PWA</h1>
-                <p className="text-xs text-gray-500">Sistema de Ponto e Assinatura</p>
-              </div>
-            </div>
+        <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 pb-20">
+          {/* Header Minimalista */}
+          <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white sticky top-0 z-40 shadow-lg">
+            <div className="px-4 py-4">
+              <div className="flex items-center justify-between">
+                {/* Logo e título */}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                    <Smartphone className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="font-bold text-lg">IRBANA</h1>
+                    <div className="flex items-center gap-2 text-xs text-blue-100">
+                      {isOnline ? (
+                        <>
+                          <Wifi className="w-3 h-3" />
+                          <span>Online</span>
+                        </>
+                      ) : (
+                        <>
+                          <WifiOff className="w-3 h-3" />
+                          <span>Offline</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-            {/* Status e controles */}
-            <div className="flex items-center gap-3">
-              {/* Status de conexão */}
-              <div className="flex items-center gap-1">
-                {isOnline ? (
-                  <Wifi className="w-4 h-4 text-green-600" />
-                ) : (
-                  <WifiOff className="w-4 h-4 text-red-600" />
+                {/* User info */}
+                {user && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
                 )}
-                <span className="text-xs text-gray-600">
-                  {isOnline ? "Online" : "Offline"}
-                </span>
               </div>
-
-              {/* Menu mobile */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="lg:hidden"
-              >
-                {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </Button>
             </div>
-          </div>
+          </header>
 
-          {/* Informações do usuário */}
-          {user && (
-            <div className="mt-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-blue-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-sm text-gray-900">{user.nome}</p>
-                  <p className="text-xs text-gray-500">{user.cargo}</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="text-red-600 hover:text-red-700"
-              >
-                <LogOut className="w-4 h-4 mr-1" />
-                Sair
-              </Button>
+          {/* Conteúdo principal */}
+          <main className="px-4 pt-4 pb-24">
+            {/* Indicador de sincronização offline */}
+            <div className="mb-4">
+              <OfflineSyncIndicator />
             </div>
-          )}
-        </div>
-      </header>
+            
+            {children}
+          </main>
 
-      {/* Navegação principal */}
-      <nav className="bg-white border-b">
-        <div className="px-4 py-2">
-          <div className="flex gap-1 overflow-x-auto">
-            {navigationItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href
-              return (
-                <Button
-                  key={item.name}
-                  variant={isActive ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => router.push(item.href)}
-                  className={`flex items-center gap-2 whitespace-nowrap ${
-                    isActive 
-                      ? "bg-blue-600 text-white hover:bg-blue-700" 
-                      : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{item.name}</span>
-                </Button>
-              )
-            })}
-          </div>
-        </div>
-      </nav>
-
-      {/* Conteúdo principal */}
-      <main className="p-4 pb-20">
-        {/* Indicador de sincronização offline */}
-        <div className="mb-4">
-          <OfflineSyncIndicator />
-        </div>
-        
-        {children}
-      </main>
+          {/* Bottom Navigation - Típico de Apps */}
+          <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50">
+            <div className="grid grid-cols-5 h-16">
+              {navigationItems.slice(0, 5).map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href
+                return (
+                  <button
+                    key={item.name}
+                    onClick={() => router.push(item.href)}
+                    className={`flex flex-col items-center justify-center gap-1 transition-all ${
+                      isActive 
+                        ? "text-blue-600" 
+                        : "text-gray-500 active:bg-gray-100"
+                    }`}
+                  >
+                    <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform`}>
+                      <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
+                      {isActive && (
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full" />
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-medium ${isActive ? 'font-semibold' : ''}`}>
+                      {item.name}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </nav>
 
       {/* Prompt de instalação PWA */}
       <PWAInstallPrompt />

@@ -37,7 +37,7 @@ export function usePWAUser(): PWAUserData {
           throw new Error('Token não encontrado')
         }
 
-        // Carregar ponto de hoje
+        // Carregar ponto de hoje (silenciosamente, sem quebrar a página)
         try {
           const hoje = new Date().toISOString().split('T')[0]
           const pontoResponse = await fetch(
@@ -77,13 +77,15 @@ export function usePWAUser(): PWAUserData {
                 setHorasTrabalhadas(`${horas}h ${minutos}min`)
               }
             }
+          } else {
+            console.warn('[PWA User Hook] Endpoint de ponto não disponível ou retornou erro:', pontoResponse.status)
           }
         } catch (pontoError) {
-          console.error('Erro ao carregar ponto:', pontoError)
+          console.warn('[PWA User Hook] Erro ao carregar ponto (continuando sem dados):', pontoError)
           // Não lançar erro, apenas continuar sem dados de ponto
         }
 
-        // Carregar documentos pendentes
+        // Carregar documentos pendentes (silenciosamente, sem quebrar a página)
         try {
           const docsResponse = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/documentos/funcionario/${parsedUser.id}?status=pendente`,
@@ -98,9 +100,11 @@ export function usePWAUser(): PWAUserData {
           if (docsResponse.ok) {
             const docsData = await docsResponse.json()
             setDocumentosPendentes(docsData.total || docsData.data?.length || 0)
+          } else {
+            console.warn('[PWA User Hook] Endpoint de documentos não disponível ou retornou erro:', docsResponse.status)
           }
         } catch (docsError) {
-          console.error('Erro ao carregar documentos:', docsError)
+          console.warn('[PWA User Hook] Erro ao carregar documentos (continuando sem dados):', docsError)
           // Não lançar erro, apenas continuar sem dados de documentos
         }
 

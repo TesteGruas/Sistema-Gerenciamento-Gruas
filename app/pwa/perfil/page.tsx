@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { 
   User, 
   Mail, 
@@ -20,7 +21,9 @@ import {
   Camera,
   Clock,
   FileText,
-  CheckCircle
+  CheckCircle,
+  ShieldCheck,
+  Users
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -36,6 +39,7 @@ export default function PWAPerfilPage() {
     telefone: '',
     email: ''
   })
+  const [isSimulatingManager, setIsSimulatingManager] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -44,7 +48,56 @@ export default function PWAPerfilPage() {
         email: (user as any).email || ''
       })
     }
+    
+    // Carregar estado de simulação do localStorage
+    const simulatingManager = localStorage.getItem('simulating_manager') === 'true'
+    setIsSimulatingManager(simulatingManager)
   }, [user])
+
+  const handleToggleSimulateManager = (checked: boolean) => {
+    setIsSimulatingManager(checked)
+    localStorage.setItem('simulating_manager', checked.toString())
+    
+    // Atualizar dados do usuário no localStorage para incluir cargo de gestor
+    if (checked) {
+      const currentUser = JSON.parse(localStorage.getItem('user_data') || '{}')
+      const updatedUser = {
+        ...currentUser,
+        cargo_original: currentUser.cargo,
+        cargo: 'Encarregador Simulado'
+      }
+      localStorage.setItem('user_data', JSON.stringify(updatedUser))
+      
+      toast({
+        title: "✅ Modo Gestor Ativado",
+        description: "Você agora tem acesso a funcionalidades de encarregador",
+        variant: "default"
+      })
+      
+      // Recarregar página para aplicar mudanças
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } else {
+      const currentUser = JSON.parse(localStorage.getItem('user_data') || '{}')
+      const updatedUser = {
+        ...currentUser,
+        cargo: currentUser.cargo_original || currentUser.cargo
+      }
+      delete updatedUser.cargo_original
+      localStorage.setItem('user_data', JSON.stringify(updatedUser))
+      
+      toast({
+        title: "Modo Gestor Desativado",
+        description: "Você voltou ao seu cargo original",
+        variant: "default"
+      })
+      
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    }
+  }
 
   const handleLogout = () => {
     localStorage.removeItem('access_token')
@@ -113,7 +166,7 @@ export default function PWAPerfilPage() {
             {/* Foto de Perfil */}
             <div className="relative">
               <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold">
-                {user.nome.charAt(0).toUpperCase()}
+                {user.nome ? user.nome.charAt(0).toUpperCase() : 'U'}
               </div>
               <button 
                 className="absolute bottom-0 right-0 p-2 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-700"
@@ -125,8 +178,8 @@ export default function PWAPerfilPage() {
 
             {/* Informações */}
             <div className="flex-1 text-center sm:text-left">
-              <h2 className="text-2xl font-bold text-gray-900">{user.nome}</h2>
-              <p className="text-gray-600 mb-2">{user.cargo}</p>
+              <h2 className="text-2xl font-bold text-gray-900">{user.nome || 'Usuário'}</h2>
+              <p className="text-gray-600 mb-2">{user.cargo || 'Sem cargo'}</p>
               <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                 <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
                   <CheckCircle className="w-3 h-3 mr-1" />
@@ -208,6 +261,67 @@ export default function PWAPerfilPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modo de Teste - Simular Gestor */}
+      <Card className={isSimulatingManager ? "border-2 border-orange-500 bg-orange-50" : "border border-gray-200"}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5" />
+            Modo de Teste - Simular Gestor
+            {isSimulatingManager && (
+              <Badge className="bg-orange-600 text-white">
+                Ativo
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Ative esta opção para testar funcionalidades de encarregador/supervisor
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${isSimulatingManager ? 'bg-orange-100' : 'bg-gray-100'}`}>
+                  <Users className={`w-5 h-5 ${isSimulatingManager ? 'text-orange-600' : 'text-gray-600'}`} />
+                </div>
+                <div>
+                  <p className="font-medium">Simular cargo de Encarregador</p>
+                  <p className="text-sm text-gray-600">
+                    {isSimulatingManager 
+                      ? 'Você tem acesso às funções de aprovação' 
+                      : 'Ative para testar aprovações de ponto e horas extras'}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={isSimulatingManager}
+                onCheckedChange={handleToggleSimulateManager}
+              />
+            </div>
+
+            {isSimulatingManager && (
+              <div className="bg-orange-100 border border-orange-300 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <ShieldCheck className="w-5 h-5 text-orange-700 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-orange-900">Modo Gestor Ativo</p>
+                    <p className="text-sm text-orange-800 mt-1">
+                      Você agora tem acesso a:
+                    </p>
+                    <ul className="text-sm text-orange-800 mt-2 space-y-1 list-disc list-inside">
+                      <li>Página do Encarregador no menu</li>
+                      <li>Aprovação de horas extras</li>
+                      <li>Gestão de funcionários</li>
+                      <li>Relatórios de equipe</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Dados Pessoais */}
       <Card>

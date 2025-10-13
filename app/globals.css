@@ -126,3 +126,215 @@
   width: 1200px!important;
   max-width: 1200px!important;
 }
+
+/* PWA Animations and Interactions */
+@keyframes slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* PWA Smooth Transitions */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+.pwa-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pwa-card:active {
+  transform: scale(0.97);
+}
+
+.pwa-button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pwa-button:active {
+  transform: scale(0.95);
+}
+
+/* Bottom Nav Animation */
+.bottom-nav-item {
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.bottom-nav-item:active {
+  transform: scale(0.9);
+}
+
+.bottom-nav-item.active::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 0 0 3px 3px;
+  animation: slide-down 0.3s ease;
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateX(-50%) translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Pull to Refresh Indicator */
+.pull-to-refresh {
+  transform: translateY(var(--pull-distance, 0));
+  transition: transform 0.2s ease;
+}
+
+/* Smooth Scroll */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Remove scrollbar on PWA */
+@media (display-mode: standalone) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Gestures */
+.swipeable {
+  touch-action: pan-y;
+  user-select: none;
+}
+
+/* Loading States */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* iOS Safe Area */
+@supports (padding: max(0px)) {
+  .pwa-safe-area-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
+  
+  .pwa-safe-area-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Haptic Feedback Simulation */
+@keyframes haptic {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+}
+
+.haptic-feedback:active {
+  animation: haptic 0.1s ease;
+}
+
+/* Card Hover Effects */
+.hover-lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.2);
+}
+
+/* Notification Badge */
+.notification-badge {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Offline Indicator */
+.offline-indicator {
+  animation: slide-up 0.3s ease;
+}
+
+/* PWA Splash Screen */
+#pwa-splash {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fade-out 0.5s ease 2s forwards;
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+    pointer-events: none;
+  }
+}

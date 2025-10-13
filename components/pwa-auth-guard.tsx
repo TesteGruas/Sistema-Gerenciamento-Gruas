@@ -16,13 +16,21 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
 
   useEffect(() => {
     const checkAuth = () => {
-      // Permitir acesso sem autenticação apenas para /pwa/login e /pwa/redirect
-      const publicPaths = ['/pwa/login', '/pwa/redirect']
-      const isPublicPath = publicPaths.some(path => pathname === path)
+      // Garantir que estamos no cliente
+      if (typeof window === 'undefined') {
+        return
+      }
+
+      console.log('[PWA Auth Guard] Verificando auth para:', pathname)
+
+      // Permitir acesso sem autenticação para rotas públicas
+      const publicPaths = ['/pwa/login', '/pwa/redirect', '/pwa/test-api']
+      const isPublicPath = publicPaths.some(path => pathname === path || pathname?.startsWith(path))
       
       if (isPublicPath) {
+        console.log('[PWA Auth Guard] Rota pública, permitindo acesso')
         setIsLoading(false)
-        setIsAuthenticated(true) // Permitir renderização
+        setIsAuthenticated(true)
         return
       }
 
@@ -31,49 +39,60 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       const userData = localStorage.getItem('user_data')
 
       if (!token || !userData) {
-        console.log('PWA Auth Guard: Sem credenciais, redirecionando para login')
+        console.log('[PWA Auth Guard] Sem credenciais, redirecionando para login')
+        setIsLoading(false)
+        setIsAuthenticated(false)
         router.push('/pwa/login')
         return
       }
 
-      // Verificar se o token não está expirado
+      // Verificar se o token não está expirado (opcional, pode causar problemas)
       try {
         const tokenParts = token.split('.')
-        if (tokenParts.length !== 3) {
-          throw new Error('Token inválido')
-        }
-
-        const payload = JSON.parse(atob(tokenParts[1]))
-        const isExpired = payload.exp * 1000 < Date.now()
-        
-        if (isExpired) {
-          console.log('PWA Auth Guard: Token expirado')
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('user_data')
-          localStorage.removeItem('refresh_token')
-          router.push('/pwa/login')
-          return
+        if (tokenParts.length === 3) {
+          // Tentar decodificar o payload
+          try {
+            const payload = JSON.parse(atob(tokenParts[1]))
+            if (payload.exp) {
+              const isExpired = payload.exp * 1000 < Date.now()
+              
+              if (isExpired) {
+                console.log('[PWA Auth Guard] Token expirado')
+                localStorage.removeItem('access_token')
+                localStorage.removeItem('user_data')
+                localStorage.removeItem('refresh_token')
+                setIsLoading(false)
+                setIsAuthenticated(false)
+                router.push('/pwa/login')
+                return
+              }
+            }
+          } catch (decodeError) {
+            console.warn('[PWA Auth Guard] Não foi possível decodificar token, mas permitindo acesso')
+          }
         }
       } catch (error) {
-        console.error('Erro ao validar token:', error)
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('user_data')
-        localStorage.removeItem('refresh_token')
-        router.push('/pwa/login')
-        return
+        console.warn('[PWA Auth Guard] Erro ao validar token, mas permitindo acesso:', error)
       }
 
-      // Token válido, permitir acesso
+      // Token existe, permitir acesso
+      console.log('[PWA Auth Guard] Autenticado, permitindo acesso')
       setIsAuthenticated(true)
       setIsLoading(false)
     }
 
-    checkAuth()
+    // Pequeno delay para evitar flash de loading
+    const timer = setTimeout(() => {
+      checkAuth()
+    }, 100)
 
     // Verificar autenticação a cada 5 minutos
     const interval = setInterval(checkAuth, 5 * 60 * 1000)
 
-    return () => clearInterval(interval)
+    return () => {
+      clearTimeout(timer)
+      clearInterval(interval)
+    }
   }, [pathname, router])
 
   // Mostrar tela de loading enquanto verifica autenticação

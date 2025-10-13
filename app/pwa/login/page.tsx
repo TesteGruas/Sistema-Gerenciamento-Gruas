@@ -76,8 +76,15 @@ export default function PWALoginPage() {
     setIsLoading(true)
 
     try {
+      // Construir URL da API
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const loginUrl = `${apiUrl}/api/auth/login`
+      
+      console.log('[PWA Login] Tentando login em:', loginUrl)
+      console.log('[PWA Login] Dados:', { email: formData.usuario })
+
       // Fazer login real com a API
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/login`, {
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,35 +95,71 @@ export default function PWALoginPage() {
         })
       })
 
-      const data = await response.json()
+      console.log('[PWA Login] Status da resposta:', response.status)
+
+      let data
+      try {
+        data = await response.json()
+        console.log('[PWA Login] Resposta da API:', data)
+      } catch (jsonError) {
+        console.error('[PWA Login] Erro ao parsear JSON:', jsonError)
+        throw new Error('Resposta inválida do servidor')
+      }
 
       if (response.ok && data.success) {
+        // Verificar se os dados necessários existem
+        if (!data.data || !data.data.access_token) {
+          throw new Error('Token de acesso não fornecido pela API')
+        }
+
         // Salvar dados de autenticação
         localStorage.setItem('access_token', data.data.access_token)
-        localStorage.setItem('user_data', JSON.stringify(data.data.user))
+        
+        // Salvar dados do usuário
+        if (data.data.user) {
+          localStorage.setItem('user_data', JSON.stringify(data.data.user))
+        }
+        
+        // Salvar refresh token se existir
         if (data.data.refresh_token) {
           localStorage.setItem('refresh_token', data.data.refresh_token)
         }
 
+        console.log('[PWA Login] Login bem-sucedido!')
+
         toast({
           title: "Login realizado com sucesso!",
-          description: `Bem-vindo, ${data.data.user.nome}!`,
+          description: `Bem-vindo${data.data.user?.nome ? ', ' + data.data.user.nome : ''}!`,
           variant: "default"
         })
         
-        router.push("/pwa")
+        // Pequeno delay para garantir que o localStorage foi salvo
+        setTimeout(() => {
+          router.push("/pwa")
+        }, 100)
       } else {
+        // Login falhou
+        console.error('[PWA Login] Falha no login:', data)
         toast({
           title: "Credenciais inválidas",
           description: data.message || "Verifique seu usuário e senha",
           variant: "destructive"
         })
       }
-    } catch (error) {
-      console.error('Erro no login:', error)
+    } catch (error: any) {
+      console.error('[PWA Login] Erro no login:', error)
+      
+      let errorMessage = "Não foi possível conectar ao servidor"
+      
+      if (error.message) {
+        errorMessage = error.message
+      } else if (error.name === 'TypeError' && error.message?.includes('fetch')) {
+        errorMessage = "Erro de conexão. Verifique sua internet ou a URL da API"
+      }
+      
       toast({
         title: "Erro no login",
-        description: "Tente novamente em alguns instantes",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {
@@ -251,6 +294,16 @@ export default function PWALoginPage() {
 
         {/* PWA Install Prompt */}
         <PWAInstallPrompt />
+
+        {/* Link de Debug */}
+        <div className="mt-6 text-center">
+          <a 
+            href="/pwa/test-api" 
+            className="text-sm text-blue-600 hover:underline"
+          >
+            🔧 Problemas com login? Clique aqui para diagnóstico
+          </a>
+        </div>
       </div>
     </div>
   )
