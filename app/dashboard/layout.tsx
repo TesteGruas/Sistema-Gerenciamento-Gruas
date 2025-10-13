@@ -33,6 +33,7 @@ import { usePathname } from "next/navigation"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { UserDropdown } from "@/components/user-dropdown"
 import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
+import { GlobalSearch } from "@/components/global-search"
 
 // Tipos para navegação
 interface NavigationItem {
@@ -443,6 +444,7 @@ export default function DashboardLayout({
 
             <div className="flex items-center gap-4 ml-auto">
               <span className="text-sm text-gray-600 hidden md:block">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</span>
+              <GlobalSearch />
               <NotificationsDropdown />
               <UserDropdown />
             </div>
