@@ -1,44 +1,53 @@
-"use client"
+'use client'
 
-import { useState, useEffect } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { 
-  Cloud, 
-  CloudOff, 
-  RefreshCw, 
-  CheckCircle,
-  AlertCircle 
-} from "lucide-react"
-import { offlineSync } from "@/lib/offline-sync"
-import { useToast } from "@/hooks/use-toast"
+import { useState, useEffect } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Wifi, WifiOff, Sync, CheckCircle, AlertCircle, Clock } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
+
+interface SyncStatus {
+  isOnline: boolean
+  pendingActions: number
+  lastSync: Date | null
+  isSyncing: boolean
+}
+
+interface PendingAction {
+  id: string
+  type: 'ponto' | 'documento' | 'assinatura'
+  data: any
+  timestamp: Date
+  retryCount: number
+}
 
 export function OfflineSyncIndicator() {
-  const [isOnline, setIsOnline] = useState(true)
-  const [queueLength, setQueueLength] = useState(0)
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [status, setStatus] = useState<SyncStatus>({
+    isOnline: navigator.onLine,
+    pendingActions: 0,
+    lastSync: null,
+    isSyncing: false
+  })
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([])
   const { toast } = useToast()
 
   useEffect(() => {
-    // Verificar status da conexão
-    setIsOnline(navigator.onLine)
-    setQueueLength(offlineSync.getQueueLength())
-
+    // Verificar status de conectividade
     const handleOnline = () => {
-      setIsOnline(true)
+      setStatus(prev => ({ ...prev, isOnline: true }))
       toast({
         title: "Conexão restaurada",
         description: "Sincronizando dados pendentes...",
       })
-      handleSync()
+      syncPendingActions()
     }
 
     const handleOffline = () => {
-      setIsOnline(false)
+      setStatus(prev => ({ ...prev, isOnline: false }))
       toast({
-        title: "Sem conexão",
-        description: "Suas ações serão sincronizadas quando voltar online",
+        title: "Modo offline",
+        description: "Suas ações serão sincronizadas quando a conexão voltar",
         variant: "destructive"
       })
     }
@@ -46,129 +55,265 @@ export function OfflineSyncIndicator() {
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
 
-    // Iniciar sincronização automática
-    offlineSync.startAutoSync(5)
-
-    // Atualizar contador da fila periodicamente
-    const interval = setInterval(() => {
-      setQueueLength(offlineSync.getQueueLength())
-    }, 10000)
+    // Carregar ações pendentes do localStorage
+    loadPendingActions()
 
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
-      offlineSync.stopAutoSync()
-      clearInterval(interval)
     }
   }, [])
 
-  const handleSync = async () => {
-    setIsSyncing(true)
+  const loadPendingActions = () => {
     try {
-      const result = await offlineSync.processQueue()
-      setQueueLength(offlineSync.getQueueLength())
-      
-      if (result.success > 0) {
-        toast({
-          title: "Sincronização concluída",
-          description: `${result.success} ação(ões) sincronizada(s) com sucesso`,
-        })
-      }
-      
-      if (result.failed > 0) {
-        toast({
-          title: "Algumas ações falharam",
-          description: `${result.failed} ação(ões) não puderam ser sincronizadas`,
-          variant: "destructive"
-        })
+      const stored = localStorage.getItem('offline-actions')
+      if (stored) {
+        const actions: PendingAction[] = JSON.parse(stored)
+        setPendingActions(actions)
+        setStatus(prev => ({ ...prev, pendingActions: actions.length }))
       }
     } catch (error) {
-      console.error('Erro ao sincronizar:', error)
-      toast({
-        title: "Erro na sincronização",
-        description: "Não foi possível sincronizar os dados",
-        variant: "destructive"
-      })
-    } finally {
-      setIsSyncing(false)
+      console.error('Erro ao carregar ações pendentes:', error)
     }
   }
 
-  if (isOnline && queueLength === 0) {
-    return (
-      <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
-        <Cloud className="w-3 h-3 mr-1" />
-        Online
-      </Badge>
-    )
+  const savePendingActions = (actions: PendingAction[]) => {
+    try {
+      localStorage.setItem('offline-actions', JSON.stringify(actions))
+      setPendingActions(actions)
+      setStatus(prev => ({ ...prev, pendingActions: actions.length }))
+    } catch (error) {
+      console.error('Erro ao salvar ações pendentes:', error)
+    }
   }
 
-  if (!isOnline) {
-    return (
-      <Card className="border-orange-200 bg-orange-50">
-        <CardContent className="p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <CloudOff className="w-5 h-5 text-orange-600" />
-              <div>
-                <p className="text-sm font-medium text-orange-900">Modo Offline</p>
-                {queueLength > 0 && (
-                  <p className="text-xs text-orange-700">
-                    {queueLength} ação(ões) aguardando sincronização
-                  </p>
-                )}
-              </div>
-            </div>
-            {queueLength > 0 && (
-              <Badge variant="secondary" className="bg-orange-200 text-orange-800">
-                {queueLength}
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    )
+  const addPendingAction = (action: Omit<PendingAction, 'id' | 'timestamp' | 'retryCount'>) => {
+    const newAction: PendingAction = {
+      ...action,
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      retryCount: 0
+    }
+    
+    const updatedActions = [...pendingActions, newAction]
+    savePendingActions(updatedActions)
   }
 
-  if (queueLength > 0) {
-    return (
-      <Card className="border-blue-200 bg-blue-50">
-        <CardContent className="p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-600" />
+  const syncPendingActions = async () => {
+    if (!status.isOnline || pendingActions.length === 0) return
+
+    setStatus(prev => ({ ...prev, isSyncing: true }))
+
+    try {
+      const successfulActions: string[] = []
+      const failedActions: PendingAction[] = []
+
+      for (const action of pendingActions) {
+        try {
+          await syncAction(action)
+          successfulActions.push(action.id)
+        } catch (error) {
+          console.error(`Erro ao sincronizar ação ${action.id}:`, error)
+          failedActions.push({
+            ...action,
+            retryCount: action.retryCount + 1
+          })
+        }
+      }
+
+      // Remover ações bem-sucedidas
+      const remainingActions = failedActions.filter(
+        action => action.retryCount < 3 // Máximo 3 tentativas
+      )
+      
+      savePendingActions(remainingActions)
+      setStatus(prev => ({ 
+        ...prev, 
+        lastSync: new Date(),
+        isSyncing: false 
+      }))
+
+      if (successfulActions.length > 0) {
+        toast({
+          title: "Sincronização concluída",
+          description: `${successfulActions.length} ação(ões) sincronizada(s) com sucesso`,
+        })
+      }
+
+    } catch (error) {
+      console.error('Erro na sincronização:', error)
+      setStatus(prev => ({ ...prev, isSyncing: false }))
+    }
+  }
+
+  const syncAction = async (action: PendingAction) => {
+    // Simular sincronização com API
+    const token = localStorage.getItem('access_token')
+    
+    switch (action.type) {
+      case 'ponto':
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(action.data)
+        })
+        break
+      
+      case 'documento':
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/documentos`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(action.data)
+        })
+        break
+      
+      case 'assinatura':
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/assinaturas`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(action.data)
+        })
+        break
+    }
+  }
+
+  const retryFailedActions = () => {
+    if (status.isOnline) {
+      syncPendingActions()
+    }
+  }
+
+  const clearAllPendingActions = () => {
+    savePendingActions([])
+    toast({
+      title: "Ações pendentes removidas",
+      description: "Todas as ações pendentes foram removidas",
+    })
+  }
+
+  const getStatusIcon = () => {
+    if (status.isSyncing) return <Sync className="w-4 h-4 animate-spin" />
+    if (status.isOnline) return <Wifi className="w-4 h-4 text-green-500" />
+    return <WifiOff className="w-4 h-4 text-red-500" />
+  }
+
+  const getStatusText = () => {
+    if (status.isSyncing) return 'Sincronizando...'
+    if (status.isOnline) return 'Online'
+    return 'Offline'
+  }
+
+  const getStatusColor = () => {
+    if (status.isSyncing) return 'bg-blue-100 text-blue-800'
+    if (status.isOnline) return 'bg-green-100 text-green-800'
+    return 'bg-red-100 text-red-800'
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Indicador de Status */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {getStatusIcon()}
               <div>
-                <p className="text-sm font-medium text-blue-900">Dados pendentes</p>
-                <p className="text-xs text-blue-700">
-                  {queueLength} ação(ões) aguardando sincronização
+                <p className="font-medium">{getStatusText()}</p>
+                <p className="text-sm text-gray-500">
+                  {status.lastSync 
+                    ? `Última sincronização: ${status.lastSync.toLocaleString('pt-BR')}`
+                    : 'Nunca sincronizado'
+                  }
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSync}
-              disabled={isSyncing}
-              className="border-blue-300 text-blue-700 hover:bg-blue-100"
-            >
-              {isSyncing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
-                  Sincronizando...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Sincronizar
-                </>
-              )}
-            </Button>
+            <Badge className={getStatusColor()}>
+              {getStatusText()}
+            </Badge>
           </div>
         </CardContent>
       </Card>
-    )
-  }
 
-  return null
+      {/* Ações Pendentes */}
+      {pendingActions.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-orange-500" />
+                <h3 className="font-medium">Ações Pendentes</h3>
+                <Badge variant="outline">{pendingActions.length}</Badge>
+              </div>
+              <div className="flex gap-2">
+                {status.isOnline && (
+                  <Button size="sm" onClick={retryFailedActions}>
+                    <Sync className="w-4 h-4 mr-2" />
+                    Sincronizar
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={clearAllPendingActions}>
+                  Limpar
+                </Button>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              {pendingActions.slice(0, 5).map(action => (
+                <div key={action.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">
+                      {action.type === 'ponto' && 'Registro de Ponto'}
+                      {action.type === 'documento' && 'Assinatura de Documento'}
+                      {action.type === 'assinatura' && 'Assinatura Digital'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {action.timestamp.toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                  {action.retryCount > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {action.retryCount} tentativas
+                    </Badge>
+                  )}
+                </div>
+              ))}
+              
+              {pendingActions.length > 5 && (
+                <p className="text-sm text-gray-500 text-center">
+                  +{pendingActions.length - 5} mais ações pendentes
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Instruções Offline */}
+      {!status.isOnline && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5" />
+              <div>
+                <h3 className="font-medium text-orange-800">Modo Offline</h3>
+                <p className="text-sm text-orange-700 mt-1">
+                  Você está offline. Suas ações serão salvas localmente e sincronizadas 
+                  automaticamente quando a conexão for restaurada.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
 }
-

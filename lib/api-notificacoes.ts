@@ -44,6 +44,7 @@ export interface ListarNotificacoesParams {
   limit?: number;
   tipo?: NotificationType;
   lida?: boolean;
+  search?: string;
 }
 
 export interface ListarNotificacoesResponse {
@@ -75,13 +76,13 @@ export const NotificacoesAPI = {
   /**
    * Listar todas as notificações com paginação e filtros
    */
-  listar: async (params?: ListarNotificacoesParams): Promise<Notificacao[]> => {
+  listar: async (params?: ListarNotificacoesParams): Promise<ListarNotificacoesResponse> => {
     try {
       const response = await apiWithRetry(
         () => api.get<ListarNotificacoesResponse>('/notificacoes', { params }),
         { maxRetries: 2 }
       )
-      return response.data.data || []
+      return response.data
     } catch (error: any) {
       console.error('Erro ao listar notificações:', error)
       throw new Error(

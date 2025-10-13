@@ -22,6 +22,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X } from "lucide-react"
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  LineChart,
+  Line
+} from 'recharts'
 import { 
   apiFuncionarios, 
   apiRegistrosPonto, 
@@ -33,6 +48,7 @@ import {
   type Justificativa
 } from "@/lib/api-ponto-eletronico"
 import { ExportButton } from "@/components/export-button"
+import { EspelhoPontoDialog } from "@/components/espelho-ponto-dialog"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -493,6 +509,17 @@ export default function PontoPage() {
             nomeArquivo="relatorio-ponto"
             titulo="Relatório de Ponto Eletrônico"
           />
+          <EspelhoPontoDialog
+            funcionarioId={selectedFuncionario ? parseInt(selectedFuncionario) : 1}
+            mes={new Date().getMonth() + 1}
+            ano={new Date().getFullYear()}
+            trigger={
+              <Button variant="outline">
+                <FileText className="w-4 h-4 mr-2" />
+                Espelho de Ponto
+              </Button>
+            }
+          />
           <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 bg-transparent">
@@ -917,11 +944,12 @@ export default function PontoPage() {
       </div>
 
       <Tabs defaultValue="registros" className="space-y-6">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="registros">Registros de Ponto</TabsTrigger>
           <TabsTrigger value="horas-extras">Controle de Horas Extras</TabsTrigger>
           <TabsTrigger value="justificativas">Justificativas</TabsTrigger>
           <TabsTrigger value="relatorio">Relatório Mensal</TabsTrigger>
+          <TabsTrigger value="graficos">📊 Gráficos Visuais</TabsTrigger>
         </TabsList>
 
         <TabsContent value="registros">
@@ -1443,6 +1471,223 @@ export default function PontoPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Nova aba de Gráficos Visuais */}
+        <TabsContent value="graficos">
+          <div className="space-y-6">
+            {/* Gráficos de Pizza - Distribuição de Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle>📊 Distribuição de Status dos Registros</CardTitle>
+                <CardDescription>Visualização da situação atual dos registros de ponto</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const statusCounts = data.registrosPonto.reduce((acc, registro) => {
+                    const status = registro.status || 'Sem Status'
+                    acc[status] = (acc[status] || 0) + 1
+                    return acc
+                  }, {} as Record<string, number>)
+
+                  const chartData = Object.entries(statusCounts).map(([status, count]) => ({
+                    name: status,
+                    value: count
+                  }))
+
+                  const COLORS = {
+                    'Completo': '#10b981',
+                    'Em Andamento': '#3b82f6',
+                    'Atraso': '#f59e0b',
+                    'Falta': '#ef4444',
+                    'Pendente Aprovação': '#f97316',
+                    'Aprovado': '#22c55e',
+                    'Rejeitado': '#dc2626'
+                  }
+
+                  return chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={350}>
+                      <PieChart>
+                        <Pie
+                          data={chartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={120}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[entry.name as keyof typeof COLORS] || '#94a3b8'} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip 
+                          formatter={(value: number) => [`${value} registros`, '']}
+                        />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[350px] flex items-center justify-center text-muted-foreground">
+                      <p>Nenhum dado disponível</p>
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Gráficos de Barras - Horas Trabalhadas e Extras */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Horas Trabalhadas por Funcionário */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>⏰ Horas Trabalhadas por Funcionário</CardTitle>
+                  <CardDescription>Total de horas trabalhadas (Top 10)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const horasPorFuncionario = data.funcionarios
+                      .map(func => {
+                        const registros = data.registrosPonto.filter(r => r.funcionario_id === func.id)
+                        const totalHoras = registros.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0)
+                        return {
+                          nome: func.nome.split(' ')[0], // Apenas primeiro nome
+                          horas: Number(totalHoras.toFixed(1))
+                        }
+                      })
+                      .filter(item => item.horas > 0)
+                      .sort((a, b) => b.horas - a.horas)
+                      .slice(0, 10)
+
+                    return horasPorFuncionario.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <RechartsBarChart data={horasPorFuncionario}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="nome" />
+                          <YAxis />
+                          <RechartsTooltip 
+                            formatter={(value: number) => [`${value}h`, 'Horas Trabalhadas']}
+                          />
+                          <Legend />
+                          <Bar dataKey="horas" fill="#10b981" name="Horas Trabalhadas" />
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                        <p>Nenhum dado disponível</p>
+                      </div>
+                    )
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* Horas Extras por Funcionário */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>⭐ Horas Extras por Funcionário</CardTitle>
+                  <CardDescription>Total de horas extras (Top 10)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const horasExtrasPorFuncionario = data.funcionarios
+                      .map(func => {
+                        const registros = data.registrosPonto.filter(r => r.funcionario_id === func.id)
+                        const totalExtras = registros.reduce((sum, r) => sum + (r.horas_extras || 0), 0)
+                        return {
+                          nome: func.nome.split(' ')[0], // Apenas primeiro nome
+                          extras: Number(totalExtras.toFixed(1))
+                        }
+                      })
+                      .filter(item => item.extras > 0)
+                      .sort((a, b) => b.extras - a.extras)
+                      .slice(0, 10)
+
+                    return horasExtrasPorFuncionario.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <RechartsBarChart data={horasExtrasPorFuncionario}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="nome" />
+                          <YAxis />
+                          <RechartsTooltip 
+                            formatter={(value: number) => [`${value}h`, 'Horas Extras']}
+                          />
+                          <Legend />
+                          <Bar dataKey="extras" fill="#f59e0b" name="Horas Extras" />
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                        <p>Nenhuma hora extra registrada</p>
+                      </div>
+                    )
+                  })()}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Gráfico de Linha - Tendência de Atrasos */}
+            <Card>
+              <CardHeader>
+                <CardTitle>📈 Evolução de Atrasos e Faltas</CardTitle>
+                <CardDescription>Acompanhamento mensal de atrasos e faltas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  // Agrupar atrasos e faltas por mês
+                  const registrosPorMes = data.registrosPonto.reduce((acc, registro) => {
+                    const data = new Date(registro.data)
+                    const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`
+                    
+                    if (!acc[mesAno]) {
+                      acc[mesAno] = { mes: mesAno, atrasos: 0, faltas: 0, timestamp: data.getTime() }
+                    }
+                    
+                    if (registro.status === 'Atraso') acc[mesAno].atrasos++
+                    if (registro.status === 'Falta') acc[mesAno].faltas++
+                    
+                    return acc
+                  }, {} as Record<string, { mes: string; atrasos: number; faltas: number; timestamp: number }>)
+
+                  const chartData = Object.values(registrosPorMes)
+                    .sort((a, b) => a.timestamp - b.timestamp)
+                    .slice(-6) // Últimos 6 meses
+
+                  return chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="mes" />
+                        <YAxis />
+                        <RechartsTooltip />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="atrasos" 
+                          stroke="#f59e0b" 
+                          strokeWidth={2}
+                          name="Atrasos"
+                          dot={{ r: 4 }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="faltas" 
+                          stroke="#ef4444" 
+                          strokeWidth={2}
+                          name="Faltas"
+                          dot={{ r: 4 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                      <p>Nenhum dado disponível para análise de tendência</p>
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

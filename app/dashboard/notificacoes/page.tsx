@@ -17,15 +17,21 @@ import {
   DollarSign,
   Users,
   ConeIcon as Crane,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { NotificacoesAPI, Notificacao, formatarTempoRelativo, NotificationType } from '@/lib/api-notificacoes'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { NotificacoesAPI, Notificacao, formatarTempoRelativo, NotificationType, ListarNotificacoesResponse } from '@/lib/api-notificacoes'
 import { useToast } from '@/hooks/use-toast'
 import { NovaNotificacaoDialog } from '@/components/nova-notificacao-dialog'
+import { NotificacaoDetailModal } from '@/components/notificacao-detail-modal'
 
 // Configuração de ícones e cores
 const tipoConfig: Record<NotificationType, { 
@@ -102,19 +108,37 @@ const tipoConfig: Record<NotificationType, {
 
 export default function NotificacoesPage() {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
-  const [filtradas, setFiltradas] = useState<Notificacao[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
   const [filtroTipo, setFiltroTipo] = useState<'todas' | 'nao_lidas' | 'lidas'>('todas')
+  const [filtroTipoNotificacao, setFiltroTipoNotificacao] = useState<string>('all')
+  const [pagina, setPagina] = useState(1)
+  const [limite, setLimite] = useState(10)
+  const [paginacao, setPaginacao] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 1
+  })
+  const [notificacaoSelecionada, setNotificacaoSelecionada] = useState<Notificacao | null>(null)
+  const [modalAberto, setModalAberto] = useState(false)
   const { toast } = useToast()
 
-  // Carregar notificações
-  const carregarNotificacoes = async () => {
+  // Carregar notificações com paginação e filtros
+  const carregarNotificacoes = async (novaPagina?: number, novoLimite?: number) => {
     setLoading(true)
     try {
-      const dados = await NotificacoesAPI.listar()
-      setNotificacoes(dados)
-      setFiltradas(dados)
+      const params = {
+        page: novaPagina || pagina,
+        limit: novoLimite || limite,
+        search: busca || undefined,
+        tipo: filtroTipoNotificacao !== 'all' ? filtroTipoNotificacao as NotificationType : undefined,
+        lida: filtroTipo === 'todas' ? undefined : filtroTipo === 'nao_lidas' ? false : true
+      }
+
+      const response = await NotificacoesAPI.listar(params)
+      setNotificacoes(response.data)
+      setPaginacao(response.pagination)
     } catch (error) {
       toast({
         title: 'Erro ao carregar notificações',
@@ -130,27 +154,39 @@ export default function NotificacoesPage() {
     carregarNotificacoes()
   }, [])
 
-  // Aplicar filtros
+  // Recarregar quando filtros mudarem
   useEffect(() => {
-    let resultado = [...notificacoes]
-
-    // Filtro por leitura
-    if (filtroTipo === 'nao_lidas') {
-      resultado = resultado.filter(n => !n.lida)
-    } else if (filtroTipo === 'lidas') {
-      resultado = resultado.filter(n => n.lida)
+    if (pagina > 1) {
+      setPagina(1) // Reset para primeira página
+    } else {
+      carregarNotificacoes()
     }
+  }, [busca, filtroTipo, filtroTipoNotificacao, limite])
 
-    // Filtro por busca
-    if (busca) {
-      resultado = resultado.filter(n => 
-        n.titulo.toLowerCase().includes(busca.toLowerCase()) ||
-        n.mensagem.toLowerCase().includes(busca.toLowerCase())
-      )
-    }
+  // Mudar página
+  const mudarPagina = (novaPagina: number) => {
+    setPagina(novaPagina)
+    carregarNotificacoes(novaPagina)
+  }
 
-    setFiltradas(resultado)
-  }, [notificacoes, filtroTipo, busca])
+  // Mudar limite por página
+  const mudarLimite = (novoLimite: number) => {
+    setLimite(novoLimite)
+    setPagina(1)
+    carregarNotificacoes(1, novoLimite)
+  }
+
+  // Abrir modal de detalhes
+  const abrirDetalhes = (notificacao: Notificacao) => {
+    setNotificacaoSelecionada(notificacao)
+    setModalAberto(true)
+  }
+
+  // Fechar modal
+  const fecharModal = () => {
+    setModalAberto(false)
+    setNotificacaoSelecionada(null)
+  }
 
   // Marcar como lida
   const marcarComoLida = async (id: string) => {
@@ -271,69 +307,98 @@ export default function NotificacoesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+    <div className="space-y-4">
+      {/* Header Compacto */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Notificações</h1>
-          <p className="text-gray-600 mt-2">
-            Gerencie todas as suas notificações do sistema
+          <h1 className="text-2xl font-bold text-gray-900">Notificações</h1>
+          <p className="text-sm text-gray-600">
+            {paginacao.total} notificação{paginacao.total !== 1 ? 'ões' : ''} encontrada{paginacao.total !== 1 ? 's' : ''}
           </p>
         </div>
-        <NovaNotificacaoDialog onNotificacaoCriada={carregarNotificacoes} />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => carregarNotificacoes()}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+          <NovaNotificacaoDialog onNotificacaoCriada={carregarNotificacoes} />
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Total de Notificações
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{notificacoes.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Não Lidas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{naoLidas}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Lidas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-500">
-              {notificacoes.length - naoLidas}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filtros e Ações */}
+      {/* Filtros Compactos */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
+        <CardContent className="p-4">
+          <div className="flex flex-col lg:flex-row gap-3 items-end">
             {/* Busca */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar notificações..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                className="pl-10"
-              />
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Buscar</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Título ou mensagem..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="pl-10 h-9"
+                />
+              </div>
+            </div>
+
+            {/* Filtro por Status */}
+            <div className="flex-1 min-w-[140px]">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Status</label>
+              <Select value={filtroTipo} onValueChange={(v) => setFiltroTipo(v as any)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas</SelectItem>
+                  <SelectItem value="nao_lidas">Não Lidas</SelectItem>
+                  <SelectItem value="lidas">Lidas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Filtro por Tipo */}
+            <div className="flex-1 min-w-[140px]">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Tipo</label>
+              <Select value={filtroTipoNotificacao} onValueChange={setFiltroTipoNotificacao}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="info">Informação</SelectItem>
+                  <SelectItem value="warning">Aviso</SelectItem>
+                  <SelectItem value="error">Erro</SelectItem>
+                  <SelectItem value="success">Sucesso</SelectItem>
+                  <SelectItem value="grua">Gruas</SelectItem>
+                  <SelectItem value="obra">Obras</SelectItem>
+                  <SelectItem value="financeiro">Financeiro</SelectItem>
+                  <SelectItem value="rh">RH</SelectItem>
+                  <SelectItem value="estoque">Estoque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Itens por página */}
+            <div className="flex-1 min-w-[120px]">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Por página</label>
+              <Select value={limite.toString()} onValueChange={(v) => mudarLimite(parseInt(v))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Ações */}
@@ -341,22 +406,24 @@ export default function NotificacoesPage() {
               {naoLidas > 0 && (
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={marcarTodasComoLidas}
-                  className="whitespace-nowrap"
+                  className="h-9"
                 >
-                  <CheckCheck className="h-4 w-4 mr-2" />
-                  Marcar todas como lidas
+                  <CheckCheck className="h-3 w-3 mr-1" />
+                  Marcar lidas
                 </Button>
               )}
               
               {notificacoes.length > 0 && (
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={deletarTodas}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 whitespace-nowrap"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir todas
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Excluir
                 </Button>
               )}
             </div>
@@ -364,132 +431,252 @@ export default function NotificacoesPage() {
         </CardContent>
       </Card>
 
-      {/* Tabs de Filtros */}
-      <Tabs value={filtroTipo} onValueChange={(v) => setFiltroTipo(v as any)}>
-        <TabsList className="grid w-full md:w-auto grid-cols-3">
-          <TabsTrigger value="todas">
-            Todas ({notificacoes.length})
-          </TabsTrigger>
-          <TabsTrigger value="nao_lidas">
-            Não Lidas ({naoLidas})
-          </TabsTrigger>
-          <TabsTrigger value="lidas">
-            Lidas ({notificacoes.length - naoLidas})
-          </TabsTrigger>
-        </TabsList>
+      {/* Tabela de Notificações */}
+      {loading ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <RefreshCw className="h-8 w-8 mx-auto text-gray-400 mb-4 animate-spin" />
+            <div className="text-gray-500">Carregando notificações...</div>
+          </CardContent>
+        </Card>
+      ) : notificacoes.length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Bell className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Nenhuma notificação encontrada
+            </h3>
+            <p className="text-gray-500">
+              {busca ? 'Tente ajustar sua busca' : 'Você está em dia!'}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tipo
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Título
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Mensagem
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Remetente
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Data
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {notificacoes.map((notificacao) => {
+                    const config = tipoConfig[notificacao.tipo]
+                    const Icon = config.icon
 
-        <TabsContent value={filtroTipo} className="mt-6 space-y-4">
-          {loading ? (
-            <Card>
-              <CardContent className="p-12 text-center">
-                <div className="text-gray-500">Carregando notificações...</div>
-              </CardContent>
-            </Card>
-          ) : filtradas.length === 0 ? (
-            <Card>
-              <CardContent className="p-12 text-center">
-                <Bell className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Nenhuma notificação encontrada
-                </h3>
-                <p className="text-gray-500">
-                  {busca ? 'Tente ajustar sua busca' : 'Você está em dia!'}
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            filtradas.map((notificacao) => {
-              const config = tipoConfig[notificacao.tipo]
-              const Icon = config.icon
+                    return (
+                      <tr
+                        key={notificacao.id}
+                        className={`hover:bg-gray-50 transition-colors ${
+                          !notificacao.lida ? 'bg-blue-50/30' : ''
+                        }`}
+                      >
+                        {/* Status */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {!notificacao.lida && (
+                              <span className="h-2 w-2 bg-blue-500 rounded-full" />
+                            )}
+                            <span className={`text-xs font-medium ${
+                              notificacao.lida ? 'text-gray-500' : 'text-blue-600'
+                            }`}>
+                              {notificacao.lida ? 'Lida' : 'Não lida'}
+                            </span>
+                          </div>
+                        </td>
 
-              return (
-                <Card
-                  key={notificacao.id}
-                  className={`transition-all hover:shadow-md ${
-                    !notificacao.lida ? 'border-l-4 border-l-blue-500' : ''
-                  }`}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex gap-4">
-                      {/* Ícone */}
-                      <div className={`p-3 rounded-lg ${config.bg} ${config.text} h-fit`}>
-                        <Icon className="h-6 w-6" />
-                      </div>
-
-                      {/* Conteúdo */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-gray-900">
-                                {notificacao.titulo}
-                              </h3>
-                              {!notificacao.lida && (
-                                <span className="h-2 w-2 bg-blue-500 rounded-full" />
-                              )}
+                        {/* Tipo */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded-md ${config.bg} ${config.text}`}>
+                              <Icon className="h-3 w-3" />
                             </div>
                             <Badge variant="secondary" className="text-xs">
                               {config.label}
                             </Badge>
                           </div>
+                        </td>
 
-                          {/* Ações */}
-                          <div className="flex items-center gap-2">
+                        {/* Título */}
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => abrirDetalhes(notificacao)}
+                            className="text-sm font-medium text-gray-900 max-w-xs truncate hover:text-blue-600 hover:underline text-left"
+                          >
+                            {notificacao.titulo}
+                          </button>
+                        </td>
+
+                        {/* Mensagem */}
+                        <td className="px-4 py-3">
+                          <div className="text-sm text-gray-600 max-w-xs truncate">
+                            {notificacao.mensagem}
+                          </div>
+                        </td>
+
+                        {/* Remetente */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {notificacao.remetente || 'Sistema'}
+                          </div>
+                        </td>
+
+                        {/* Data */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="text-sm text-gray-500">
+                            {formatarTempoRelativo(notificacao.data)}
+                          </div>
+                        </td>
+
+                        {/* Ações */}
+                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center justify-end gap-1">
                             {!notificacao.lida && (
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => marcarComoLida(notificacao.id)}
+                                className="h-7 px-2 text-xs"
                               >
-                                <Check className="h-4 w-4 mr-1" />
-                                Marcar como lida
+                                <Check className="h-3 w-3 mr-1" />
+                                Lida
                               </Button>
                             )}
                             
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => deletarNotificacao(notificacao.id)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => abrirDetalhes(notificacao)}
+                              className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Eye className="h-3 w-3 mr-1" />
+                              Ver detalhes
+                            </Button>
+                            
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deletarNotificacao(notificacao.id)}
+                              className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs"
+                            >
+                              <Trash2 className="h-3 w-3" />
                             </Button>
                           </div>
-                        </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                        <p className="text-gray-600 mb-3">
-                          {notificacao.mensagem}
-                        </p>
+      {/* Paginação */}
+      {!loading && notificacoes.length > 0 && paginacao.pages > 1 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* Informações da paginação */}
+              <div className="flex items-center gap-4 text-sm text-gray-600">
+                <span>
+                  Mostrando {((paginacao.page - 1) * paginacao.limit) + 1} a{' '}
+                  {Math.min(paginacao.page * paginacao.limit, paginacao.total)} de{' '}
+                  {paginacao.total} notificações
+                </span>
+              </div>
 
-                        <div className="flex flex-col gap-2">
-                          {/* Destinatário e Remetente */}
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            {(notificacao.destinatario || notificacao.destinatarios) && (
-                              <>
-                                <span className="font-medium">Para:</span>
-                                <span>{formatarDestinatarios(notificacao)}</span>
-                                <span className="text-gray-300">•</span>
-                              </>
-                            )}
-                            {notificacao.remetente && (
-                              <>
-                                <span className="font-medium">De:</span>
-                                <span>{notificacao.remetente}</span>
-                                <span className="text-gray-300">•</span>
-                              </>
-                            )}
-                            <span>{formatarTempoRelativo(notificacao.data)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })
-          )}
-        </TabsContent>
-      </Tabs>
+              {/* Controles de navegação */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => mudarPagina(pagina - 1)}
+                  disabled={pagina <= 1}
+                  className="h-8"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, paginacao.pages) }, (_, i) => {
+                    const pageNum = i + 1
+                    const isActive = pageNum === pagina
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={isActive ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => mudarPagina(pageNum)}
+                        className="h-8 w-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                  
+                  {paginacao.pages > 5 && (
+                    <>
+                      <span className="text-gray-400">...</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => mudarPagina(paginacao.pages)}
+                        className="h-8"
+                      >
+                        {paginacao.pages}
+                      </Button>
+                    </>
+                  )}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => mudarPagina(pagina + 1)}
+                  disabled={pagina >= paginacao.pages}
+                  className="h-8"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal de Detalhes da Notificação */}
+      <NotificacaoDetailModal
+        notificacao={notificacaoSelecionada}
+        isOpen={modalAberto}
+        onClose={fecharModal}
+        onMarcarComoLida={marcarComoLida}
+        onDeletar={deletarNotificacao}
+      />
     </div>
   )
 }

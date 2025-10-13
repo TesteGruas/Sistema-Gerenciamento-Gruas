@@ -39,6 +39,19 @@ import {
   Clock,
   AlertCircle
 } from 'lucide-react'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 
@@ -775,9 +788,94 @@ export default function EmailConfigPage() {
                 </Card>
               </div>
 
+              {/* Gráficos Visuais */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Gráfico de Pizza - Taxa de Sucesso */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Taxa de Sucesso vs Falhas</CardTitle>
+                    <CardDescription>
+                      Distribuição de emails enviados nos últimos 30 dias
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Enviados', value: stats.total_enviados, color: '#10b981' },
+                            { name: 'Falhas', value: stats.total_falhas, color: '#ef4444' }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={100}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {[
+                            { name: 'Enviados', value: stats.total_enviados, color: '#10b981' },
+                            { name: 'Falhas', value: stats.total_falhas, color: '#ef4444' }
+                          ].map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip 
+                          formatter={(value: number) => [`${value} emails`, '']}
+                        />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Gráfico de Barras - Emails por Tipo */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Emails por Tipo</CardTitle>
+                    <CardDescription>
+                      Quantidade de emails enviados por tipo nos últimos 30 dias
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {Object.keys(stats.por_tipo).length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart 
+                          data={Object.entries(stats.por_tipo).map(([tipo, count]) => ({
+                            tipo: tipo === 'welcome' ? 'Boas-vindas' : 
+                                  tipo === 'reset_password' ? 'Redefinição' :
+                                  tipo === 'password_changed' ? 'Senha Alterada' :
+                                  tipo === 'test' ? 'Teste' : 'Personalizado',
+                            quantidade: count
+                          }))}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="tipo" />
+                          <YAxis />
+                          <RechartsTooltip 
+                            formatter={(value: number) => [`${value} emails`, 'Quantidade']}
+                          />
+                          <Legend />
+                          <Bar dataKey="quantidade" fill="#3b82f6" name="Emails Enviados" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                        <div className="text-center">
+                          <Mail className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                          <p>Nenhum email enviado nos últimos 30 dias</p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Lista de Emails por Tipo (mantida para referência) */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Emails por Tipo</CardTitle>
+                  <CardTitle>Detalhamento por Tipo</CardTitle>
                   <CardDescription>
                     Últimos 30 dias
                   </CardDescription>

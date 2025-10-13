@@ -68,6 +68,7 @@ import {
   Filter,
   MoreHorizontal
 } from "lucide-react"
+import { ExportButton } from "@/components/export-button"
 
 // Interfaces já importadas do api-financial.ts
 
@@ -256,10 +257,13 @@ export default function FinanceiroPage() {
             <CreditCard className="w-4 h-4 mr-2" />
             Transferência Bancária
           </Button>
-          <Button variant="outline" onClick={() => setIsExportDialogOpen(true)}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
-          </Button>
+          <ExportButton
+            dados={financialData.fluxoCaixa}
+            tipo="financeiro"
+            nomeArquivo="relatorio-financeiro"
+            titulo="Relatório Financeiro"
+            filtros={{ periodo: selectedPeriod }}
+          />
           <Button variant="outline" onClick={handleImport}>
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Importar

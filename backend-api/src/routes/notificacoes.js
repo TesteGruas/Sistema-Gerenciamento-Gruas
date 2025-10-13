@@ -56,6 +56,11 @@ const notificacaoSchema = Joi.object({
  *         schema:
  *           type: boolean
  *         description: Filtrar por lida (true/false)
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar por título ou mensagem
  *     responses:
  *       200:
  *         description: Lista de notificações
@@ -65,7 +70,32 @@ router.get('/', authenticateToken, async (req, res) => {
     const page = parseInt(req.query.page) || 1
     const limit = Math.min(parseInt(req.query.limit) || 20, 100)
     const offset = (page - 1) * limit
-    const userId = req.user.id
+    let userId = req.user.id
+
+    // Se userId é UUID, buscar o ID inteiro da tabela usuarios
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+
+      if (userError || !userData) {
+        console.log('⚠️ Usuário não encontrado na tabela usuarios:', req.user.email)
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            pages: 0
+          }
+        })
+      }
+
+      userId = userData.id
+    }
 
     let query = supabaseAdmin
       .from('notificacoes')
@@ -81,6 +111,12 @@ router.get('/', authenticateToken, async (req, res) => {
     if (req.query.lida !== undefined) {
       const lida = req.query.lida === 'true'
       query = query.eq('lida', lida)
+    }
+
+    // Filtro por busca (título ou mensagem)
+    if (req.query.search) {
+      const searchTerm = req.query.search.toLowerCase()
+      query = query.or(`titulo.ilike.%${searchTerm}%,mensagem.ilike.%${searchTerm}%`)
     }
 
     query = query
@@ -133,7 +169,26 @@ router.get('/', authenticateToken, async (req, res) => {
  */
 router.get('/nao-lidas', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id
+    let userId = req.user.id
+
+    // Se userId é UUID, buscar o ID inteiro da tabela usuarios
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+
+      if (userError || !userData) {
+        console.log('⚠️ Usuário não encontrado na tabela usuarios:', req.user.email)
+        return res.json({
+          success: true,
+          data: []
+        })
+      }
+
+      userId = userData.id
+    }
 
     const { data, error } = await supabaseAdmin
       .from('notificacoes')
@@ -178,7 +233,26 @@ router.get('/nao-lidas', authenticateToken, async (req, res) => {
  */
 router.get('/count/nao-lidas', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id
+    let userId = req.user.id
+
+    // Se userId é UUID, buscar o ID inteiro da tabela usuarios
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+
+      if (userError || !userData) {
+        console.log('⚠️ Usuário não encontrado na tabela usuarios:', req.user.email)
+        return res.json({
+          success: true,
+          count: 0
+        })
+      }
+
+      userId = userData.id
+    }
 
     const { count, error } = await supabaseAdmin
       .from('notificacoes')
@@ -391,7 +465,27 @@ router.post('/', authenticateToken, requirePermission('criar_notificacoes'), asy
 router.patch('/:id/marcar-lida', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    const userId = req.user.id
+    let userId = req.user.id
+
+    // Se userId é UUID, buscar o ID inteiro da tabela usuarios
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+
+      if (userError || !userData) {
+        console.log('⚠️ Usuário não encontrado na tabela usuarios:', req.user.email)
+        return res.status(404).json({
+          success: false,
+          error: 'Usuário não encontrado',
+          message: 'Usuário não encontrado na tabela de usuários'
+        })
+      }
+
+      userId = userData.id
+    }
 
     // Verificar se a notificação pertence ao usuário
     const { data: notificacao, error: checkError } = await supabaseAdmin
@@ -451,7 +545,27 @@ router.patch('/:id/marcar-lida', authenticateToken, async (req, res) => {
  */
 router.patch('/marcar-todas-lidas', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id
+    let userId = req.user.id
+
+    // Se userId é UUID, buscar o ID inteiro da tabela usuarios
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+
+      if (userError || !userData) {
+        console.log('⚠️ Usuário não encontrado na tabela usuarios:', req.user.email)
+        return res.json({
+          success: true,
+          count: 0,
+          message: 'Nenhuma notificação para marcar como lida'
+        })
+      }
+
+      userId = userData.id
+    }
 
     // Primeiro contar quantas notificações não lidas existem
     const { count } = await supabaseAdmin
@@ -512,7 +626,27 @@ router.patch('/marcar-todas-lidas', authenticateToken, async (req, res) => {
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    const userId = req.user.id
+    let userId = req.user.id
+
+    // Se userId é UUID, buscar o ID inteiro da tabela usuarios
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+
+      if (userError || !userData) {
+        console.log('⚠️ Usuário não encontrado na tabela usuarios:', req.user.email)
+        return res.status(404).json({
+          success: false,
+          error: 'Usuário não encontrado',
+          message: 'Usuário não encontrado na tabela de usuários'
+        })
+      }
+
+      userId = userData.id
+    }
 
     // Verificar se a notificação pertence ao usuário
     const { data: notificacao, error: checkError } = await supabaseAdmin
@@ -572,7 +706,27 @@ router.delete('/:id', authenticateToken, async (req, res) => {
  */
 router.delete('/todas', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id
+    let userId = req.user.id
+
+    // Se userId é UUID, buscar o ID inteiro da tabela usuarios
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+
+      if (userError || !userData) {
+        console.log('⚠️ Usuário não encontrado na tabela usuarios:', req.user.email)
+        return res.json({
+          success: true,
+          count: 0,
+          message: 'Nenhuma notificação para excluir'
+        })
+      }
+
+      userId = userData.id
+    }
 
     // Primeiro contar quantas notificações existem
     const { count } = await supabaseAdmin

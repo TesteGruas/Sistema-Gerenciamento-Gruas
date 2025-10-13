@@ -1,43 +1,28 @@
-import { Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
+'use client'
+
+import { Loader2 } from 'lucide-react'
 
 interface LoadingSpinnerProps {
-  size?: "sm" | "md" | "lg" | "xl"
+  size?: 'sm' | 'md' | 'lg'
   text?: string
   className?: string
-  fullScreen?: boolean
-}
-
-const sizeClasses = {
-  sm: "w-4 h-4",
-  md: "w-8 h-8",
-  lg: "w-12 h-12",
-  xl: "w-16 h-16"
 }
 
 export function LoadingSpinner({ 
-  size = "md", 
-  text, 
-  className,
-  fullScreen = false 
+  size = 'md', 
+  text = 'Carregando...', 
+  className = '' 
 }: LoadingSpinnerProps) {
-  const content = (
-    <div className={cn("flex flex-col items-center justify-center", className)}>
-      <Loader2 className={cn("animate-spin text-blue-600", sizeClasses[size])} />
-      {text && (
-        <p className="mt-4 text-gray-600 text-center">{text}</p>
-      )}
-    </div>
-  )
-
-  if (fullScreen) {
-    return (
-      <div className="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50">
-        {content}
-      </div>
-    )
+  const sizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-6 h-6',
+    lg: 'w-8 h-8'
   }
 
-  return content
+  return (
+    <div className={`flex items-center justify-center gap-2 ${className}`}>
+      <Loader2 className={`animate-spin ${sizeClasses[size]}`} />
+      {text && <span className="text-sm text-gray-600">{text}</span>}
+    </div>
+  )
 }
-

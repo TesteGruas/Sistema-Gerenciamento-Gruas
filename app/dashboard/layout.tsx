@@ -24,29 +24,51 @@ import {
   Bell,
   Settings,
   Mail,
+  User,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
+import { UserDropdown } from "@/components/user-dropdown"
 
-const baseNavigation = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell },
-  { name: "Clientes", href: "/dashboard/clientes", icon: Users },
-  { name: "Obras", href: "/dashboard/obras", icon: Building2 },
-  { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane },
-  { name: "Estoque", href: "/dashboard/estoque", icon: Package },
-  { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock },
-  { name: "RH", href: "/dashboard/rh", icon: UserCheck },
-  { name: "Histórico", href: "/dashboard/historico", icon: History },
-  { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature },
-  { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign },
-  { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3 },
+// Tipos para navegação
+interface NavigationItem {
+  name: string
+  href: string
+  icon: any
+  category?: string
+}
+
+// Navegação reorganizada por categorias lógicas
+const baseNavigation: NavigationItem[] = [
+  // SEÇÃO PRINCIPAL
+  { name: "Dashboard", href: "/dashboard", icon: Home, category: "principal" },
+  { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "principal" },
+  
+  // SEÇÃO OPERACIONAL
+  { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional" },
+  { name: "Obras", href: "/dashboard/obras", icon: Building2, category: "operacional" },
+  { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane, category: "operacional" },
+  { name: "Estoque", href: "/dashboard/estoque", icon: Package, category: "operacional" },
+  
+  // SEÇÃO RH E PESSOAS
+  { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock, category: "rh" },
+  { name: "RH", href: "/dashboard/rh", icon: UserCheck, category: "rh" },
+  
+  // SEÇÃO FINANCEIRA
+  { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign, category: "financeiro" },
+  
+  // SEÇÃO RELATÓRIOS E ANÁLISES
+  { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3, category: "relatorios" },
+  { name: "Histórico", href: "/dashboard/historico", icon: History, category: "relatorios" },
+  
+  // SEÇÃO DOCUMENTOS
+  { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature, category: "documentos" },
 ]
 
-const adminNavigation = [
-  { name: "Usuários", href: "/dashboard/usuarios", icon: Shield },
-  { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail },
+const adminNavigation: NavigationItem[] = [
+  { name: "Usuários", href: "/dashboard/usuarios", icon: Shield, category: "admin" },
+  { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail, category: "admin" },
 ]
 
 export default function DashboardLayout({
@@ -111,23 +133,162 @@ export default function DashboardLayout({
           </Button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2">
-          
-          {navigation.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                {item.name}
-              </Link>
-            )
-          })}
+        <nav className="flex-1 px-4 py-6 space-y-6">
+          {/* Seção Principal */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Principal</h3>
+            <div className="space-y-1">
+              {navigation.filter(item => item.category === "principal").map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Seção Operacional */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Operacional</h3>
+            <div className="space-y-1">
+              {navigation.filter(item => item.category === "operacional").map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Seção RH e Pessoas */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">RH e Pessoas</h3>
+            <div className="space-y-1">
+              {navigation.filter(item => item.category === "rh").map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Seção Financeira */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Financeiro</h3>
+            <div className="space-y-1">
+              {navigation.filter(item => item.category === "financeiro").map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Seção Relatórios e Análises */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Relatórios</h3>
+            <div className="space-y-1">
+              {navigation.filter(item => item.category === "relatorios").map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Seção Documentos */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Documentos</h3>
+            <div className="space-y-1">
+              {navigation.filter(item => item.category === "documentos").map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Seção Administrativa (apenas para admin) */}
+          {isAdmin && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Administração</h3>
+              <div className="space-y-1">
+                {adminNavigation.map((item) => {
+                  const isActive = pathname === item.href
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      <item.icon className="w-5 h-5" />
+                      {item.name}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </nav>
 
         <div className="p-4 border-t border-gray-200">
@@ -180,6 +341,7 @@ export default function DashboardLayout({
             <div className="flex items-center gap-4 ml-auto">
               <span className="text-sm text-gray-600 hidden md:block">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</span>
               <NotificationsDropdown />
+              <UserDropdown />
             </div>
           </div>
         </div>

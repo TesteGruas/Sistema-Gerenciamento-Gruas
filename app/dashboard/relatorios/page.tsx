@@ -25,6 +25,23 @@ import {
   Users,
   Loader2
 } from "lucide-react"
+import {
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  AreaChart,
+  Area
+} from 'recharts'
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { apiRelatorios, RelatorioUtilizacao, RelatorioFinanceiro, RelatorioManutencao, DashboardRelatorios } from "@/lib/api-relatorios"
@@ -263,23 +280,16 @@ export default function RelatoriosPage() {
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros Compactos */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarIcon className="w-5 h-5" />
-            Filtros de Período
-          </CardTitle>
-          <CardDescription>
-            Configure o período para análise dos relatórios
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div>
-              <label className="text-sm font-medium">Obra</label>
+        <CardContent className="p-4">
+          {/* Filtros em linha única */}
+          <div className="flex flex-col lg:flex-row gap-3 items-end">
+            {/* Obra */}
+            <div className="flex-1 min-w-[140px]">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Obra</label>
               <Select value={selectedObra} onValueChange={setSelectedObra}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue placeholder="Todas as obras" />
                 </SelectTrigger>
                 <SelectContent>
@@ -288,10 +298,12 @@ export default function RelatoriosPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-sm font-medium">Período</label>
+
+            {/* Período */}
+            <div className="flex-1 min-w-[140px]">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Período</label>
               <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -303,28 +315,32 @@ export default function RelatoriosPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-sm font-medium">Itens por página</label>
+
+            {/* Itens por página */}
+            <div className="flex-1 min-w-[120px]">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Itens/página</label>
               <Select value={limitePorPagina.toString()} onValueChange={(value) => setLimitePorPagina(parseInt(value))}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="5">5 itens</SelectItem>
-                  <SelectItem value="10">10 itens</SelectItem>
-                  <SelectItem value="20">20 itens</SelectItem>
-                  <SelectItem value="50">50 itens</SelectItem>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Datas personalizadas */}
             {selectedPeriod === 'custom' && (
               <>
-                <div>
-                  <label className="text-sm font-medium">Data Início</label>
+                <div className="flex-1 min-w-[140px]">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Data Início</label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start text-left font-normal">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
+                      <Button variant="outline" className="h-9 w-full justify-start text-left font-normal text-xs">
+                        <CalendarIcon className="mr-2 h-3 w-3" />
                         {startDate ? format(startDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
                       </Button>
                     </PopoverTrigger>
@@ -338,12 +354,12 @@ export default function RelatoriosPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Data Fim</label>
+                <div className="flex-1 min-w-[140px]">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Data Fim</label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start text-left font-normal">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
+                      <Button variant="outline" className="h-9 w-full justify-start text-left font-normal text-xs">
+                        <CalendarIcon className="mr-2 h-3 w-3" />
                         {endDate ? format(endDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
                       </Button>
                     </PopoverTrigger>
@@ -359,15 +375,13 @@ export default function RelatoriosPage() {
                 </div>
               </>
             )}
-          </div>
-          
-          {/* Indicador do período atual e botões de ação */}
-          <div className="mt-4 space-y-3">
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-800">Período atual:</span>
-                <span className="text-sm text-blue-700">
+
+            {/* Indicador do período atual */}
+            <div className="flex-1 min-w-[200px]">
+              <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md border border-blue-200">
+                <CalendarIcon className="w-3 h-3 text-blue-600" />
+                <span className="text-xs font-medium text-blue-800">Período:</span>
+                <span className="text-xs text-blue-700">
                   {(() => {
                     const { dataInicio, dataFim } = calcularDatasPeriodo()
                     return `${format(new Date(dataInicio), 'dd/MM/yyyy', { locale: ptBR })} - ${format(new Date(dataFim), 'dd/MM/yyyy', { locale: ptBR })}`
@@ -375,7 +389,8 @@ export default function RelatoriosPage() {
                 </span>
               </div>
             </div>
-            
+
+            {/* Botões de ação */}
             <div className="flex gap-2">
               <Button 
                 onClick={() => {
@@ -383,10 +398,11 @@ export default function RelatoriosPage() {
                   carregarRelatorioFinanceiro()
                 }}
                 disabled={loading}
-                className="flex-1"
+                size="sm"
+                className="h-9"
               >
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Atualizar Relatórios
+                <BarChart3 className="w-3 h-3 mr-1" />
+                Atualizar
               </Button>
               <Button 
                 variant="outline" 
@@ -395,9 +411,11 @@ export default function RelatoriosPage() {
                   setStartDate(undefined)
                   setEndDate(undefined)
                 }}
+                size="sm"
+                className="h-9"
               >
-                <Clock className="w-4 h-4 mr-2" />
-                Resetar Filtros
+                <Clock className="w-3 h-3 mr-1" />
+                Resetar
               </Button>
             </div>
           </div>
@@ -476,91 +494,92 @@ export default function RelatoriosPage() {
             </Card>
           </div>
 
-          {/* Gráfico de Distribuição por Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PieChart className="w-5 h-5" />
-                Distribuição por Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {dashboardData?.distribuicao.por_status && Object.entries(dashboardData.distribuicao.por_status).map(([status, count]) => {
-                  const total = dashboardData.resumo_geral.total_gruas
-                  const percentage = total > 0 ? (count / total) * 100 : 0
-                  return (
-                    <div key={status} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${
-                          status === 'Operacional' ? 'bg-green-500' : 
-                          status === 'Manutenção' ? 'bg-yellow-500' : 
-                          status === 'Disponível' ? 'bg-blue-500' : 'bg-gray-500'
-                        }`} />
-                        <span className="text-sm font-medium capitalize">{status}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              status === 'Operacional' ? 'bg-green-500' : 
-                              status === 'Manutenção' ? 'bg-yellow-500' : 
-                              status === 'Disponível' ? 'bg-blue-500' : 'bg-gray-500'
-                            }`}
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-gray-600">{count}</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Gráficos Visuais - Distribuição por Status e Tipo */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico de Pizza - Distribuição por Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChart className="w-5 h-5" />
+                  Distribuição por Status
+                </CardTitle>
+                <CardDescription>
+                  Situação atual do parque de gruas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {dashboardData?.distribuicao.por_status && Object.keys(dashboardData.distribuicao.por_status).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RechartsPieChart>
+                      <Pie
+                        data={Object.entries(dashboardData.distribuicao.por_status).map(([status, count]) => ({
+                          name: status,
+                          value: count
+                        }))}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {Object.entries(dashboardData.distribuicao.por_status).map(([status], index) => (
+                          <Cell key={`cell-${index}`} fill={
+                            status === 'Operacional' ? '#10b981' : 
+                            status === 'Manutenção' ? '#f59e0b' : 
+                            status === 'Disponível' ? '#3b82f6' : '#94a3b8'
+                          } />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip />
+                      <Legend />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    <p>Nenhum dado disponível</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Gráfico de Distribuição por Tipo */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Distribuição por Tipo
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {dashboardData?.distribuicao.por_tipo && Object.entries(dashboardData.distribuicao.por_tipo).map(([tipo, count]) => {
-                  const total = dashboardData.resumo_geral.total_gruas
-                  const percentage = total > 0 ? (count / total) * 100 : 0
-                  return (
-                    <div key={tipo} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${
-                          tipo === 'Grua Torre' ? 'bg-purple-500' : 
-                          tipo === 'Grua Móvel' ? 'bg-indigo-500' : 
-                          tipo === 'Guincho' ? 'bg-pink-500' : 'bg-gray-500'
-                        }`} />
-                        <span className="text-sm font-medium">{tipo}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              tipo === 'Grua Torre' ? 'bg-purple-500' : 
-                              tipo === 'Grua Móvel' ? 'bg-indigo-500' : 
-                              tipo === 'Guincho' ? 'bg-pink-500' : 'bg-gray-500'
-                            }`}
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-gray-600">{count}</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+            {/* Gráfico de Barras - Distribuição por Tipo */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Distribuição por Tipo
+                </CardTitle>
+                <CardDescription>
+                  Quantidade de gruas por tipo de equipamento
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {dashboardData?.distribuicao.por_tipo && Object.keys(dashboardData.distribuicao.por_tipo).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RechartsBarChart 
+                      data={Object.entries(dashboardData.distribuicao.por_tipo).map(([tipo, count]) => ({
+                        tipo,
+                        quantidade: count
+                      }))}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="tipo" />
+                      <YAxis />
+                      <RechartsTooltip />
+                      <Legend />
+                      <Bar dataKey="quantidade" fill="#8b5cf6" name="Quantidade" />
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    <p>Nenhum dado disponível</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="gruas" className="space-y-6">
@@ -692,6 +711,69 @@ export default function RelatoriosPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Gráficos de Análise de Utilização */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                    {/* Gráfico de Barras - Taxa de Utilização Top 10 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>📊 Taxa de Utilização - Top 10</CardTitle>
+                        <CardDescription>
+                          Gruas com maior taxa de utilização
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <RechartsBarChart 
+                            data={relatorioUtilizacao.relatorio
+                              .sort((a, b) => (b.taxa_utilizacao || 0) - (a.taxa_utilizacao || 0))
+                              .slice(0, 10)
+                              .map(item => ({
+                                grua: item.grua.modelo.substring(0, 15),
+                                taxa: Number((item.taxa_utilizacao || 0).toFixed(1))
+                              }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="grua" angle={-45} textAnchor="end" height={100} />
+                            <YAxis />
+                            <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Taxa de Utilização']} />
+                            <Legend />
+                            <Bar dataKey="taxa" fill="#10b981" name="Taxa de Utilização (%)" />
+                          </RechartsBarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Gráfico de Barras - Receita por Grua Top 10 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>💰 Receita por Grua - Top 10</CardTitle>
+                        <CardDescription>
+                          Gruas que mais geraram receita
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <RechartsBarChart 
+                            data={relatorioUtilizacao.relatorio
+                              .sort((a, b) => b.receita_total - a.receita_total)
+                              .slice(0, 10)
+                              .map(item => ({
+                                grua: item.grua.modelo.substring(0, 15),
+                                receita: Number((item.receita_total / 1000).toFixed(1))
+                              }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="grua" angle={-45} textAnchor="end" height={100} />
+                            <YAxis />
+                            <RechartsTooltip formatter={(value: number) => [`R$ ${(value * 1000).toLocaleString('pt-BR')}`, 'Receita']} />
+                            <Legend />
+                            <Bar dataKey="receita" fill="#3b82f6" name="Receita (R$ mil)" />
+                          </RechartsBarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -845,6 +927,80 @@ export default function RelatoriosPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Gráficos de Análise Financeira */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                    {/* Gráfico de Barras - Receita vs Compras Top 10 */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>📊 Receita vs Compras - Top 10</CardTitle>
+                        <CardDescription>
+                          Comparativo de receitas e compras por {relatorioFinanceiro.agrupamento}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <RechartsBarChart 
+                            data={relatorioFinanceiro.relatorio
+                              .sort((a, b) => b.total_receita - a.total_receita)
+                              .slice(0, 10)
+                              .map(item => ({
+                                nome: item.nome.substring(0, 15),
+                                receita: Number((item.total_receita / 1000).toFixed(1)),
+                                compras: Number((item.total_compras / 1000).toFixed(1))
+                              }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="nome" angle={-45} textAnchor="end" height={100} />
+                            <YAxis />
+                            <RechartsTooltip formatter={(value: number) => [`R$ ${(value * 1000).toLocaleString('pt-BR')}`, '']} />
+                            <Legend />
+                            <Bar dataKey="receita" fill="#10b981" name="Receita (R$ mil)" />
+                            <Bar dataKey="compras" fill="#ef4444" name="Compras (R$ mil)" />
+                          </RechartsBarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Gráfico de Pizza - Distribuição de Lucro */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>🥧 Distribuição de Lucro Bruto</CardTitle>
+                        <CardDescription>
+                          Lucro por {relatorioFinanceiro.agrupamento} (Top 5)
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <RechartsPieChart>
+                            <Pie
+                              data={relatorioFinanceiro.relatorio
+                                .filter(item => item.lucro_bruto > 0)
+                                .sort((a, b) => b.lucro_bruto - a.lucro_bruto)
+                                .slice(0, 5)
+                                .map(item => ({
+                                  name: item.nome.substring(0, 20),
+                                  value: item.lucro_bruto
+                                }))}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                              outerRadius={100}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {[0, 1, 2, 3, 4].map((index) => (
+                                <Cell key={`cell-${index}`} fill={['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'][index]} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Lucro']} />
+                            <Legend />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -965,6 +1121,93 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+
+                  {/* Gráficos de Análise de Manutenção */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                    {/* Gráfico de Pizza - Distribuição por Prioridade */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>🥧 Distribuição por Prioridade</CardTitle>
+                        <CardDescription>
+                          Manutenções classificadas por nível de prioridade
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <RechartsPieChart>
+                            <Pie
+                              data={(() => {
+                                const prioridades = relatorioManutencao.relatorio.reduce((acc, item) => {
+                                  const prior = item.manutencao.prioridade
+                                  acc[prior] = (acc[prior] || 0) + 1
+                                  return acc
+                                }, {} as Record<string, number>)
+                                
+                                return Object.entries(prioridades).map(([name, value]) => ({
+                                  name,
+                                  value
+                                }))
+                              })()}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={100}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {(() => {
+                                const prioridades = relatorioManutencao.relatorio.reduce((acc, item) => {
+                                  const prior = item.manutencao.prioridade
+                                  acc[prior] = (acc[prior] || 0) + 1
+                                  return acc
+                                }, {} as Record<string, number>)
+                                
+                                return Object.entries(prioridades).map(([name], index) => (
+                                  <Cell key={`cell-${index}`} fill={
+                                    name === 'Alta' ? '#ef4444' : 
+                                    name === 'Média' ? '#f59e0b' : '#10b981'
+                                  } />
+                                ))
+                              })()}
+                            </Pie>
+                            <RechartsTooltip formatter={(value: number) => [`${value} manutenções`, '']} />
+                            <Legend />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Gráfico de Barras - Custo Estimado por Grua */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>💰 Custo Estimado por Grua - Top 10</CardTitle>
+                        <CardDescription>
+                          Gruas com maior custo estimado de manutenção
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <RechartsBarChart 
+                            data={relatorioManutencao.relatorio
+                              .sort((a, b) => b.manutencao.valor_estimado - a.manutencao.valor_estimado)
+                              .slice(0, 10)
+                              .map(item => ({
+                                grua: item.grua.modelo.substring(0, 15),
+                                valor: Number((item.manutencao.valor_estimado / 1000).toFixed(1))
+                              }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="grua" angle={-45} textAnchor="end" height={100} />
+                            <YAxis />
+                            <RechartsTooltip formatter={(value: number) => [`R$ ${(value * 1000).toLocaleString('pt-BR')}`, 'Custo Estimado']} />
+                            <Legend />
+                            <Bar dataKey="valor" fill="#f59e0b" name="Custo (R$ mil)" />
+                          </RechartsBarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">

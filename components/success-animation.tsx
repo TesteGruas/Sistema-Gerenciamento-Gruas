@@ -1,8 +1,7 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from "react"
-import { CheckCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { CheckCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 interface SuccessAnimationProps {
   show: boolean
@@ -13,9 +12,9 @@ interface SuccessAnimationProps {
 
 export function SuccessAnimation({ 
   show, 
-  message = "Sucesso!",
+  message = 'Sucesso!', 
   onComplete,
-  duration = 2000
+  duration = 2000 
 }: SuccessAnimationProps) {
   const [isVisible, setIsVisible] = useState(false)
 
@@ -26,6 +25,7 @@ export function SuccessAnimation({
         setIsVisible(false)
         onComplete?.()
       }, duration)
+
       return () => clearTimeout(timer)
     }
   }, [show, duration, onComplete])
@@ -33,19 +33,14 @@ export function SuccessAnimation({
   if (!isVisible) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-300">
-      <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-sm mx-4 animate-in zoom-in duration-500">
-        <div className="flex flex-col items-center">
-          <div className="relative">
-            <div className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-75"></div>
-            <div className="relative bg-green-100 rounded-full p-4">
-              <CheckCircle className="w-16 h-16 text-green-600" />
-            </div>
-          </div>
-          <h3 className="mt-6 text-2xl font-bold text-gray-900">{message}</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-8 text-center shadow-xl animate-in zoom-in-50 duration-300">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-in zoom-in-50 duration-500">
+          <CheckCircle className="w-8 h-8 text-green-600 animate-in zoom-in-50 duration-700" />
         </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">{message}</h3>
+        <div className="w-8 h-1 bg-green-500 mx-auto rounded-full animate-pulse"></div>
       </div>
     </div>
   )
 }
-
