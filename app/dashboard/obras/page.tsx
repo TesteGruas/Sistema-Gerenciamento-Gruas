@@ -45,6 +45,7 @@ import FuncionarioSearch from "@/components/funcionario-search"
 import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
+import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 
 export default function ObrasPage() {
   const router = useRouter()
@@ -62,9 +63,9 @@ export default function ObrasPage() {
   
   // Estados para integração com backend
   const [obras, setObras] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const { loading, startLoading, stopLoading } = useLoading(true)
   const [error, setError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
+  const { loading: creating, startLoading: startCreating, stopLoading: stopCreating } = useLoading()
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [pagination, setPagination] = useState({
@@ -120,7 +121,7 @@ export default function ObrasPage() {
   // Carregar obras do backend com paginação
   const carregarObras = async () => {
     try {
-      setLoading(true)
+      startLoading()
       setError(null)
       const response = await obrasApi.listarObras({ 
         page: currentPage,
@@ -144,7 +145,7 @@ export default function ObrasPage() {
       // Fallback para dados mockados em caso de erro
       setObras(mockObras)
     } finally {
-      setLoading(false)
+      stopLoading()
     }
   }
 
@@ -340,7 +341,7 @@ export default function ObrasPage() {
       setError(err instanceof Error ? err.message : 'Erro ao buscar obras')
       setObras(mockObras)
     } finally {
-      setLoading(false)
+      stopLoading()
     }
   }
 
@@ -1020,7 +1021,7 @@ export default function ObrasPage() {
       {loading && (
         <Card>
           <CardContent className="p-6">
-            <CardLoader text="Carregando obras..." />
+            <Loading size="lg" text="Carregando obras..." />
           </CardContent>
         </Card>
       )}

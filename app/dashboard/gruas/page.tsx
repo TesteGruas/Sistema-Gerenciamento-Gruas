@@ -37,6 +37,7 @@ import {
 import { mockObras, mockUsers } from "@/lib/mock-data"
 import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
 import { ExportButton } from "@/components/export-button"
+import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 
 // Interface para o formato da grua usado no componente
 interface GruaFrontend extends GruaBackend {
@@ -105,10 +106,10 @@ export default function GruasPage() {
   
   // Estados para API
   const [gruas, setGruas] = useState<GruaFrontend[]>([])
-  const [loading, setLoading] = useState(true)
+  const { loading, startLoading, stopLoading } = useLoading(true)
   const [error, setError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [updating, setUpdating] = useState(false)
+  const { loading: creating, startLoading: startCreating, stopLoading: stopCreating } = useLoading()
+  const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating } = useLoading()
   const [deleting, setDeleting] = useState(false)
 
   // Função auxiliar para converter dados do backend para o formato do componente
@@ -135,7 +136,7 @@ export default function GruasPage() {
   // Função para carregar gruas da API
   const carregarGruas = async () => {
     try {
-      setLoading(true)
+      startLoading()
       setError(null)
       
       const params: any = {
@@ -179,7 +180,7 @@ export default function GruasPage() {
       console.error('Erro ao carregar gruas:', err)
       setError(err instanceof Error ? err.message : 'Erro ao carregar gruas')
     } finally {
-      setLoading(false)
+      stopLoading()
     }
   }
 
@@ -590,10 +591,7 @@ export default function GruasPage() {
       {loading && (
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-2">Carregando gruas...</span>
-            </div>
+            <Loading size="lg" text="Carregando gruas..." />
           </CardContent>
         </Card>
       )}

@@ -105,6 +105,18 @@ export class AuthService {
     return !!this.getToken()
   }
 
+  // Obter dados do usuário atual
+  static async getCurrentUser(): Promise<any> {
+    // Sempre retornar dados mockados para desenvolvimento
+    return {
+      id: 1,
+      name: 'Usuário Demo',
+      email: 'demo@sistema.com',
+      role: 'admin',
+      avatar: '/placeholder-user.jpg'
+    }
+  }
+
   // Fazer logout
   static logout(): void {
     this.removeToken()

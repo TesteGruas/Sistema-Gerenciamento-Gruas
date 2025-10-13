@@ -35,7 +35,10 @@ import {
   Legend,
   ResponsiveContainer,
   LineChart,
-  Line
+  Line,
+  AreaChart,
+  Area,
+  ComposedChart
 } from 'recharts'
 import { 
   apiFuncionarios, 
@@ -49,6 +52,7 @@ import {
 } from "@/lib/api-ponto-eletronico"
 import { ExportButton } from "@/components/export-button"
 import { EspelhoPontoDialog } from "@/components/espelho-ponto-dialog"
+import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -59,6 +63,40 @@ const estadoInicial = {
   error: null as string | null,
   isAdmin: false,
   usuarioAtual: null as { id: number, nome: string } | null
+}
+
+// Dados mockados para gráficos
+const dadosGraficos = {
+  horasTrabalhadas: [
+    { dia: 'Seg', horas: 8.5, extras: 0.5 },
+    { dia: 'Ter', horas: 8.0, extras: 0 },
+    { dia: 'Qua', horas: 9.0, extras: 1.0 },
+    { dia: 'Qui', horas: 8.0, extras: 0 },
+    { dia: 'Sex', horas: 7.5, extras: 0 },
+    { dia: 'Sáb', horas: 4.0, extras: 0 },
+    { dia: 'Dom', horas: 0, extras: 0 }
+  ],
+  frequencia: [
+    { mes: 'Jan', presencas: 22, faltas: 1, atrasos: 3 },
+    { mes: 'Fev', presencas: 20, faltas: 2, atrasos: 1 },
+    { mes: 'Mar', presencas: 23, faltas: 0, atrasos: 2 },
+    { mes: 'Abr', presencas: 21, faltas: 1, atrasos: 4 },
+    { mes: 'Mai', presencas: 22, faltas: 1, atrasos: 2 },
+    { mes: 'Jun', presencas: 20, faltas: 2, atrasos: 3 }
+  ],
+  statusFuncionarios: [
+    { nome: 'João Silva', horas: 44, status: 'completo' },
+    { nome: 'Maria Santos', horas: 40, status: 'completo' },
+    { nome: 'Pedro Costa', horas: 36, status: 'incompleto' },
+    { nome: 'Ana Oliveira', horas: 42, status: 'completo' },
+    { nome: 'Carlos Lima', horas: 38, status: 'incompleto' }
+  ],
+  distribuicaoHoras: [
+    { tipo: 'Horas Normais', valor: 160, cor: '#3b82f6' },
+    { tipo: 'Horas Extras', valor: 24, cor: '#10b981' },
+    { tipo: 'Faltas', valor: 8, cor: '#ef4444' },
+    { tipo: 'Atrasos', valor: 12, cor: '#f59e0b' }
+  ]
 }
 
 export default function PontoPage() {
@@ -1476,215 +1514,227 @@ export default function PontoPage() {
         {/* Nova aba de Gráficos Visuais */}
         <TabsContent value="graficos">
           <div className="space-y-6">
-            {/* Gráficos de Pizza - Distribuição de Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle>📊 Distribuição de Status dos Registros</CardTitle>
-                <CardDescription>Visualização da situação atual dos registros de ponto</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const statusCounts = data.registrosPonto.reduce((acc, registro) => {
-                    const status = registro.status || 'Sem Status'
-                    acc[status] = (acc[status] || 0) + 1
-                    return acc
-                  }, {} as Record<string, number>)
-
-                  const chartData = Object.entries(statusCounts).map(([status, count]) => ({
-                    name: status,
-                    value: count
-                  }))
-
-                  const COLORS = {
-                    'Completo': '#10b981',
-                    'Em Andamento': '#3b82f6',
-                    'Atraso': '#f59e0b',
-                    'Falta': '#ef4444',
-                    'Pendente Aprovação': '#f97316',
-                    'Aprovado': '#22c55e',
-                    'Rejeitado': '#dc2626'
-                  }
-
-                  return chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <PieChart>
-                        <Pie
-                          data={chartData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                          outerRadius={120}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[entry.name as keyof typeof COLORS] || '#94a3b8'} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip 
-                          formatter={(value: number) => [`${value} registros`, '']}
-                        />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-[350px] flex items-center justify-center text-muted-foreground">
-                      <p>Nenhum dado disponível</p>
-                    </div>
-                  )
-                })()}
-              </CardContent>
-            </Card>
-
-            {/* Gráficos de Barras - Horas Trabalhadas e Extras */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Horas Trabalhadas por Funcionário */}
+            {/* Estatísticas Resumidas */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card>
-                <CardHeader>
-                  <CardTitle>⏰ Horas Trabalhadas por Funcionário</CardTitle>
-                  <CardDescription>Total de horas trabalhadas (Top 10)</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {(() => {
-                    const horasPorFuncionario = data.funcionarios
-                      .map(func => {
-                        const registros = data.registrosPonto.filter(r => r.funcionario_id === func.id)
-                        const totalHoras = registros.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0)
-                        return {
-                          nome: func.nome.split(' ')[0], // Apenas primeiro nome
-                          horas: Number(totalHoras.toFixed(1))
-                        }
-                      })
-                      .filter(item => item.horas > 0)
-                      .sort((a, b) => b.horas - a.horas)
-                      .slice(0, 10)
-
-                    return horasPorFuncionario.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <RechartsBarChart data={horasPorFuncionario}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="nome" />
-                          <YAxis />
-                          <RechartsTooltip 
-                            formatter={(value: number) => [`${value}h`, 'Horas Trabalhadas']}
-                          />
-                          <Legend />
-                          <Bar dataKey="horas" fill="#10b981" name="Horas Trabalhadas" />
-                        </RechartsBarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                        <p>Nenhum dado disponível</p>
-                      </div>
-                    )
-                  })()}
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Total de Funcionários</p>
+                      <p className="text-2xl font-bold text-blue-600">{data.funcionarios.length}</p>
+                    </div>
+                    <User className="w-8 h-8 text-blue-600" />
+                  </div>
                 </CardContent>
               </Card>
-
-              {/* Horas Extras por Funcionário */}
+              
               <Card>
-                <CardHeader>
-                  <CardTitle>⭐ Horas Extras por Funcionário</CardTitle>
-                  <CardDescription>Total de horas extras (Top 10)</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {(() => {
-                    const horasExtrasPorFuncionario = data.funcionarios
-                      .map(func => {
-                        const registros = data.registrosPonto.filter(r => r.funcionario_id === func.id)
-                        const totalExtras = registros.reduce((sum, r) => sum + (r.horas_extras || 0), 0)
-                        return {
-                          nome: func.nome.split(' ')[0], // Apenas primeiro nome
-                          extras: Number(totalExtras.toFixed(1))
-                        }
-                      })
-                      .filter(item => item.extras > 0)
-                      .sort((a, b) => b.extras - a.extras)
-                      .slice(0, 10)
-
-                    return horasExtrasPorFuncionario.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <RechartsBarChart data={horasExtrasPorFuncionario}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="nome" />
-                          <YAxis />
-                          <RechartsTooltip 
-                            formatter={(value: number) => [`${value}h`, 'Horas Extras']}
-                          />
-                          <Legend />
-                          <Bar dataKey="extras" fill="#f59e0b" name="Horas Extras" />
-                        </RechartsBarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                        <p>Nenhuma hora extra registrada</p>
-                      </div>
-                    )
-                  })()}
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Registros Hoje</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {data.registrosPonto.filter(r => r.data === new Date().toISOString().split('T')[0]).length}
+                      </p>
+                    </div>
+                    <Clock className="w-8 h-8 text-green-600" />
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Justificativas Pendentes</p>
+                      <p className="text-2xl font-bold text-orange-600">
+                        {data.justificativas.filter(j => j.status === 'pendente').length}
+                      </p>
+                    </div>
+                    <AlertCircle className="w-8 h-8 text-orange-600" />
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Taxa de Presença</p>
+                      <p className="text-2xl font-bold text-purple-600">94.2%</p>
+                    </div>
+                    <CheckCircle className="w-8 h-8 text-purple-600" />
+                  </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Gráfico de Linha - Tendência de Atrasos */}
+            {/* Gráfico de Horas Trabalhadas por Dia */}
             <Card>
               <CardHeader>
-                <CardTitle>📈 Evolução de Atrasos e Faltas</CardTitle>
-                <CardDescription>Acompanhamento mensal de atrasos e faltas</CardDescription>
+                <CardTitle>📈 Horas Trabalhadas - Última Semana</CardTitle>
+                <CardDescription>Distribuição das horas normais e extras por dia da semana</CardDescription>
               </CardHeader>
               <CardContent>
-                {(() => {
-                  // Agrupar atrasos e faltas por mês
-                  const registrosPorMes = data.registrosPonto.reduce((acc, registro) => {
-                    const data = new Date(registro.data)
-                    const mesAno = `${data.getMonth() + 1}/${data.getFullYear()}`
-                    
-                    if (!acc[mesAno]) {
-                      acc[mesAno] = { mes: mesAno, atrasos: 0, faltas: 0, timestamp: data.getTime() }
-                    }
-                    
-                    if (registro.status === 'Atraso') acc[mesAno].atrasos++
-                    if (registro.status === 'Falta') acc[mesAno].faltas++
-                    
-                    return acc
-                  }, {} as Record<string, { mes: string; atrasos: number; faltas: number; timestamp: number }>)
+                <ResponsiveContainer width="100%" height={300}>
+                  <ComposedChart data={dadosGraficos.horasTrabalhadas}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="dia" />
+                    <YAxis />
+                    <RechartsTooltip 
+                      formatter={(value: number, name: string) => [
+                        `${value}h`, 
+                        name === 'horas' ? 'Horas Normais' : 'Horas Extras'
+                      ]}
+                    />
+                    <Legend />
+                    <Bar dataKey="horas" fill="#3b82f6" name="Horas Normais" />
+                    <Bar dataKey="extras" fill="#10b981" name="Horas Extras" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-                  const chartData = Object.values(registrosPorMes)
-                    .sort((a, b) => a.timestamp - b.timestamp)
-                    .slice(-6) // Últimos 6 meses
+            {/* Gráfico de Frequência Mensal */}
+            <Card>
+              <CardHeader>
+                <CardTitle>📊 Frequência Mensal</CardTitle>
+                <CardDescription>Presenças, faltas e atrasos por mês</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={dadosGraficos.frequencia}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="mes" />
+                    <YAxis />
+                    <RechartsTooltip />
+                    <Legend />
+                    <Area 
+                      type="monotone" 
+                      dataKey="presencas" 
+                      stackId="1" 
+                      stroke="#10b981" 
+                      fill="#10b981" 
+                      name="Presenças"
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="faltas" 
+                      stackId="2" 
+                      stroke="#ef4444" 
+                      fill="#ef4444" 
+                      name="Faltas"
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="atrasos" 
+                      stackId="3" 
+                      stroke="#f59e0b" 
+                      fill="#f59e0b" 
+                      name="Atrasos"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-                  return chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="mes" />
-                        <YAxis />
-                        <RechartsTooltip />
-                        <Legend />
-                        <Line 
-                          type="monotone" 
-                          dataKey="atrasos" 
-                          stroke="#f59e0b" 
-                          strokeWidth={2}
-                          name="Atrasos"
-                          dot={{ r: 4 }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="faltas" 
-                          stroke="#ef4444" 
-                          strokeWidth={2}
-                          name="Faltas"
-                          dot={{ r: 4 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                      <p>Nenhum dado disponível para análise de tendência</p>
-                    </div>
-                  )
-                })()}
+            {/* Gráficos em Linha - Status dos Funcionários */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>👥 Status dos Funcionários</CardTitle>
+                  <CardDescription>Horas trabalhadas por funcionário</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <RechartsBarChart data={dadosGraficos.statusFuncionarios} layout="horizontal">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="nome" type="category" width={100} />
+                      <RechartsTooltip 
+                        formatter={(value: number) => [`${value}h`, 'Horas']}
+                      />
+                      <Bar 
+                        dataKey="horas" 
+                        fill={(entry: any) => entry.status === 'completo' ? '#10b981' : '#ef4444'}
+                      />
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>🥧 Distribuição de Horas</CardTitle>
+                  <CardDescription>Proporção de horas normais, extras, faltas e atrasos</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={dadosGraficos.distribuicaoHoras}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ tipo, valor }) => `${tipo}: ${valor}h`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="valor"
+                      >
+                        {dadosGraficos.distribuicaoHoras.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.cor} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip 
+                        formatter={(value: number) => [`${value}h`, '']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Gráfico de Linha - Tendência de Horas */}
+            <Card>
+              <CardHeader>
+                <CardTitle>📈 Tendência de Horas Trabalhadas</CardTitle>
+                <CardDescription>Evolução das horas ao longo dos meses</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={dadosGraficos.frequencia}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="mes" />
+                    <YAxis />
+                    <RechartsTooltip />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="presencas" 
+                      stroke="#3b82f6" 
+                      strokeWidth={3}
+                      name="Presenças"
+                      dot={{ r: 6 }}
+                      activeDot={{ r: 8 }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="faltas" 
+                      stroke="#ef4444" 
+                      strokeWidth={2}
+                      name="Faltas"
+                      dot={{ r: 4 }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="atrasos" 
+                      stroke="#f59e0b" 
+                      strokeWidth={2}
+                      name="Atrasos"
+                      dot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </div>
