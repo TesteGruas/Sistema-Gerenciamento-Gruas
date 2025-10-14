@@ -126,10 +126,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 
-          process.env.NODE_ENV === 'production'
-            ? 'http://72.60.60.118:3000/api/:path*'
-            : 'http://localhost:3001/api/:path*',
+        destination: 'http://localhost:3001/api/:path*',
       },
     ];
   },

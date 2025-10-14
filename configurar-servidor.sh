@@ -1,7 +1,7 @@
 #!/bin/bash
 
-echo "🚀 Configurando Sistema para Produção - Servidor 72.60.60.118:3000"
-echo "================================================================"
+echo "🚀 Configurando Sistema para Desenvolvimento - Servidor localhost:3001"
+echo "====================================================================="
 
 # 1. Configurar variáveis de ambiente do frontend
 echo "📝 Criando .env.local no frontend..."
@@ -28,9 +28,9 @@ SMTP_PASS=your-app-password
 BACKUP_SCHEDULE=0 2 * * *
 BACKUP_RETENTION_DAYS=30
 
-# Configurações da API - SERVIDOR PRODUÇÃO
-NEXT_PUBLIC_API_BASE_URL=http://72.60.60.118:3000/api
-NEXT_PUBLIC_API_URL=http://72.60.60.118:3000
+# Configurações da API - SERVIDOR LOCAL
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/api
+NEXT_PUBLIC_API_URL=http://localhost:3001
 EOF
 
 # 2. Configurar variáveis de ambiente do backend
@@ -69,16 +69,16 @@ EOF
 
 echo "✅ Arquivos .env criados com sucesso!"
 echo ""
-echo "📋 Próximos passos no servidor:"
+echo "📋 Próximos passos:"
 echo "1. Execute: npm run build"
 echo "2. Execute: pm2 restart all"
-echo "3. Teste o login em: http://72.60.60.118:3000"
+echo "3. Teste o login em: http://localhost:3000"
 echo ""
 echo "🔧 Para verificar se está funcionando:"
-echo "- Frontend: http://72.60.60.118:3000"
-echo "- Backend: http://72.60.60.118:3000/api"
-echo "- Teste CORS: http://72.60.60.118:3000/test-cors"
-echo "- Documentação: http://72.60.60.118:3000/api-docs"
+echo "- Frontend: http://localhost:3000"
+echo "- Backend: http://localhost:3001/api"
+echo "- Teste CORS: http://localhost:3001/test-cors"
+echo "- Documentação: http://localhost:3001/api-docs"
 echo ""
 echo "⚠️  IMPORTANTE: As variáveis NEXT_PUBLIC_API_URL e NEXT_PUBLIC_API_BASE_URL"
-echo "   agora apontam para http://72.60.60.118:3000 em vez de localhost:3001"
+echo "   agora apontam para http://localhost:3001"
