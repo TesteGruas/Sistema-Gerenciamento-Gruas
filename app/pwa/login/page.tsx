@@ -17,7 +17,7 @@ import {
   WifiOff,
   Clock
 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 
 export default function PWALoginPage() {
@@ -30,7 +30,7 @@ export default function PWALoginPage() {
   const [isOnline, setIsOnline] = useState(true)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const router = useRouter()
-  const { toast } = useToast()
+  const { showAuthError, showSuccess, showNetworkError } = useEnhancedToast()
 
   // Verificar se já está autenticado
   useEffect(() => {
@@ -127,11 +127,10 @@ export default function PWALoginPage() {
 
         console.log('[PWA Login] Login bem-sucedido!')
 
-        toast({
-          title: "Login realizado com sucesso!",
-          description: `Bem-vindo${data.data.user?.nome ? ', ' + data.data.user.nome : ''}!`,
-          variant: "default"
-        })
+        showSuccess(
+          "Login realizado com sucesso!",
+          `Bem-vindo${data.data.user?.nome ? ', ' + data.data.user.nome : ''}!`
+        )
         
         // Pequeno delay para garantir que o localStorage foi salvo
         setTimeout(() => {
@@ -140,28 +139,23 @@ export default function PWALoginPage() {
       } else {
         // Login falhou
         console.error('[PWA Login] Falha no login:', data)
-        toast({
-          title: "Credenciais inválidas",
-          description: data.message || "Verifique seu usuário e senha",
-          variant: "destructive"
+        showAuthError({
+          error: "Credenciais inválidas",
+          message: data.message || "Email ou senha incorretos. Verifique suas credenciais e tente novamente."
         })
       }
     } catch (error: any) {
       console.error('[PWA Login] Erro no login:', error)
       
-      let errorMessage = "Não foi possível conectar ao servidor"
-      
-      if (error.message) {
-        errorMessage = error.message
-      } else if (error.name === 'TypeError' && error.message?.includes('fetch')) {
-        errorMessage = "Erro de conexão. Verifique sua internet ou a URL da API"
+      // Verificar se é erro de rede
+      if (error.name === 'TypeError' && error.message?.includes('fetch')) {
+        showNetworkError(() => {
+          // Tentar novamente
+          handleSubmit(e)
+        })
+      } else {
+        showAuthError(error)
       }
-      
-      toast({
-        title: "Erro no login",
-        description: errorMessage,
-        variant: "destructive"
-      })
     } finally {
       setIsLoading(false)
     }

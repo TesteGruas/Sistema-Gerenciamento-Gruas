@@ -8,6 +8,8 @@ export interface Grua {
   id: string | number;
   name: string;
   modelo: string;
+  fabricante?: string;
+  tipo?: string;
   capacidade: string;
   status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa';
   localizacao?: string;
@@ -16,6 +18,7 @@ export interface Grua {
   ultima_manutencao?: string;
   proxima_manutencao?: string;
   obra_id?: number;
+  observacoes?: string;
 }
 
 export interface GruaBackend {
@@ -47,6 +50,7 @@ export interface GruaBackend {
   capacidade_ponta?: string;
   capacidadePonta?: string;
   lanca?: string;
+  observacoes?: string;
   valor_locacao?: number;
   valorLocacao?: number;
   valor_operacao?: number;
@@ -63,6 +67,9 @@ export interface GruaFiltros {
   funcionario_id?: number;
   page?: number;
   limit?: number;
+  search?: string;
+  tipo?: string;
+  grua_id?: string;
 }
 
 // ============================================
@@ -94,6 +101,8 @@ export function converterGruaBackendParaFrontend(grua: GruaBackend): Grua {
     id: grua.id,
     name: grua.name,
     modelo: grua.model || grua.modelo,
+    fabricante: grua.fabricante,
+    tipo: grua.tipo,
     capacidade: grua.capacity || grua.capacidade,
     status: statusNormalizado,
     localizacao: grua.localizacao,
@@ -102,6 +111,7 @@ export function converterGruaBackendParaFrontend(grua: GruaBackend): Grua {
     ultima_manutencao: grua.ultimaManutencao || grua.ultima_manutencao,
     proxima_manutencao: grua.proximaManutencao || grua.proxima_manutencao,
     obra_id: grua.currentObraId ? Number(grua.currentObraId) : grua.obra_atual_id,
+    observacoes: grua.observacoes,
   };
 }
 
@@ -132,7 +142,7 @@ export const gruasApi = {
   /**
    * Listar gruas com filtros opcionais
    */
-  listarGruas: async (filtros?: GruaFiltros): Promise<{ success: boolean; data: Grua[] }> => {
+  listarGruas: async (filtros?: GruaFiltros): Promise<{ success: boolean; data: Grua[]; pagination?: any }> => {
     const response = await api.get('/gruas', { params: filtros });
     const gruasBackend = response.data.data || response.data;
     const gruasFrontend = Array.isArray(gruasBackend)
@@ -141,6 +151,7 @@ export const gruasApi = {
     return {
       success: true,
       data: gruasFrontend,
+      pagination: response.data.pagination,
     };
   },
 

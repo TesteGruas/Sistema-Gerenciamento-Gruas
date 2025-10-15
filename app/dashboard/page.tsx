@@ -188,8 +188,42 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+   {/* Quick Actions - Linha 100% acima dos gráficos */}
+   <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Ações Rápidas
+          </CardTitle>
+          <CardDescription>Acesso rápido às principais funcionalidades</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Link href="/dashboard/obras" className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left transition-colors block">
+              <Building2 className="w-6 h-6 text-blue-600 mb-2" />
+              <p className="font-medium text-gray-900">Obras</p>
+              <p className="text-xs text-gray-600">Gerenciar projetos</p>
+            </Link>
+            <Link href="/dashboard/gruas" className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left transition-colors block">
+              <TrendingUp className="w-6 h-6 text-green-600 mb-2" />
+              <p className="font-medium text-gray-900">Gruas</p>
+              <p className="text-xs text-gray-600">Gerenciar equipamentos</p>
+            </Link>
+            <Link href="/dashboard/clientes" className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-left transition-colors block">
+              <Users className="w-6 h-6 text-purple-600 mb-2" />
+              <p className="font-medium text-gray-900">Clientes</p>
+              <p className="text-xs text-gray-600">Gerenciar clientes</p>
+            </Link>
+            <Link href="/dashboard/financeiro" className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-left transition-colors block">
+              <DollarSign className="w-6 h-6 text-yellow-600 mb-2" />
+              <p className="font-medium text-gray-900">Financeiro</p>
+              <p className="text-xs text-gray-600">Ver relatórios</p>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Gráficos de Visão Geral */}
+      {/* Gráficos de Visão Geral - 4 gráficos lado a lado */}
       {dashboardData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Taxa de Utilização por Mês */}
@@ -202,7 +236,7 @@ export default function Dashboard() {
               <CardDescription>Evolução mensal de gruas em operação</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={[
                   { mes: 'Jan', taxa: 75, gruas: 12 },
                   { mes: 'Fev', taxa: 82, gruas: 14 },
@@ -226,10 +260,66 @@ export default function Dashboard() {
                       return [value, 'Gruas Ocupadas']
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
                   <Area type="monotone" dataKey="taxa" stroke="#3b82f6" fillOpacity={1} fill="url(#colorTaxa)" name="Taxa %" />
-                  <Area type="monotone" dataKey="gruas" stroke="#10b981" fill="#10b981" fillOpacity={0.3} name="Gruas" />
                 </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Receita Mensal */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5" />
+                Receita Mensal
+              </CardTitle>
+              <CardDescription>Evolução de receitas dos últimos 6 meses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={[
+                  { mes: 'Jan', receita: dashboardData.resumo_geral.receita_mes_atual * 0.8 },
+                  { mes: 'Fev', receita: dashboardData.resumo_geral.receita_mes_atual * 0.85 },
+                  { mes: 'Mar', receita: dashboardData.resumo_geral.receita_mes_atual * 0.9 },
+                  { mes: 'Abr', receita: dashboardData.resumo_geral.receita_mes_atual * 0.95 },
+                  { mes: 'Mai', receita: dashboardData.resumo_geral.receita_mes_atual * 1.05 },
+                  { mes: 'Jun', receita: dashboardData.resumo_geral.receita_mes_atual }
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <RechartsTooltip 
+                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  />
+                  <Bar dataKey="receita" fill="#10b981" name="Receita (R$)" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Obras por Status */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="w-5 h-5" />
+                Obras por Status
+              </CardTitle>
+              <CardDescription>Distribuição de obras ativas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={[
+                  { status: 'Em Andamento', quantidade: 8 },
+                  { status: 'Planejamento', quantidade: 4 },
+                  { status: 'Finalização', quantidade: 3 },
+                  { status: 'Paralisada', quantidade: 1 }
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="status" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <RechartsTooltip />
+                  <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
+                </RechartsBarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
@@ -244,7 +334,7 @@ export default function Dashboard() {
               <CardDescription>Distribuição atual do parque</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={300}>
                 <RechartsPieChart>
                   <Pie
                     data={[
@@ -269,136 +359,40 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-
-          {/* Receita Mensal */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Receita Mensal
-              </CardTitle>
-              <CardDescription>Evolução de receitas dos últimos 6 meses</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <RechartsBarChart data={[
-                  { mes: 'Jan', receita: dashboardData.resumo_geral.receita_mes_atual * 0.8 },
-                  { mes: 'Fev', receita: dashboardData.resumo_geral.receita_mes_atual * 0.85 },
-                  { mes: 'Mar', receita: dashboardData.resumo_geral.receita_mes_atual * 0.9 },
-                  { mes: 'Abr', receita: dashboardData.resumo_geral.receita_mes_atual * 0.95 },
-                  { mes: 'Mai', receita: dashboardData.resumo_geral.receita_mes_atual * 1.05 },
-                  { mes: 'Jun', receita: dashboardData.resumo_geral.receita_mes_atual }
-                ]}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <RechartsTooltip 
-                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Bar dataKey="receita" fill="#10b981" name="Receita (R$)" />
-                </RechartsBarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Obras por Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
-                Obras por Status
-              </CardTitle>
-              <CardDescription>Distribuição de obras ativas</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <RechartsBarChart data={[
-                  { status: 'Em Andamento', quantidade: 8 },
-                  { status: 'Planejamento', quantidade: 4 },
-                  { status: 'Finalização', quantidade: 3 },
-                  { status: 'Paralisada', quantidade: 1 }
-                ]}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="status" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <RechartsTooltip />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
-                </RechartsBarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              Atividades Recentes
-            </CardTitle>
-            <CardDescription>Últimas movimentações do sistema</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {activity.type === "success" && <div className="w-2 h-2 bg-green-500 rounded-full" />}
-                    {activity.type === "warning" && <div className="w-2 h-2 bg-yellow-500 rounded-full" />}
-                    {activity.type === "info" && <div className="w-2 h-2 bg-blue-500 rounded-full" />}
-                    <div className="flex flex-col">
-                      <span className="text-sm text-gray-700">{activity.action}</span>
-                      {activity.usuario && (
-                        <span className="text-xs text-gray-500">por {activity.usuario}</span>
-                      )}
-                    </div>
+  
+      {/* Atividades Recentes - Ocupando 100% da tela */}
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Atividades Recentes
+          </CardTitle>
+          <CardDescription>Últimas movimentações do sistema</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentActivities.map((activity, index) => (
+              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  {activity.type === "success" && <div className="w-3 h-3 bg-green-500 rounded-full" />}
+                  {activity.type === "warning" && <div className="w-3 h-3 bg-yellow-500 rounded-full" />}
+                  {activity.type === "info" && <div className="w-3 h-3 bg-blue-500 rounded-full" />}
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-700">{activity.action}</span>
+                    {activity.usuario && (
+                      <span className="text-xs text-gray-500">por {activity.usuario}</span>
+                    )}
                   </div>
-                  <span className="text-xs text-gray-500">{activity.time}</span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              Ações Rápidas
-            </CardTitle>
-            <CardDescription>Acesso rápido às principais funcionalidades</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <Link href="/dashboard/obras" className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left transition-colors block">
-                <Building2 className="w-6 h-6 text-blue-600 mb-2" />
-                <p className="font-medium text-gray-900">Obras</p>
-                <p className="text-xs text-gray-600">Gerenciar projetos</p>
-              </Link>
-              <Link href="/dashboard/historico" className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left transition-colors block">
-                <Clock className="w-6 h-6 text-green-600 mb-2" />
-                <p className="font-medium text-gray-900">Histórico</p>
-                <p className="text-xs text-gray-600">Ver atividades</p>
-              </Link>
-              <Link href="/dashboard/rh" className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-left transition-colors block">
-                <Users className="w-6 h-6 text-purple-600 mb-2" />
-                <p className="font-medium text-gray-900">RH</p>
-                <p className="text-xs text-gray-600">Gerenciar funcionários</p>
-              </Link>
-              <Link href="/dashboard/financeiro" className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-left transition-colors block">
-                <DollarSign className="w-6 h-6 text-yellow-600 mb-2" />
-                <p className="font-medium text-gray-900">Financeiro</p>
-                <p className="text-xs text-gray-600">Ver relatórios</p>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                <span className="text-xs text-gray-500">{activity.time}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

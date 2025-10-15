@@ -142,9 +142,26 @@ router.post('/login', async (req, res) => {
     // Validar dados
     const { error, value } = loginSchema.validate(req.body)
     if (error) {
+      // Traduzir mensagens de erro do Joi para mensagens mais amigáveis
+      let userMessage = 'Dados inválidos'
+      const joiMessage = error.details[0].message
+      
+      if (joiMessage.includes('email')) {
+        userMessage = 'Por favor, insira um email válido'
+      } else if (joiMessage.includes('password') && joiMessage.includes('length')) {
+        userMessage = 'A senha deve ter pelo menos 6 caracteres'
+      } else if (joiMessage.includes('required')) {
+        if (joiMessage.includes('email')) {
+          userMessage = 'O email é obrigatório'
+        } else if (joiMessage.includes('password')) {
+          userMessage = 'A senha é obrigatória'
+        }
+      }
+      
       return res.status(400).json({
-        error: 'Dados inválidos',
-        details: error.details[0].message
+        error: userMessage,
+        message: userMessage,
+        details: joiMessage
       })
     }
 
@@ -157,9 +174,28 @@ router.post('/login', async (req, res) => {
     })
 
     if (authError) {
+      // Traduzir erros específicos do Supabase
+      let userMessage = 'Email ou senha incorretos'
+      let description = 'Verifique suas credenciais e tente novamente'
+      
+      if (authError.message.includes('Invalid login credentials')) {
+        userMessage = 'Email ou senha incorretos'
+        description = 'Verifique se o email e senha estão corretos'
+      } else if (authError.message.includes('Email not confirmed')) {
+        userMessage = 'Email não confirmado'
+        description = 'Verifique sua caixa de entrada e confirme seu email'
+      } else if (authError.message.includes('Too many requests')) {
+        userMessage = 'Muitas tentativas de login'
+        description = 'Aguarde alguns minutos antes de tentar novamente'
+      } else if (authError.message.includes('User not found')) {
+        userMessage = 'Usuário não encontrado'
+        description = 'Verifique se o email está correto'
+      }
+      
       return res.status(401).json({
-        error: 'Credenciais inválidas',
-        message: authError.message
+        error: userMessage,
+        message: userMessage,
+        description: description
       })
     }
 

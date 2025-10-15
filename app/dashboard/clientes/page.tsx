@@ -385,28 +385,44 @@ export default function ClientesPage() {
     }
   }
 
+  // Calcular estatísticas dos clientes
+  const totalClientes = pagination.total || clientes.length
+  
+  // Qtd de Obras atreladas (total de obras)
+  const qtdObrasAtreladas = obras.length
+  
+  // Total de Novos Clientes do mês atual
+  const mesAtual = new Date().getMonth()
+  const anoAtual = new Date().getFullYear()
+  const novosClientesMes = clientes.filter(cliente => {
+    const dataCriacao = new Date(cliente.created_at)
+    return dataCriacao.getMonth() === mesAtual && dataCriacao.getFullYear() === anoAtual
+  }).length
+
   const stats = [
     { 
       title: "Total de Clientes", 
-      value: pagination.total, 
+      value: totalClientes, 
       icon: Building2, 
       color: "bg-blue-500" 
     },
     { 
-      title: "Total de Obras", 
-      value: obras.length, 
+      title: "Qtd de Obras Atreladas", 
+      value: qtdObrasAtreladas, 
       icon: FileText, 
       color: "bg-purple-500" 
     },
     { 
-      title: "Obras em Andamento", 
-      value: obras.filter(obra => obra.status === 'Em Andamento').length, 
+      title: "Clientes com Obras", 
+      value: clientes.filter(cliente => {
+        return obras.some(obra => obra.cliente_id === cliente.id)
+      }).length, 
       icon: CheckCircle, 
       color: "bg-green-500" 
     },
     { 
-      title: "Obras Concluídas", 
-      value: obras.filter(obra => obra.status === 'Concluída').length, 
+      title: "Novos Clientes (Mês)", 
+      value: novosClientesMes, 
       icon: XCircle, 
       color: "bg-gray-500" 
     },
@@ -1093,66 +1109,7 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
         </div>
       </div>
 
-      {/* Configuração de Usuário */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium">Configuração de Usuário</h3>
-        
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            id="criar_usuario"
-            checked={formData.criar_usuario || false}
-            onChange={(e) => setFormData({ ...formData, criar_usuario: e.target.checked })}
-            disabled={isEdit && formData.criar_usuario}
-            className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <Label htmlFor="criar_usuario" className={`text-sm font-medium ${isEdit && formData.criar_usuario ? 'text-gray-500' : ''}`}>
-            {isEdit && formData.criar_usuario 
-              ? 'Usuário já criado para o representante' 
-              : 'Criar usuário para o representante'
-            }
-          </Label>
-        </div>
-
-        {formData.criar_usuario && (
-          <div className={`border rounded-lg p-4 ${isEdit ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <User className={`w-5 h-5 mt-0.5 ${isEdit ? 'text-green-600' : 'text-blue-600'}`} />
-              </div>
-              <div>
-                <h4 className={`text-sm font-medium mb-1 ${isEdit ? 'text-green-900' : 'text-blue-900'}`}>
-                  {isEdit ? 'Usuário Existente' : 'Criação de Usuário'}
-                </h4>
-                <p className={`text-sm mb-3 ${isEdit ? 'text-green-700' : 'text-blue-700'}`}>
-                  {isEdit 
-                    ? 'Este cliente já possui um usuário vinculado com acesso ao sistema.'
-                    : 'Será criado um usuário para o representante com acesso limitado ao sistema.'
-                  }
-                </p>
-                {!isEdit && (
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="usuario_senha">Senha Inicial *</Label>
-                      <Input
-                        id="usuario_senha"
-                        type="password"
-                        value={formData.usuario_senha || ''}
-                        onChange={(e) => setFormData({ ...formData, usuario_senha: e.target.value })}
-                        placeholder="Mínimo 6 caracteres"
-                        required={formData.criar_usuario}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        O representante poderá alterar esta senha no primeiro acesso.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+     
 
       {/* Contato */}
       <div className="space-y-4">
@@ -1223,6 +1180,67 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
             />
           </div>
         </div>
+      </div>
+
+       {/* Configuração de Usuário */}
+       <div className="space-y-4">
+        <h3 className="text-lg font-medium">Configuração de Usuário</h3>
+        
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="criar_usuario"
+            checked={formData.criar_usuario || false}
+            onChange={(e) => setFormData({ ...formData, criar_usuario: e.target.checked })}
+            disabled={isEdit && formData.criar_usuario}
+            className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <Label htmlFor="criar_usuario" className={`text-sm font-medium ${isEdit && formData.criar_usuario ? 'text-gray-500' : ''}`}>
+            {isEdit && formData.criar_usuario 
+              ? 'Usuário já criado para o representante' 
+              : 'Criar usuário para o representante'
+            }
+          </Label>
+        </div>
+
+        {formData.criar_usuario && (
+          <div className={`border rounded-lg p-4 ${isEdit ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <User className={`w-5 h-5 mt-0.5 ${isEdit ? 'text-green-600' : 'text-blue-600'}`} />
+              </div>
+              <div>
+                <h4 className={`text-sm font-medium mb-1 ${isEdit ? 'text-green-900' : 'text-blue-900'}`}>
+                  {isEdit ? 'Usuário Existente' : 'Criação de Usuário'}
+                </h4>
+                <p className={`text-sm mb-3 ${isEdit ? 'text-green-700' : 'text-blue-700'}`}>
+                  {isEdit 
+                    ? 'Este cliente já possui um usuário vinculado com acesso ao sistema.'
+                    : 'Será criado um usuário para o representante com acesso limitado ao sistema.'
+                  }
+                </p>
+                {!isEdit && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="usuario_senha">Senha Inicial *</Label>
+                      <Input
+                        id="usuario_senha"
+                        type="password"
+                        value={formData.usuario_senha || ''}
+                        onChange={(e) => setFormData({ ...formData, usuario_senha: e.target.value })}
+                        placeholder="Mínimo 6 caracteres"
+                        required={formData.criar_usuario}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        O representante poderá alterar esta senha no primeiro acesso.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
 

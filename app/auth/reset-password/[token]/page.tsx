@@ -84,7 +84,7 @@ export default function ResetPasswordPage() {
         setSuccess(true)
         // Redirecionar para login após 3 segundos
         setTimeout(() => {
-          router.push('/login')
+          router.push('/')
         }, 3000)
       }
     } catch (err: any) {
