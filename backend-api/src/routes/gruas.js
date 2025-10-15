@@ -390,7 +390,7 @@ router.get('/', async (req, res) => {
 
     const totalPages = Math.ceil(count / limit)
 
-    // Enriquecer dados de cada grua (temporariamente simplificado para debug)
+    // Enriquecer dados de cada grua
     const gruasEnriquecidas = (data || []).map(grua => ({
       ...grua,
       // Campos calculados para compatibilidade com mocks

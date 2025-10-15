@@ -108,29 +108,31 @@ export default function GruasPage() {
   const [gruas, setGruas] = useState<GruaFrontend[]>([])
   const { loading, startLoading, stopLoading } = useLoading(true)
   const [error, setError] = useState<string | null>(null)
-  const { loading: creating, startLoading: startCreating, stopLoading: stopCreating } = useLoading()
-  const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating } = useLoading()
+  const { loading: creating, startLoading: startCreating, stopLoading: stopCreating, setLoading: setCreating } = useLoading()
+  const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating, setLoading: setUpdating } = useLoading()
   const [deleting, setDeleting] = useState(false)
 
   // Função auxiliar para converter dados do backend para o formato do componente
   const converterGruaBackend = (grua: any): GruaFrontend => {
-    return {
+    const converted = {
       id: grua.id,
       name: grua.name || grua.nome,
       model: grua.model || grua.modelo,
       modelo: grua.modelo || grua.model,
       fabricante: grua.fabricante,
-      tipo: grua.tipo,
+      tipo: grua.tipo, // O tipo já vem correto do backend
       capacity: grua.capacity || grua.capacidade,
       capacidade: grua.capacidade || grua.capacity,
       status: grua.status || 'disponivel',
-      currentObraId: grua.obra_atual_id || grua.currentObraId || grua.obraId,
-      currentObraName: grua.obra_atual_nome || grua.currentObraName,
+      currentObraId: grua.obra_atual_id || grua.currentObraId || grua.obraId || grua.current_obra_id,
+      currentObraName: grua.obra_atual_nome || grua.currentObraName || grua.current_obra_name,
       observacoes: grua.observacoes,
       createdAt: grua.created_at || grua.createdAt,
       created_at: grua.created_at || grua.createdAt,
       updated_at: grua.updated_at || grua.updatedAt,
     }
+    
+    return converted
   }
 
   // Função para carregar gruas da API
@@ -562,6 +564,7 @@ export default function GruasPage() {
                 <SelectContent>
                   <SelectItem value="all">Todos os tipos</SelectItem>
                   <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                  <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                   <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
                   <SelectItem value="Guincho">Guincho</SelectItem>
                   <SelectItem value="Outros">Outros</SelectItem>
@@ -634,6 +637,12 @@ export default function GruasPage() {
                   </Badge>
                 </div>
                 <CardDescription>{grua.model} - {grua.capacity}</CardDescription>
+                {grua.tipo && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                    <Package className="w-4 h-4" />
+                    <span>Tipo: {grua.tipo}</span>
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -665,6 +674,13 @@ export default function GruasPage() {
                       >
                         <Eye className="w-4 h-4 mr-1" />
                         Ver na Obra
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(grua)}
+                      >
+                        <Eye className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="outline"
@@ -873,6 +889,8 @@ export default function GruasPage() {
                     <SelectItem value="Grua Torre">Grua Torre</SelectItem>
                     <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                     <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                    <SelectItem value="Guincho">Guincho</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1022,6 +1040,8 @@ export default function GruasPage() {
                     <SelectItem value="Grua Torre">Grua Torre</SelectItem>
                     <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                     <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                    <SelectItem value="Guincho">Guincho</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1176,6 +1196,112 @@ export default function GruasPage() {
                 </>
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Detalhes da Grua */}
+      <Dialog open={!!selectedGrua} onOpenChange={() => setSelectedGrua(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crane className="w-5 h-5" />
+              Detalhes da Grua
+            </DialogTitle>
+          </DialogHeader>
+          {selectedGrua && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Nome</Label>
+                  <p className="text-sm text-gray-900">{selectedGrua.name}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Modelo</Label>
+                  <p className="text-sm text-gray-900">{selectedGrua.model}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Fabricante</Label>
+                  <p className="text-sm text-gray-900">{selectedGrua.fabricante || 'Não informado'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Capacidade</Label>
+                  <p className="text-sm text-gray-900">{selectedGrua.capacity}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Tipo</Label>
+                  <p className="text-sm text-gray-900">{selectedGrua.tipo || 'Não informado'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Status</Label>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(selectedGrua.status)}>
+                      {getStatusIcon(selectedGrua.status)}
+                      <span className="ml-1 capitalize">{selectedGrua.status.replace('_', ' ')}</span>
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+              
+              {selectedGrua.currentObraId && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Obra Atual</Label>
+                  <p className="text-sm text-gray-900">
+                    {selectedGrua.currentObraName || `Obra ID: ${selectedGrua.currentObraId}`}
+                  </p>
+                </div>
+              )}
+              
+              {selectedGrua.observacoes && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Observações</Label>
+                  <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-md">
+                    {selectedGrua.observacoes}
+                  </p>
+                </div>
+              )}
+              
+              {selectedGrua.createdAt && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Data de Criação</Label>
+                  <p className="text-sm text-gray-900">
+                    {new Date(selectedGrua.createdAt).toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <div className="flex justify-end gap-2 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedGrua(null)}
+            >
+              Fechar
+            </Button>
+            {selectedGrua && (
+              <Button 
+                onClick={() => {
+                  setSelectedGrua(null)
+                  handleEditGrua(selectedGrua)
+                }}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Editar
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

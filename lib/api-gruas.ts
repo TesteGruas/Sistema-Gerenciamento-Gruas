@@ -8,6 +8,8 @@ export interface Grua {
   id: string | number;
   name: string;
   modelo: string;
+  fabricante?: string;
+  tipo?: string;
   capacidade: string;
   status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa';
   localizacao?: string;
@@ -94,6 +96,8 @@ export function converterGruaBackendParaFrontend(grua: GruaBackend): Grua {
     id: grua.id,
     name: grua.name,
     modelo: grua.model || grua.modelo,
+    fabricante: grua.fabricante,
+    tipo: grua.tipo,
     capacidade: grua.capacity || grua.capacidade,
     status: statusNormalizado,
     localizacao: grua.localizacao,
@@ -113,6 +117,8 @@ export function converterGruaFrontendParaBackend(grua: Grua): GruaBackend {
     id: grua.id,
     name: grua.name,
     modelo: grua.modelo,
+    fabricante: grua.fabricante,
+    tipo: grua.tipo,
     capacidade: grua.capacidade,
     status: grua.status,
     localizacao: grua.localizacao,
