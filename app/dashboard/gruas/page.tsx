@@ -119,16 +119,6 @@ export default function GruasPage() {
       name: grua.name || grua.nome,
       model: grua.model || grua.modelo,
       modelo: grua.modelo || grua.model,
-<<<<<<< HEAD
-      fabricante: grua.fabricante,
-      tipo: grua.tipo, // O tipo já vem correto do backend
-      capacity: grua.capacity || grua.capacidade,
-      capacidade: grua.capacidade || grua.capacity,
-      status: grua.status || 'disponivel',
-      currentObraId: grua.obra_atual_id || grua.currentObraId || grua.obraId || grua.current_obra_id,
-      currentObraName: grua.obra_atual_nome || grua.currentObraName || grua.current_obra_name,
-      observacoes: grua.observacoes,
-=======
       fabricante: grua.fabricante || 'Não informado',
       tipo: grua.tipo || 'Não informado',
       capacity: grua.capacity || grua.capacidade,
@@ -137,7 +127,6 @@ export default function GruasPage() {
       currentObraId: grua.current_obra_id || grua.currentObraId || grua.obra_id,
       currentObraName: grua.current_obra_name || grua.currentObraName,
       observacoes: grua.observacoes || 'Nenhuma observação registrada',
->>>>>>> 058a119a69255aa5900d0a73a18ff6390588a7c7
       createdAt: grua.created_at || grua.createdAt,
       created_at: grua.created_at || grua.createdAt,
       updated_at: grua.updated_at || grua.updatedAt,
@@ -948,47 +937,7 @@ export default function GruasPage() {
                   )}
                   
                   <div className="space-y-2">
-<<<<<<< HEAD
-                    {/* Ações Principais */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = `/dashboard/obras/${grua.currentObraId}?tab=livro`}
-                        className="flex-1"
-                        disabled={!grua.currentObraId}
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        Ver na Obra
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetails(grua)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditGrua(grua)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteGrua(grua)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    
-                    {/* Novas Funcionalidades */}
-=======
                     {/* Funcionalidades */}
->>>>>>> 058a119a69255aa5900d0a73a18ff6390588a7c7
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -1446,111 +1395,6 @@ export default function GruasPage() {
         </DialogContent>
       </Dialog>
 
-<<<<<<< HEAD
-      {/* Modal de Detalhes da Grua */}
-      <Dialog open={!!selectedGrua} onOpenChange={() => setSelectedGrua(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Crane className="w-5 h-5" />
-              Detalhes da Grua
-            </DialogTitle>
-          </DialogHeader>
-          {selectedGrua && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Nome</Label>
-                  <p className="text-sm text-gray-900">{selectedGrua.name}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Modelo</Label>
-                  <p className="text-sm text-gray-900">{selectedGrua.model}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Fabricante</Label>
-                  <p className="text-sm text-gray-900">{selectedGrua.fabricante || 'Não informado'}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Capacidade</Label>
-                  <p className="text-sm text-gray-900">{selectedGrua.capacity}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Tipo</Label>
-                  <p className="text-sm text-gray-900">{selectedGrua.tipo || 'Não informado'}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Status</Label>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(selectedGrua.status)}>
-                      {getStatusIcon(selectedGrua.status)}
-                      <span className="ml-1 capitalize">{selectedGrua.status.replace('_', ' ')}</span>
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-              
-              {selectedGrua.currentObraId && (
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Obra Atual</Label>
-                  <p className="text-sm text-gray-900">
-                    {selectedGrua.currentObraName || `Obra ID: ${selectedGrua.currentObraId}`}
-                  </p>
-                </div>
-              )}
-              
-              {selectedGrua.observacoes && (
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Observações</Label>
-                  <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded-md">
-                    {selectedGrua.observacoes}
-                  </p>
-                </div>
-              )}
-              
-              {selectedGrua.createdAt && (
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Data de Criação</Label>
-                  <p className="text-sm text-gray-900">
-                    {new Date(selectedGrua.createdAt).toLocaleDateString('pt-BR', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-          
-          <div className="flex justify-end gap-2 pt-4">
-            <Button 
-              variant="outline" 
-              onClick={() => setSelectedGrua(null)}
-            >
-              Fechar
-            </Button>
-            {selectedGrua && (
-              <Button 
-                onClick={() => {
-                  setSelectedGrua(null)
-                  handleEditGrua(selectedGrua)
-                }}
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Editar
-              </Button>
-            )}
-          </div>
-=======
       {/* Dialog de Visualização de Detalhes */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
@@ -1667,7 +1511,6 @@ export default function GruasPage() {
               </div>
             </div>
           )}
->>>>>>> 058a119a69255aa5900d0a73a18ff6390588a7c7
         </DialogContent>
       </Dialog>
     </div>
