@@ -143,8 +143,8 @@ const swaggerOptions = {
         description: 'Servidor de desenvolvimento'
       },
       {
-        url: `http://72.60.60.118:${PORT}`,
-        description: 'Servidor de produção'
+        url: `http://localhost:${PORT}`,
+        description: 'Servidor local'
       }
     ],
     components: {
@@ -360,11 +360,10 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('🌐 Disponível em:')
   console.log(`   http://localhost:${PORT}`)
   console.log(`   http://127.0.0.1:${PORT}`)
-  console.log(`   http://72.60.60.118:${PORT}`)
-  console.log(`📚 Documentação: http://72.60.60.118:${PORT}/api-docs`)
-  console.log(`🏥 Health: http://72.60.60.118:${PORT}/health`)
-  console.log(`🧪 Teste CORS: http://72.60.60.118:${PORT}/test-cors`)
-  console.log(`🔑 Teste Login: http://72.60.60.118:${PORT}/test-login`)
+  console.log(`📚 Documentação: http://localhost:${PORT}/api-docs`)
+  console.log(`🏥 Health: http://localhost:${PORT}/health`)
+  console.log(`🧪 Teste CORS: http://localhost:${PORT}/test-cors`)
+  console.log(`🔑 Teste Login: http://localhost:${PORT}/test-login`)
   console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`)
   console.log(`🔓 CORS: CONFIGURAÇÃO MANUAL - TOTALMENTE LIBERADO`)
   console.log('🚀 ==========================================')

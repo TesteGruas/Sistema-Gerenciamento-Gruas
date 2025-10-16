@@ -34,7 +34,7 @@ export interface UploadDocumentoPayload {
  * Buscar documentos de um funcionário específico
  */
 export const getDocumentosFuncionario = async (funcionarioId: number): Promise<DocumentoFuncionario[]> => {
-  const response = await api.get(`/api/funcionarios/${funcionarioId}/documentos`);
+  const response = await api.get(`/funcionarios/${funcionarioId}/documentos`);
   return response.data.data || response.data;
 };
 
@@ -42,7 +42,7 @@ export const getDocumentosFuncionario = async (funcionarioId: number): Promise<D
  * Buscar um documento específico pelo ID
  */
 export const getDocumentoById = async (documentoId: string | number): Promise<DocumentoFuncionario> => {
-  const response = await api.get(`/api/funcionarios/documentos/${documentoId}`);
+  const response = await api.get(`/funcionarios/documentos/${documentoId}`);
   return response.data.data || response.data;
 };
 
@@ -53,7 +53,7 @@ export const assinarDocumento = async (
   documentoId: string | number,
   payload: AssinarDocumentoPayload
 ): Promise<DocumentoFuncionario> => {
-  const response = await api.post(`/api/funcionarios/documentos/${documentoId}/assinar`, payload);
+  const response = await api.post(`/funcionarios/documentos/${documentoId}/assinar`, payload);
   return response.data.data || response.data;
 };
 
@@ -71,7 +71,7 @@ export const uploadDocumento = async (payload: UploadDocumentoPayload): Promise<
     formData.append('descricao', payload.descricao);
   }
 
-  const response = await api.post('/api/funcionarios/documentos/upload', formData, {
+  const response = await api.post('/funcionarios/documentos/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }
@@ -84,7 +84,7 @@ export const uploadDocumento = async (payload: UploadDocumentoPayload): Promise<
  * Baixar um documento
  */
 export const downloadDocumento = async (documentoId: string | number): Promise<Blob> => {
-  const response = await api.get(`/api/funcionarios/documentos/${documentoId}/download`, {
+  const response = await api.get(`/funcionarios/documentos/${documentoId}/download`, {
     responseType: 'blob'
   });
   return response.data;
@@ -94,14 +94,14 @@ export const downloadDocumento = async (documentoId: string | number): Promise<B
  * Deletar um documento
  */
 export const deletarDocumento = async (documentoId: string | number): Promise<void> => {
-  await api.delete(`/api/funcionarios/documentos/${documentoId}`);
+  await api.delete(`/funcionarios/documentos/${documentoId}`);
 };
 
 /**
  * Buscar todos os documentos pendentes de assinatura do usuário logado
  */
 export const getDocumentosPendentes = async (): Promise<DocumentoFuncionario[]> => {
-  const response = await api.get('/api/funcionarios/documentos/pendentes');
+  const response = await api.get('/funcionarios/documentos/pendentes');
   return response.data.data || response.data;
 };
 

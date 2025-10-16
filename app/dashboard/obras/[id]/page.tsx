@@ -58,15 +58,15 @@ import { AlertCircle } from "lucide-react"
 import GruaSearch from "@/components/grua-search"
 import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 import { obraGruasApi } from "@/lib/api-obra-gruas"
-import { useObraStore, useObraStoreDebug, debugCustosMensais } from "@/lib/obra-store"
-import { ObraStoreDebug } from "@/components/obra-store-debug"
+import { useObraStore } from "@/lib/obra-store"
 
 function ObraDetailsPageContent() {
+
   const { toast } = useToast()
   const params = useParams()
   const obraId = params.id as string
   
-  // Usar store de obra com debug
+  // Usar store de obra
   const {
     obra,
     loading,
@@ -75,10 +75,8 @@ function ObraDetailsPageContent() {
     loadingCustos,
     errorCustos,
     carregarObra,
-    carregarCustosMensais,
-    lastUpdated,
-    lastCustosUpdated
-  } = useObraStoreDebug()
+    carregarCustosMensais
+  } = useObraStore()
   
   // Estados locais para dados não armazenados no store
   const [documentos, setDocumentos] = useState<any[]>([])
@@ -251,7 +249,6 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao exportar entradas:', error)
       toast({
         title: "Informação",
         description: "Erro ao exportar entradas",
@@ -301,10 +298,9 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao adicionar arquivo:', error)
       toast({
         title: "Informação",
-        description: "Erro ao adicionar arquivo: ${error.message}",
+        description: "Erro ao adicionar arquivo",
         variant: "default"
       })
     }
@@ -322,10 +318,9 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao excluir arquivo:', error)
       toast({
         title: "Informação",
-        description: "Erro ao excluir arquivo: ${error.message}",
+        description: "Erro ao excluir arquivo",
         variant: "default"
       })
     }
@@ -505,10 +500,9 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao criar novo mês:', error)
       toast({
         title: "Informação",
-        description: "Erro ao criar novo mês: ${error.message}",
+        description: "Erro ao criar novo mês",
         variant: "default"
       })
     }
@@ -523,7 +517,6 @@ function ObraDetailsPageContent() {
       setMesesDisponiveis(meses)
       setIsNovoMesOpen(true)
     } catch (error: any) {
-      console.error('Erro ao obter meses disponíveis:', error)
       // Fallback para função mockada
       const meses = gerarMesesDisponiveis()
       setMesesDisponiveis(meses)
@@ -542,10 +535,9 @@ function ObraDetailsPageContent() {
       window.location.reload()
       
     } catch (error: any) {
-      console.error('Erro ao atualizar quantidade:', error)
       toast({
         title: "Erro",
-        description: `Erro ao atualizar quantidade: ${error.message}`,
+        description: "Erro ao atualizar quantidade",
         variant: "destructive"
       })
     }
@@ -595,10 +587,9 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao criar custo:', error)
       toast({
         title: "Informação",
-        description: "Erro ao criar custo: ${error.message}",
+        description: "Erro ao criar custo",
         variant: "default"
       })
     }
@@ -653,10 +644,9 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao atualizar custo:', error)
       toast({
         title: "Informação",
-        description: "Erro ao atualizar custo: ${error.message}",
+        description: "Erro ao atualizar custo",
         variant: "default"
       })
     }
@@ -678,10 +668,9 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao excluir custo:', error)
       toast({
         title: "Informação",
-        description: "Erro ao excluir custo: ${error.message}",
+        description: "Erro ao excluir custo",
         variant: "default"
       })
     }
@@ -783,10 +772,9 @@ function ObraDetailsPageContent() {
         variant: "default"
       })
     } catch (error: any) {
-      console.error('Erro ao criar custos iniciais:', error)
       toast({
         title: "Informação",
-        description: "Erro ao criar custos iniciais: ${error.message}",
+        description: "Erro ao criar custos iniciais",
         variant: "default"
       })
     }
@@ -817,7 +805,6 @@ function ObraDetailsPageContent() {
           observacoes: novaGruaData.observacoes || `Valor locação: R$ ${grua.valorLocacao || 0}, Taxa mensal: R$ ${grua.taxaMensal || 0}`
         }
         
-        console.log('Enviando payload para API:', payload)
         return obraGruasApi.adicionarGruaObra(payload)
       })
       
@@ -855,7 +842,6 @@ function ObraDetailsPageContent() {
       await carregarGruasVinculadas()
       
     } catch (error) {
-      console.error('Erro ao adicionar gruas:', error)
       toast({
         title: "Erro",
         description: "Erro ao adicionar gruas à obra",
@@ -1044,23 +1030,17 @@ function ObraDetailsPageContent() {
               }
             }
             
-            console.log(`🔍 DEBUG - Grua convertida ${index}:`, gruaConvertida)
             return gruaConvertida
           })
           
           setGruasReais(gruasConvertidas)
-          console.log('✅ Gruas carregadas e convertidas:', gruasConvertidas)
         } else {
-          console.warn('⚠️ Nenhuma grua encontrada no relacionamento')
           setGruasReais([])
         }
       } else {
-        console.warn('❌ Erro ao carregar obra ou obra não encontrada')
-        console.log('🔍 DEBUG - Response:', response)
         setGruasReais([])
       }
     } catch (err) {
-      console.error('Erro ao carregar gruas vinculadas:', err)
       setGruasReais([])
     } finally {
       setLoadingGruas(false)
@@ -1077,7 +1057,6 @@ function ObraDetailsPageContent() {
       const response = await obrasDocumentosApi.listarPorObra(parseInt(obra.id))
       setDocumentos(Array.isArray(response.data) ? response.data : [response.data])
     } catch (error: any) {
-      console.error('Erro ao carregar documentos:', error)
       // Fallback para dados mockados
       const documentosMockados = getDocumentosByObra(obra.id)
       setDocumentos(documentosMockados.map(doc => ({
@@ -1154,7 +1133,6 @@ function ObraDetailsPageContent() {
       const response = await obrasArquivosApi.listarPorObra(parseInt(obra.id))
       setArquivos(Array.isArray(response.data) ? response.data : [response.data])
     } catch (error: any) {
-      console.error('Erro ao carregar arquivos:', error)
       setArquivos([])
     } finally {
       setLoadingArquivos(false)
@@ -1327,19 +1305,11 @@ function ObraDetailsPageContent() {
     )
   }
 
-  // Componente de debug do store (apenas em desenvolvimento)
-  const showDebug = process.env.NODE_ENV === 'development'
-
-  if (!obra) {
+  // Se não estiver carregando e não tiver obra, mostrar loading infinito
+  if (!loading && !obra) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-center p-8">
-          <div className="text-center">
-            <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <h2 className="text-xl font-semibold text-gray-700 mb-2">Obra não encontrada</h2>
-            <p className="text-gray-600">A obra com ID {obraId} não foi encontrada.</p>
-          </div>
-        </div>
+        <PageLoader text="Carregando detalhes da obra..." />
       </div>
     )
   }
@@ -1351,9 +1321,6 @@ function ObraDetailsPageContent() {
 
   return (
     <div className="space-y-6">
-      {/* Debug do Store (apenas em desenvolvimento) */}
-      {showDebug && <ObraStoreDebug />}
-      
       <div className="flex items-center gap-4">
         <Button 
           variant="outline" 
@@ -2254,10 +2221,9 @@ function ObraDetailsPageContent() {
                                 try {
                                   await obrasArquivosApi.baixar(parseInt(obra.id), arquivo.id)
                                 } catch (error: any) {
-                                  console.error('Erro ao baixar arquivo:', error)
                                   toast({
         title: "Informação",
-        description: "Erro ao baixar arquivo: ${error.message}",
+        description: "Erro ao baixar arquivo",
         variant: "default"
       })
                                 }
@@ -2736,7 +2702,7 @@ function ObraDetailsPageContent() {
                 <Button 
                   onClick={() => {
                     // Aqui poderia implementar edição da entrada
-                    console.log('Editar entrada:', entradaSelecionada)
+                    // Editar entrada
                   }}
                 >
                   <Edit className="w-4 h-4 mr-2" />

@@ -560,16 +560,49 @@ export default function HistoricoPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historicoPonto.map((registro: any) => (
+                  {historicoPonto.map((registro: any) => {
+                    // Verificar se está em atraso (múltiplas variações do status)
+                    const isAtraso = registro.status === 'Atraso' || 
+                                    registro.status === 'atraso' || 
+                                    registro.status?.toLowerCase().includes('atraso')
+                    
+                    // Verificar se tem registros incompletos (sem saída do almoço, volta do almoço ou saída)
+                    const isIncompleto = (!registro.saida_almoco && registro.entrada) || 
+                                       (!registro.volta_almoco && registro.saida_almoco) || 
+                                       (!registro.saida && registro.volta_almoco)
+                    
+                    // Debug: log para verificar os valores
+                    console.log('Registro:', {
+                      id: registro.id,
+                      funcionario: registro.funcionario?.nome,
+                      status: registro.status,
+                      isAtraso,
+                      isIncompleto,
+                      saida_almoco: registro.saida_almoco,
+                      volta_almoco: registro.volta_almoco,
+                      saida: registro.saida
+                    })
+                    
+                    // Aplicar cores condicionais
+                    const nomeColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
+                    const dataColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
+                    
+                    return (
                     <TableRow key={registro.id}>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{registro.funcionario?.nome}</div>
+                          <div className={`font-medium ${nomeColor}`}>
+                            {registro.funcionario?.nome}
+                            {isAtraso && <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">ATRASO</span>}
+                            {isIncompleto && !isAtraso && <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">INCOMPLETO</span>}
+                          </div>
                           <div className="text-sm text-muted-foreground">{registro.funcionario?.cargo}</div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        {format(new Date(registro.data), 'dd/MM/yyyy', { locale: ptBR })}
+                        <span className={dataColor}>
+                          {format(new Date(registro.data), 'dd/MM/yyyy', { locale: ptBR })}
+                        </span>
                       </TableCell>
                       <TableCell>
                         {registro.entrada || '-'}
@@ -605,7 +638,8 @@ export default function HistoricoPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

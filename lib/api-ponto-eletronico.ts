@@ -159,7 +159,7 @@ export const apiFuncionarios = {
     search?: string;
   }): Promise<{ isAdmin: boolean; funcionarios: Funcionario[]; pagination?: any }> {
     try {
-      const response = await api.get('/api/funcionarios', { params });
+      const response = await api.get('/funcionarios', { params });
       const funcionarios = response.data.data || response.data || [];
       
       // Verificar se o usuário é admin (pode ver todos)
@@ -495,7 +495,7 @@ export const utilsPonto = {
         className: 'bg-green-100 text-green-800'
       },
       'Em Andamento': {
-        text: 'Em Andamento',
+        text: 'Aberto',
         className: 'bg-blue-100 text-blue-800'
       },
       'Atraso': {

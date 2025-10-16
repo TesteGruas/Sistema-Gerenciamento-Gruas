@@ -38,7 +38,7 @@ export interface RejeitarRegistroPayload {
  * Buscar funcionários da obra do encarregador
  */
 export const getFuncionariosDaObra = async (obraId: number): Promise<FuncionarioEncarregador[]> => {
-  const response = await api.get(`/api/funcionarios/obra/${obraId}`);
+  const response = await api.get(`/funcionarios/obra/${obraId}`);
   return response.data.data || response.data;
 };
 

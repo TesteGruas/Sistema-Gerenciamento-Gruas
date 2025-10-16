@@ -29,7 +29,7 @@ BACKUP_SCHEDULE=0 2 * * *
 BACKUP_RETENTION_DAYS=30
 
 # Configurações da API - SERVIDOR LOCAL
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/api
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 NEXT_PUBLIC_API_URL=http://localhost:3001
 EOF
 
@@ -47,8 +47,8 @@ PORT=3000
 # ========================================
 # ⚠️ NÃO coloque credenciais SMTP aqui! Use o painel admin em /dashboard/configuracoes/email
 
-# URLs do Sistema - SERVIDOR PRODUÇÃO
-FRONTEND_URL=http://72.60.60.118:3000
+# URLs do Sistema - SERVIDOR LOCAL
+FRONTEND_URL=http://localhost:3000
 
 # Remetente Padrão (pode ser alterado no painel admin)
 EMAIL_FROM_DEFAULT=noreply@sistema-gruas.com

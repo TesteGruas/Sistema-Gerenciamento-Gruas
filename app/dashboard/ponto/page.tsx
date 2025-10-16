@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X } from "lucide-react"
+import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
 import {
   PieChart,
   Pie,
@@ -120,6 +121,10 @@ export default function PontoPage() {
   const [filtroDataFim, setFiltroDataFim] = useState("")
   const [ordenacaoHorasExtras, setOrdenacaoHorasExtras] = useState("data") // Ordenar por data (mais recente primeiro)
   const [filtroStatus, setFiltroStatus] = useState("todos")
+  
+  // Estados para aprovação de horas extras
+  const [isAprovacaoOpen, setIsAprovacaoOpen] = useState(false)
+  const [registroParaAprovacao, setRegistroParaAprovacao] = useState<RegistroPonto | null>(null)
   
   // Estados para edição de registros
   const [isEditarOpen, setIsEditarOpen] = useState(false)
@@ -453,6 +458,53 @@ export default function PontoPage() {
       justificativa_alteracao: "",
     })
     setIsEditarOpen(true)
+  }
+
+  // Funções para aprovação de horas extras
+  const abrirAprovacao = (registro: RegistroPonto) => {
+    setRegistroParaAprovacao(registro)
+    setIsAprovacaoOpen(true)
+  }
+
+  const fecharAprovacao = () => {
+    setIsAprovacaoOpen(false)
+    setRegistroParaAprovacao(null)
+  }
+
+  const handleAprovarHorasExtras = async (gestorId: number, observacoes: string) => {
+    if (!registroParaAprovacao) return
+
+    try {
+      // Simular envio para aprovação
+      // Em produção, isso chamaria a API real
+      console.log('Enviando para aprovação:', {
+        registroId: registroParaAprovacao.id,
+        gestorId,
+        observacoes
+      })
+
+      // Atualizar status do registro
+      await apiRegistrosPonto.atualizar(registroParaAprovacao.id, {
+        status: 'Pendente Aprovação',
+        observacoes_aprovacao: observacoes
+      })
+
+      toast({
+        title: "Sucesso",
+        description: "Horas extras enviadas para aprovação do gestor",
+        variant: "default"
+      })
+
+      carregarDados()
+      fecharAprovacao()
+    } catch (error) {
+      console.error('Erro ao enviar para aprovação:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao enviar para aprovação",
+        variant: "destructive"
+      })
+    }
   }
 
   // Função para salvar edição
@@ -972,7 +1024,6 @@ export default function PontoPage() {
                   </div>
                   <div className="text-right">
                     {getStatusBadge(registro.status)}
-                    <p className="text-sm text-gray-500 mt-1">Horas: {registro.horas_trabalhadas || "Calculando..."}</p>
                   </div>
                 </div>
               ))}
@@ -1069,7 +1120,7 @@ export default function PontoPage() {
                       <SelectContent>
                         <SelectItem value="todos">Todos os status</SelectItem>
                         <SelectItem value="Completo">Completo</SelectItem>
-                        <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                        <SelectItem value="Em Andamento">Aberto</SelectItem>
                         <SelectItem value="Atraso">Atraso</SelectItem>
                         <SelectItem value="Falta">Falta</SelectItem>
                         <SelectItem value="Pendente Aprovação">Pendente Aprovação</SelectItem>
@@ -1146,11 +1197,8 @@ export default function PontoPage() {
                       <TableHead>Saída</TableHead>
                       <TableHead>Horas Trabalhadas</TableHead>
                       <TableHead>Horas Extras</TableHead>
-                      <TableHead>Localização</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Aprovado Por</TableHead>
-                      <TableHead>Data Aprovação</TableHead>
-                      <TableHead>Observações</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1177,7 +1225,6 @@ export default function PontoPage() {
                             <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="max-w-xs truncate">{registro.localizacao || '-'}</TableCell>
                         <TableCell>{getStatusBadge(registro.status)}</TableCell>
                         <TableCell>
                           {registro.aprovador?.nome ? (
@@ -1187,28 +1234,25 @@ export default function PontoPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {registro.data_aprovacao ? (
-                            <span className="text-sm">
-                              {utilsPonto.formatarData(registro.data_aprovacao)} às{" "}
-                              {new Date(registro.data_aprovacao).toLocaleTimeString("pt-BR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate">{registro.observacoes || '-'}</TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => abrirEdicao(registro)}
-                            className="text-blue-600 hover:text-blue-700"
-                          >
-                            Editar
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => abrirEdicao(registro)}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              Editar
+                            </Button>
+                            {registro.horas_extras > 0 && registro.status !== 'Pendente Aprovação' && (
+                              <Button
+                                size="sm"
+                                onClick={() => abrirAprovacao(registro)}
+                                className="bg-orange-600 hover:bg-orange-700 text-white"
+                              >
+                                Enviar para Aprovação
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1267,7 +1311,6 @@ export default function PontoPage() {
                         <TableHead>Justificativa</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Aprovado Por</TableHead>
-                        <TableHead>Data Aprovação</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1293,19 +1336,6 @@ export default function PontoPage() {
                             <TableCell>
                               {registro.aprovador?.nome ? (
                                 <span className="text-sm font-medium">{registro.aprovador.nome}</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {registro.data_aprovacao ? (
-                                <span className="text-sm">
-                                  {utilsPonto.formatarData(registro.data_aprovacao)} às{" "}
-                                  {new Date(registro.data_aprovacao).toLocaleTimeString("pt-BR", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </span>
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}
@@ -1740,6 +1770,14 @@ export default function PontoPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog de Aprovação de Horas Extras */}
+      <AprovacaoHorasExtrasDialog
+        isOpen={isAprovacaoOpen}
+        onClose={fecharAprovacao}
+        registro={registroParaAprovacao}
+        onAprovar={handleAprovarHorasExtras}
+      />
     </div>
   )
 }

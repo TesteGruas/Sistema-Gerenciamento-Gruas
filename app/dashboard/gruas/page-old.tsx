@@ -52,7 +52,7 @@ import {
 } from "lucide-react"
 
 
-const NEXT_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api'
+const NEXT_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
 export default function GruasPage() {
   const { toast } = useToast()
   const [gruas, setGruas] = useState<any[]>([])

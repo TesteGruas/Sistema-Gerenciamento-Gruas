@@ -51,6 +51,7 @@ export default function EstoquePage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isMovDialogOpen, setIsMovDialogOpen] = useState(false)
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Produto | null>(null)
   
   // Estados para filtros
@@ -97,10 +98,22 @@ export default function EstoquePage() {
     observacoes: "",
   })
 
+  // Formulário para nova categoria
+  const [categoryFormData, setCategoryFormData] = useState({
+    nome: "",
+    descricao: "",
+    status: "Ativo" as "Ativo" | "Inativo",
+  })
+
   // Carregar dados iniciais
   useEffect(() => {
     carregarDados()
-  }, [filtros, filtrosMovimentacoes])
+  }, [filtros])
+
+  // Carregar movimentações separadamente
+  useEffect(() => {
+    carregarMovimentacoes()
+  }, [filtrosMovimentacoes])
 
   const carregarDados = async () => {
     try {
@@ -119,7 +132,34 @@ export default function EstoquePage() {
       if (filtros.status && filtros.status !== "todos") {
         params.status = filtros.status
       }
+
+      const [produtosResponse, categoriasResponse] = await Promise.all([
+        estoqueAPI.listarProdutos(params),
+        estoqueAPI.listarCategorias()
+      ])
       
+      setEstoque(produtosResponse.data)
+      setCategorias(categoriasResponse.data)
+      
+      // Atualizar informações de paginação se disponíveis
+      if (produtosResponse.pagination) {
+        setTotalItems(produtosResponse.pagination.total)
+        setTotalPages(produtosResponse.pagination.pages)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados do estoque",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const carregarMovimentacoes = async () => {
+    try {
       // Preparar parâmetros para movimentações
       const paramsMovimentacoes: any = {
         page: filtrosMovimentacoes.page,
@@ -138,21 +178,8 @@ export default function EstoquePage() {
         paramsMovimentacoes.data_fim = filtrosMovimentacoes.data_fim
       }
 
-      const [produtosResponse, categoriasResponse, movimentacoesResponse] = await Promise.all([
-        estoqueAPI.listarProdutos(params),
-        estoqueAPI.listarCategorias(),
-        estoqueAPI.listarMovimentacoes(paramsMovimentacoes)
-      ])
-      
-      setEstoque(produtosResponse.data)
-      setCategorias(categoriasResponse.data)
+      const movimentacoesResponse = await estoqueAPI.listarMovimentacoes(paramsMovimentacoes)
       setMovimentacoes(movimentacoesResponse.data)
-      
-      // Atualizar informações de paginação se disponíveis
-      if (produtosResponse.pagination) {
-        setTotalItems(produtosResponse.pagination.total)
-        setTotalPages(produtosResponse.pagination.pages)
-      }
       
       // Atualizar informações de paginação das movimentações
       if (movimentacoesResponse.pagination) {
@@ -160,14 +187,12 @@ export default function EstoquePage() {
         setTotalPagesMovimentacoes(movimentacoesResponse.pagination.pages)
       }
     } catch (error) {
-      console.error('Erro ao carregar dados:', error)
+      console.error('Erro ao carregar movimentações:', error)
       toast({
         title: "Erro",
-        description: "Erro ao carregar dados do estoque",
+        description: "Erro ao carregar movimentações",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -375,64 +400,32 @@ export default function EstoquePage() {
     setIsDialogOpen(true)
   }
 
-  const exportToExcel = () => {
-    // Criar dados para exportação
-    const dadosParaExportar = estoque.map((item) => {
-      const estoqueData = getEstoqueData(item.id)
-      const estoqueAtual = estoqueData?.quantidade_disponivel || 0
-      const estoqueMinimo = item.estoque_minimo || 0
-      const valorTotal = estoqueData?.valor_total || 0
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      await estoqueAPI.criarCategoria(categoryFormData)
+      toast({
+        title: "Sucesso",
+        description: "Categoria criada com sucesso",
+      })
       
-      return [
-        item.id,
-        item.nome,
-        item.categorias?.nome || "",
-        estoqueAtual,
-        item.unidade_medida,
-        estoqueMinimo,
-        `R$ ${(item.valor_unitario || 0).toFixed(2)}`,
-        `R$ ${(valorTotal || 0).toFixed(2)}`,
-        item.codigo_barras || "",
-        item.localizacao || "",
-        getEstoqueData(item.id)?.ultima_movimentacao ? new Date(getEstoqueData(item.id)!.ultima_movimentacao).toLocaleDateString("pt-BR") : "",
-        estoqueAtual <= estoqueMinimo ? "Estoque Baixo" : 
-        estoqueAtual <= estoqueMinimo * 1.5 ? "Atenção" : "Normal"
-      ]
-    })
-
-    // Cabeçalhos da planilha
-    const headers = [
-      "ID",
-      "Produto",
-      "Categoria", 
-      "Quantidade Disponível",
-      "Unidade",
-      "Estoque Mínimo",
-      "Valor Unitário",
-      "Valor Total",
-      "Código de Barras",
-      "Localização",
-      "Última Movimentação",
-      "Status"
-    ]
-
-    // Criar CSV
-    const csvContent = [
-      headers.join(","),
-      ...dadosParaExportar.map(row => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n")
-
-    // Download do arquivo
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", `estoque_${new Date().toISOString().split("T")[0]}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+      await carregarDados()
+      setCategoryFormData({
+        nome: "",
+        descricao: "",
+        status: "Ativo",
+      })
+      setIsCategoryDialogOpen(false)
+    } catch (error) {
+      console.error('Erro ao criar categoria:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao criar categoria",
+        variant: "destructive",
+      })
+    }
   }
+
 
   const stats = [
     { 
@@ -489,6 +482,23 @@ export default function EstoquePage() {
           <p className="text-gray-600">Gerenciamento completo do estoque de materiais</p>
         </div>
         <div className="flex gap-3">
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <div className="flex gap-2">
+              <ExportButton
+                dados={estoque}
+                tipo="estoque"
+                nomeArquivo="relatorio-estoque"
+                titulo="Relatório de Estoque"
+              />
+              <DialogTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Item
+                </Button>
+              </DialogTrigger>
+            </div>
+          </Dialog>
+
           <Dialog open={isMovDialogOpen} onOpenChange={setIsMovDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 bg-transparent">
@@ -563,7 +573,6 @@ export default function EstoquePage() {
                   />
                 </div>
 
-
                 <div className="space-y-2">
                   <Label htmlFor="observacoes">Observações</Label>
                   <Textarea
@@ -586,30 +595,69 @@ export default function EstoquePage() {
             </DialogContent>
           </Dialog>
 
-          <Button 
-            variant="outline" 
-            className="border-green-600 text-green-600 hover:bg-green-50 bg-transparent"
-            onClick={exportToExcel}
-          >
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Exportar Excel
-          </Button>
+          <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-green-600 text-green-600 hover:bg-green-50 bg-transparent">
+                <Archive className="w-4 h-4 mr-2" />
+                Nova Categoria
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Criar Nova Categoria</DialogTitle>
+                <DialogDescription>Adicione uma nova categoria para organizar os produtos</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreateCategory} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="categoria-nome">Nome da Categoria</Label>
+                  <Input
+                    id="categoria-nome"
+                    value={categoryFormData.nome}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, nome: e.target.value })}
+                    placeholder="Ex: Ferramentas, Materiais de Construção"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="categoria-descricao">Descrição</Label>
+                  <Textarea
+                    id="categoria-descricao"
+                    value={categoryFormData.descricao}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, descricao: e.target.value })}
+                    placeholder="Descrição da categoria..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="categoria-status">Status</Label>
+                  <Select
+                    value={categoryFormData.status}
+                    onValueChange={(value) => setCategoryFormData({ ...categoryFormData, status: value as "Ativo" | "Inativo" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Ativo">Ativo</SelectItem>
+                      <SelectItem value="Inativo">Inativo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" className="bg-green-600 hover:bg-green-700">
+                    Criar Categoria
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <div className="flex gap-2">
-              <ExportButton
-                dados={estoque}
-                tipo="estoque"
-                nomeArquivo="relatorio-estoque"
-                titulo="Relatório de Estoque"
-              />
-              <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Novo Item
-                </Button>
-              </DialogTrigger>
-            </div>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>{editingItem ? "Editar Item" : "Cadastrar Novo Item"}</DialogTitle>
@@ -744,11 +792,7 @@ export default function EstoquePage() {
                       }
                       className={formData.estoque_maximo && formData.estoque_maximo <= formData.estoque_minimo ? "border-red-500" : ""}
                     />
-                    {formData.estoque_maximo && formData.estoque_maximo <= formData.estoque_minimo && (
-                      <p className="text-sm text-red-500">
-                        O estoque máximo deve ser maior que o estoque mínimo ({formData.estoque_minimo})
-                      </p>
-                    )}
+                    
                   </div>
                 </div>
 
@@ -1036,7 +1080,7 @@ export default function EstoquePage() {
             <CardContent>
               {/* Filtros para Movimentações */}
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-5 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="tipo-movimentacao">Tipo de Movimentação</Label>
                     <Select
@@ -1093,25 +1137,28 @@ export default function EstoquePage() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-transparent">Ações</Label>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={limparFiltrosMovimentacoes}
+                        className="text-gray-600"
+                      >
+                        Limpar Filtros
+                      </Button>
+                      {(filtrosMovimentacoes.tipo !== "todos" || filtrosMovimentacoes.data_inicio || filtrosMovimentacoes.data_fim) && (
+                        <Badge variant="secondary" className="text-xs">
+                          Filtros ativos
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-4">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={limparFiltrosMovimentacoes}
-                      className="text-gray-600"
-                    >
-                      Limpar Filtros
-                    </Button>
-                    {(filtrosMovimentacoes.tipo !== "todos" || filtrosMovimentacoes.data_inicio || filtrosMovimentacoes.data_fim) && (
-                      <Badge variant="secondary" className="text-xs">
-                        Filtros ativos
-                      </Badge>
-                    )}
-                  </div>
-                  
+                <div className="flex items-center justify-end mt-4">
                   <div className="text-sm text-gray-600">
                     {totalItemsMovimentacoes > 0 && (
                       <>

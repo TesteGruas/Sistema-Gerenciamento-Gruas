@@ -269,6 +269,17 @@ class EstoqueAPI {
   async listarCategorias(): Promise<{ success: boolean; data: Categoria[] }> {
     return this.request<{ success: boolean; data: Categoria[] }>('/categorias')
   }
+
+  // Criar categoria
+  async criarCategoria(dados: { nome: string; descricao?: string; status?: string }): Promise<{ success: boolean; data: Categoria }> {
+    return this.request<{ success: boolean; data: Categoria }>('/categorias', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(dados),
+    })
+  }
 }
 
 export const estoqueAPI = new EstoqueAPI()

@@ -117,7 +117,7 @@ npm install
 ### **2. Configurar Variáveis de Ambiente**
 ```bash
 # .env.local
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/api
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 NEXT_PUBLIC_SUPABASE_URL=sua_url_supabase
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_supabase
 ```
