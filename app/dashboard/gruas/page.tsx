@@ -108,8 +108,8 @@ export default function GruasPage() {
   const [gruas, setGruas] = useState<GruaFrontend[]>([])
   const { loading, startLoading, stopLoading } = useLoading(true)
   const [error, setError] = useState<string | null>(null)
-  const { loading: creating, startLoading: startCreating, stopLoading: stopCreating } = useLoading()
-  const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating } = useLoading()
+  const { loading: creating, startLoading: startCreating, stopLoading: stopCreating, setLoading: setCreating } = useLoading()
+  const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating, setLoading: setUpdating } = useLoading()
   const [deleting, setDeleting] = useState(false)
 
   // Função auxiliar para converter dados do backend para o formato do componente
@@ -770,6 +770,7 @@ export default function GruasPage() {
                 <SelectContent>
                   <SelectItem value="all">Todos os tipos</SelectItem>
                   <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                  <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                   <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
                   <SelectItem value="Guincho">Guincho</SelectItem>
                   <SelectItem value="Outros">Outros</SelectItem>
@@ -910,6 +911,12 @@ export default function GruasPage() {
                   </div>
                 </div>
                 <CardDescription>{grua.model} - {grua.capacity}</CardDescription>
+                {grua.tipo && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                    <Package className="w-4 h-4" />
+                    <span>Tipo: {grua.tipo}</span>
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -1122,6 +1129,8 @@ export default function GruasPage() {
                     <SelectItem value="Grua Torre">Grua Torre</SelectItem>
                     <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                     <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                    <SelectItem value="Guincho">Guincho</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1248,6 +1257,8 @@ export default function GruasPage() {
                     <SelectItem value="Grua Torre">Grua Torre</SelectItem>
                     <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
                     <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                    <SelectItem value="Guincho">Guincho</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

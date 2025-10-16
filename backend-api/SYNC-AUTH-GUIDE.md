@@ -70,7 +70,7 @@ Agora todas as rotas de criação sincronizam automaticamente:
 }
 ```
 
-#### **POST /api/funcionarios** (Criar Funcionário)
+#### **POST /funcionarios** (Criar Funcionário)
 ```json
 {
   "nome": "Ana Paula",
@@ -262,7 +262,7 @@ R: NÃO é recomendado. Todos os usuários precisam estar no Auth para fazer log
 
 - [x] Script de migração criado
 - [x] Rota `/api/users` atualizada
-- [x] Rota `/api/funcionarios` atualizada
+- [x] Rota `/funcionarios` atualizada
 - [x] Rota `/api/clientes` atualizada
 - [x] Senhas temporárias geradas automaticamente
 - [x] Rollback automático em caso de erro

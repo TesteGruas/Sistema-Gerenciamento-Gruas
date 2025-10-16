@@ -159,7 +159,7 @@ export const apiFuncionarios = {
     search?: string;
   }): Promise<{ isAdmin: boolean; funcionarios: Funcionario[]; pagination?: any }> {
     try {
-      const response = await api.get('/api/funcionarios', { params });
+      const response = await api.get('/funcionarios', { params });
       const funcionarios = response.data.data || response.data || [];
       
       // Verificar se o usuário é admin (pode ver todos)

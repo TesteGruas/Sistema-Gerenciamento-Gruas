@@ -24,7 +24,7 @@ import LivroGruaForm from "@/components/livro-grua-form"
 import LivroGruaList from "@/components/livro-grua-list"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi, EntradaLivroGruaCompleta } from "@/lib/api-livro-grua"
-import { mockRelacoesGruaObra, mockFuncionarios, mockEntradasLivroGrua } from "@/lib/mock-data"
+import { useCurrentUser } from "@/hooks/use-current-user"
 
 interface GruaCompleta {
   id: string
@@ -54,6 +54,7 @@ export default function LivroGruaRelacaoPage() {
   const params = useParams()
   const router = useRouter()
   const relacaoId = params.relacaoId as string
+  const { user, loading: userLoading } = useCurrentUser()
 
   // Estados
   const [grua, setGrua] = useState<GruaCompleta | null>(null)
@@ -73,60 +74,29 @@ export default function LivroGruaRelacaoPage() {
       setLoading(true)
       setError(null)
 
-      // Verificar se há token de autenticação
-      const token = localStorage.getItem('access_token')
-      if (!token) {
-        throw new Error('Usuário não autenticado. Faça login para acessar esta página.')
+      // Aguardar carregamento do usuário
+      if (userLoading) {
+        return
       }
 
-      // Tentar buscar do backend primeiro
-      try {
-        const { relacao, grua: gruaData, obra } = await livroGruaApi.buscarGruaPorRelacao(parseInt(relacaoId))
-        
-        if (gruaData) {
-          // Adicionar informações da obra à grua
-          const gruaCompleta: GruaCompleta = {
-            ...gruaData,
-            obraAtual: obra,
-            relacaoAtual: relacao
-          }
-          setGrua(gruaCompleta)
-          return
-        }
-      } catch (apiError) {
-        console.warn('API não disponível, usando dados mock:', apiError)
+      if (!user) {
+        setError('Usuário não autenticado. Faça login para acessar esta página.')
+        return
       }
 
-      // Fallback para dados mock
-      console.log('Usando dados mock para grua')
-      const relacaoMock = mockRelacoesGruaObra.find(r => r.id === parseInt(relacaoId))
+      // Buscar dados do backend
+      const { relacao, grua: gruaData, obra } = await livroGruaApi.buscarGruaPorRelacao(parseInt(relacaoId))
       
-      if (relacaoMock) {
+      if (gruaData) {
+        // Adicionar informações da obra à grua
         const gruaCompleta: GruaCompleta = {
-          id: relacaoMock.grua.id,
-          tipo: relacaoMock.grua.tipo,
-          modelo: relacaoMock.grua.modelo,
-          fabricante: relacaoMock.grua.fabricante,
-          obraAtual: {
-            id: relacaoMock.obra.id,
-            nome: relacaoMock.obra.nome,
-            endereco: relacaoMock.obra.endereco,
-            cidade: relacaoMock.obra.cidade,
-            estado: relacaoMock.obra.estado,
-            status: relacaoMock.obra.status
-          },
-          relacaoAtual: {
-            id: relacaoMock.id,
-            data_inicio_locacao: relacaoMock.data_inicio_locacao,
-            data_fim_locacao: relacaoMock.data_fim_locacao,
-            status: relacaoMock.status,
-            valor_locacao_mensal: relacaoMock.valor_locacao_mensal,
-            observacoes: relacaoMock.observacoes
-          }
+          ...gruaData,
+          obraAtual: obra,
+          relacaoAtual: relacao
         }
         setGrua(gruaCompleta)
       } else {
-        throw new Error('Grua não encontrada')
+        setError('Grua não encontrada ou você não tem acesso a esta grua.')
       }
 
     } catch (err) {
@@ -162,7 +132,7 @@ export default function LivroGruaRelacaoPage() {
   // Carregar dados na inicialização
   useEffect(() => {
     carregarGrua()
-  }, [relacaoId])
+  }, [relacaoId, user, userLoading])
 
   // Carregar estatísticas quando a grua for carregada
   useEffect(() => {
@@ -434,9 +404,12 @@ export default function LivroGruaRelacaoPage() {
           </DialogHeader>
           <LivroGruaForm
             gruaId={grua.id}
-            onSalvar={handleEntradaSalva}
-            onCancelar={handleFecharModais}
+            onSave={handleEntradaSalva}
+            onCancel={handleFecharModais}
+            funcionarioLogado={user}
           />
+          {/* Debug */}
+          {console.log('LivroGruaPage - user sendo passado:', user)}
         </DialogContent>
       </Dialog>
 
@@ -449,8 +422,10 @@ export default function LivroGruaRelacaoPage() {
             <LivroGruaForm
               gruaId={grua.id}
               entrada={entradaSelecionada}
-              onSalvar={handleEntradaSalva}
-              onCancelar={handleFecharModais}
+              onSave={handleEntradaSalva}
+              onCancel={handleFecharModais}
+              modoEdicao={true}
+              funcionarioLogado={user}
             />
           )}
         </DialogContent>

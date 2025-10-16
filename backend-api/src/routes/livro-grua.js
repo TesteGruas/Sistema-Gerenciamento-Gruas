@@ -27,6 +27,123 @@ router.use(authenticateToken)
  */
 router.get('/relacoes-grua-obra', async (req, res) => {
   try {
+    const { funcionario_id } = req.query
+    
+    let query = supabase
+      .from('grua_obra')
+      .select(`
+        id,
+        grua_id,
+        obra_id,
+        data_inicio_locacao,
+        data_fim_locacao,
+        status,
+        valor_locacao_mensal,
+        observacoes,
+        gruas (
+          id,
+          tipo,
+          modelo,
+          fabricante
+        ),
+        obras (
+          id,
+          nome,
+          endereco,
+          cidade,
+          estado,
+          status
+        )
+      `)
+      .in('status', ['Ativa', 'Pausada'])
+      .order('obras(nome)', { ascending: true })
+      .order('gruas(id)', { ascending: true })
+
+    // Se funcionario_id fornecido, filtrar apenas obras onde o funcionário trabalha
+    if (funcionario_id) {
+      // Primeiro buscar obras do funcionário
+      const { data: obrasFuncionario, error: obrasError } = await supabase
+        .from('funcionarios_obras')
+        .select('obra_id')
+        .eq('funcionario_id', funcionario_id)
+        .eq('status', 'ativo')
+
+      if (obrasError) {
+        console.error('Erro ao buscar obras do funcionário:', obrasError)
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao buscar obras do funcionário',
+          error: obrasError.message
+        })
+      }
+
+      if (obrasFuncionario && obrasFuncionario.length > 0) {
+        const obraIds = obrasFuncionario.map(o => o.obra_id)
+        query = query.in('obra_id', obraIds)
+      } else {
+        // Funcionário não está alocado em nenhuma obra
+        return res.json({
+          success: true,
+          data: [],
+          message: 'Funcionário não está alocado em nenhuma obra ativa'
+        })
+      }
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Erro ao buscar relações grua-obra:', error)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar relações',
+        error: error.message
+      })
+    }
+
+    console.log('Dados brutos do Supabase:', JSON.stringify(data, null, 2))
+
+    // Transformar os dados para o formato esperado e filtrar dados inválidos
+    const relacoes = data
+      .filter(row => row.gruas && row.obras) // Filtrar apenas relações com dados válidos
+      .map(row => ({
+        id: row.id,
+        grua_id: row.grua_id,
+        obra_id: row.obra_id,
+        data_inicio_locacao: row.data_inicio_locacao,
+        data_fim_locacao: row.data_fim_locacao,
+        status: row.status,
+        valor_locacao_mensal: row.valor_locacao_mensal,
+        observacoes: row.observacoes,
+        grua: row.gruas,
+        obra: row.obras
+      }))
+
+    console.log('Relações processadas:', JSON.stringify(relacoes, null, 2))
+
+    res.json({
+      success: true,
+      data: relacoes
+    })
+
+  } catch (error) {
+    console.error('Erro ao listar relações grua-obra:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * GET /api/livro-grua/relacoes-grua-obra-debug
+ * Endpoint de debug para testar sem filtro por funcionário
+ */
+router.get('/relacoes-grua-obra-debug', async (req, res) => {
+  try {
+    console.log('=== DEBUG: Buscando todas as relações sem filtro ===')
+    
     const { data, error } = await supabase
       .from('grua_obra')
       .select(`
@@ -58,7 +175,7 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       .order('gruas(id)', { ascending: true })
 
     if (error) {
-      console.error('Erro ao buscar relações grua-obra:', error)
+      console.error('Erro ao buscar relações (debug):', error)
       return res.status(500).json({
         success: false,
         message: 'Erro ao buscar relações',
@@ -66,27 +183,34 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       })
     }
 
+    console.log('Dados brutos do Supabase (debug):', JSON.stringify(data, null, 2))
+
     // Transformar os dados para o formato esperado
-    const relacoes = data.map(row => ({
-      id: row.id,
-      grua_id: row.grua_id,
-      obra_id: row.obra_id,
-      data_inicio_locacao: row.data_inicio_locacao,
-      data_fim_locacao: row.data_fim_locacao,
-      status: row.status,
-      valor_locacao_mensal: row.valor_locacao_mensal,
-      observacoes: row.observacoes,
-      grua: row.gruas,
-      obra: row.obras
-    }))
+    const relacoes = data
+      .filter(row => row.gruas && row.obras)
+      .map(row => ({
+        id: row.id,
+        grua_id: row.grua_id,
+        obra_id: row.obra_id,
+        data_inicio_locacao: row.data_inicio_locacao,
+        data_fim_locacao: row.data_fim_locacao,
+        status: row.status,
+        valor_locacao_mensal: row.valor_locacao_mensal,
+        observacoes: row.observacoes,
+        grua: row.gruas,
+        obra: row.obras
+      }))
+
+    console.log('Relações processadas (debug):', JSON.stringify(relacoes, null, 2))
 
     res.json({
       success: true,
-      data: relacoes
+      data: relacoes,
+      debug: true
     })
 
   } catch (error) {
-    console.error('Erro ao listar relações grua-obra:', error)
+    console.error('Erro ao listar relações grua-obra (debug):', error)
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',

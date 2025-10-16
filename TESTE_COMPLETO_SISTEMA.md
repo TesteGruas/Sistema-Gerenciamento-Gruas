@@ -146,10 +146,10 @@ DELETE /api/users/{id}
 #### **2.1 Cadastro de Funcionários**
 ```bash
 # Teste 1: Listar funcionários
-GET /api/funcionarios?page=1&limit=10&status=Ativo
+GET /funcionarios?page=1&limit=10&status=Ativo
 
 # Teste 2: Criar funcionário
-POST /api/funcionarios
+POST /funcionarios
 {
   "nome": "Maria Santos",
   "cpf": "123.456.789-00",
@@ -166,14 +166,14 @@ POST /api/funcionarios
 }
 
 # Teste 3: Atualizar funcionário
-PUT /api/funcionarios/{id}
+PUT /funcionarios/{id}
 {
   "cargo": "Supervisor",
   "salario": 4000.00
 }
 
 # Teste 4: Deletar funcionário
-DELETE /api/funcionarios/{id}
+DELETE /funcionarios/{id}
 ```
 
 #### **2.2 Ponto Eletrônico**
