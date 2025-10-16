@@ -2,17 +2,26 @@ import api from './api';
 
 export interface DocumentoFuncionario {
   id: string | number;
-  nome: string;
-  tipo: string;
-  status: 'pendente' | 'assinado' | 'rejeitado';
-  data_criacao: string;
-  data_vencimento?: string;
+  documento_id: number;
+  user_id: string;
+  ordem: number;
+  status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado';
+  tipo: 'interno' | 'cliente';
+  docu_sign_link?: string;
+  docu_sign_envelope_id?: string;
+  data_envio?: string;
+  data_assinatura?: string;
+  arquivo_assinado?: string;
+  observacoes?: string;
+  email_enviado: boolean;
+  data_email_enviado?: string;
+  created_at: string;
+  updated_at: string;
+  // Campos do documento relacionado
+  titulo?: string;
   descricao?: string;
-  arquivo_url?: string;
-  assinatura_url?: string;
-  funcionario_id: number;
-  funcionario_nome?: string;
-  caminho_arquivo?: string;
+  arquivo_original?: string;
+  data_criacao?: string;
 }
 
 export interface AssinarDocumentoPayload {
@@ -34,7 +43,7 @@ export interface UploadDocumentoPayload {
  * Buscar documentos de um funcionário específico
  */
 export const getDocumentosFuncionario = async (funcionarioId: number): Promise<DocumentoFuncionario[]> => {
-  const response = await api.get(`/api/funcionarios/${funcionarioId}/documentos`);
+  const response = await api.get(`/assinaturas/pendentes`);
   return response.data.data || response.data;
 };
 
@@ -42,7 +51,7 @@ export const getDocumentosFuncionario = async (funcionarioId: number): Promise<D
  * Buscar um documento específico pelo ID
  */
 export const getDocumentoById = async (documentoId: string | number): Promise<DocumentoFuncionario> => {
-  const response = await api.get(`/api/funcionarios/documentos/${documentoId}`);
+  const response = await api.get(`/funcionarios/documentos/${documentoId}`);
   return response.data.data || response.data;
 };
 
@@ -50,10 +59,14 @@ export const getDocumentoById = async (documentoId: string | number): Promise<Do
  * Assinar um documento
  */
 export const assinarDocumento = async (
-  documentoId: string | number,
+  assinaturaId: string | number,
   payload: AssinarDocumentoPayload
 ): Promise<DocumentoFuncionario> => {
-  const response = await api.post(`/api/funcionarios/documentos/${documentoId}/assinar`, payload);
+  const response = await api.post(`/assinaturas/assinar/${assinaturaId}`, {
+    assinatura: payload.assinatura,
+    geoloc: payload.geoloc,
+    timestamp: payload.timestamp
+  });
   return response.data.data || response.data;
 };
 
@@ -71,7 +84,7 @@ export const uploadDocumento = async (payload: UploadDocumentoPayload): Promise<
     formData.append('descricao', payload.descricao);
   }
 
-  const response = await api.post('/api/funcionarios/documentos/upload', formData, {
+  const response = await api.post('/funcionarios/documentos/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }
@@ -84,7 +97,7 @@ export const uploadDocumento = async (payload: UploadDocumentoPayload): Promise<
  * Baixar um documento
  */
 export const downloadDocumento = async (documentoId: string | number): Promise<Blob> => {
-  const response = await api.get(`/api/funcionarios/documentos/${documentoId}/download`, {
+  const response = await api.get(`/funcionarios/documentos/${documentoId}/download`, {
     responseType: 'blob'
   });
   return response.data;
@@ -94,14 +107,14 @@ export const downloadDocumento = async (documentoId: string | number): Promise<B
  * Deletar um documento
  */
 export const deletarDocumento = async (documentoId: string | number): Promise<void> => {
-  await api.delete(`/api/funcionarios/documentos/${documentoId}`);
+  await api.delete(`/funcionarios/documentos/${documentoId}`);
 };
 
 /**
  * Buscar todos os documentos pendentes de assinatura do usuário logado
  */
 export const getDocumentosPendentes = async (): Promise<DocumentoFuncionario[]> => {
-  const response = await api.get('/api/funcionarios/documentos/pendentes');
+  const response = await api.get('/funcionarios/documentos/pendentes');
   return response.data.data || response.data;
 };
 

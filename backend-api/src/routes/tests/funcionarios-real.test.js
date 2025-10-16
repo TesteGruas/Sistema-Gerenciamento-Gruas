@@ -79,7 +79,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
   // Função auxiliar para criar registro de teste
   const createTestRecord = async (data) => {
     const response = await request(API_BASE_URL)
-      .post('/api/funcionarios')
+      .post('/funcionarios')
       .set('Authorization', `Bearer ${authToken}`)
       .send(data)
     
@@ -103,7 +103,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
   // Função auxiliar para atualizar registro de teste
   const updateTestRecord = async (id, data) => {
     const response = await request(API_BASE_URL)
-      .put(`/api/funcionarios/${id}`)
+      .put(`/funcionarios/${id}`)
       .set('Authorization', `Bearer ${authToken}`)
       .send(data)
     
@@ -131,7 +131,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
   describe('Autenticação e Autorização', () => {
     test('Deve rejeitar requisições sem token', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
       
       expect(response.status).toBe(401)
       expect(response.body).toHaveProperty('error')
@@ -139,7 +139,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve rejeitar token inválido', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', 'Bearer token-invalido')
       
       expect(response.status).toBe(403)
@@ -147,7 +147,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve aceitar token válido', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
       
       expect(response.status).toBe(200)
@@ -160,7 +160,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
   describe('Validação de Dados', () => {
     test('Deve rejeitar dados obrigatórios ausentes', async () => {
       const response = await request(API_BASE_URL)
-        .post('/api/funcionarios')
+        .post('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           telefone: '81999999999'
@@ -173,7 +173,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve rejeitar tipos de dados incorretos', async () => {
       const response = await request(API_BASE_URL)
-        .post('/api/funcionarios')
+        .post('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           nome: 123, // Deveria ser string
@@ -187,7 +187,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve rejeitar formatos inválidos', async () => {
       const response = await request(API_BASE_URL)
-        .post('/api/funcionarios')
+        .post('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           nome: 'João Silva',
@@ -278,7 +278,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
   describe('Testes REAIS - Listagem e Busca', () => {
     test('Deve listar registros reais do banco', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ limit: 20 })
       
@@ -299,7 +299,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve filtrar por cargo', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ cargo: 'Operador' })
       
@@ -309,7 +309,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve filtrar por status', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ status: 'Ativo' })
       
@@ -319,7 +319,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve buscar funcionários por nome', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios/buscar')
+        .get('/funcionarios/buscar')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ q: 'Teste Automatizado' })
       
@@ -388,7 +388,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
   describe('Filtros e Busca', () => {
     test('Deve filtrar por parâmetros específicos', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ 
           cargo: 'Operador',
@@ -406,7 +406,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve ordenar resultados', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ limit: 10 })
       
@@ -420,7 +420,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve implementar paginação corretamente', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ page: 1, limit: 5 })
       
@@ -433,7 +433,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve buscar por texto livre', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios/buscar')
+        .get('/funcionarios/buscar')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ q: 'Operador' })
       
@@ -452,7 +452,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
       // Fazer várias requisições rapidamente
       const promises = Array(5).fill().map(() => 
         request(API_BASE_URL)
-          .get('/api/funcionarios')
+          .get('/funcionarios')
           .set('Authorization', `Bearer ${authToken}`)
       )
       
@@ -468,7 +468,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
       const startTime = Date.now()
       
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
       
       const endTime = Date.now()
@@ -501,7 +501,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
   describe('Tratamento de Erros', () => {
     test('Deve retornar erro 400 para dados inválidos', async () => {
       const response = await request(API_BASE_URL)
-        .post('/api/funcionarios')
+        .post('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           nome: '', // Nome vazio
@@ -514,7 +514,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve retornar erro 403 para não autenticado', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios')
+        .get('/funcionarios')
       
       expect(response.status).toBe(401)
       expect(response.body).toHaveProperty('error')
@@ -522,7 +522,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
 
     test('Deve retornar erro 404 para recurso não encontrado', async () => {
       const response = await request(API_BASE_URL)
-        .get('/api/funcionarios/99999')
+        .get('/funcionarios/99999')
         .set('Authorization', `Bearer ${authToken}`)
       
       expect(response.status).toBe(404)
@@ -549,7 +549,7 @@ describe('Funcionários - Testes REAIS com Banco de Homologação', () => {
       }
 
       const response2 = await request(API_BASE_URL)
-        .post('/api/funcionarios')
+        .post('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .send(testData2)
       

@@ -177,7 +177,7 @@ async function testListFuncionariosObra() {
   }
   
   try {
-    const response = await makeRequest(`/api/funcionarios/obra/${testObraId}`);
+    const response = await makeRequest(`/funcionarios/obra/${testObraId}`);
     
     if (response.success && Array.isArray(response.data)) {
       logSuccess(`Encontrados ${response.data.length} funcionários na obra.`);

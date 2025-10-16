@@ -44,7 +44,7 @@ const documentoUpdateSchema = documentoSchema.fork(
 // ============== LISTAR DOCUMENTOS ==============
 
 /**
- * GET /api/funcionarios/documentos
+ * GET /funcionarios/documentos
  * Listar documentos de funcionários
  */
 router.get('/', async (req, res) => {
@@ -105,7 +105,7 @@ router.get('/', async (req, res) => {
 // ============== OBTER DOCUMENTO ==============
 
 /**
- * GET /api/funcionarios/documentos/:id
+ * GET /funcionarios/documentos/:id
  * Obter documento específico
  */
 router.get('/:id', async (req, res) => {
@@ -145,7 +145,7 @@ router.get('/:id', async (req, res) => {
 // ============== CRIAR DOCUMENTO ==============
 
 /**
- * POST /api/funcionarios/documentos
+ * POST /funcionarios/documentos
  * Criar novo documento
  */
 router.post('/', async (req, res) => {
@@ -201,7 +201,7 @@ router.post('/', async (req, res) => {
 // ============== ATUALIZAR DOCUMENTO ==============
 
 /**
- * PUT /api/funcionarios/documentos/:id
+ * PUT /funcionarios/documentos/:id
  * Atualizar documento existente
  */
 router.put('/:id', async (req, res) => {
@@ -268,7 +268,7 @@ router.put('/:id', async (req, res) => {
 // ============== EXCLUIR DOCUMENTO ==============
 
 /**
- * DELETE /api/funcionarios/documentos/:id
+ * DELETE /funcionarios/documentos/:id
  * Excluir documento
  */
 router.delete('/:id', async (req, res) => {
@@ -314,7 +314,7 @@ router.delete('/:id', async (req, res) => {
 // ============== LISTAR DOCUMENTOS POR FUNCIONÁRIO ==============
 
 /**
- * GET /api/funcionarios/:funcionario_id/documentos
+ * GET /funcionarios/:funcionario_id/documentos
  * Listar todos os documentos de um funcionário específico
  */
 router.get('/funcionario/:funcionario_id', async (req, res) => {

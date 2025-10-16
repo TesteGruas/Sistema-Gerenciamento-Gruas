@@ -91,9 +91,9 @@ GET /api/livro-grua/export/:grua_id        # Exportar CSV
 
 #### **Funcionários**
 ```http
-GET /api/funcionarios/obra/:obra_id        # Funcionários por obra
-GET /api/funcionarios                      # Todos os funcionários
-GET /api/funcionarios/:id                  # Funcionário específico
+GET /funcionarios/obra/:obra_id        # Funcionários por obra
+GET /funcionarios                      # Todos os funcionários
+GET /funcionarios/:id                  # Funcionário específico
 ```
 
 #### **Autenticação**
@@ -281,7 +281,7 @@ O Sistema de Livros de Gruas é uma solução completa que permite aos funcioná
 
 #### **Endpoints Implementados e Testados:**
 
-1. **✅ GET /api/funcionarios/obra/:obra_id** - Listar funcionários alocados em uma obra específica
+1. **✅ GET /funcionarios/obra/:obra_id** - Listar funcionários alocados em uma obra específica
    - **Status**: Implementado e testado com dados reais do Supabase
    - **Arquivo**: `backend-api/src/routes/funcionarios.js`
    - **Teste**: ✅ Validado com dados reais

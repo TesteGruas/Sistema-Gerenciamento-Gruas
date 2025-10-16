@@ -26,7 +26,7 @@ const funcionarioObraSchema = Joi.object({
 })
 
 /**
- * GET /api/funcionarios-obras
+ * GET /funcionarios-obras
  * Listar alocações
  */
 router.get('/', async (req, res) => {
@@ -92,7 +92,7 @@ router.get('/', async (req, res) => {
 })
 
 /**
- * GET /api/funcionarios-obras/:id
+ * GET /funcionarios-obras/:id
  * Obter alocação por ID
  */
 router.get('/:id', async (req, res) => {
@@ -134,7 +134,7 @@ router.get('/:id', async (req, res) => {
 })
 
 /**
- * POST /api/funcionarios-obras
+ * POST /funcionarios-obras
  * Criar alocação de funcionário em obra
  */
 router.post('/', async (req, res) => {
@@ -194,7 +194,7 @@ router.post('/', async (req, res) => {
 })
 
 /**
- * PUT /api/funcionarios-obras/:id
+ * PUT /funcionarios-obras/:id
  * Atualizar alocação
  */
 router.put('/:id', async (req, res) => {
@@ -249,7 +249,7 @@ router.put('/:id', async (req, res) => {
 })
 
 /**
- * POST /api/funcionarios-obras/:id/finalizar
+ * POST /funcionarios-obras/:id/finalizar
  * Finalizar alocação
  */
 router.post('/:id/finalizar', async (req, res) => {
@@ -292,7 +292,7 @@ router.post('/:id/finalizar', async (req, res) => {
 })
 
 /**
- * POST /api/funcionarios-obras/:id/transferir
+ * POST /funcionarios-obras/:id/transferir
  * Transferir funcionário para outra obra
  */
 router.post('/:id/transferir', async (req, res) => {
@@ -357,7 +357,7 @@ router.post('/:id/transferir', async (req, res) => {
 })
 
 /**
- * DELETE /api/funcionarios-obras/:id
+ * DELETE /funcionarios-obras/:id
  * Deletar alocação
  */
 router.delete('/:id', async (req, res) => {
@@ -408,7 +408,7 @@ router.delete('/:id', async (req, res) => {
 })
 
 /**
- * GET /api/funcionarios-obras/obra/:obra_id/funcionarios
+ * GET /funcionarios-obras/obra/:obra_id/funcionarios
  * Listar funcionários de uma obra
  */
 router.get('/obra/:obra_id/funcionarios', async (req, res) => {

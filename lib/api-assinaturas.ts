@@ -53,7 +53,7 @@ export interface RecusaPayload {
  * Busca documentos pendentes de assinatura para o usuário atual
  */
 export const getDocumentosPendentes = async (): Promise<DocumentoAssinatura[]> => {
-  const response = await api.get('/api/assinaturas/pendentes');
+  const response = await api.get('/assinaturas/pendentes');
   return response.data;
 };
 
@@ -61,7 +61,7 @@ export const getDocumentosPendentes = async (): Promise<DocumentoAssinatura[]> =
  * Busca um documento específico por ID
  */
 export const getDocumentoById = async (id: number): Promise<DocumentoAssinatura> => {
-  const response = await api.get(`/api/assinaturas/documento/${id}`);
+  const response = await api.get(`/assinaturas/documento/${id}`);
   return response.data;
 };
 
@@ -72,7 +72,7 @@ export const assinarDocumento = async (
   id: number, 
   payload: AssinaturaPayload
 ): Promise<DocumentoAssinatura> => {
-  const response = await api.post(`/api/assinaturas/assinar/${id}`, payload);
+  const response = await api.post(`/assinaturas/assinar/${id}`, payload);
   return response.data;
 };
 
@@ -83,7 +83,7 @@ export const recusarDocumento = async (
   id: number, 
   payload: RecusaPayload
 ): Promise<DocumentoAssinatura> => {
-  const response = await api.post(`/api/assinaturas/recusar/${id}`, payload);
+  const response = await api.post(`/assinaturas/recusar/${id}`, payload);
   return response.data;
 };
 
@@ -91,7 +91,7 @@ export const recusarDocumento = async (
  * Busca histórico de assinaturas do usuário
  */
 export const getHistoricoAssinaturas = async (): Promise<AssinaturaDocumento[]> => {
-  const response = await api.get('/api/assinaturas/historico');
+  const response = await api.get('/assinaturas/historico');
   return response.data;
 };
 
@@ -99,7 +99,7 @@ export const getHistoricoAssinaturas = async (): Promise<AssinaturaDocumento[]> 
  * Busca todos os documentos (pendentes, assinados, rejeitados)
  */
 export const getTodosDocumentos = async (): Promise<DocumentoAssinatura[]> => {
-  const response = await api.get('/api/assinaturas/documentos');
+  const response = await api.get('/assinaturas/documentos');
   return response.data;
 };
 
@@ -107,7 +107,7 @@ export const getTodosDocumentos = async (): Promise<DocumentoAssinatura[]> => {
  * Valida se um documento pode ser assinado pelo usuário atual
  */
 export const validarAssinatura = async (id: number): Promise<{ valido: boolean, motivo?: string }> => {
-  const response = await api.get(`/api/assinaturas/${id}/validar`);
+  const response = await api.get(`/assinaturas/${id}/validar`);
   return response.data;
 };
 
@@ -115,7 +115,7 @@ export const validarAssinatura = async (id: number): Promise<{ valido: boolean, 
  * Baixa um documento para visualização/download
  */
 export const downloadDocumento = async (id: number): Promise<Blob> => {
-  const response = await api.get(`/api/assinaturas/documento/${id}/download`, {
+  const response = await api.get(`/assinaturas/documento/${id}/download`, {
     responseType: 'blob'
   });
   return response.data;
@@ -125,13 +125,57 @@ export const downloadDocumento = async (id: number): Promise<Blob> => {
  * Envia lembrete para assinantes pendentes
  */
 export const enviarLembrete = async (documentoId: number): Promise<void> => {
-  await api.post(`/api/assinaturas/${documentoId}/lembrete`);
+  await api.post(`/assinaturas/${documentoId}/lembrete`);
 };
 
 /**
  * Cancela um documento (apenas criador)
  */
 export const cancelarDocumento = async (id: number, motivo: string): Promise<void> => {
-  await api.post(`/api/assinaturas/${id}/cancelar`, { motivo });
+  await api.post(`/assinaturas/${id}/cancelar`, { motivo });
+};
+
+/**
+ * Upload de arquivo assinado fisicamente
+ */
+export const uploadArquivoAssinado = async (
+  assinaturaId: number, 
+  arquivo: File, 
+  observacoes?: string
+): Promise<{ success: boolean; message: string; data?: any }> => {
+  const formData = new FormData();
+  formData.append('arquivo', arquivo);
+  if (observacoes) {
+    formData.append('observacoes', observacoes);
+  }
+
+  const response = await api.post(`/assinaturas/${assinaturaId}/upload-assinado`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  
+  return response.data;
+};
+
+/**
+ * Download do arquivo assinado
+ */
+export const downloadArquivoAssinado = async (assinaturaId: number): Promise<Blob> => {
+  const response = await api.get(`/assinaturas/${assinaturaId}/arquivo-assinado`, {
+    responseType: 'blob'
+  });
+  return response.data;
+};
+
+/**
+ * Atualizar status da assinatura (para casos especiais)
+ */
+export const atualizarStatusAssinatura = async (
+  assinaturaId: number,
+  payload: { status: string; observacoes?: string }
+): Promise<{ success: boolean; message: string }> => {
+  const response = await api.put(`/assinaturas/${assinaturaId}/status`, payload);
+  return response.data;
 };
 

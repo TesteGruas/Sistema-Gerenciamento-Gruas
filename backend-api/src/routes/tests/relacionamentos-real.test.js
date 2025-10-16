@@ -112,7 +112,7 @@ describe('Relacionamentos - Testes REAIS com Banco de Homologação', () => {
 
       // Criar um funcionário de teste se não existir
       const funcionarioResponse = await request(API_BASE_URL)
-        .post('/api/funcionarios')
+        .post('/funcionarios')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           nome: 'Teste Automatizado - Funcionário Relacionamento',

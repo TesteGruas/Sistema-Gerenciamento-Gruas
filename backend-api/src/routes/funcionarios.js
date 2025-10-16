@@ -62,7 +62,7 @@ const funcionarioUpdateSchema = Joi.object({
 
 /**
  * @swagger
- * /api/funcionarios:
+ * /funcionarios:
  *   get:
  *     summary: Listar todos os funcionários
  *     tags: [Funcionários]
@@ -232,7 +232,7 @@ router.get('/', async (req, res) => {
 
 /**
  * @swagger
- * /api/funcionarios/buscar:
+ * /funcionarios/buscar:
  *   get:
  *     summary: Buscar funcionários para autocomplete
  *     tags: [Funcionários]
@@ -336,7 +336,7 @@ router.get('/buscar', async (req, res) => {
 
 /**
  * @swagger
- * /api/funcionarios/{id}:
+ * /funcionarios/{id}:
  *   get:
  *     summary: Obter funcionário por ID
  *     tags: [Funcionários]
@@ -444,7 +444,7 @@ router.get('/:id', async (req, res) => {
 
 /**
  * @swagger
- * /api/funcionarios:
+ * /funcionarios:
  *   post:
  *     summary: Criar novo funcionário
  *     tags: [Funcionários]
@@ -713,7 +713,7 @@ router.post('/', async (req, res) => {
 
 /**
  * @swagger
- * /api/funcionarios/{id}:
+ * /funcionarios/{id}:
  *   put:
  *     summary: Atualizar funcionário
  *     tags: [Funcionários]
@@ -825,7 +825,7 @@ router.put('/:id', async (req, res) => {
 
 /**
  * @swagger
- * /api/funcionarios/{id}:
+ * /funcionarios/{id}:
  *   delete:
  *     summary: Excluir funcionário
  *     tags: [Funcionários]
@@ -997,7 +997,7 @@ router.delete('/:id', async (req, res) => {
 
 /**
  * @swagger
- * /api/funcionarios/{id}/desassociar-gruas:
+ * /funcionarios/{id}/desassociar-gruas:
  *   post:
  *     summary: Desassociar funcionário de todas as gruas ativas
  *     tags: [Funcionários]
@@ -1239,7 +1239,7 @@ router.post('/:id/desassociar-gruas', async (req, res) => {
 
 /**
  * @swagger
- * /api/funcionarios/obra/{obra_id}:
+ * /funcionarios/obra/{obra_id}:
  *   get:
  *     summary: Listar funcionários alocados em uma obra específica
  *     tags: [Funcionários]
