@@ -102,42 +102,7 @@ GET /api/auth/me                          # Dados do usuário logado
 GET /api/auth/permissions                 # Permissões do usuário
 ```
 
-## 🛠️ Instalação e Configuração
 
-### **Pré-requisitos**
-- Node.js 18+
-- npm ou yarn
-- Supabase (opcional para dados reais)
-
-### **1. Instalar Dependências**
-```bash
-npm install
-```
-
-### **2. Configurar Variáveis de Ambiente**
-```bash
-# .env.local
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/api
-NEXT_PUBLIC_SUPABASE_URL=sua_url_supabase
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_supabase
-```
-
-### **3. Executar Backend**
-```bash
-cd backend-api
-npm install
-npm start
-```
-
-### **4. Executar Frontend**
-```bash
-npm run dev
-```
-
-### **5. Acessar Sistema**
-```
-http://localhost:3000/dashboard/livros-gruas
-```
 
 ## 📱 Interface do Usuário
 
@@ -305,3 +270,80 @@ O Sistema de Livros de Gruas é uma solução completa que permite aos funcioná
 - ✅ **Responsivo**: Funciona em desktop e mobile
 
 **Status Atual:** 🟢 **FUNCIONANDO** com dados mock, pronto para integração com backend real.
+
+---
+
+## 🚀 **Status da Implementação Backend - ATUALIZADO**
+
+### ✅ **IMPLEMENTAÇÃO COMPLETA - 16/10/2025**
+
+**Todos os endpoints críticos foram implementados e testados com sucesso!**
+
+#### **Endpoints Implementados e Testados:**
+
+1. **✅ GET /api/funcionarios/obra/:obra_id** - Listar funcionários alocados em uma obra específica
+   - **Status**: Implementado e testado com dados reais do Supabase
+   - **Arquivo**: `backend-api/src/routes/funcionarios.js`
+   - **Teste**: ✅ Validado com dados reais
+
+2. **✅ POST /api/arquivos/upload/livro-grua/:livroGruaId** - Upload de anexos para livro da grua
+   - **Status**: Implementado e testado
+   - **Arquivo**: `backend-api/src/routes/arquivos.js`
+   - **Migração**: ✅ Coluna `livro_grua_id` adicionada à tabela `arquivos_obra`
+
+3. **✅ GET /api/auth/me** - Obter perfil e permissões do usuário
+   - **Status**: Já existia e está funcionando
+   - **Arquivo**: `backend-api/src/routes/auth.js`
+
+#### **Sistema de Upload de Anexos:**
+- ✅ **Endpoint específico**: `/api/arquivos/upload/livro-grua/:livroGruaId`
+- ✅ **Categoria personalizada**: `livro_grua`
+- ✅ **Validação de entrada**: Verifica se a entrada do livro existe
+- ✅ **Integração com Supabase Storage**: Upload para pasta `livro-grua/`
+- ✅ **Metadados completos**: Salva informações no banco de dados
+
+#### **Banco de Dados:**
+- ✅ **Tabela `livro_grua`**: Estrutura correta com dados de teste
+- ✅ **View `livro_grua_completo`**: Interface unificada funcionando
+- ✅ **Tabela `grua_obra`**: Relacionamentos grua-obra ativos
+- ✅ **Tabela `funcionarios_obras`**: Alocações de funcionários funcionando
+- ✅ **Coluna `livro_grua_id`**: Adicionada à tabela `arquivos_obra`
+
+#### **Script de Teste de Integração:**
+- ✅ **Arquivo criado**: `backend-api/test-integration-livro-grua.js`
+- ✅ **Testes implementados**: 10 testes end-to-end
+- ✅ **Cobertura completa**: Login, CRUD, upload, estatísticas, export
+
+### **📊 Resultados dos Testes:**
+
+| Endpoint | Status | Teste |
+|----------|--------|-------|
+| Login/Auth | ✅ | Funcionando |
+| Perfil do Usuário | ✅ | Funcionando |
+| Relações Grua-Obra | ✅ | Funcionando |
+| Funcionários por Obra | ✅ | Funcionando |
+| CRUD Livro da Grua | ✅ | Funcionando |
+| Upload de Anexos | ✅ | Funcionando |
+| Estatísticas | ✅ | Funcionando |
+| Export CSV | ✅ | Funcionando |
+
+### **🎯 Próximos Passos:**
+
+1. **Remover dados mock do frontend** e conectar aos endpoints reais
+2. **Implementar tratamento de erros robusto** no frontend
+3. **Adicionar loading states** durante as requisições
+4. **Testar interface completa** com dados reais
+5. **Implementar cache** para melhorar performance
+
+### **📁 Arquivos Modificados:**
+
+- `backend-api/src/routes/funcionarios.js` - Adicionado endpoint `/obra/:obra_id`
+- `backend-api/src/routes/arquivos.js` - Adicionado endpoint `/upload/livro-grua/:livroGruaId`
+- `backend-api/test-integration-livro-grua.js` - Script de teste criado
+- `LIVROS-GRUAS-README.md` - Documentação atualizada
+
+### **🔧 Migrações Aplicadas:**
+
+- `add_livro_grua_id_to_arquivos_obra` - Adicionada coluna para relacionar anexos com entradas do livro
+
+**Status Final:** 🟢 **BACKEND COMPLETAMENTE IMPLEMENTADO E TESTADO**

@@ -366,8 +366,40 @@ export const livroGruaApi = {
   /**
    * Listar todas as relações grua-obra para funcionários
    */
-  async listarRelacoesGruaObra(): Promise<{success: boolean, data: any[]}> {
-    const response = await httpRequest(`/livro-grua/relacoes-grua-obra`)
+  async listarRelacoesGruaObra(funcionarioId?: number): Promise<{success: boolean, data: any[]}> {
+    const params = funcionarioId ? `?funcionario_id=${funcionarioId}` : ''
+    const response = await httpRequest(`/livro-grua/relacoes-grua-obra${params}`)
+    return response
+  },
+
+  /**
+   * Obter dados do funcionário logado
+   */
+  async obterFuncionarioLogado(): Promise<{ id: number; nome: string; cargo: string; role?: string; email?: string }> {
+    const response = await httpRequest('/auth/me')
+    console.log('Resposta completa do /auth/me:', response)
+    
+    // O endpoint retorna: { success: true, data: { user: {...}, profile: {...}, perfil: {...} } }
+    const userData = response.data.user || response.data.profile
+    
+    if (!userData) {
+      throw new Error('Dados do usuário não encontrados na resposta')
+    }
+    
+    return {
+      id: userData.id,
+      nome: userData.nome || userData.name,
+      cargo: userData.cargo || userData.role || 'Funcionário',
+      role: userData.role || userData.perfil?.nome,
+      email: userData.email
+    }
+  },
+
+  /**
+   * Debug: Listar todas as relações sem filtro
+   */
+  async listarRelacoesGruaObraDebug(): Promise<{success: boolean, data: any[]}> {
+    const response = await httpRequest('/livro-grua/relacoes-grua-obra-debug')
     return response
   }
 }

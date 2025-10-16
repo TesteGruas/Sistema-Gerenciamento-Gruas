@@ -1237,4 +1237,133 @@ router.post('/:id/desassociar-gruas', async (req, res) => {
  *           description: Observações adicionais
  */
 
+/**
+ * @swagger
+ * /api/funcionarios/obra/{obra_id}:
+ *   get:
+ *     summary: Listar funcionários alocados em uma obra específica
+ *     tags: [Funcionários]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: obra_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da obra
+ *     responses:
+ *       200:
+ *         description: Lista de funcionários da obra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       cargo:
+ *                         type: string
+ *                       telefone:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       cpf:
+ *                         type: string
+ *                       turno:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       data_admissao:
+ *                         type: string
+ *                         format: date
+ *                       salario:
+ *                         type: number
+ *                       observacoes:
+ *                         type: string
+ *                       data_inicio:
+ *                         type: string
+ *                         format: date
+ *                       data_fim:
+ *                         type: string
+ *                         format: date
+ *                       horas_trabalhadas:
+ *                         type: number
+ *       400:
+ *         description: Erro na requisição
+ *       401:
+ *         description: Não autorizado
+ *       404:
+ *         description: Obra não encontrada
+ */
+router.get('/obra/:obra_id', async (req, res) => {
+  try {
+    const { obra_id } = req.params;
+    const userId = req.user.id;
+
+    // Verificar se a obra existe
+    const obraExists = await db.query(
+      'SELECT id FROM obras WHERE id = $1',
+      [obra_id]
+    );
+
+    if (obraExists.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Obra não encontrada'
+      });
+    }
+
+    // Buscar funcionários alocados na obra
+    const query = `
+      SELECT 
+        f.id,
+        f.nome,
+        f.cargo,
+        f.telefone,
+        f.email,
+        f.cpf,
+        f.turno,
+        f.status,
+        f.data_admissao,
+        f.salario,
+        f.observacoes,
+        fo.data_inicio,
+        fo.data_fim,
+        fo.horas_trabalhadas
+      FROM funcionarios f
+      INNER JOIN funcionarios_obras fo ON f.id = fo.funcionario_id
+      WHERE fo.obra_id = $1 
+        AND fo.status = 'ativo'
+        AND f.status = 'Ativo'
+      ORDER BY f.nome
+    `;
+
+    const result = await db.query(query, [obra_id]);
+
+    res.json({
+      success: true,
+      data: result.rows,
+      total: result.rows.length
+    });
+
+  } catch (error) {
+    console.error('Erro ao buscar funcionários da obra:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
 export default router

@@ -24,7 +24,7 @@ import { PageLoader } from "@/components/ui/loader"
 import { gruasApi } from "@/lib/api-gruas"
 import { obrasApi } from "@/lib/api-obras"
 import { livroGruaApi } from "@/lib/api-livro-grua"
-import { mockRelacoesGruaObra, GruaObraRelacao } from "@/lib/mock-data"
+import { useCurrentUser } from "@/hooks/use-current-user"
 
 interface GruaObraRelacao {
   id: number
@@ -53,6 +53,7 @@ interface GruaObraRelacao {
 
 export default function LivrosGruasPage() {
   const { toast } = useToast()
+  const { user, loading: userLoading, isAdmin } = useCurrentUser()
   
   // Estados
   const [relacoes, setRelacoes] = useState<GruaObraRelacao[]>([])
@@ -68,21 +69,28 @@ export default function LivrosGruasPage() {
       setLoading(true)
       setError(null)
 
-      // Tentar buscar do backend primeiro
-      try {
-        const response = await livroGruaApi.listarRelacoesGruaObra()
-        
-        if (response.success && response.data) {
-          setRelacoes(response.data)
-          return
-        }
-      } catch (apiError) {
-        console.warn('API não disponível, usando dados mock:', apiError)
+      // Aguardar carregamento do usuário
+      if (userLoading) {
+        return
       }
 
-      // Fallback para dados mock
-      console.log('Usando dados mock para relações grua-obra')
-      setRelacoes(mockRelacoesGruaObra)
+      if (!user) {
+        setError('Usuário não autenticado. Faça login para acessar esta página.')
+        return
+      }
+
+      // TEMPORÁRIO: Usar endpoint de debug para testar
+      console.log('=== TESTE: Usando endpoint de debug ===')
+      const response = await livroGruaApi.listarRelacoesGruaObraDebug()
+      console.log('Resposta da API (debug):', response)
+      
+      if (response.success && response.data) {
+        console.log('Relações recebidas:', response.data)
+        setRelacoes(response.data)
+      } else {
+        console.log('Nenhuma relação encontrada ou erro na resposta')
+        setError('Nenhuma relação grua-obra encontrada para este usuário.')
+      }
 
     } catch (err) {
       console.error('Erro ao carregar relações:', err)
@@ -95,21 +103,26 @@ export default function LivrosGruasPage() {
 
   // Filtrar relações
   const relacoesFiltradas = relacoes.filter(relacao => {
+    // Verificar se os objetos existem antes de acessar suas propriedades
+    if (!relacao.grua || !relacao.obra) {
+      return false
+    }
+
     const matchSearch = 
-      relacao.grua.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relacao.grua.modelo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relacao.obra.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      relacao.obra.endereco.toLowerCase().includes(searchTerm.toLowerCase())
+      (relacao.grua.id?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (relacao.grua.modelo?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (relacao.obra.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (relacao.obra.endereco?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
     
-    const matchObra = filterObra === "all" || filterObra === "" || relacao.obra.id.toString() === filterObra
+    const matchObra = filterObra === "all" || filterObra === "" || relacao.obra.id?.toString() === filterObra
     const matchStatus = filterStatus === "all" || filterStatus === "" || relacao.status === filterStatus
     
     return matchSearch && matchObra && matchStatus
   })
 
   // Obter obras únicas para filtro
-  const obrasUnicas = [...new Set(relacoes.map(r => r.obra.id))].map(id => 
-    relacoes.find(r => r.obra.id === id)?.obra
+  const obrasUnicas = [...new Set(relacoes.filter(r => r.obra?.id).map(r => r.obra.id))].map(id => 
+    relacoes.find(r => r.obra?.id === id)?.obra
   ).filter(Boolean)
 
   // Obter status únicos para filtro
@@ -118,7 +131,7 @@ export default function LivrosGruasPage() {
   // Carregar dados na inicialização
   useEffect(() => {
     carregarRelacoes()
-  }, [])
+  }, [user, userLoading, isAdmin])
 
   // Tratamento de loading e erro
   if (loading) {
@@ -235,68 +248,75 @@ export default function LivrosGruasPage() {
 
       {/* Lista de Relações */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {relacoesFiltradas.map((relacao) => (
-          <Card key={relacao.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wrench className="w-5 h-5 text-blue-600" />
-                  <span className="font-semibold text-lg">{relacao.grua.id}</span>
+        {relacoesFiltradas.map((relacao) => {
+          // Verificar se os dados necessários existem
+          if (!relacao.grua || !relacao.obra) {
+            return null
+          }
+
+          return (
+            <Card key={relacao.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-5 h-5 text-blue-600" />
+                    <span className="font-semibold text-lg">{relacao.grua.id || 'N/A'}</span>
+                  </div>
+                  <Badge 
+                    variant={relacao.status === 'Ativa' ? 'default' : 'secondary'}
+                  >
+                    {relacao.status || 'N/A'}
+                  </Badge>
                 </div>
-                <Badge 
-                  variant={relacao.status === 'Ativa' ? 'default' : 'secondary'}
-                >
-                  {relacao.status}
-                </Badge>
-              </div>
-              <CardDescription>
-                {relacao.grua.fabricante} {relacao.grua.modelo}
-              </CardDescription>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">
-              {/* Informações da Obra */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-gray-600" />
-                  <span className="font-medium">{relacao.obra.nome}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm text-gray-600">
-                    {relacao.obra.endereco}, {relacao.obra.cidade}/{relacao.obra.estado}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm text-gray-600">
-                    Início: {new Date(relacao.data_inicio_locacao).toLocaleDateString('pt-BR')}
-                  </span>
-                </div>
-                {relacao.data_fim_locacao && (
+                <CardDescription>
+                  {relacao.grua.fabricante || 'N/A'} {relacao.grua.modelo || 'N/A'}
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="space-y-4">
+                {/* Informações da Obra */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-gray-600" />
+                    <span className="font-medium">{relacao.obra.nome || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm text-gray-600">
+                      {relacao.obra.endereco || 'N/A'}, {relacao.obra.cidade || 'N/A'}/{relacao.obra.estado || 'N/A'}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-gray-600" />
                     <span className="text-sm text-gray-600">
-                      Fim: {new Date(relacao.data_fim_locacao).toLocaleDateString('pt-BR')}
+                      Início: {relacao.data_inicio_locacao ? new Date(relacao.data_inicio_locacao).toLocaleDateString('pt-BR') : 'N/A'}
                     </span>
                   </div>
-                )}
-              </div>
+                  {relacao.data_fim_locacao && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-600">
+                        Fim: {new Date(relacao.data_fim_locacao).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-              {/* Botão de Acesso */}
-              <Button 
-                className="w-full"
-                onClick={() => {
-                  window.location.href = `/dashboard/livros-gruas/${relacao.id}/livro`
-                }}
-              >
-                <BookOpen className="w-4 h-4 mr-2" />
-                Acessar Livro
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                {/* Botão de Acesso */}
+                <Button 
+                  className="w-full"
+                  onClick={() => {
+                    window.location.href = `/dashboard/livros-gruas/${relacao.id}/livro`
+                  }}
+                >
+                  <BookOpen className="w-4 h-4 mr-2" />
+                  Acessar Livro
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {/* Mensagem quando não há resultados */}
