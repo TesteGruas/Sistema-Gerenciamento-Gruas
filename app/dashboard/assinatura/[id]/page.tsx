@@ -58,6 +58,10 @@ export default function AssinaturaDocumentoPage() {
     descricao: '',
     status: ''
   })
+  const [uploadDialogOpen, setUploadDialogOpen] = useState<string | null>(null)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadObservacoes, setUploadObservacoes] = useState('')
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
   const documentoId = params.id as string
 
@@ -231,8 +235,8 @@ export default function AssinaturaDocumentoPage() {
 
     setIsLoading(true)
     try {
-      // TODO: Implementar upload do documento assinado via API
-      // Por enquanto, simular o upload
+      // Simular upload do documento assinado
+      console.log('Simulando upload do arquivo:', arquivoAssinado.name)
       await new Promise(resolve => setTimeout(resolve, 2000))
       
       // Atualizar status da assinatura localmente
@@ -249,6 +253,16 @@ export default function AssinaturaDocumentoPage() {
         nextAssinatura.status = 'aguardando'
       }
 
+      // Atualizar status do documento
+      const assinaturasCompletas = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
+      const totalAssinaturas = documento.assinaturas?.length || 0
+      
+      if (assinaturasCompletas + 1 >= totalAssinaturas) {
+        documento.status = 'assinado'
+      } else {
+        documento.status = 'em_assinatura'
+      }
+
       setDocumento({ ...documento })
       setIsUploadDialogOpen(false)
       setArquivoAssinado(null)
@@ -256,16 +270,16 @@ export default function AssinaturaDocumentoPage() {
       
       // Mostrar sucesso
       toast({
-        title: "Informação",
+        title: "Sucesso",
         description: "Documento assinado e enviado com sucesso!",
         variant: "default"
       })
     } catch (error) {
       console.error('Erro ao enviar documento assinado:', error)
       toast({
-        title: "Informação",
+        title: "Erro",
         description: "Erro ao enviar documento assinado",
-        variant: "default"
+        variant: "destructive"
       })
     } finally {
       setIsLoading(false)
@@ -301,6 +315,66 @@ export default function AssinaturaDocumentoPage() {
     }
   }
 
+  const handleUploadAssinatura = async (assinaturaId: string) => {
+    if (!uploadFile) return
+
+    setIsLoading(true)
+    try {
+      console.log('=== DEBUG UPLOAD ASSINATURA ===')
+      console.log('Assinatura ID:', assinaturaId)
+      console.log('Arquivo:', uploadFile.name)
+      console.log('Observações:', uploadObservacoes)
+
+      // Simular upload do arquivo assinado
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      // Atualizar status da assinatura
+      const assinatura = documento.assinaturas?.find(a => a.user_id.toString() === assinaturaId)
+      if (assinatura) {
+        assinatura.status = 'assinado'
+        assinatura.data_assinatura = new Date().toISOString()
+        assinatura.arquivo_assinado = uploadFile.name
+        assinatura.observacoes = uploadObservacoes
+      }
+
+      // Ativar próximo assinante se houver
+      const nextAssinatura = documento.assinaturas?.find(a => a.ordem === (assinatura?.ordem || 0) + 1)
+      if (nextAssinatura) {
+        nextAssinatura.status = 'aguardando'
+      }
+
+      // Atualizar status do documento
+      const assinaturasCompletas = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
+      const totalAssinaturas = documento.assinaturas?.length || 0
+      
+      if (assinaturasCompletas + 1 >= totalAssinaturas) {
+        documento.status = 'assinado'
+      } else {
+        documento.status = 'em_assinatura'
+      }
+
+      setDocumento({ ...documento })
+      setUploadDialogOpen(null)
+      setUploadFile(null)
+      setUploadObservacoes('')
+      
+      toast({
+        title: "Sucesso",
+        description: "Arquivo assinado enviado com sucesso!",
+        variant: "default"
+      })
+    } catch (error) {
+      console.error('Erro ao enviar arquivo assinado:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao enviar arquivo assinado",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleDownloadDocument = async () => {
     if (!documento) return
 
@@ -330,11 +404,11 @@ export default function AssinaturaDocumentoPage() {
       descricao: documento.descricao || '',
       status: documento.status
     })
-    setIsEditing(true)
+    setIsEditDialogOpen(true)
   }
 
   const handleCancelEdit = () => {
-    setIsEditing(false)
+    setIsEditDialogOpen(false)
     setEditData({
       titulo: '',
       descricao: '',
@@ -358,9 +432,9 @@ export default function AssinaturaDocumentoPage() {
         updated_at: new Date().toISOString()
       })
       
-      setIsEditing(false)
+      setIsEditDialogOpen(false)
       toast({
-        title: "Informação",
+        title: "Sucesso",
         description: "Documento atualizado com sucesso!",
         variant: "default"
       })
@@ -390,28 +464,8 @@ export default function AssinaturaDocumentoPage() {
             Voltar
           </Button>
           <div className="flex-1">
-            {isEditing ? (
-              <div className="space-y-2">
-                <Input
-                  value={editData.titulo}
-                  onChange={(e) => setEditData({...editData, titulo: e.target.value})}
-                  className="text-2xl font-bold border-0 p-0 h-auto"
-                  placeholder="Título do documento"
-                />
-                <Textarea
-                  value={editData.descricao}
-                  onChange={(e) => setEditData({...editData, descricao: e.target.value})}
-                  className="text-gray-600 border-0 p-0 h-auto resize-none"
-                  placeholder="Descrição do documento"
-                  rows={2}
-                />
-              </div>
-            ) : (
-              <>
-                <h1 className="text-3xl font-bold text-gray-900">{documento.titulo}</h1>
-                <p className="text-gray-600">{documento.descricao}</p>
-              </>
-            )}
+            <h1 className="text-3xl font-bold text-gray-900">{documento.titulo}</h1>
+            <p className="text-gray-600">{documento.descricao}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -432,37 +486,14 @@ export default function AssinaturaDocumentoPage() {
           
           {/* Botões de Edição (apenas para admin) */}
           {isAdmin && (
-            <>
-              {!isEditing ? (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleStartEdit}
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Editar
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button 
-                    size="sm"
-                    onClick={handleSaveEdit}
-                    disabled={isLoading}
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    Salvar
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleCancelEdit}
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Cancelar
-                  </Button>
-                </div>
-              )}
-            </>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleStartEdit}
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Editar
+            </Button>
           )}
         </div>
       </div>
@@ -489,30 +520,60 @@ export default function AssinaturaDocumentoPage() {
             </div>
             <div>
               <Label className="text-sm font-medium text-gray-600">Status Atual</Label>
-              {isEditing ? (
-                <Select 
-                  value={editData.status} 
-                  onValueChange={(value) => setEditData({...editData, status: value})}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione o status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="rascunho">Rascunho</SelectItem>
-                    <SelectItem value="aguardando_assinatura">Aguardando Assinatura</SelectItem>
-                    <SelectItem value="em_assinatura">Em Assinatura</SelectItem>
-                    <SelectItem value="assinado">Assinado</SelectItem>
-                    <SelectItem value="rejeitado">Rejeitado</SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="text-sm text-gray-900">{documento.status}</p>
-              )}
+              <p className="text-sm text-gray-900">{documento.status}</p>
             </div>
             <div>
               <Label className="text-sm font-medium text-gray-600">Progresso</Label>
               <p className="text-sm text-gray-900">{progress}% concluído</p>
             </div>
+            {/* Link de assinatura (apenas se preenchido) */}
+            {documento.link_assinatura && (
+              <div className="md:col-span-2">
+                <Label className="text-sm font-medium text-gray-600">Link para Assinatura</Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <a 
+                    href={documento.link_assinatura} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Acessar Link de Assinatura
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Arquivo Original */}
+          <div className="border-t pt-4">
+            <Label className="text-sm font-medium text-gray-600 mb-3 block">Arquivo Original</Label>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-gray-600" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {documento.arquivo_original || 'documento.pdf'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Arquivo para assinatura
+                  </p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleDownloadDocument}
+                disabled={isLoading}
+                className="flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Baixar
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Este é o documento original que deve ser assinado pelos usuários listados abaixo.
+            </p>
           </div>
           
           <div>
@@ -575,9 +636,29 @@ export default function AssinaturaDocumentoPage() {
             </div>
 
             {assinaturaAtual.arquivo_assinado && (
-              <div>
-                <Label className="text-sm font-medium text-gray-600">Arquivo Assinado</Label>
-                <p className="text-sm text-gray-900">{assinaturaAtual.arquivo_assinado}</p>
+              <div className="border-t pt-4">
+                <Label className="text-sm font-medium text-gray-600 mb-3 block">Arquivo Assinado</Label>
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <FileSignature className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {assinaturaAtual.arquivo_assinado}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Documento assinado por você
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="flex items-center gap-2 text-green-600 border-green-300 hover:bg-green-100"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -596,16 +677,46 @@ export default function AssinaturaDocumentoPage() {
                     <DialogTrigger asChild>
                       <Button>
                         <Upload className="w-4 h-4 mr-2" />
-                        Enviar Documento Assinado
+                        Assinar Documento
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
+                    <DialogContent className="sm:max-w-lg">
                       <DialogHeader>
-                        <DialogTitle>Enviar Documento Assinado</DialogTitle>
+                        <DialogTitle>Assinar Documento</DialogTitle>
                       </DialogHeader>
-                      <div className="space-y-4">
+                      <div className="space-y-6">
+                        {/* Link de Assinatura (apenas se preenchido) */}
+                        {documento.link_assinatura && (
+                          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="flex items-start gap-3">
+                              <ExternalLink className="w-5 h-5 text-blue-600 mt-0.5" />
+                              <div className="flex-1">
+                                <h4 className="font-medium text-blue-900 mb-2">Link para Assinatura</h4>
+                                <p className="text-sm text-blue-700 mb-3">
+                                  Acesse o link abaixo para assinar o documento externamente:
+                                </p>
+                                <a 
+                                  href={documento.link_assinatura} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium text-sm"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                  Abrir Link de Assinatura
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Upload do Arquivo Assinado */}
                         <div>
-                          <Label htmlFor="arquivo">Arquivo Assinado *</Label>
+                          <Label htmlFor="arquivo" className="text-base font-medium">
+                            Upload do Documento Assinado *
+                          </Label>
+                          <p className="text-sm text-gray-600 mb-3">
+                            Faça o upload do documento já assinado (PDF, DOC, DOCX)
+                          </p>
                           <Input
                             id="arquivo"
                             type="file"
@@ -613,38 +724,54 @@ export default function AssinaturaDocumentoPage() {
                             onChange={(e) => setArquivoAssinado(e.target.files?.[0] || null)}
                             className="mt-1"
                           />
+                          {arquivoAssinado && (
+                            <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                              ✓ Arquivo selecionado: {arquivoAssinado.name}
+                            </div>
+                          )}
                         </div>
+
+                        {/* Observações */}
                         <div>
-                          <Label htmlFor="observacoes">Observações</Label>
+                          <Label htmlFor="observacoes" className="text-base font-medium">
+                            Observações (Opcional)
+                          </Label>
                           <Textarea
                             id="observacoes"
                             value={observacoes}
                             onChange={(e) => setObservacoes(e.target.value)}
-                            placeholder="Observações sobre a assinatura..."
+                            placeholder="Adicione observações sobre a assinatura..."
                             className="mt-1"
+                            rows={3}
                           />
                         </div>
-                        <div className="flex gap-2">
+
+                        {/* Botões de Ação */}
+                        <div className="flex gap-3 pt-4 border-t">
                           <Button 
                             onClick={handleUploadSignedDocument}
                             disabled={!arquivoAssinado || isLoading}
-                            className="flex-1"
+                            className="flex-1 bg-green-600 hover:bg-green-700"
                           >
                             {isLoading ? (
                               <>
                                 <Clock className="w-4 h-4 mr-2 animate-spin" />
-                                Enviando...
+                                Processando...
                               </>
                             ) : (
                               <>
-                                <Send className="w-4 h-4 mr-2" />
-                                Enviar
+                                <FileSignature className="w-4 h-4 mr-2" />
+                                Confirmar Assinatura
                               </>
                             )}
                           </Button>
                           <Button 
                             variant="outline" 
-                            onClick={() => setIsUploadDialogOpen(false)}
+                            onClick={() => {
+                              setIsUploadDialogOpen(false)
+                              setArquivoAssinado(null)
+                              setObservacoes('')
+                            }}
                           >
                             Cancelar
                           </Button>
@@ -802,6 +929,55 @@ export default function AssinaturaDocumentoPage() {
                             </div>
                           )}
 
+                          {/* Upload de Arquivo Assinado */}
+                          <div className="border-t pt-4">
+                            <Label className="text-sm font-medium text-gray-700 mb-3 block">
+                              Upload de Arquivo Assinado
+                            </Label>
+                            
+                            {assinatura.arquivo_assinado ? (
+                              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <FileSignature className="w-5 h-5 text-green-600" />
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {assinatura.arquivo_assinado}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        Arquivo assinado enviado
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="text-green-600 border-green-300 hover:bg-green-100"
+                                  >
+                                    <Download className="w-4 h-4 mr-1" />
+                                    Baixar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                  <p className="text-sm text-blue-700 mb-2">
+                                    Faça o upload do documento assinado por este responsável
+                                  </p>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => setUploadDialogOpen(assinatura.user_id.toString())}
+                                    className="bg-blue-600 hover:bg-blue-700"
+                                  >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Enviar Arquivo Assinado
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
                           {/* Ações de Assinatura */}
                           {isCurrentUser && assinatura.status === 'aguardando' && (
                             <div className="border-t pt-4">
@@ -958,6 +1134,224 @@ export default function AssinaturaDocumentoPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Diálogo de Edição de Documento */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5" />
+              Editar Documento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Informações do Documento */}
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-start gap-3">
+                <FileSignature className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-blue-900 mb-2">Documento Atual</h4>
+                  <p className="text-sm text-blue-700">
+                    <strong>Título:</strong> {documento.titulo}
+                  </p>
+                  <p className="text-sm text-blue-700">
+                    <strong>Status:</strong> {documento.status}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-2">
+                    Edite as informações abaixo conforme necessário
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Formulário de Edição */}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-titulo" className="text-base font-medium">
+                  Título do Documento *
+                </Label>
+                <Input
+                  id="edit-titulo"
+                  value={editData.titulo}
+                  onChange={(e) => setEditData({...editData, titulo: e.target.value})}
+                  placeholder="Ex: Contrato de Prestação de Serviços"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-descricao" className="text-base font-medium">
+                  Descrição
+                </Label>
+                <Textarea
+                  id="edit-descricao"
+                  value={editData.descricao}
+                  onChange={(e) => setEditData({...editData, descricao: e.target.value})}
+                  placeholder="Descreva o conteúdo e propósito do documento..."
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-status" className="text-base font-medium">
+                  Status do Documento *
+                </Label>
+                <Select 
+                  value={editData.status} 
+                  onValueChange={(value) => setEditData({...editData, status: value})}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="rascunho">Rascunho</SelectItem>
+                    <SelectItem value="aguardando_assinatura">Aguardando Assinatura</SelectItem>
+                    <SelectItem value="em_assinatura">Em Assinatura</SelectItem>
+                    <SelectItem value="assinado">Assinado</SelectItem>
+                    <SelectItem value="rejeitado">Rejeitado</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Altere o status do documento conforme necessário
+                </p>
+              </div>
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button 
+                onClick={handleSaveEdit}
+                disabled={isLoading || !editData.titulo.trim()}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                {isLoading ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Salvar Alterações
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleCancelEdit}
+                disabled={isLoading}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Upload de Arquivo Assinado */}
+      <Dialog open={!!uploadDialogOpen} onOpenChange={(open) => !open && setUploadDialogOpen(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Upload de Arquivo Assinado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Informações do responsável */}
+            {uploadDialogOpen && (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-start gap-3">
+                  <Users className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-blue-900 mb-2">Responsável</h4>
+                    <p className="text-sm text-blue-700">
+                      {documento.assinaturas?.find(a => a.user_id.toString() === uploadDialogOpen)?.user_nome || 'Usuário'}
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      Faça o upload do documento assinado por este responsável
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Upload do Arquivo */}
+            <div>
+              <Label htmlFor="upload-file" className="text-base font-medium">
+                Arquivo Assinado *
+              </Label>
+              <p className="text-sm text-gray-600 mb-3">
+                Selecione o arquivo já assinado por este responsável
+              </p>
+              <Input
+                id="upload-file"
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  console.log('=== DEBUG UPLOAD RESPONSÁVEL ===')
+                  console.log('Arquivo selecionado:', file)
+                  console.log('Nome:', file?.name)
+                  console.log('Tamanho:', file?.size)
+                  console.log('Tipo:', file?.type)
+                  setUploadFile(file)
+                }}
+                className="mt-1"
+              />
+              {uploadFile && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                  ✅ Arquivo selecionado: {uploadFile.name} ({(uploadFile.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+            </div>
+
+            {/* Observações */}
+            <div>
+              <Label htmlFor="upload-observacoes" className="text-base font-medium">
+                Observações (Opcional)
+              </Label>
+              <Textarea
+                id="upload-observacoes"
+                value={uploadObservacoes}
+                onChange={(e) => setUploadObservacoes(e.target.value)}
+                placeholder="Adicione observações sobre a assinatura..."
+                className="mt-1"
+                rows={3}
+              />
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button 
+                onClick={() => uploadDialogOpen && handleUploadAssinatura(uploadDialogOpen)}
+                disabled={!uploadFile || isLoading}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                {isLoading ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    Confirmar Upload
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setUploadDialogOpen(null)
+                  setUploadFile(null)
+                  setUploadObservacoes('')
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

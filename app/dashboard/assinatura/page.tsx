@@ -1030,11 +1030,13 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
   obras: any[]
   onDocumentCreated: () => void
 }) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     titulo: '',
     descricao: '',
     obraId: '',
-    arquivo: null as File | null
+    arquivo: null as File | null,
+    linkAssinatura: ''
   })
   const [assinantes, setAssinantes] = useState<Array<{
     userId: string, 
@@ -1177,36 +1179,84 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
     setIsSubmitting(true)
     
     try {
+      console.log('=== DEBUG CRIAÇÃO DE DOCUMENTO ===')
       console.log('Dados do formulário:', formData)
+      console.log('Arquivo selecionado:', formData.arquivo)
+      console.log('Nome do arquivo:', formData.arquivo?.name)
+      console.log('Tamanho do arquivo:', formData.arquivo?.size)
+      console.log('Tipo do arquivo:', formData.arquivo?.type)
       console.log('Assinantes:', assinantes)
       
-      // Criar o documento via API
-      const documentoData = {
-        titulo: formData.titulo,
-        descricao: formData.descricao,
-        arquivo: formData.arquivo!,
-        ordem_assinatura: assinantes.map(ass => ({
-          user_id: ass.userId, // Manter como string (UUID)
-          ordem: ass.ordem,
-          tipo: ass.tipo,
-          docu_sign_link: ass.docuSignLink,
-          status: ass.status
-        }))
+      // Validar se arquivo foi selecionado
+      if (!formData.arquivo) {
+        console.error('❌ ERRO: Nenhum arquivo selecionado!')
+        toast({
+          title: "Erro",
+          description: "Por favor, selecione um arquivo para upload",
+          variant: "destructive"
+        })
+        setIsSubmitting(false)
+        return
       }
       
-      console.log('Dados para criação:', documentoData)
-      const response = await obrasDocumentosApi.criar(parseInt(formData.obraId), documentoData)
-      
-      // As assinaturas serão adicionadas via ordem_assinatura no DocumentoCreate
-      // Por enquanto, vamos apenas criar o documento básico
-      
-      toast({
-        title: "Informação",
-        description: "Documento criado com sucesso!",
-        variant: "default"
+      console.log('✅ Arquivo validado:', {
+        nome: formData.arquivo.name,
+        tamanho: formData.arquivo.size,
+        tipo: formData.arquivo.type
       })
-      onDocumentCreated()
-      onClose()
+      
+      // Criar FormData para upload
+      const formDataUpload = new FormData()
+      formDataUpload.append('titulo', formData.titulo)
+      formDataUpload.append('descricao', formData.descricao || '')
+      formDataUpload.append('arquivo', formData.arquivo)
+      formDataUpload.append('ordem_assinatura', JSON.stringify(assinantes.map(ass => ({
+        user_id: ass.userId,
+        ordem: ass.ordem,
+        tipo: ass.tipo,
+        docu_sign_link: ass.docuSignLink,
+        status: ass.status
+      }))))
+      
+      console.log('FormData criado:', {
+        titulo: formDataUpload.get('titulo'),
+        descricao: formDataUpload.get('descricao'),
+        arquivo: formDataUpload.get('arquivo'),
+        ordem_assinatura: formDataUpload.get('ordem_assinatura')
+      })
+      
+      console.log('Enviando para API...')
+      console.log('Obra ID:', formData.obraId)
+      console.log('FormData entries:')
+      for (let [key, value] of formDataUpload.entries()) {
+        console.log(`${key}:`, value)
+      }
+      
+      const response = await obrasDocumentosApi.criar(parseInt(formData.obraId), formDataUpload)
+      
+      console.log('=== RESPOSTA DA API ===')
+      console.log('Status:', response.status)
+      console.log('Response data:', response.data)
+      console.log('Success:', response.data?.success)
+      console.log('Message:', response.data?.message)
+      
+      if (response.data?.success) {
+        console.log('✅ Documento criado com sucesso!')
+        toast({
+          title: "Sucesso",
+          description: "Documento criado com sucesso!",
+          variant: "default"
+        })
+        onDocumentCreated()
+        onClose()
+      } else {
+        console.error('❌ Erro na criação:', response.data?.message)
+        toast({
+          title: "Erro",
+          description: response.data?.message || "Erro ao criar documento",
+          variant: "destructive"
+        })
+      }
     } catch (error: any) {
       console.error('Erro ao criar documento:', error)
       toast({
@@ -1369,7 +1419,16 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                     id="arquivo"
                     type="file"
                     accept=".pdf,.doc,.docx"
-                    onChange={(e) => setFormData({...formData, arquivo: e.target.files?.[0] || null})}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      console.log('=== DEBUG UPLOAD ===')
+                      console.log('Arquivo selecionado:', file)
+                      console.log('Nome:', file?.name)
+                      console.log('Tamanho:', file?.size)
+                      console.log('Tipo:', file?.type)
+                      console.log('Última modificação:', file?.lastModified)
+                      setFormData({...formData, arquivo: file})
+                    }}
                     required
                   />
                   <Button type="button" variant="outline">
@@ -1379,6 +1438,26 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Formatos aceitos: PDF, DOC, DOCX
+                </p>
+                {formData.arquivo && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                    ✅ Arquivo selecionado: {formData.arquivo.name} ({(formData.arquivo.size / 1024 / 1024).toFixed(2)} MB)
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="link-assinatura">Link para Assinatura (Opcional)</Label>
+                <Input
+                  id="link-assinatura"
+                  type="url"
+                  value={formData.linkAssinatura || ''}
+                  onChange={(e) => setFormData({...formData, linkAssinatura: e.target.value})}
+                  placeholder="https://exemplo.com/assinatura"
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Link externo onde o usuário pode acessar e assinar o documento (opcional)
                 </p>
               </div>
 

@@ -17,10 +17,10 @@ interface ObraStore {
   cliente?: {
     id: string
     nome: string
-    email: string
-    telefone: string
+    email?: string
+    telefone?: string
     cnpj?: string // Propriedade adicional
-  }
+  } | null
   gruasVinculadas?: any[]
   custosMensais?: any[]
   totalCustosMensais?: number
@@ -96,7 +96,6 @@ export const useObraStore = create<ObraState>()(
 
       // Carregar obra principal
       carregarObra: async (obraId: string) => {
-        
         set({ 
           loading: true, 
           error: null,
@@ -109,7 +108,6 @@ export const useObraStore = create<ObraState>()(
           if (response.success && response.data) {
             const obraConvertida = converterObraBackendParaFrontend(response.data)
             
-            
             set({ 
               obra: obraConvertida,
               loading: false,
@@ -120,7 +118,6 @@ export const useObraStore = create<ObraState>()(
             await get().carregarCustosMensais(obraId)
             
           } else {
-            console.error('🏗️ [OBRA STORE] Erro ao carregar obra:', response)
             set({ 
               error: 'Erro ao carregar obra',
               loading: false 
@@ -136,7 +133,6 @@ export const useObraStore = create<ObraState>()(
 
       // Carregar custos mensais
       carregarCustosMensais: async (obraId: string) => {
-        
         set({ 
           loadingCustos: true, 
           errorCustos: null,
@@ -204,8 +200,6 @@ export const useObraStore = create<ObraState>()(
 // Hook para debug do store
 export const useObraStoreDebug = () => {
   const store = useObraStore()
-  
-  
   return store
 }
 

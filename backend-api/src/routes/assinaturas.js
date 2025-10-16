@@ -1,8 +1,34 @@
 import express from 'express'
+import multer from 'multer'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 
 const router = express.Router()
+
+// Configuração do multer para upload de arquivos
+const storage = multer.memoryStorage()
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB
+  },
+  fileFilter: (req, file, cb) => {
+    // Aceitar apenas PDFs
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true)
+    } else {
+      cb(new Error('Apenas arquivos PDF são permitidos'), false)
+    }
+  }
+})
+
+// Função para gerar nome único do arquivo
+const generateFileName = (originalName) => {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).substring(2, 15)
+  const extension = originalName.split('.').pop()
+  return `assinado_${timestamp}_${random}.${extension}`
+}
 
 /**
  * GET /api/assinaturas/pendentes
