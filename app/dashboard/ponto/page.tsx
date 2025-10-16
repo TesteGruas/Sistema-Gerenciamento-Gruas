@@ -1340,8 +1340,9 @@ export default function PontoPage() {
                                 size="sm"
                                 onClick={() => abrirAprovacao(registro)}
                                 className="bg-orange-600 hover:bg-orange-700 text-white"
+                                title="Enviar para Aprovação"
                               >
-                                Enviar para Aprovação
+                                <Check className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
