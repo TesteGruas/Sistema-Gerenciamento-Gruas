@@ -194,7 +194,103 @@ export const apiCustosMensais = {
       novo_ano
     })
     return response.data
+  },
+
+  // Listar custos por obra
+  async listarPorObra(obraId: number) {
+    const response = await api.get(`/custos-mensais/obra/${obraId}`)
+    return response.data
+  },
+
+  // Obter meses disponíveis para uma obra
+  async obterMesesDisponiveis(obraId: number) {
+    const response = await api.get(`/custos-mensais/obra/${obraId}`)
+    const custos = response.data.data || response.data
+    const meses = [...new Set(custos.map((custo: any) => custo.mes))]
+    return meses.sort()
+  },
+
+  // Gerar próximos meses disponíveis
+  gerarProximosMeses(mesesExistentes: string[]) {
+    const meses = []
+    
+    if (mesesExistentes.length === 0) {
+      // Se não há meses existentes, começar do mês atual
+      const hoje = new Date()
+      const anoAtual = hoje.getFullYear()
+      const mesAtual = hoje.getMonth() + 1
+      
+      for (let i = 0; i < 12; i++) {
+        const data = new Date(anoAtual, mesAtual + i - 1, 1)
+        const mes = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
+        
+        meses.push({
+          value: mes,
+          label: `${data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+        })
+      }
+    } else {
+      // Se há meses existentes, começar do último mês + 1
+      const ultimoMes = mesesExistentes[mesesExistentes.length - 1]
+      const [ano, mes] = ultimoMes.split('-').map(Number)
+      
+      // Começar do mês seguinte ao último
+      for (let i = 1; i <= 12; i++) {
+        const data = new Date(ano, mes + i - 1, 1)
+        const mesFormatado = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
+        
+        meses.push({
+          value: mesFormatado,
+          label: `${data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+        })
+      }
+    }
+    
+    return meses
+  },
+
+  // Replicar custos de um mês para outro
+  async replicar(dados: {
+    obra_id: number
+    mes_origem: string
+    mes_destino: string
+  }) {
+    const response = await api.post('/custos-mensais/replicar', dados)
+    return response.data
   }
 }
+
+// Funções utilitárias para formatação
+export function formatarValor(valor: number): string {
+  return valor.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  })
+}
+
+export function formatarMes(mes: string): string {
+  const meses = {
+    '01': 'Janeiro',
+    '02': 'Fevereiro', 
+    '03': 'Março',
+    '04': 'Abril',
+    '05': 'Maio',
+    '06': 'Junho',
+    '07': 'Julho',
+    '08': 'Agosto',
+    '09': 'Setembro',
+    '10': 'Outubro',
+    '11': 'Novembro',
+    '12': 'Dezembro'
+  }
+  return meses[mes as keyof typeof meses] || mes
+}
+
+export function formatarQuantidade(quantidade: number): string {
+  return quantidade.toLocaleString('pt-BR')
+}
+
+// Exportar a API com nome mais compatível
+export const custosMensaisApi = apiCustosMensais
 
 export default apiCustosMensais

@@ -14,6 +14,7 @@ import {
   DollarSign,
   BarChart3,
   ConeIcon as Crane,
+  BookOpen,
   Menu,
   X,
   LogOut,
@@ -53,6 +54,7 @@ const baseNavigation: NavigationItem[] = [
   { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional" },
   { name: "Obras", href: "/dashboard/obras", icon: Building2, category: "operacional" },
   { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane, category: "operacional" },
+  { name: "Livros de Gruas", href: "/dashboard/livros-gruas", icon: BookOpen, category: "operacional" },
   { name: "Estoque", href: "/dashboard/estoque", icon: Package, category: "operacional" },
   
   // SEÇÃO RH E PESSOAS

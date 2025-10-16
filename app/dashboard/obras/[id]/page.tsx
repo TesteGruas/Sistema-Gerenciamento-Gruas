@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -58,16 +58,78 @@ import { AlertCircle } from "lucide-react"
 import GruaSearch from "@/components/grua-search"
 import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 import { obraGruasApi } from "@/lib/api-obra-gruas"
+import { useObraStore, useObraStoreDebug, debugCustosMensais } from "@/lib/obra-store"
+import { ObraStoreDebug } from "@/components/obra-store-debug"
 
-export default function ObraDetailsPage() {
+function ObraDetailsPageContent() {
   const { toast } = useToast()
   const params = useParams()
   const obraId = params.id as string
   
-  // Estados para integração com backend
-  const [obra, setObra] = useState<Obra | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Usar store de obra com debug
+  const {
+    obra,
+    loading,
+    error,
+    custosMensais,
+    loadingCustos,
+    errorCustos,
+    carregarObra,
+    carregarCustosMensais,
+    lastUpdated,
+    lastCustosUpdated
+  } = useObraStoreDebug()
+  
+  // Estados locais para dados não armazenados no store
+  const [documentos, setDocumentos] = useState<any[]>([])
+  const [arquivos, setArquivos] = useState<any[]>([])
+  const [loadingDocumentos, setLoadingDocumentos] = useState(false)
+  const [loadingArquivos, setLoadingArquivos] = useState(false)
+  const [errorDocumentos, setErrorDocumentos] = useState<string | null>(null)
+  const [errorArquivos, setErrorArquivos] = useState<string | null>(null)
+  
+  // Funções para carregar documentos e arquivos
+  const carregarDocumentos = async () => {
+    if (!obraId) return
+    
+    setLoadingDocumentos(true)
+    setErrorDocumentos(null)
+    
+    try {
+      const response = await obrasDocumentosApi.listarPorObra(parseInt(obraId))
+      if (response.success && response.data) {
+        setDocumentos(Array.isArray(response.data) ? response.data : [response.data])
+      } else {
+        setErrorDocumentos('Erro ao carregar documentos')
+      }
+    } catch (error) {
+      setErrorDocumentos('Erro ao carregar documentos')
+    } finally {
+      setLoadingDocumentos(false)
+    }
+  }
+  
+  const carregarArquivos = async () => {
+    if (!obraId) return
+    
+    setLoadingArquivos(true)
+    setErrorArquivos(null)
+    
+    try {
+      const response = await obrasArquivosApi.listarPorObra(parseInt(obraId))
+      if (response.success && response.data) {
+        setArquivos(Array.isArray(response.data) ? response.data : [response.data])
+      } else {
+        setErrorArquivos('Erro ao carregar arquivos')
+      }
+    } catch (error) {
+      setErrorArquivos('Erro ao carregar arquivos')
+    } finally {
+      setLoadingArquivos(false)
+    }
+  }
+  
+  // Estados locais que não estão no store
   const [gruasReais, setGruasReais] = useState<any[]>([])
   const [loadingGruas, setLoadingGruas] = useState(false)
   
@@ -80,11 +142,7 @@ export default function ObraDetailsPage() {
     observacoes: ''
   })
   
-  // Estados para documentos e arquivos
-  const [documentos, setDocumentos] = useState<DocumentoObra[]>([])
-  const [arquivos, setArquivos] = useState<ArquivoObra[]>([])
-  const [loadingDocumentos, setLoadingDocumentos] = useState(false)
-  const [loadingArquivos, setLoadingArquivos] = useState(false)
+  // Estados para documentos e arquivos - agora no store
   
   // Estados para livro da grua
   const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
@@ -121,12 +179,8 @@ export default function ObraDetailsPage() {
     valorPeriodo: 0
   })
   
-  // Estados para custos mensais
+  // Estados para custos mensais - agora no store
   const [mesSelecionado, setMesSelecionado] = useState('')
-  const [custosMensais, setCustosMensais] = useState<CustoMensalApi[]>([])
-  const [todosCustosMensais, setTodosCustosMensais] = useState<CustoMensalApi[]>([]) // Para armazenar todos os custos
-  const [custosMensaisLoading, setCustosMensaisLoading] = useState(false)
-  const [custosMensaisError, setCustosMensaisError] = useState<string | null>(null)
   const [isNovoMesOpen, setIsNovoMesOpen] = useState(false)
   const [novoMesData, setNovoMesData] = useState({
     mes: ''
@@ -391,23 +445,22 @@ export default function ObraDetailsPage() {
 
   // Função para extrair meses dos dados reais da API
   const getMesesDisponiveisDaAPI = () => {
-    if (!todosCustosMensais || todosCustosMensais.length === 0) return []
+    if (!custosMensais || custosMensais.length === 0) return []
     
-    const meses = [...new Set(todosCustosMensais.map(custo => custo.mes))]
+    const meses = [...new Set(custosMensais.map(custo => custo.mes))]
     return meses.sort()
   }
 
-  // Função para filtrar custos por mês sem nova chamada à API
-  const filtrarCustosPorMes = (mes: string) => {
-    if (!todosCustosMensais || todosCustosMensais.length === 0) return
-
-    if (mes === 'todos' || !mes) {
-      setCustosMensais(todosCustosMensais)
-    } else {
-      const custosFiltrados = todosCustosMensais.filter(custo => custo.mes === mes)
-      setCustosMensais(custosFiltrados)
+  // Custos filtrados baseados no mês selecionado
+  const custosFiltrados = useMemo(() => {
+    if (!custosMensais || custosMensais.length === 0) return []
+    
+    if (mesSelecionado === 'todos' || !mesSelecionado) {
+      return custosMensais
     }
-  }
+    
+    return custosMensais.filter(custo => custo.mes === mesSelecionado)
+  }, [custosMensais, mesSelecionado])
 
   const handleNovoMes = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -442,7 +495,7 @@ export default function ObraDetailsPage() {
         mes_destino: novoMesData.mes
       })
       
-      await carregarCustosMensais()
+      await carregarCustosMensais(obraId)
       setMesSelecionado(novoMesData.mes)
       setNovoMesData({ mes: '' })
       setIsNovoMesOpen(false)
@@ -481,13 +534,19 @@ export default function ObraDetailsPage() {
   const handleAtualizarQuantidade = async (custoId: number, novaQuantidade: number) => {
     try {
       await custosMensaisApi.atualizarQuantidadeRealizada(custoId, novaQuantidade)
-      await carregarCustosMensais() // Recarregar dados
+      
+      // Recarregar custos no store
+      await carregarCustosMensais(obraId)
+      
+      // Refresh da página para garantir que todos os dados sejam atualizados
+      window.location.reload()
+      
     } catch (error: any) {
       console.error('Erro ao atualizar quantidade:', error)
       toast({
-        title: "Informação",
-        description: "Erro ao atualizar quantidade: ${error.message}",
-        variant: "default"
+        title: "Erro",
+        description: `Erro ao atualizar quantidade: ${error.message}`,
+        variant: "destructive"
       })
     }
   }
@@ -512,7 +571,10 @@ export default function ObraDetailsPage() {
       }
 
       await custosMensaisApi.criar(dadosCusto)
-      await carregarCustosMensais()
+      await carregarCustosMensais(obraId)
+      
+      // Refresh da página para garantir que todos os dados sejam atualizados
+      window.location.reload()
       
       // Resetar formulário
       setNovoCustoData({
@@ -565,7 +627,10 @@ export default function ObraDetailsPage() {
 
     try {
       await custosMensaisApi.atualizar(custoSelecionado.id, novoCustoData)
-      await carregarCustosMensais()
+      await carregarCustosMensais(obraId)
+      
+      // Refresh da página para garantir que todos os dados sejam atualizados
+      window.location.reload()
       
       // Resetar formulário
       setCustoSelecionado(null)
@@ -602,7 +667,11 @@ export default function ObraDetailsPage() {
 
     try {
       await custosMensaisApi.excluir(custoId)
-      await carregarCustosMensais()
+      await carregarCustosMensais(obraId)
+      
+      // Refresh da página para garantir que todos os dados sejam atualizados
+      window.location.reload()
+      
       toast({
         title: "Informação",
         description: "Custo excluído com sucesso!",
@@ -705,7 +774,7 @@ export default function ObraDetailsPage() {
         await custosMensaisApi.criar(dadosCusto)
       }
 
-      await carregarCustosMensais()
+      await carregarCustosMensais(obraId)
       setMesSelecionado(custosIniciaisData.mes)
       setIsCustosIniciaisOpen(false)
       toast({
@@ -839,67 +908,7 @@ export default function ObraDetailsPage() {
     }
   }
 
-  const carregarCustosMensais = async () => {
-    if (!obra) return
-    
-    try {
-      setCustosMensaisLoading(true)
-      setCustosMensaisError(null)
-      
-      // Sempre carregar todos os custos primeiro
-      const response = await custosMensaisApi.listarPorObra(parseInt(obra.id))
-      
-      // Armazenar todos os custos
-      setTodosCustosMensais(response.data)
-      
-      // Filtrar por mês se necessário
-      if (mesSelecionado && mesSelecionado !== 'todos') {
-        const custosFiltrados = response.data.filter(custo => custo.mes === mesSelecionado)
-        setCustosMensais(custosFiltrados)
-      } else {
-        setCustosMensais(response.data)
-      }
-    } catch (error: any) {
-      console.error('Erro ao carregar custos mensais:', error)
-      setCustosMensaisError(error.message || 'Erro ao carregar custos mensais')
-      // Fallback para dados mockados em caso de erro
-      const custos = getCustosMensaisByObra(obra.id)
-      // Converter dados mockados para formato da API
-      const custosConvertidos = custos.map(custo => ({
-        id: parseInt(custo.id),
-        obra_id: parseInt(obra.id),
-        item: custo.item,
-        descricao: custo.descricao,
-        unidade: custo.unidade,
-        quantidade_orcamento: custo.quantidadeOrcamento,
-        valor_unitario: custo.valorUnitario,
-        total_orcamento: custo.totalOrcamento,
-        mes: custo.mes,
-        quantidade_realizada: custo.quantidadeRealizada,
-        valor_realizado: custo.valorRealizado,
-        quantidade_acumulada: custo.quantidadeAcumulada,
-        valor_acumulado: custo.valorAcumulado,
-        quantidade_saldo: custo.quantidadeSaldo,
-        valor_saldo: custo.valorSaldo,
-        tipo: custo.tipo as 'contrato' | 'aditivo',
-        created_at: custo.createdAt,
-        updated_at: custo.updatedAt
-      }))
-      
-      // Armazenar todos os custos mockados
-      setTodosCustosMensais(custosConvertidos)
-      
-      // Filtrar por mês se necessário
-      if (mesSelecionado && mesSelecionado !== 'todos') {
-        const custosFiltrados = custosConvertidos.filter(custo => custo.mes === mesSelecionado)
-        setCustosMensais(custosFiltrados)
-      } else {
-        setCustosMensais(custosConvertidos)
-      }
-    } finally {
-      setCustosMensaisLoading(false)
-    }
-  }
+  // Função carregarCustosMensais agora está no store
 
   const handleExportarCustos = (tipo: 'geral' | 'mes') => {
     if (!obra) return
@@ -979,35 +988,7 @@ export default function ObraDetailsPage() {
       })
   }
 
-  // Carregar dados da obra do backend
-  const carregarObra = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      console.log('🔍 DEBUG - Carregando obra ID:', obraId)
-      const response = await obrasApi.obterObra(parseInt(obraId))
-      console.log('🔍 DEBUG - Resposta da API:', response)
-      const obraConvertida = converterObraBackendParaFrontend(response.data)
-      console.log('🔍 DEBUG - Obra convertida:', obraConvertida)
-      setObra(obraConvertida)
-    } catch (err) {
-      console.error('❌ ERRO ao carregar obra:', err)
-      console.error('❌ Detalhes do erro:', {
-        message: err instanceof Error ? err.message : 'Erro desconhecido',
-        stack: err instanceof Error ? err.stack : undefined,
-        obraId: obraId
-      })
-      setError(err instanceof Error ? err.message : 'Erro ao carregar obra')
-      
-      // TEMPORARIAMENTE DESABILITADO: Fallback para dados mockados em caso de erro
-      // const obraMockada = mockObras.find(o => o.id === obraId)
-      // if (obraMockada) {
-      //   setObra(obraMockada)
-      // }
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Função carregarObra agora está no store
 
   // Carregar gruas vinculadas à obra
   const carregarGruasVinculadas = async () => {
@@ -1087,7 +1068,8 @@ export default function ObraDetailsPage() {
   }
 
   // Carregar documentos da obra
-  const carregarDocumentos = async () => {
+  // Função movida para o store
+  const carregarDocumentosLocal = async () => {
     if (!obra) return
     
     try {
@@ -1163,7 +1145,8 @@ export default function ObraDetailsPage() {
   }
 
   // Carregar arquivos da obra
-  const carregarArquivos = async () => {
+  // Função movida para o store
+  const carregarArquivosLocal = async () => {
     if (!obra) return
     
     try {
@@ -1196,7 +1179,13 @@ export default function ObraDetailsPage() {
     const init = async () => {
       const isAuth = await ensureAuthenticated()
       if (isAuth) {
-        carregarObra()
+        await carregarObra(obraId)
+        
+        // Carregar documentos e arquivos em paralelo
+        await Promise.all([
+          carregarDocumentos(),
+          carregarArquivos()
+        ])
       }
     }
     init()
@@ -1210,27 +1199,18 @@ export default function ObraDetailsPage() {
   }, [obra])
 
 
-  // Carregar custos mensais quando a obra mudar
+  // Definir mês padrão após carregar custos
   useEffect(() => {
-    if (obra) {
-      carregarCustosMensais()
+    if (custosMensais && custosMensais.length > 0) {
+      // Obter todos os meses disponíveis e ordenar
+      const mesesDisponiveis = [...new Set(custosMensais.map(custo => custo.mes))].sort()
+      // Definir o último mês como padrão
+      const ultimoMes = mesesDisponiveis[mesesDisponiveis.length - 1]
+      setMesSelecionado(ultimoMes)
     }
-  }, [obra?.id])
+  }, [custosMensais])
 
-  // Carregar documentos e arquivos quando a obra mudar
-  useEffect(() => {
-    if (obra) {
-      carregarDocumentos()
-      carregarArquivos()
-    }
-  }, [obra?.id])
-
-  // Filtrar custos quando o mês selecionado mudar
-  useEffect(() => {
-    if (todosCustosMensais.length > 0) {
-      filtrarCustosPorMes(mesSelecionado)
-    }
-  }, [mesSelecionado, todosCustosMensais])
+  // Filtro de custos agora é feito via useMemo com custosFiltrados
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1272,6 +1252,55 @@ export default function ObraDetailsPage() {
     }
   }
 
+  // Cálculos memoizados para evitar re-renderizações desnecessárias
+  const gastosMesPassado = useMemo(() => {
+    if (!custosMensais || custosMensais.length === 0) return 0
+    
+    // Obter todos os meses disponíveis e ordenar
+    const mesesDisponiveis = [...new Set(custosMensais.map(custo => custo.mes))].sort()
+    
+    if (mesesDisponiveis.length < 2) return 0 // Precisa de pelo menos 2 meses
+    
+    // Pegar o penúltimo mês (mês passado)
+    const mesPassado = mesesDisponiveis[mesesDisponiveis.length - 2]
+    
+    
+    const gastos = custosMensais
+      .filter(custo => custo.mes === mesPassado)
+      .reduce((total, custo) => {
+        const valor = custo.total_orcamento || custo.valor_realizado || custo.valor || custo.valor_unitario || 0
+        return total + valor
+      }, 0)
+    
+    return gastos
+  }, [custosMensais])
+
+  const gastosMesAtual = useMemo(() => {
+    if (!custosFiltrados || custosFiltrados.length === 0) return 0
+    
+    const gastos = custosFiltrados
+      .reduce((total, custo) => {
+        const valor = custo.total_orcamento || custo.valor_realizado || custo.valor || custo.valor_unitario || 0
+        return total + valor
+      }, 0)
+    
+    
+    return gastos
+  }, [custosFiltrados, mesSelecionado])
+
+  // Total de todos os custos (todos os meses)
+  const totalTodosCustos = useMemo(() => {
+    if (!custosMensais || custosMensais.length === 0) return 0
+    
+    const total = custosMensais.reduce((sum, custo) => {
+      const valor = custo.total_orcamento || custo.valor_realizado || custo.valor || custo.valor_unitario || 0
+      return sum + valor
+    }, 0)
+    
+    
+    return total
+  }, [custosMensais])
+
   // Tratamento de loading e erro
   if (loading) {
     return (
@@ -1289,7 +1318,7 @@ export default function ObraDetailsPage() {
             <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
             <h2 className="text-xl font-semibold text-red-700 mb-2">Erro ao carregar obra</h2>
             <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={carregarObra} variant="outline">
+            <Button onClick={() => carregarObra(obraId)} variant="outline">
               Tentar novamente
             </Button>
           </div>
@@ -1297,6 +1326,9 @@ export default function ObraDetailsPage() {
       </div>
     )
   }
+
+  // Componente de debug do store (apenas em desenvolvimento)
+  const showDebug = process.env.NODE_ENV === 'development'
 
   if (!obra) {
     return (
@@ -1319,6 +1351,9 @@ export default function ObraDetailsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Debug do Store (apenas em desenvolvimento) */}
+      {showDebug && <ObraStoreDebug />}
+      
       <div className="flex items-center gap-4">
         <Button 
           variant="outline" 
@@ -1415,16 +1450,26 @@ export default function ObraDetailsPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Custos Iniciais:</span>
-                  <span className="text-sm font-medium">R$ {obra.custosIniciais.toLocaleString('pt-BR')}</span>
+                  <span className="text-sm text-gray-600">Valor Total da Obra:</span>
+                  <span className="text-sm font-medium text-blue-600">R$ {(obra.valorTotalObra || 0).toLocaleString('pt-BR')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Custos Adicionais:</span>
-                  <span className="text-sm font-medium">R$ {obra.custosAdicionais.toLocaleString('pt-BR')}</span>
+                  <span className="text-sm text-gray-600">Gastos do Mês Passado:</span>
+                  <span className="text-sm font-medium text-orange-600">R$ {gastosMesPassado.toLocaleString('pt-BR')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Gastos do Mês:</span>
+                  <span className="text-sm font-medium text-red-600">R$ {gastosMesAtual.toLocaleString('pt-BR')}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2">
-                  <span className="text-sm font-semibold">Total:</span>
-                  <span className="text-sm font-bold">R$ {obra.totalCustos.toLocaleString('pt-BR')}</span>
+                  <span className="text-sm font-semibold">Saldo Restante:</span>
+                  <span className={`text-sm font-bold ${
+                    (obra.orcamento || 0) - totalTodosCustos >= 0 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    R$ {((obra.orcamento || 0) - totalTodosCustos).toLocaleString('pt-BR')}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -1598,7 +1643,7 @@ export default function ObraDetailsPage() {
                     variant="outline" 
                     size="sm"
                     onClick={() => handleExportarCustos('geral')}
-                    disabled={custosMensais.length === 0}
+                    disabled={custosFiltrados.length === 0}
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Exportar Geral
@@ -1607,7 +1652,7 @@ export default function ObraDetailsPage() {
                     variant="outline" 
                     size="sm"
                     onClick={() => handleExportarCustos('mes')}
-                    disabled={custosMensais.length === 0 || (mesSelecionado === 'todos' || !mesSelecionado)}
+                    disabled={custosFiltrados.length === 0 || (mesSelecionado === 'todos' || !mesSelecionado)}
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Exportar Mês
@@ -1646,24 +1691,28 @@ export default function ObraDetailsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Valor Total da Obra</Label>
-                  <p className="text-lg font-bold text-blue-600">R$ {obra.custosIniciais.toLocaleString('pt-BR')}</p>
+                  <p className="text-lg font-bold text-blue-600">R$ {(obra.valorTotalObra || 0).toLocaleString('pt-BR')}</p>
                 </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <Label className="text-sm font-medium text-gray-600">Gastos Acumulados</Label>
-                  <p className="text-lg font-bold text-green-600">
-                    R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
+                <div className="text-center p-4 bg-orange-50 rounded-lg">
+                  <Label className="text-sm font-medium text-gray-600">Gastos do Mês Passado</Label>
+                  <p className="text-lg font-bold text-orange-600">
+                    R$ {gastosMesPassado.toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div className="text-center p-4 bg-yellow-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Gastos do Mês</Label>
                   <p className="text-lg font-bold text-yellow-600">
-                    R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_realizado, 0))}
+                    R$ {gastosMesAtual.toLocaleString('pt-BR')}
                   </p>
                 </div>
                 <div className="text-center p-4 bg-red-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Saldo Restante</Label>
-                  <p className="text-lg font-bold text-red-600">
-                    R$ {formatarValor(obra.custosIniciais - custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
+                  <p className={`text-lg font-bold ${
+                    (obra.orcamento || 0) - totalTodosCustos >= 0 
+                      ? 'text-green-600' 
+                      : 'text-red-600'
+                  }`}>
+                    R$ {((obra.orcamento || 0) - totalTodosCustos).toLocaleString('pt-BR')}
                   </p>
                 </div>
               </div>
@@ -1677,22 +1726,22 @@ export default function ObraDetailsPage() {
                 Custos Mensais {mesSelecionado && mesSelecionado !== 'todos' && `- ${new Date(mesSelecionado + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`}
               </CardTitle>
               <CardDescription>
-                {custosMensais.length > 0 ? `${custosMensais.length} itens encontrados` : 'Nenhum custo encontrado para este período'}
+                {custosFiltrados.length > 0 ? `${custosFiltrados.length} itens encontrados` : 'Nenhum custo encontrado para este período'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {custosMensaisLoading ? (
+              {loadingCustos ? (
                 <CardLoader text="Carregando custos mensais..." />
-              ) : custosMensaisError ? (
+              ) : errorCustos ? (
                 <div className="text-center py-8">
                   <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-red-700 mb-2">Erro ao carregar custos</h3>
-                  <p className="text-red-600 mb-4">{custosMensaisError}</p>
-                  <Button onClick={carregarCustosMensais} variant="outline">
+                  <p className="text-red-600 mb-4">{errorCustos}</p>
+                  <Button onClick={() => carregarCustosMensais(obraId)} variant="outline">
                     Tentar novamente
                   </Button>
                 </div>
-              ) : custosMensais.length > 0 ? (
+              ) : custosFiltrados.length > 0 ? (
                 <div className="space-y-4">
                   {/* Tabela Desktop */}
                   <div className="hidden lg:block overflow-x-auto border rounded-lg">
@@ -1704,15 +1753,13 @@ export default function ObraDetailsPage() {
                           <TableHead className="w-[80px] font-semibold text-blue-900 text-center">UND</TableHead>
                           <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Orçamento</TableHead>
                           <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Acumulado Anterior</TableHead>
-                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Realizado Período</TableHead>
-                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Acumulado Total</TableHead>
                           <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Saldo Contrato</TableHead>
                           <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Mês</TableHead>
                           <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                     <TableBody>
-                      {custosMensais.map((custo, index) => (
+                      {custosFiltrados.map((custo, index) => (
                         <TableRow key={custo.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
                           <TableCell className="font-semibold text-center text-blue-700">
                             <div className="flex flex-col items-center gap-1">
@@ -1755,26 +1802,6 @@ export default function ObraDetailsPage() {
                             <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
                               <div className="text-xs text-gray-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada - custo.quantidade_realizada)}</div>
                               <div className="text-sm font-medium text-gray-800">R$ {formatarValor(custo.valor_acumulado - custo.valor_realizado)}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="bg-green-50 p-2 rounded-lg border border-green-200">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={custo.quantidade_realizada}
-                                onChange={(e) => handleAtualizarQuantidade(custo.id, parseFloat(e.target.value) || 0)}
-                                className="w-20 h-8 text-xs mb-1 border-green-300 focus:border-green-500"
-                              />
-                              <div className="text-sm font-medium text-green-800">
-                                R$ {formatarValor(custo.valor_realizado)}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="bg-purple-50 p-2 rounded-lg border border-purple-200">
-                              <div className="text-xs text-purple-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada)}</div>
-                              <div className="text-sm font-medium text-purple-800">R$ {formatarValor(custo.valor_acumulado)}</div>
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
@@ -1853,20 +1880,6 @@ export default function ObraDetailsPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="bg-green-100 p-2 rounded-lg border-2 border-green-300">
-                            <div className="text-sm font-bold text-green-900">
-                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_realizado, 0))}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="bg-purple-100 p-2 rounded-lg border-2 border-purple-300">
-                            <div className="text-sm font-bold text-purple-900">
-                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
                           <div className={`p-2 rounded-lg border-2 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
                             <div className={`text-sm font-bold ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-900' : 'text-red-900'}`}>
                               R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0))}
@@ -1882,7 +1895,7 @@ export default function ObraDetailsPage() {
 
                 {/* Cards Mobile/Tablet */}
                 <div className="lg:hidden space-y-4">
-                  {custosMensais.map((custo, index) => (
+                  {custosFiltrados.map((custo, index) => (
                     <Card key={custo.id} className="p-4">
                       <div className="space-y-4">
                         {/* Header do Card */}
@@ -1954,25 +1967,6 @@ export default function ObraDetailsPage() {
                             <div className="text-sm font-medium text-gray-800">R$ {formatarValor(custo.valor_acumulado - custo.valor_realizado)}</div>
                           </div>
 
-                          <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                            <div className="text-xs text-green-600 mb-1">Realizado Período</div>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={custo.quantidade_realizada}
-                              onChange={(e) => handleAtualizarQuantidade(custo.id, parseFloat(e.target.value) || 0)}
-                              className="w-full h-8 text-xs mb-1 border-green-300 focus:border-green-500"
-                            />
-                            <div className="text-sm font-medium text-green-800">
-                              R$ {formatarValor(custo.valor_realizado)}
-                            </div>
-                          </div>
-
-                          <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
-                            <div className="text-xs text-purple-600 mb-1">Acumulado Total</div>
-                            <div className="text-xs text-purple-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada)}</div>
-                            <div className="text-sm font-medium text-purple-800">R$ {formatarValor(custo.valor_acumulado)}</div>
-                          </div>
                         </div>
 
                         {/* Saldo e Progresso */}
@@ -2019,18 +2013,6 @@ export default function ObraDetailsPage() {
                           R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + (custo.valor_acumulado - custo.valor_realizado), 0))}
                         </div>
                       </div>
-                      <div className="bg-green-100 p-3 rounded-lg border-2 border-green-300">
-                        <div className="text-green-600 font-medium mb-1">Realizado Período</div>
-                        <div className="font-bold text-green-900">
-                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_realizado, 0))}
-                        </div>
-                      </div>
-                      <div className="bg-purple-100 p-3 rounded-lg border-2 border-purple-300">
-                        <div className="text-purple-600 font-medium mb-1">Acumulado Total</div>
-                        <div className="font-bold text-purple-900">
-                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_acumulado, 0))}
-                        </div>
-                      </div>
                       <div className={`p-3 rounded-lg border-2 col-span-2 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
                         <div className={`font-medium mb-1 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>Saldo Contrato</div>
                         <div className={`font-bold ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-900' : 'text-red-900'}`}>
@@ -2051,10 +2033,16 @@ export default function ObraDetailsPage() {
                       : 'Esta obra ainda não possui custos mensais registrados.'
                     }
                   </p>
-                  <Button onClick={handleAbrirNovoMes}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Criar Primeiro Mês
-                  </Button>
+                  <div className="flex gap-2 justify-center">
+                    <Button onClick={handleAbrirCustosIniciais} className="bg-green-600 hover:bg-green-700">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Criar Custos Iniciais
+                    </Button>
+                    <Button onClick={handleAbrirNovoMes} variant="outline">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Criar Primeiro Mês
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -3049,29 +3037,26 @@ export default function ObraDetailsPage() {
               <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
                 {mesesDisponiveis.map((mes) => (
                   <Card 
-                    key={mes} 
+                    key={mes.value} 
                     className={`cursor-pointer transition-colors hover:bg-gray-50 ${
-                      novoMesData.mes === mes ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                      novoMesData.mes === mes.value ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                     }`}
-                    onClick={() => setNovoMesData({ ...novoMesData, mes })}
+                    onClick={() => setNovoMesData({ ...novoMesData, mes: mes.value })}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
                           <h4 className="font-medium">
-                            {new Date(mes + '-01').toLocaleDateString('pt-BR', { 
-                              month: 'long', 
-                              year: 'numeric' 
-                            })}
+                            {mes.label}
                           </h4>
                           <p className="text-sm text-gray-500">
-                            {new Date(mes + '-01').toLocaleDateString('pt-BR', { 
+                            {new Date(mes.value + '-01').toLocaleDateString('pt-BR', { 
                               month: 'short', 
                               year: 'numeric' 
                             })}
                           </p>
                         </div>
-                        {novoMesData.mes === mes && (
+                        {novoMesData.mes === mes.value && (
                           <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                             <span className="text-white text-sm">✓</span>
                           </div>
@@ -3917,5 +3902,9 @@ export default function ObraDetailsPage() {
       </Dialog>
     </div>
   )
+}
+
+export default function ObraDetailsPage() {
+  return <ObraDetailsPageContent />
 }
 
