@@ -21,7 +21,6 @@ import {
 } from "lucide-react"
 import { livroGruaApi, EntradaLivroGrua } from "@/lib/api-livro-grua"
 import { ButtonLoader } from "@/components/ui/loader"
-import FuncionarioSearch from "@/components/funcionario-search"
 
 interface LivroGruaFormProps {
   gruaId: string
@@ -29,6 +28,7 @@ interface LivroGruaFormProps {
   onSave?: (entrada: EntradaLivroGrua) => void
   onCancel?: () => void
   modoEdicao?: boolean
+  funcionarioLogado?: { id: number; nome: string; cargo: string }
 }
 
 export default function LivroGruaForm({
@@ -36,48 +36,55 @@ export default function LivroGruaForm({
   entrada,
   onSave,
   onCancel,
-  modoEdicao = false
+  modoEdicao = false,
+  funcionarioLogado
 }: LivroGruaFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<any>(null)
   
-  const [formData, setFormData] = useState<Partial<EntradaLivroGrua>>({
-    grua_id: gruaId,
-    funcionario_id: entrada?.funcionario_id || 0,
-    data_entrada: entrada?.data_entrada || new Date().toISOString().split('T')[0],
-    hora_entrada: entrada?.hora_entrada || new Date().toTimeString().slice(0, 5),
-    tipo_entrada: entrada?.tipo_entrada || 'checklist',
-    status_entrada: entrada?.status_entrada || 'ok',
-    descricao: entrada?.descricao || '',
-    observacoes: entrada?.observacoes || '',
-    responsavel_resolucao: entrada?.responsavel_resolucao || '',
-    data_resolucao: entrada?.data_resolucao || '',
-    status_resolucao: entrada?.status_resolucao || 'pendente'
+  const [formData, setFormData] = useState<Partial<EntradaLivroGrua>>(() => {
+    console.log('LivroGruaForm - Inicializando formData com funcionarioLogado:', funcionarioLogado)
+    return {
+      grua_id: gruaId,
+      funcionario_id: entrada?.funcionario_id || funcionarioLogado?.id || 0,
+      data_entrada: entrada?.data_entrada || new Date().toISOString().split('T')[0],
+      hora_entrada: entrada?.hora_entrada || new Date().toTimeString().slice(0, 5),
+      tipo_entrada: entrada?.tipo_entrada || 'checklist',
+      status_entrada: entrada?.status_entrada || 'ok',
+      descricao: entrada?.descricao || '',
+      observacoes: entrada?.observacoes || '',
+      responsavel_resolucao: entrada?.responsavel_resolucao || '',
+      data_resolucao: entrada?.data_resolucao || '',
+      status_resolucao: entrada?.status_resolucao || 'pendente'
+    }
   })
 
-  // Carregar dados do funcionário se estiver editando
+  // Auto-selecionar funcionário logado
   useEffect(() => {
-    if (modoEdicao && entrada?.funcionario_id) {
-      // Aqui você pode buscar os dados do funcionário
-      // Por enquanto, vamos usar dados básicos
+    console.log('LivroGruaForm - funcionarioLogado recebido:', funcionarioLogado)
+    if (funcionarioLogado) {
+      console.log('LivroGruaForm - Configurando funcionário:', funcionarioLogado)
       setFuncionarioSelecionado({
-        id: entrada.funcionario_id,
-        name: 'Funcionário',
-        role: 'Operador'
+        id: funcionarioLogado.id,
+        name: funcionarioLogado.nome,
+        role: funcionarioLogado.cargo
       })
+      setFormData(prev => {
+        const newData = { ...prev, funcionario_id: funcionarioLogado.id }
+        console.log('LivroGruaForm - FormData atualizado:', newData)
+        return newData
+      })
+    } else {
+      console.log('LivroGruaForm - funcionarioLogado é null/undefined')
     }
-  }, [modoEdicao, entrada])
-
-  const handleFuncionarioSelect = (funcionario: any) => {
-    setFuncionarioSelecionado(funcionario)
-    if (funcionario) {
-      setFormData({ ...formData, funcionario_id: parseInt(funcionario.id) })
-    }
-  }
+  }, [funcionarioLogado])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    console.log('LivroGruaForm - handleSubmit - formData:', formData)
+    console.log('LivroGruaForm - handleSubmit - funcionario_id:', formData.funcionario_id)
     
     if (!formData.funcionario_id) {
       setError('Selecione um funcionário')
@@ -212,17 +219,27 @@ export default function LivroGruaForm({
           {/* Funcionário */}
           <div>
             <Label htmlFor="funcionario">Funcionário Responsável *</Label>
-            <FuncionarioSearch
-              onFuncionarioSelect={handleFuncionarioSelect}
-              selectedFuncionario={funcionarioSelecionado}
-              placeholder="Buscar funcionário por nome ou cargo..."
-              className="mt-1"
-              onlyActive={true}
-              allowedRoles={['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro']}
-            />
+            {funcionarioLogado ? (
+              <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md mt-1">
+                <User className="w-5 h-5 text-blue-600" />
+                <div>
+                  <p className="font-medium text-blue-900">{funcionarioLogado.nome}</p>
+                  <p className="text-sm text-blue-700">{funcionarioLogado.cargo}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-md mt-1">
+                <p className="text-gray-500">Carregando dados do funcionário...</p>
+              </div>
+            )}
             <p className="text-xs text-gray-500 mt-1">
-              Digite o nome ou cargo do funcionário responsável
+              Funcionário logado automaticamente selecionado
             </p>
+            {/* Debug info */}
+            <div className="text-xs text-gray-400 mt-1">
+              Debug: funcionarioLogado = {JSON.stringify(funcionarioLogado)} | 
+              funcionario_id = {formData.funcionario_id}
+            </div>
           </div>
 
           {/* Tipo e Status */}

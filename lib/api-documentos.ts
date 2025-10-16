@@ -2,17 +2,26 @@ import api from './api';
 
 export interface DocumentoFuncionario {
   id: string | number;
-  nome: string;
-  tipo: string;
-  status: 'pendente' | 'assinado' | 'rejeitado';
-  data_criacao: string;
-  data_vencimento?: string;
+  documento_id: number;
+  user_id: string;
+  ordem: number;
+  status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado';
+  tipo: 'interno' | 'cliente';
+  docu_sign_link?: string;
+  docu_sign_envelope_id?: string;
+  data_envio?: string;
+  data_assinatura?: string;
+  arquivo_assinado?: string;
+  observacoes?: string;
+  email_enviado: boolean;
+  data_email_enviado?: string;
+  created_at: string;
+  updated_at: string;
+  // Campos do documento relacionado
+  titulo?: string;
   descricao?: string;
-  arquivo_url?: string;
-  assinatura_url?: string;
-  funcionario_id: number;
-  funcionario_nome?: string;
-  caminho_arquivo?: string;
+  arquivo_original?: string;
+  data_criacao?: string;
 }
 
 export interface AssinarDocumentoPayload {
@@ -50,10 +59,15 @@ export const getDocumentoById = async (documentoId: string | number): Promise<Do
  * Assinar um documento
  */
 export const assinarDocumento = async (
-  documentoId: string | number,
+  assinaturaId: string | number,
   payload: AssinarDocumentoPayload
 ): Promise<DocumentoFuncionario> => {
-  const response = await api.post(`/funcionarios/documentos/${documentoId}/assinar`, payload);
+  // const response = await api.post(`/funcionarios/documentos/${documentoId}/assinar`, payload);
+  const response = await api.post(`/assinaturas/assinar/${assinaturaId}`, {
+    assinatura: payload.assinatura,
+    geoloc: payload.geoloc,
+    timestamp: payload.timestamp
+  });
   return response.data.data || response.data;
 };
 

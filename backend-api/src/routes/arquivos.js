@@ -1272,4 +1272,177 @@ router.get('/stats/:obraId', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /api/arquivos/upload/livro-grua/{livroGruaId}:
+ *   post:
+ *     summary: Upload de anexo para uma entrada do livro da grua
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: livroGruaId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da entrada do livro da grua
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - arquivo
+ *             properties:
+ *               arquivo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo anexo (PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, TXT)
+ *               descricao:
+ *                 type: string
+ *                 description: Descrição do anexo
+ *     responses:
+ *       200:
+ *         description: Anexo enviado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     nome_original:
+ *                       type: string
+ *                     tamanho:
+ *                       type: integer
+ *                     tipo_mime:
+ *                       type: string
+ *                     categoria:
+ *                       type: string
+ *                     livro_grua_id:
+ *                       type: integer
+ *                     url:
+ *                       type: string
+ *       400:
+ *         description: Erro na requisição
+ *       401:
+ *         description: Não autorizado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/upload/livro-grua/:livroGruaId', authenticateToken, upload.single('arquivo'), async (req, res) => {
+  try {
+    const { livroGruaId } = req.params
+    const { descricao } = req.body
+    const file = req.file
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum arquivo foi enviado'
+      })
+    }
+
+    // Verificar se a entrada do livro da grua existe
+    const { data: livroGrua, error: livroError } = await supabaseAdmin
+      .from('livro_grua')
+      .select('id, obra_id')
+      .eq('id', livroGruaId)
+      .single()
+
+    if (livroError || !livroGrua) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entrada do livro da grua não encontrada'
+      })
+    }
+
+    // Gerar nome único para o arquivo
+    const fileName = generateFileName(file.originalname, livroGrua.obra_id)
+    
+    // Upload para Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos')
+      .upload(`livro-grua/${fileName}`, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600'
+      })
+
+    if (uploadError) {
+      console.error('Erro no upload:', uploadError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao fazer upload do arquivo',
+        error: uploadError.message
+      })
+    }
+
+    // Salvar metadados do arquivo no banco
+    const arquivoRecord = {
+      nome_original: file.originalname,
+      nome_arquivo: fileName,
+      tamanho: file.size,
+      tipo_mime: file.mimetype,
+      tipo_arquivo: getFileType(file.mimetype),
+      descricao: descricao || null,
+      categoria: 'livro_grua',
+      livro_grua_id: parseInt(livroGruaId),
+      obra_id: livroGrua.obra_id,
+      uploaded_by: req.user.id,
+      created_at: new Date().toISOString()
+    }
+
+    const { data: savedFile, error: saveError } = await supabaseAdmin
+      .from('arquivos_obra')
+      .insert(arquivoRecord)
+      .select()
+      .single()
+
+    if (saveError) {
+      console.error('Erro ao salvar metadados:', saveError)
+      // Tentar remover o arquivo do storage se falhou ao salvar no banco
+      await supabaseAdmin.storage
+        .from('arquivos')
+        .remove([`livro-grua/${fileName}`])
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar metadados do arquivo',
+        error: saveError.message
+      })
+    }
+
+    res.json({
+      success: true,
+      message: 'Anexo enviado com sucesso',
+      data: {
+        id: savedFile.id,
+        nome_original: arquivoRecord.nome_original,
+        tamanho: arquivoRecord.tamanho,
+        tipo_mime: arquivoRecord.tipo_mime,
+        categoria: arquivoRecord.categoria,
+        livro_grua_id: arquivoRecord.livro_grua_id,
+        url: uploadData.path
+      }
+    })
+
+  } catch (error) {
+    console.error('Erro no upload de anexo do livro da grua:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
 export default router

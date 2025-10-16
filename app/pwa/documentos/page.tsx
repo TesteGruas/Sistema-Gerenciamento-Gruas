@@ -32,6 +32,8 @@ export default function PWADocumentosPage() {
   const [user, setUser] = useState<any>(null)
   const [documentoSelecionado, setDocumentoSelecionado] = useState<Documento | null>(null)
   const [isAssinando, setIsAssinando] = useState(false)
+  const [arquivoAssinado, setArquivoAssinado] = useState<File | null>(null)
+  const [tipoAssinatura, setTipoAssinatura] = useState<'digital' | 'arquivo'>('digital')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [signature, setSignature] = useState<string | null>(null)
@@ -144,9 +146,13 @@ export default function PWADocumentosPage() {
         return
       }
 
-      // Buscar documentos do funcionário
+      // Buscar documentos pendentes de assinatura
       const data = await documentosApi.getDocumentosFuncionario(user.id)
-      setDocumentos(data)
+      // Filtrar apenas documentos do usuário atual
+      const documentosDoUsuario = data.filter((doc: any) => 
+        doc.user_id === user.id.toString() && doc.status === 'aguardando'
+      )
+      setDocumentos(documentosDoUsuario)
       
       // Salvar no cache
       localStorage.setItem('cached_documentos_funcionario', JSON.stringify(data))
@@ -243,7 +249,26 @@ export default function PWADocumentosPage() {
   }
 
   const assinarDocumento = async () => {
-    if (!signature || !documentoSelecionado) return
+    if (!documentoSelecionado) return
+
+    // Verificar se tem assinatura digital ou arquivo
+    if (tipoAssinatura === 'digital' && !signature) {
+      toast({
+        title: "Erro",
+        description: "Por favor, faça a assinatura digital ou selecione um arquivo",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (tipoAssinatura === 'arquivo' && !arquivoAssinado) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione um arquivo PDF para upload",
+        variant: "destructive"
+      })
+      return
+    }
 
     setIsAssinando(true)
     try {
@@ -260,50 +285,75 @@ export default function PWADocumentosPage() {
         }
       }
 
-      // Se offline, adicionar à fila de sincronização
-      if (!isOnline) {
-        const filaAssinaturas = JSON.parse(localStorage.getItem('fila_assinaturas_documentos') || '[]')
-        filaAssinaturas.push({
-          documentoId: documentoSelecionado.id,
-          assinatura: signature,
-          funcionario_id: user.id,
+      if (tipoAssinatura === 'digital') {
+        // Assinatura digital - lógica original
+        // Se offline, adicionar à fila de sincronização
+        if (!isOnline) {
+          const filaAssinaturas = JSON.parse(localStorage.getItem('fila_assinaturas_documentos') || '[]')
+          filaAssinaturas.push({
+            documentoId: documentoSelecionado.id,
+            assinatura: signature,
+            funcionario_id: user.funcionario_id || user.id,
+            geoloc,
+            timestamp: new Date().toISOString()
+          })
+          localStorage.setItem('fila_assinaturas_documentos', JSON.stringify(filaAssinaturas))
+          
+          // Atualizar UI localmente
+          setDocumentos(prev => prev.map(doc => 
+            doc.id === documentoSelecionado.id 
+              ? { ...doc, status: 'assinado' as const, assinatura_url: signature || undefined }
+              : doc
+          ))
+          
+          // Atualizar cache
+          const documentosAtualizados = documentos.map(doc => 
+            doc.id === documentoSelecionado.id 
+              ? { ...doc, status: 'assinado' as const, assinatura_url: signature || undefined }
+              : doc
+          )
+          localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosAtualizados))
+          
+          toast({
+            title: "Assinatura pendente",
+            description: "A assinatura será sincronizada quando você estiver online",
+            variant: "default"
+          })
+          
+          setDocumentoSelecionado(null)
+          setSignature(null)
+          setArquivoAssinado(null)
+          setTipoAssinatura('digital')
+          return
+        }
+
+        await documentosApi.assinarDocumento(documentoSelecionado.id, {
+          assinatura: signature!,
+          funcionario_id: user.funcionario_id || user.id,
           geoloc,
           timestamp: new Date().toISOString()
         })
-        localStorage.setItem('fila_assinaturas_documentos', JSON.stringify(filaAssinaturas))
-        
-        // Atualizar UI localmente
-        setDocumentos(prev => prev.map(doc => 
-          doc.id === documentoSelecionado.id 
-            ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
-            : doc
-        ))
-        
-        // Atualizar cache
-        const documentosAtualizados = documentos.map(doc => 
-          doc.id === documentoSelecionado.id 
-            ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
-            : doc
-        )
-        localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosAtualizados))
-        
-        toast({
-          title: "Assinatura pendente",
-          description: "A assinatura será sincronizada quando você estiver online",
-          variant: "default"
-        })
-        
-        setDocumentoSelecionado(null)
-        setSignature(null)
-        return
-      }
+      } else {
+        // Upload de arquivo - nova funcionalidade
+        if (!isOnline) {
+          toast({
+            title: "Erro",
+            description: "Upload de arquivo requer conexão com internet",
+            variant: "destructive"
+          })
+          return
+        }
 
-      await documentosApi.assinarDocumento(documentoSelecionado.id, {
-        assinatura: signature,
-        funcionario_id: user.id,
-        geoloc,
-        timestamp: new Date().toISOString()
-      })
+        // Importar a função de upload de assinaturas
+        const { uploadArquivoAssinado } = await import('@/lib/api-assinaturas')
+        
+        // Usar o ID da assinatura diretamente
+        await uploadArquivoAssinado(
+          Number(documentoSelecionado.id),
+          arquivoAssinado!,
+          'Assinatura via PWA - Documentos'
+        )
+      }
       
       toast({
         title: "Documento assinado!",
@@ -314,20 +364,22 @@ export default function PWADocumentosPage() {
       // Atualizar lista de documentos
       setDocumentos(prev => prev.map(doc => 
         doc.id === documentoSelecionado.id 
-          ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
+          ? { ...doc, status: 'assinado' as const, assinatura_url: tipoAssinatura === 'digital' ? (signature || undefined) : 'arquivo_assinado' }
           : doc
       ))
       
       // Atualizar cache
       const documentosAtualizados = documentos.map(doc => 
         doc.id === documentoSelecionado.id 
-          ? { ...doc, status: 'assinado' as const, assinatura_url: signature }
+          ? { ...doc, status: 'assinado' as const, assinatura_url: tipoAssinatura === 'digital' ? (signature || undefined) : 'arquivo_assinado' }
           : doc
       )
       localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosAtualizados))
       
       setDocumentoSelecionado(null)
       setSignature(null)
+      setArquivoAssinado(null)
+      setTipoAssinatura('digital')
       
     } catch (error: any) {
       console.error('Erro ao assinar documento:', error)
@@ -344,6 +396,7 @@ export default function PWADocumentosPage() {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       'pendente': { className: 'bg-yellow-100 text-yellow-800', text: 'Pendente', icon: Clock },
+      'aguardando': { className: 'bg-blue-100 text-blue-800', text: 'Aguardando', icon: Clock },
       'assinado': { className: 'bg-green-100 text-green-800', text: 'Assinado', icon: CheckCircle },
       'rejeitado': { className: 'bg-red-100 text-red-800', text: 'Rejeitado', icon: AlertCircle }
     }
@@ -355,9 +408,13 @@ export default function PWADocumentosPage() {
     return new Date(data).toLocaleDateString('pt-BR')
   }
 
-  const isVencido = (dataVencimento?: string) => {
-    if (!dataVencimento) return false
-    return new Date(dataVencimento) < new Date()
+  const isVencido = (documento: Documento) => {
+    // Para obras_documento_assinaturas, não temos data de vencimento
+    // Vamos usar a data de criação + 30 dias como exemplo
+    if (!documento.created_at) return false
+    const dataLimite = new Date(documento.created_at)
+    dataLimite.setDate(dataLimite.getDate() + 30)
+    return dataLimite < new Date()
   }
 
   const handleDownload = async (documento: Documento) => {
@@ -366,7 +423,7 @@ export default function PWADocumentosPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = documento.nome || 'documento.pdf'
+      a.download = documento.titulo || `documento_${documento.documento_id}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -374,7 +431,7 @@ export default function PWADocumentosPage() {
       
       toast({
         title: "Download iniciado",
-        description: `Baixando ${documento.nome}`,
+        description: `Baixando ${documento.titulo || `Documento ${documento.documento_id}`}`,
         variant: "default"
       })
     } catch (error: any) {
@@ -436,7 +493,7 @@ export default function PWADocumentosPage() {
           {documentos.map((documento) => {
             const statusConfig = getStatusBadge(documento.status)
             const StatusIcon = statusConfig.icon
-            const vencido = isVencido(documento.data_vencimento)
+            const vencido = isVencido(documento)
 
             return (
               <Card key={documento.id} className={`hover:shadow-md transition-shadow ${vencido ? 'border-red-200 bg-red-50' : ''}`}>
@@ -445,11 +502,11 @@ export default function PWADocumentosPage() {
                     <div className="flex-1">
                       <CardTitle className="text-lg flex items-center gap-2">
                         <FileSignature className="w-5 h-5" />
-                        {documento.nome}
+                        {documento.titulo || `Documento ${documento.documento_id}`}
                         {vencido && <Badge className="bg-red-100 text-red-800">Vencido</Badge>}
                       </CardTitle>
                       <CardDescription>
-                        {documento.tipo} • Criado em {formatarData(documento.data_criacao)}
+                        {documento.tipo} • Ordem: {documento.ordem} • Criado em {formatarData(documento.created_at)}
                       </CardDescription>
                     </div>
                     <Badge className={statusConfig.className}>
@@ -464,15 +521,15 @@ export default function PWADocumentosPage() {
                       <p className="text-sm text-gray-600">{documento.descricao}</p>
                     )}
                     
-                    {documento.data_vencimento && (
+                    {documento.created_at && (
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Calendar className="w-4 h-4" />
-                        <span>Vencimento: {formatarData(documento.data_vencimento)}</span>
+                        <span>Criado em: {formatarData(documento.created_at)}</span>
                       </div>
                     )}
 
                     <div className="flex gap-2">
-                      {documento.status === 'pendente' && (
+                      {documento.status === 'aguardando' && (
                         <Button
                           onClick={() => iniciarAssinatura(documento)}
                           size="sm"
@@ -511,50 +568,117 @@ export default function PWADocumentosPage() {
                 Assinar Documento
               </CardTitle>
               <CardDescription>
-                {documentoSelecionado.nome}
+                {documentoSelecionado.titulo || `Documento ${documentoSelecionado.documento_id}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Seletor de tipo de assinatura */}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Assinatura Digital
+                  Tipo de Assinatura
                 </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  <canvas
-                    ref={canvasRef}
-                    width={300}
-                    height={150}
-                    className="border border-gray-200 rounded cursor-crosshair"
-                    onMouseDown={iniciarDesenho}
-                    onMouseMove={desenhar}
-                    onMouseUp={pararDesenho}
-                    onMouseLeave={pararDesenho}
-                  />
-                </div>
-                <div className="flex gap-2 mt-2">
+                <div className="flex gap-2">
                   <Button
-                    onClick={limparAssinatura}
-                    variant="outline"
+                    type="button"
+                    variant={tipoAssinatura === 'digital' ? 'default' : 'outline'}
                     size="sm"
+                    onClick={() => setTipoAssinatura('digital')}
+                    className="flex-1"
                   >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Limpar
+                    <PenTool className="w-4 h-4 mr-1" />
+                    Digital
                   </Button>
                   <Button
-                    onClick={salvarAssinatura}
-                    variant="outline"
+                    type="button"
+                    variant={tipoAssinatura === 'arquivo' ? 'default' : 'outline'}
                     size="sm"
+                    onClick={() => setTipoAssinatura('arquivo')}
+                    className="flex-1"
                   >
-                    <Save className="w-4 h-4 mr-1" />
-                    Salvar
+                    <Upload className="w-4 h-4 mr-1" />
+                    Arquivo
                   </Button>
                 </div>
               </div>
 
+              {/* Assinatura Digital */}
+              {tipoAssinatura === 'digital' && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Assinatura Digital
+                  </label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                    <canvas
+                      ref={canvasRef}
+                      width={300}
+                      height={150}
+                      className="border border-gray-200 rounded cursor-crosshair"
+                      onMouseDown={iniciarDesenho}
+                      onMouseMove={desenhar}
+                      onMouseUp={pararDesenho}
+                      onMouseLeave={pararDesenho}
+                    />
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      onClick={limparAssinatura}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Limpar
+                    </Button>
+                    <Button
+                      onClick={salvarAssinatura}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Save className="w-4 h-4 mr-1" />
+                      Salvar
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload de Arquivo */}
+              {tipoAssinatura === 'arquivo' && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Upload do Documento Assinado
+                  </label>
+                  <div className="space-y-3">
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => setArquivoAssinado(e.target.files?.[0] || null)}
+                      className="w-full p-2 border border-gray-300 rounded-md"
+                    />
+                    
+                    {arquivoAssinado && (
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 text-green-800">
+                          <FileSignature className="w-4 h-4" />
+                          <span className="font-medium">{arquivoAssinado.name}</span>
+                          <span className="text-sm">({(arquivoAssinado.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-500">
+                      Faça o upload do documento PDF assinado fisicamente. Máximo 10MB.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button
                   onClick={assinarDocumento}
-                  disabled={!signature || isAssinando}
+                  disabled={
+                    isAssinando || 
+                    (tipoAssinatura === 'digital' && !signature) ||
+                    (tipoAssinatura === 'arquivo' && !arquivoAssinado)
+                  }
                   className="flex-1 bg-green-600 hover:bg-green-700"
                 >
                   {isAssinando ? (
@@ -565,7 +689,12 @@ export default function PWADocumentosPage() {
                   {isAssinando ? 'Assinando...' : 'Confirmar Assinatura'}
                 </Button>
                 <Button
-                  onClick={() => setDocumentoSelecionado(null)}
+                  onClick={() => {
+                    setDocumentoSelecionado(null)
+                    setSignature(null)
+                    setArquivoAssinado(null)
+                    setTipoAssinatura('digital')
+                  }}
                   variant="outline"
                 >
                   Cancelar

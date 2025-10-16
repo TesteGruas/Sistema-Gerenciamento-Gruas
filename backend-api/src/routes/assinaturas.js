@@ -693,6 +693,364 @@ router.post('/:id/lembrete', authenticateToken, async (req, res) => {
 })
 
 /**
+ * POST /api/assinaturas/:id/upload-assinado
+ * Upload de arquivo assinado por responsável individual
+ */
+router.post('/:id/upload-assinado', authenticateToken, upload.single('arquivo'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { observacoes } = req.body
+    const userId = req.user.id
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Arquivo é obrigatório'
+      })
+    }
+
+    // Buscar assinatura
+    const { data: assinatura, error: assinaturaError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('status', 'aguardando')
+      .single()
+
+    if (assinaturaError || !assinatura) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você não tem permissão para assinar este documento ou a assinatura não está aguardando'
+      })
+    }
+
+    // Buscar documento
+    const { data: documento, error: documentoError } = await supabaseAdmin
+      .from('obras_documentos')
+      .select('*')
+      .eq('id', assinatura.documento_id)
+      .single()
+
+    if (documentoError || !documento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Documento não encontrado'
+      })
+    }
+
+    // Verificar se o documento está disponível para assinatura
+    if (!['aguardando_assinatura', 'em_assinatura'].includes(documento.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Documento não está disponível para assinatura'
+      })
+    }
+
+    // Gerar nome único do arquivo
+    const fileName = generateFileName(req.file.originalname)
+    const filePath = `assinados/${documento.id}/${assinatura.id}/${fileName}`
+
+    // Upload para Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .upload(filePath, req.file.buffer, {
+        contentType: 'application/pdf',
+        cacheControl: '3600'
+      })
+
+    if (uploadError) {
+      console.error('Erro no upload:', uploadError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao fazer upload do arquivo',
+        error: uploadError.message
+      })
+    }
+
+    // Gerar URL pública do arquivo
+    const { data: urlData } = supabaseAdmin.storage
+      .from('arquivos-obras')
+      .getPublicUrl(filePath)
+
+    // Atualizar assinatura
+    const { error: updateAssinaturaError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .update({
+        status: 'assinado',
+        arquivo_assinado: urlData.publicUrl,
+        data_assinatura: new Date().toISOString(),
+        observacoes: observacoes || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', assinatura.id)
+
+    if (updateAssinaturaError) {
+      console.error('Erro ao atualizar assinatura:', updateAssinaturaError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar assinatura',
+        error: updateAssinaturaError.message
+      })
+    }
+
+    // Buscar todas as assinaturas do documento para verificar próximos passos
+    const { data: todasAssinaturas, error: todasAssinaturasError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*')
+      .eq('documento_id', documento.id)
+      .order('ordem', { ascending: true })
+
+    if (todasAssinaturasError) {
+      console.error('Erro ao buscar assinaturas:', todasAssinaturasError)
+    }
+
+    // Verificar se há mais assinaturas pendentes
+    const assinaturasPendentes = todasAssinaturas?.filter(ass => ass.status === 'pendente') || []
+    const proximaAssinatura = assinaturasPendentes.length > 0 ? assinaturasPendentes[0] : null
+
+    // Atualizar status do documento
+    let novoStatus = documento.status
+    let proximoAssinanteId = documento.proximo_assinante_id
+
+    if (proximaAssinatura) {
+      // Ainda há assinaturas pendentes - ativar próximo assinante
+      await supabaseAdmin
+        .from('obras_documento_assinaturas')
+        .update({ status: 'aguardando' })
+        .eq('id', proximaAssinatura.id)
+      
+      novoStatus = 'em_assinatura'
+      proximoAssinanteId = proximaAssinatura.user_id
+    } else {
+      // Todas assinaturas completas - documento assinado
+      novoStatus = 'assinado'
+      proximoAssinanteId = null
+    }
+
+    // Atualizar documento
+    const { error: updateDocumentoError } = await supabaseAdmin
+      .from('obras_documentos')
+      .update({
+        status: novoStatus,
+        proximo_assinante_id: proximoAssinanteId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', documento.id)
+
+    if (updateDocumentoError) {
+      console.error('Erro ao atualizar documento:', updateDocumentoError)
+    }
+
+    // Registrar no histórico
+    await supabaseAdmin
+      .from('obras_documento_historico')
+      .insert({
+        documento_id: documento.id,
+        user_id: userId,
+        acao: 'assinou',
+        user_nome: req.user.nome || req.user.email,
+        user_email: req.user.email,
+        user_role: req.user.role,
+        observacoes: `Arquivo assinado enviado${observacoes ? ` - ${observacoes}` : ''}`
+      })
+
+    res.json({
+      success: true,
+      message: 'Arquivo assinado enviado com sucesso',
+      data: {
+        assinatura_id: assinatura.id,
+        arquivo_url: urlData.publicUrl,
+        status: 'assinado',
+        data_assinatura: new Date().toISOString(),
+        proximo_assinante: proximaAssinatura ? {
+          user_id: proximaAssinatura.user_id,
+          ordem: proximaAssinatura.ordem
+        } : null
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao fazer upload do arquivo assinado:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * GET /api/assinaturas/:id/arquivo-assinado
+ * Download do arquivo assinado
+ */
+router.get('/:id/arquivo-assinado', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+
+    // Buscar assinatura
+    const { data: assinatura, error: assinaturaError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (assinaturaError || !assinatura) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assinatura não encontrada'
+      })
+    }
+
+    // Verificar se o usuário tem permissão para acessar
+    // (pode ser o assinante, criador do documento, ou admin)
+    const { data: documento } = await supabaseAdmin
+      .from('obras_documentos')
+      .select('created_by')
+      .eq('id', assinatura.documento_id)
+      .single()
+
+    const podeAcessar = assinatura.user_id === userId || 
+                       documento?.created_by === userId ||
+                       req.user.role === 'admin'
+
+    if (!podeAcessar) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você não tem permissão para acessar este arquivo'
+      })
+    }
+
+    if (!assinatura.arquivo_assinado) {
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo assinado não encontrado'
+      })
+    }
+
+    // Extrair caminho do arquivo da URL
+    const url = new URL(assinatura.arquivo_assinado)
+    const filePath = url.pathname.split('/').slice(3).join('/') // Remove '/storage/v1/object/arquivos-obras/'
+
+    // Gerar URL assinada para download
+    const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .createSignedUrl(filePath, 3600) // 1 hora
+
+    if (urlError) {
+      console.error('Erro ao gerar URL:', urlError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao gerar link de download',
+        error: urlError.message
+      })
+    }
+
+    // Fazer download do arquivo e retornar como stream
+    const fileResponse = await fetch(signedUrl.signedUrl)
+    const fileBlob = await fileResponse.arrayBuffer()
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="arquivo_assinado_${id}.pdf"`)
+    res.send(Buffer.from(fileBlob))
+  } catch (error) {
+    console.error('Erro ao fazer download:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * PUT /api/assinaturas/:id/status
+ * Atualizar status da assinatura (para casos especiais)
+ */
+router.put('/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status, observacoes } = req.body
+    const userId = req.user.id
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status é obrigatório'
+      })
+    }
+
+    // Verificar se o usuário é admin ou criador do documento
+    const { data: assinatura, error: assinaturaError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*, obras_documentos!inner(created_by)')
+      .eq('id', id)
+      .single()
+
+    if (assinaturaError || !assinatura) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assinatura não encontrada'
+      })
+    }
+
+    const podeAtualizar = req.user.role === 'admin' || 
+                         assinatura.obras_documentos.created_by === userId
+
+    if (!podeAtualizar) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você não tem permissão para atualizar este status'
+      })
+    }
+
+    // Atualizar assinatura
+    const { error: updateError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .update({
+        status: status,
+        observacoes: observacoes || assinatura.observacoes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    if (updateError) {
+      console.error('Erro ao atualizar status:', updateError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao atualizar status',
+        error: updateError.message
+      })
+    }
+
+    // Registrar no histórico
+    await supabaseAdmin
+      .from('obras_documento_historico')
+      .insert({
+        documento_id: assinatura.documento_id,
+        user_id: userId,
+        acao: 'status_alterado',
+        user_nome: req.user.nome || req.user.email,
+        user_email: req.user.email,
+        user_role: req.user.role,
+        observacoes: `Status alterado para: ${status}${observacoes ? ` - ${observacoes}` : ''}`
+      })
+
+    res.json({
+      success: true,
+      message: 'Status atualizado com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao atualizar status:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
  * POST /api/assinaturas/:id/cancelar
  * Cancelar um documento (apenas criador)
  */

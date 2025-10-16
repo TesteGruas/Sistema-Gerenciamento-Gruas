@@ -311,7 +311,10 @@ export default function ClientesPage() {
         telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
         cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
         contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
-        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : ''
+        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
+        // Remover campos de usuário na edição (não devem ser enviados)
+        criar_usuario: undefined,
+        usuario_senha: undefined
       }
       
       await clientesApi.atualizarCliente(selectedCliente.id, dadosFormatados)

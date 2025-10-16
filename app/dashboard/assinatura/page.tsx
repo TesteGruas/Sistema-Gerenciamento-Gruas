@@ -28,9 +28,9 @@ import {
   Calendar,
   FileText,
   AlertCircle,
+  RefreshCw,
   ExternalLink,
-  Send,
-  RefreshCw
+  Send
 } from "lucide-react"
 import { mockDocumentos, mockObras, mockUsers } from "@/lib/mock-data"
 import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
@@ -911,22 +911,81 @@ function DocumentoDetails({ documento, onClose }: { documento: any; onClose: () 
 function SignDialog({ documento, onClose }: { documento: any; onClose: () => void }) {
   const [observacoes, setObservacoes] = useState("")
   const [arquivoAssinado, setArquivoAssinado] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const { toast } = useToast()
   const currentSigner = documento.ordemAssinatura.find((a: any) => a.status === 'aguardando')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Função para gerar preview do PDF
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setArquivoAssinado(file)
+    
+    if (file && file.type === 'application/pdf') {
+      const url = URL.createObjectURL(file)
+      setPreviewUrl(url)
+    } else {
+      setPreviewUrl(null)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Aqui seria a lógica para processar a assinatura
-    console.log('Processando assinatura:', { 
-      documentoId: documento.id, 
-      observacoes, 
-      arquivoAssinado: arquivoAssinado?.name 
-    })
-    toast({
-        title: "Informação",
-        description: "Assinatura processada com sucesso!",
-        variant: "default"
+    
+    if (!arquivoAssinado) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione um arquivo PDF para upload",
+        variant: "destructive"
       })
-    onClose()
+      return
+    }
+
+    if (!currentSigner) {
+      toast({
+        title: "Erro",
+        description: "Assinante não encontrado",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsUploading(true)
+
+    try {
+      // Importar a função de upload
+      const { uploadArquivoAssinado } = await import('@/lib/api-assinaturas')
+      
+      const response = await uploadArquivoAssinado(
+        currentSigner.id, // ID da assinatura
+        arquivoAssinado,
+        observacoes
+      )
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: response.message || "Arquivo assinado enviado com sucesso!",
+          variant: "default"
+        })
+        onClose()
+      } else {
+        toast({
+          title: "Erro",
+          description: response.message || "Erro ao enviar arquivo assinado",
+          variant: "destructive"
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao fazer upload:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro interno do servidor",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return (
@@ -964,22 +1023,42 @@ function SignDialog({ documento, onClose }: { documento: any; onClose: () => voi
 
               <div>
                 <Label htmlFor="arquivo">Upload do Documento Assinado *</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="arquivo"
-                    type="file"
-                    accept=".pdf"
-                    onChange={(e) => setArquivoAssinado(e.target.files?.[0] || null)}
-                    required
-                  />
-                  <Button type="button" variant="outline">
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload
-                  </Button>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="arquivo"
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileChange}
+                      required
+                      disabled={isUploading}
+                    />
+                  </div>
+                  
+                  {arquivoAssinado && (
+                    <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                      <div className="flex items-center gap-2 text-green-800">
+                        <FileSignature className="w-4 h-4" />
+                        <span className="font-medium">{arquivoAssinado.name}</span>
+                        <span className="text-sm">({(arquivoAssinado.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      </div>
+                      {previewUrl && (
+                        <div className="mt-2">
+                          <p className="text-sm text-green-700 mb-2">Preview do arquivo:</p>
+                          <iframe
+                            src={previewUrl}
+                            className="w-full h-64 border border-green-300 rounded"
+                            title="Preview do PDF"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <p className="text-xs text-gray-500">
+                    Faça o upload do documento PDF assinado fisicamente. Máximo 10MB.
+                  </p>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Faça o download do documento assinado do DocuSign e faça o upload aqui
-                </p>
               </div>
 
               {documento.docuSignLink && (
@@ -998,12 +1077,30 @@ function SignDialog({ documento, onClose }: { documento: any; onClose: () => voi
               )}
 
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={onClose}>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={onClose}
+                  disabled={isUploading}
+                >
                   Cancelar
                 </Button>
-                <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                  <FileSignature className="w-4 h-4 mr-2" />
-                  Confirmar Assinatura
+                <Button 
+                  type="submit" 
+                  className="bg-green-600 hover:bg-green-700"
+                  disabled={isUploading || !arquivoAssinado}
+                >
+                  {isUploading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <FileSignature className="w-4 h-4 mr-2" />
+                      Confirmar Assinatura
+                    </>
+                  )}
                 </Button>
               </div>
             </form>

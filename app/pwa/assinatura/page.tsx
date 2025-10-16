@@ -45,6 +45,9 @@ export default function PWAAssinaturaPage() {
   const [isDrawing, setIsDrawing] = useState(false)
   const [motivoRejeicao, setMotivoRejeicao] = useState("")
   const [mostrarRejeicao, setMostrarRejeicao] = useState(false)
+  const [arquivoAssinado, setArquivoAssinado] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [tipoAssinatura, setTipoAssinatura] = useState<'digital' | 'arquivo'>('digital')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { toast } = useToast()
 
@@ -164,35 +167,74 @@ export default function PWAAssinaturaPage() {
   }
 
   const confirmarAssinatura = async () => {
-    if (!signature || !documentoSelecionado) return
+    if (!documentoSelecionado) return
+
+    // Verificar se tem assinatura digital ou arquivo
+    if (tipoAssinatura === 'digital' && !signature) {
+      toast({
+        title: "Erro",
+        description: "Por favor, faça a assinatura digital ou selecione um arquivo",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (tipoAssinatura === 'arquivo' && !arquivoAssinado) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione um arquivo PDF para upload",
+        variant: "destructive"
+      })
+      return
+    }
 
     setIsAssinando(true)
     try {
-      // Obter geolocalização se disponível
-      let geoloc = undefined
-      if (navigator.geolocation) {
-        try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 5000,
-              maximumAge: 60000
+      if (tipoAssinatura === 'digital') {
+        // Assinatura digital
+        let geoloc = undefined
+        if (navigator.geolocation) {
+          try {
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                timeout: 5000,
+                maximumAge: 60000
+              })
             })
-          })
-          geoloc = `${position.coords.latitude}, ${position.coords.longitude}`
-        } catch (error) {
-          console.log('Geolocalização não disponível:', error)
+            geoloc = `${position.coords.latitude}, ${position.coords.longitude}`
+          } catch (error) {
+            console.log('Geolocalização não disponível:', error)
+          }
         }
+
+        await assinarDocumento(documentoSelecionado.id, {
+          assinatura: signature!,
+          geoloc,
+          timestamp: new Date().toISOString()
+        })
+      } else {
+        // Upload de arquivo
+        const { uploadArquivoAssinado } = await import('@/lib/api-assinaturas')
+        
+        // Buscar ID da assinatura do usuário atual
+        const assinaturaUsuario = documentoSelecionado.assinaturas?.find(
+          (ass: any) => ass.status === 'aguardando'
+        )
+        
+        if (!assinaturaUsuario) {
+          throw new Error('Assinatura não encontrada')
+        }
+
+        await uploadArquivoAssinado(
+          assinaturaUsuario.id,
+          arquivoAssinado!,
+          'Assinatura via PWA'
+        )
       }
 
-      await assinarDocumento(documentoSelecionado.id, {
-        assinatura: signature,
-        geoloc,
-        timestamp: new Date().toISOString()
-      })
-
       toast({
-        title: "Documento assinado!",
-        description: "Assinatura digital aplicada com sucesso",
+        title: "Documento assinado com sucesso!",
+        description: "A assinatura foi processada e salva no sistema.",
         variant: "default"
       })
 
@@ -200,6 +242,8 @@ export default function PWAAssinaturaPage() {
       await carregarDocumentos()
       setDocumentoSelecionado(null)
       setSignature(null)
+      setArquivoAssinado(null)
+      setTipoAssinatura('digital')
     } catch (error: any) {
       console.error('Erro ao assinar documento:', error)
       toast({
@@ -540,57 +584,124 @@ export default function PWAAssinaturaPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Seletor de tipo de assinatura */}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Assinatura Digital
+                  Tipo de Assinatura
                 </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-white">
-                  <canvas
-                    ref={canvasRef}
-                    width={400}
-                    height={200}
-                    className="border border-gray-200 rounded cursor-crosshair w-full touch-none"
-                    onMouseDown={iniciarDesenho}
-                    onMouseMove={desenhar}
-                    onMouseUp={pararDesenho}
-                    onMouseLeave={pararDesenho}
-                    onTouchStart={iniciarDesenho}
-                    onTouchMove={desenhar}
-                    onTouchEnd={pararDesenho}
-                  />
-                </div>
-                <div className="flex gap-2 mt-2">
+                <div className="flex gap-2">
                   <Button
-                    onClick={limparAssinatura}
-                    variant="outline"
-                    size="sm"
                     type="button"
+                    variant={tipoAssinatura === 'digital' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setTipoAssinatura('digital')}
+                    className="flex-1"
                   >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Limpar
+                    <PenTool className="w-4 h-4 mr-1" />
+                    Digital
                   </Button>
                   <Button
-                    onClick={salvarAssinatura}
-                    variant="outline"
-                    size="sm"
                     type="button"
+                    variant={tipoAssinatura === 'arquivo' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setTipoAssinatura('arquivo')}
+                    className="flex-1"
                   >
-                    <Save className="w-4 h-4 mr-1" />
-                    Salvar
+                    <Upload className="w-4 h-4 mr-1" />
+                    Arquivo
                   </Button>
                 </div>
-                {signature && (
-                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Assinatura salva com sucesso</span>
-                  </div>
-                )}
               </div>
+
+              {/* Assinatura Digital */}
+              {tipoAssinatura === 'digital' && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Assinatura Digital
+                  </label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-white">
+                    <canvas
+                      ref={canvasRef}
+                      width={400}
+                      height={200}
+                      className="border border-gray-200 rounded cursor-crosshair w-full touch-none"
+                      onMouseDown={iniciarDesenho}
+                      onMouseMove={desenhar}
+                      onMouseUp={pararDesenho}
+                      onMouseLeave={pararDesenho}
+                      onTouchStart={iniciarDesenho}
+                      onTouchMove={desenhar}
+                      onTouchEnd={pararDesenho}
+                    />
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      onClick={limparAssinatura}
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Limpar
+                    </Button>
+                    <Button
+                      onClick={salvarAssinatura}
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                    >
+                      <Save className="w-4 h-4 mr-1" />
+                      Salvar
+                    </Button>
+                  </div>
+                  {signature && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Assinatura salva com sucesso</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Upload de Arquivo */}
+              {tipoAssinatura === 'arquivo' && (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Upload do Documento Assinado
+                  </label>
+                  <div className="space-y-3">
+                    <Input
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => setArquivoAssinado(e.target.files?.[0] || null)}
+                      className="w-full"
+                    />
+                    
+                    {arquivoAssinado && (
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 text-green-800">
+                          <FileSignature className="w-4 h-4" />
+                          <span className="font-medium">{arquivoAssinado.name}</span>
+                          <span className="text-sm">({(arquivoAssinado.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-500">
+                      Faça o upload do documento PDF assinado fisicamente. Máximo 10MB.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <Button
                   onClick={confirmarAssinatura}
-                  disabled={!signature || isAssinando}
+                  disabled={
+                    isAssinando || 
+                    (tipoAssinatura === 'digital' && !signature) ||
+                    (tipoAssinatura === 'arquivo' && !arquivoAssinado)
+                  }
                   className="flex-1 bg-green-600 hover:bg-green-700"
                 >
                   {isAssinando ? (
@@ -604,6 +715,8 @@ export default function PWAAssinaturaPage() {
                   onClick={() => {
                     setDocumentoSelecionado(null)
                     setSignature(null)
+                    setArquivoAssinado(null)
+                    setTipoAssinatura('digital')
                   }}
                   variant="outline"
                   disabled={isAssinando}

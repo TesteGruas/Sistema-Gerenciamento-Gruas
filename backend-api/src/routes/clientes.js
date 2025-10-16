@@ -39,6 +39,24 @@ const clienteSchema = Joi.object({
   usuario_senha: Joi.string().min(6).when('criar_usuario', { is: true, then: Joi.required(), otherwise: Joi.optional() })
 })
 
+// Schema para atualização (campos opcionais e sem validação de senha)
+const clienteUpdateSchema = Joi.object({
+  nome: Joi.string().min(2).optional(),
+  cnpj: Joi.string().allow('').optional(),
+  email: Joi.string().email().allow('').optional(),
+  telefone: Joi.string().allow('').optional(),
+  endereco: Joi.string().allow('').optional(),
+  cidade: Joi.string().allow('').optional(),
+  estado: Joi.string().length(2).allow('').optional(),
+  cep: Joi.string().pattern(/^[\d]{2}\.?[\d]{3}-?[\d]{3}$/).allow('').optional(),
+  contato: Joi.string().allow('').optional(),
+  contato_email: Joi.string().email().allow('').optional(),
+  contato_cpf: Joi.string().allow('').optional(),
+  contato_telefone: Joi.string().allow('').optional(),
+  status: Joi.string().valid('ativo', 'inativo', 'bloqueado', 'pendente').optional()
+  // Não incluir criar_usuario e usuario_senha no update
+})
+
 /**
  * @swagger
  * /api/clientes:
@@ -468,7 +486,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_clientes'), asyn
   try {
     const { id } = req.params
 
-    const { error, value } = clienteSchema.validate(req.body)
+    const { error, value } = clienteUpdateSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -476,8 +494,8 @@ router.put('/:id', authenticateToken, requirePermission('editar_clientes'), asyn
       })
     }
 
-    // Filtrar campos que não devem ser salvos na tabela clientes
-    const { criar_usuario, usuario_senha, ...clienteData } = value
+    // Usar todos os dados validados (não há campos de usuário no schema de update)
+    const clienteData = value
 
     const updateData = {
       ...clienteData,

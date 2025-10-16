@@ -123,6 +123,8 @@ export function converterGruaFrontendParaBackend(grua: Grua): GruaBackend {
     id: grua.id,
     name: grua.name,
     modelo: grua.modelo,
+    fabricante: grua.fabricante,
+    tipo: grua.tipo,
     capacidade: grua.capacidade,
     status: grua.status,
     localizacao: grua.localizacao,
