@@ -91,6 +91,9 @@ import checklistDevolucaoRoutes from './routes/checklist-devolucao.js'
 import notificacoesRoutes from './routes/notificacoes.js'
 import emailConfigRoutes from './routes/email-config.js'
 
+// Importar jobs
+import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
+
 const app = express()
 const PORT = process.env.PORT || 3001
 
@@ -240,8 +243,8 @@ app.use('/api/categorias', categoriasRoutes)
 app.use('/api/clientes', clientesRoutes)
 app.use('/api/obras', obrasRoutes)
 app.use('/api/contratos', contratosRoutes)
-app.use('/funcionarios', funcionariosRoutes)
-app.use('/funcionarios/documentos', funcionariosDocumentosRoutes)
+app.use('/api/funcionarios', funcionariosRoutes)
+app.use('/api/funcionarios/documentos', funcionariosDocumentosRoutes)
 app.use('/api/equipamentos', equipamentosRoutes)
 app.use('/api/relacionamentos', relacionamentosRoutes)
 app.use('/api/gestao-gruas', gestaoGruasRoutes)
@@ -251,9 +254,9 @@ app.use('/api/funcionalidades-avancadas', funcionalidadesAvancadasRoutes)
 app.use('/api/arquivos', arquivosRoutes)
 app.use('/api/arquivos-test', arquivosTestRoutes)
 app.use('/api/custos-mensais', custosMensaisRoutes)
-app.use('/api/obras', obrasDocumentosRoutes)
+app.use('/api/obras/documentos', obrasDocumentosRoutes)
 app.use('/api/assinaturas', assinaturasRoutes)
-app.use('/api/obras', obrasArquivosRoutes)
+app.use('/api/obras/arquivos', obrasArquivosRoutes)
 app.use('/api/vendas', vendasRoutes)
 app.use('/api/compras', comprasRoutes)
 app.use('/api/transferencias', transferenciasRoutes)
@@ -284,12 +287,12 @@ app.use('/api/ferias', feriasRoutes)
 app.use('/api/remuneracao', remuneracaoRoutes)
 app.use('/api/vales', valesRoutes)
 app.use('/api/horas-mensais', horasMensaisRoutes)
-app.use('/funcionarios-obras', funcionariosObrasRoutes)
+app.use('/api/funcionarios-obras', funcionariosObrasRoutes)
 app.use('/api/historico-rh', historicoRhRoutes)
 app.use('/api/relatorios-rh', relatoriosRhRoutes)
 app.use('/api/fornecedores', fornecedoresRoutes)
 app.use('/api/produtos', produtosRoutes)
-app.use('/api/impostos', impostosFinanceirosRoutes)
+app.use('/api/impostos-financeiros', impostosFinanceirosRoutes)
 app.use('/api/gruas-mensais', gruasMensaisRoutes)
 app.use('/api/checklist-devolucao', checklistDevolucaoRoutes)
 app.use('/api/notificacoes', notificacoesRoutes)
@@ -351,6 +354,9 @@ app.use('*', (req, res) => {
     method: req.method
   })
 })
+
+// Iniciar jobs
+iniciarJobVerificacaoAprovacoes()
 
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {

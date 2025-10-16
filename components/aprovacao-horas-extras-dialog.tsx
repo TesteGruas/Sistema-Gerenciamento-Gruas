@@ -32,14 +32,12 @@ interface AprovacaoHorasExtrasDialogProps {
   isOpen: boolean
   onClose: () => void
   registro: any
-  onAprovar: (gestorId: number, observacoes: string) => Promise<void>
 }
 
 export function AprovacaoHorasExtrasDialog({
   isOpen,
   onClose,
-  registro,
-  onAprovar
+  registro
 }: AprovacaoHorasExtrasDialogProps) {
   const [gestores, setGestores] = useState<Gestor[]>([])
   const [gestorSelecionado, setGestorSelecionado] = useState<number | null>(null)
@@ -56,25 +54,25 @@ export function AprovacaoHorasExtrasDialog({
 
   const carregarGestores = async (obraId: number) => {
     try {
-      // Simular busca de gestores da obra
-      // Em produção, isso viria de uma API real
-      const gestoresMock = [
-        {
-          id: 1,
-          nome: "João Silva",
-          cargo: "Gestor de Obra",
-          obra_id: obraId,
-          obra_nome: "Obra ABC"
-        },
-        {
-          id: 2,
-          nome: "Maria Santos",
-          cargo: "Supervisora",
-          obra_id: obraId,
-          obra_nome: "Obra ABC"
+      setLoading(true)
+      const response = await fetch(`/api/ponto-eletronico/obras/${obraId}/gestores`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
         }
-      ]
-      setGestores(gestoresMock)
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao carregar gestores')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setGestores(result.data)
+      } else {
+        throw new Error(result.message || 'Erro ao carregar gestores')
+      }
     } catch (error) {
       console.error("Erro ao carregar gestores:", error)
       toast({
@@ -82,6 +80,8 @@ export function AprovacaoHorasExtrasDialog({
         description: "Erro ao carregar gestores da obra",
         variant: "destructive"
       })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -97,17 +97,40 @@ export function AprovacaoHorasExtrasDialog({
 
     setLoading(true)
     try {
-      await onAprovar(gestorSelecionado, observacoes)
-      toast({
-        title: "Sucesso",
-        description: "Horas extras enviadas para aprovação do gestor",
-        variant: "default"
+      const response = await fetch(`/api/ponto-eletronico/registros/${registro.id}/enviar-aprovacao`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          gestor_id: gestorSelecionado,
+          observacoes: observacoes
+        })
       })
-      onClose()
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Erro ao enviar para aprovação')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        toast({
+          title: "Sucesso",
+          description: "Horas extras enviadas para aprovação do gestor",
+          variant: "default"
+        })
+        onClose()
+      } else {
+        throw new Error(result.message || 'Erro ao enviar para aprovação')
+      }
     } catch (error) {
+      console.error("Erro ao enviar para aprovação:", error)
       toast({
         title: "Erro",
-        description: "Erro ao enviar para aprovação",
+        description: error.message || "Erro ao enviar para aprovação",
         variant: "destructive"
       })
     } finally {

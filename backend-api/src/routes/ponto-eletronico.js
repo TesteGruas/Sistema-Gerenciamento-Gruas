@@ -865,7 +865,8 @@ router.put('/registros/:id', async (req, res) => {
       saida,
       observacoes,
       localizacao,
-      justificativa_alteracao
+      justificativa_alteracao,
+      status
     } = req.body;
 
     // Buscar registro atual
@@ -934,7 +935,11 @@ router.put('/registros/:id', async (req, res) => {
 
     const horasTrabalhadas = calcularHorasTrabalhadas(novaEntrada, novaSaida, novaSaidaAlmoco, novaVoltaAlmoco);
     const horasExtras = calcularHorasExtras(horasTrabalhadas);
-    const status = determinarStatus(novaEntrada, novaSaida, horasExtras);
+    
+    // Usar status fornecido se for "Aprovado" ou "Rejeitado", senão calcular automaticamente
+    const novoStatus = (status === 'Aprovado' || status === 'Rejeitado') 
+      ? status 
+      : determinarStatus(novaEntrada, novaSaida, horasExtras);
 
     // Dados atualizados
     const dadosAtualizados = {
@@ -944,7 +949,7 @@ router.put('/registros/:id', async (req, res) => {
       saida: novaSaida,
       horas_trabalhadas: horasTrabalhadas,
       horas_extras: horasExtras,
-      status,
+      status: novoStatus,
       observacoes: observacoes || registroAtual.observacoes,
       localizacao: localizacao || registroAtual.localizacao,
       updated_at: new Date().toISOString()
@@ -2229,6 +2234,635 @@ router.get('/historico/:registro_id', async (req, res) => {
 
   } catch (error) {
     console.error('Erro na rota de histórico:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/obras/{obra_id}/gestores:
+ *   get:
+ *     summary: Lista gestores disponíveis para uma obra específica
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: obra_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da obra
+ *     responses:
+ *       200:
+ *         description: Lista de gestores da obra
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         description: ID do funcionário
+ *                       nome:
+ *                         type: string
+ *                         description: Nome do funcionário
+ *                       cargo:
+ *                         type: string
+ *                         description: Cargo do funcionário
+ *                       email:
+ *                         type: string
+ *                         description: Email do funcionário
+ *                       telefone:
+ *                         type: string
+ *                         description: Telefone do funcionário
+ *                       status:
+ *                         type: string
+ *                         description: Status do funcionário
+ *       404:
+ *         description: Obra não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/obras/:obra_id/gestores', async (req, res) => {
+  try {
+    const { obra_id } = req.params;
+
+    // Verificar se a obra existe
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome')
+      .eq('id', obra_id)
+      .single();
+
+    if (obraError || !obra) {
+      return res.status(404).json({
+        success: false,
+        message: 'Obra não encontrada'
+      });
+    }
+
+    // Buscar funcionários que são gestores na obra
+    const { data, error } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, cargo, email, telefone, status')
+      .eq('obra_atual_id', obra_id)
+      .eq('status', 'Ativo')
+      .in('cargo', ['Supervisor', 'Técnico Manutenção', 'Gerente', 'Coordenador']);
+
+    if (error) {
+      console.error('Erro ao buscar gestores:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: data || []
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de gestores por obra:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/registros/{id}/enviar-aprovacao:
+ *   post:
+ *     summary: Envia um registro para aprovação de horas extras
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do registro de ponto
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - gestor_id
+ *             properties:
+ *               gestor_id:
+ *                 type: integer
+ *                 description: ID do gestor que irá aprovar
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações do funcionário
+ *     responses:
+ *       200:
+ *         description: Registro enviado para aprovação com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Dados do registro atualizado
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Registro não tem horas extras ou gestor inválido
+ *       404:
+ *         description: Registro ou gestor não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/registros/:id/enviar-aprovacao', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { gestor_id, observacoes } = req.body;
+
+    if (!gestor_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do gestor é obrigatório'
+      });
+    }
+
+    // Buscar registro
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, obra_atual_id)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (errorBusca) {
+      if (errorBusca.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          message: 'Registro não encontrado'
+        });
+      }
+      console.error('Erro ao buscar registro:', errorBusca);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Verificar se tem horas extras
+    if (!registro.horas_extras || registro.horas_extras <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este registro não possui horas extras para aprovação'
+      });
+    }
+
+    // Verificar se o gestor existe e pertence à mesma obra
+    const { data: gestor, error: gestorError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, cargo, obra_atual_id')
+      .eq('id', gestor_id)
+      .eq('status', 'Ativo')
+      .single();
+
+    if (gestorError || !gestor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gestor não encontrado ou inativo'
+      });
+    }
+
+    // Verificar se o gestor pertence à mesma obra do funcionário
+    if (gestor.obra_atual_id !== registro.funcionario.obra_atual_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'O gestor deve pertencer à mesma obra do funcionário'
+      });
+    }
+
+    // Atualizar registro para pendente de aprovação
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update({
+        status: 'Pendente Aprovação',
+        observacoes: observacoes || registro.observacoes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno)
+      `)
+      .single();
+
+    if (errorUpdate) {
+      console.error('Erro ao atualizar registro:', errorUpdate);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao enviar registro para aprovação'
+      });
+    }
+
+    // Criar notificação para o gestor
+    const { error: notifError } = await supabaseAdmin
+      .from('notificacoes')
+      .insert({
+        usuario_id: gestor_id,
+        tipo: 'warning',
+        titulo: 'Aprovação de Horas Extras',
+        mensagem: `${registro.funcionario.nome} tem ${registro.horas_extras}h extras para aprovar`,
+        link: `/pwa/aprovacoes/${id}`,
+        lida: false,
+        created_at: new Date().toISOString()
+      });
+
+    if (notifError) {
+      console.error('Erro ao criar notificação:', notifError);
+      // Não falhar a operação por causa da notificação
+    }
+
+    res.json({
+      success: true,
+      data: registroAtualizado,
+      message: 'Registro enviado para aprovação com sucesso'
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de envio para aprovação:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/registros/{id}/aprovar-assinatura:
+ *   post:
+ *     summary: Aprova horas extras com assinatura digital
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do registro de ponto
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - gestor_id
+ *               - assinatura_digital
+ *             properties:
+ *               gestor_id:
+ *                 type: integer
+ *                 description: ID do gestor que está aprovando
+ *               assinatura_digital:
+ *                 type: string
+ *                 description: Assinatura digital em base64
+ *               observacoes_aprovacao:
+ *                 type: string
+ *                 description: Observações da aprovação
+ *     responses:
+ *       200:
+ *         description: Horas extras aprovadas com assinatura digital
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Dados do registro aprovado
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Assinatura digital é obrigatória ou registro não está pendente
+ *       404:
+ *         description: Registro ou gestor não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/registros/:id/aprovar-assinatura', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { gestor_id, assinatura_digital, observacoes_aprovacao } = req.body;
+
+    if (!gestor_id || !assinatura_digital) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do gestor e assinatura digital são obrigatórios'
+      });
+    }
+
+    // Buscar registro
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, obra_atual_id)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (errorBusca) {
+      if (errorBusca.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          message: 'Registro não encontrado'
+        });
+      }
+      console.error('Erro ao buscar registro:', errorBusca);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    if (registro.status !== 'Pendente Aprovação') {
+      return res.status(400).json({
+        success: false,
+        message: 'Este registro não está pendente de aprovação'
+      });
+    }
+
+    // Verificar se o gestor existe
+    const { data: gestor, error: gestorError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, cargo')
+      .eq('id', gestor_id)
+      .eq('status', 'Ativo')
+      .single();
+
+    if (gestorError || !gestor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gestor não encontrado ou inativo'
+      });
+    }
+
+    // Salvar assinatura digital no storage
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `assinatura_${id}_${gestor_id}_${timestamp}.png`;
+    
+    // Converter base64 para buffer
+    const base64Data = assinatura_digital.replace(/^data:image\/png;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Upload para Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('assinaturas-digitais')
+      .upload(fileName, buffer, {
+        contentType: 'image/png',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Erro ao fazer upload da assinatura:', uploadError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar assinatura digital'
+      });
+    }
+
+    // Atualizar registro para aprovado
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update({
+        status: 'Aprovado',
+        aprovado_por: gestor_id,
+        data_aprovacao: new Date().toISOString(),
+        observacoes: observacoes_aprovacao || registro.observacoes,
+        assinatura_digital_path: uploadData.path,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno),
+        aprovador:usuarios!registros_ponto_aprovado_por_fkey(nome)
+      `)
+      .single();
+
+    if (errorUpdate) {
+      console.error('Erro ao aprovar registro:', errorUpdate);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao aprovar registro'
+      });
+    }
+
+    // Criar notificação para o funcionário
+    const { error: notifError } = await supabaseAdmin
+      .from('notificacoes')
+      .insert({
+        usuario_id: registro.funcionario_id,
+        tipo: 'success',
+        titulo: 'Horas Extras Aprovadas',
+        mensagem: `Suas horas extras de ${registro.data} foram aprovadas por ${gestor.nome}`,
+        link: `/dashboard/ponto`,
+        lida: false,
+        created_at: new Date().toISOString()
+      });
+
+    if (notifError) {
+      console.error('Erro ao criar notificação:', notifError);
+      // Não falhar a operação por causa da notificação
+    }
+
+    res.json({
+      success: true,
+      data: registroAtualizado,
+      message: 'Horas extras aprovadas com assinatura digital'
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de aprovação com assinatura:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/registros/pendentes-aprovacao:
+ *   get:
+ *     summary: Lista registros pendentes de aprovação para um gestor
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: gestor_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do gestor
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Limite de registros por página
+ *     responses:
+ *       200:
+ *         description: Lista de registros pendentes de aprovação
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         description: ID do registro
+ *                       funcionario_id:
+ *                         type: integer
+ *                         description: ID do funcionário
+ *                       data:
+ *                         type: string
+ *                         format: date
+ *                         description: Data do registro
+ *                       horas_extras:
+ *                         type: number
+ *                         description: Horas extras
+ *                       observacoes:
+ *                         type: string
+ *                         description: Observações
+ *                       funcionario:
+ *                         type: object
+ *                         properties:
+ *                           nome:
+ *                             type: string
+ *                           cargo:
+ *                             type: string
+ *                           turno:
+ *                             type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       400:
+ *         description: ID do gestor é obrigatório
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/registros/pendentes-aprovacao', async (req, res) => {
+  try {
+    const { gestor_id, page = 1, limit = 20 } = req.query;
+
+    if (!gestor_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do gestor é obrigatório'
+      });
+    }
+
+    // Buscar a obra do gestor
+    const { data: gestor, error: gestorError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('obra_atual_id')
+      .eq('id', gestor_id)
+      .eq('status', 'Ativo')
+      .single();
+
+    if (gestorError || !gestor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gestor não encontrado'
+      });
+    }
+
+    // Buscar registros pendentes de aprovação da mesma obra
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno, obra_atual_id)
+      `)
+      .eq('status', 'Pendente Aprovação')
+      .eq('funcionario.obra_atual_id', gestor.obra_atual_id)
+      .order('data', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    // Paginação
+    const offset = (page - 1) * limit;
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar registros pendentes:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: data || [],
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de registros pendentes:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor'

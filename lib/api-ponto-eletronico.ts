@@ -125,6 +125,7 @@ export interface RegistroPontoPayload {
   localizacao?: string;
   justificativa_alteracao?: string;
   observacoes?: string;
+  status?: string;
 }
 
 export interface Justificativa {

@@ -126,6 +126,13 @@ export default function PontoPage() {
   const [isAprovacaoOpen, setIsAprovacaoOpen] = useState(false)
   const [registroParaAprovacao, setRegistroParaAprovacao] = useState<RegistroPonto | null>(null)
   
+  // Estados para modal de aprovação/rejeição
+  const [isModalAprovacaoOpen, setIsModalAprovacaoOpen] = useState(false)
+  const [registroParaModal, setRegistroParaModal] = useState<RegistroPonto | null>(null)
+  const [tipoAcao, setTipoAcao] = useState<'aprovar' | 'rejeitar'>('aprovar')
+  const [observacoesModal, setObservacoesModal] = useState('')
+  const [justificativaModal, setJustificativaModal] = useState('')
+  
   // Estados para edição de registros
   const [isEditarOpen, setIsEditarOpen] = useState(false)
   const [registroEditando, setRegistroEditando] = useState<RegistroPonto | null>(null)
@@ -298,7 +305,7 @@ export default function PontoPage() {
           justificativa_alteracao: `Registro automático de ${tipo}`
         }
 
-        const registroAtualizado = await apiRegistrosPonto.atualizar(registroAtual.id, dadosAtualizacao)
+        const registroAtualizado = await apiRegistrosPonto.atualizar(registroAtual.id || '', dadosAtualizacao)
         
         setData(prev => ({
           ...prev,
@@ -348,7 +355,7 @@ export default function PontoPage() {
       // Filtro por status
       const matchesStatus = 
         filtroStatus === "todos" || 
-        registro.status === filtroStatus
+        (registro.status || '') === filtroStatus
       
       return matchesSearch && matchesFuncionario && matchesData && matchesStatus
     })
@@ -484,9 +491,9 @@ export default function PontoPage() {
       })
 
       // Atualizar status do registro
-      await apiRegistrosPonto.atualizar(registroParaAprovacao.id, {
-        status: 'Pendente Aprovação',
-        observacoes_aprovacao: observacoes
+      await apiRegistrosPonto.atualizar(registroParaAprovacao.id || '', {
+        observacoes: observacoes,
+        justificativa_alteracao: `Enviado para aprovação do gestor: ${observacoes}`
       })
 
       toast({
@@ -507,6 +514,91 @@ export default function PontoPage() {
     }
   }
 
+  // Função para abrir modal de aprovação
+  const abrirModalAprovacao = (registro: RegistroPonto, tipo: 'aprovar' | 'rejeitar') => {
+    setRegistroParaModal(registro)
+    setTipoAcao(tipo)
+    setObservacoesModal('')
+    setJustificativaModal('')
+    setIsModalAprovacaoOpen(true)
+  }
+
+  // Função para aprovar horas extras diretamente (para administradores)
+  const handleAprovarDireto = async () => {
+    if (!registroParaModal) return
+    
+    try {
+      if (!justificativaModal.trim()) {
+        toast({
+          title: "Erro",
+          description: "Justificativa da aprovação é obrigatória",
+          variant: "destructive"
+        })
+        return
+      }
+      
+      await apiRegistrosPonto.atualizar(registroParaModal.id || '', {
+        observacoes: observacoesModal,
+        justificativa_alteracao: justificativaModal,
+        status: 'Aprovado'
+      })
+
+      toast({
+        title: "Sucesso",
+        description: "Horas extras aprovadas com sucesso!",
+        variant: "default"
+      })
+
+      setIsModalAprovacaoOpen(false)
+      carregarDados()
+    } catch (error) {
+      console.error('Erro ao aprovar horas extras:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao aprovar horas extras",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Função para rejeitar horas extras
+  const handleRejeitarDireto = async () => {
+    if (!registroParaModal) return
+    
+    try {
+      if (!justificativaModal.trim()) {
+        toast({
+          title: "Erro",
+          description: "Motivo da rejeição é obrigatório",
+          variant: "destructive"
+        })
+        return
+      }
+
+      await apiRegistrosPonto.atualizar(registroParaModal.id || '', {
+        observacoes: observacoesModal,
+        justificativa_alteracao: `Rejeição: ${justificativaModal}`,
+        status: 'Rejeitado'
+      })
+
+      toast({
+        title: "Sucesso",
+        description: "Horas extras rejeitadas",
+        variant: "default"
+      })
+
+      setIsModalAprovacaoOpen(false)
+      carregarDados()
+    } catch (error) {
+      console.error('Erro ao rejeitar horas extras:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao rejeitar horas extras",
+        variant: "destructive"
+      })
+    }
+  }
+
   // Função para salvar edição
   const salvarEdicao = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -514,7 +606,7 @@ export default function PontoPage() {
     if (!registroEditando) return
 
     try {
-      const registroAtualizado = await apiRegistrosPonto.atualizar(registroEditando.id, {
+      const registroAtualizado = await apiRegistrosPonto.atualizar(registroEditando.id || '', {
         entrada: dadosEdicao.entrada,
         saida_almoco: dadosEdicao.saida_almoco,
         volta_almoco: dadosEdicao.volta_almoco,
@@ -1023,7 +1115,7 @@ export default function PontoPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    {getStatusBadge(registro.status)}
+                    {getStatusBadge(registro.status || '')}
                   </div>
                 </div>
               ))}
@@ -1206,7 +1298,7 @@ export default function PontoPage() {
                     {filteredRegistros.map((registro) => (
                       <TableRow key={registro.id}>
                         <TableCell className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</TableCell>
-                        <TableCell>{utilsPonto.formatarData(registro.data)}</TableCell>
+                        <TableCell>{utilsPonto.formatarData(registro.data || '')}</TableCell>
                         <TableCell>{registro.entrada || '-'}</TableCell>
                         <TableCell>{registro.saida_almoco || '-'}</TableCell>
                         <TableCell>{registro.volta_almoco || '-'}</TableCell>
@@ -1217,15 +1309,15 @@ export default function PontoPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {registro.horas_extras > 0 ? (
+                          {(registro.horas_extras || 0) > 0 ? (
                             <Badge className="bg-orange-100 text-orange-800">
-                              +{registro.horas_extras}h
+                              +{registro.horas_extras || 0}h
                             </Badge>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell>{getStatusBadge(registro.status)}</TableCell>
+                        <TableCell>{getStatusBadge(registro.status || '')}</TableCell>
                         <TableCell>
                           {registro.aprovador?.nome ? (
                             <span className="text-sm font-medium">{registro.aprovador.nome}</span>
@@ -1243,7 +1335,7 @@ export default function PontoPage() {
                             >
                               Editar
                             </Button>
-                            {registro.horas_extras > 0 && registro.status !== 'Pendente Aprovação' && (
+                            {(registro.horas_extras || 0) > 0 && (registro.status || '') !== 'Pendente Aprovação' && (
                               <Button
                                 size="sm"
                                 onClick={() => abrirAprovacao(registro)}
@@ -1316,11 +1408,11 @@ export default function PontoPage() {
                     </TableHeader>
                     <TableBody>
                       {data.registrosPonto
-                        .filter((r) => r.horas_extras > 0)
+                        .filter((r) => (r.horas_extras || 0) > 0)
                         .map((registro) => (
                           <TableRow key={registro.id}>
                             <TableCell className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</TableCell>
-                            <TableCell>{utilsPonto.formatarData(registro.data)}</TableCell>
+                            <TableCell>{utilsPonto.formatarData(registro.data || '')}</TableCell>
                             <TableCell>
                               <Badge variant="outline">
                                 {registro.horas_trabalhadas}h
@@ -1328,11 +1420,11 @@ export default function PontoPage() {
                             </TableCell>
                             <TableCell>
                               <Badge className="bg-orange-100 text-orange-800">
-                                +{registro.horas_extras}h
+                                +{registro.horas_extras || 0}h
                               </Badge>
                             </TableCell>
                             <TableCell className="max-w-xs truncate">{registro.observacoes || '-'}</TableCell>
-                            <TableCell>{getStatusBadge(registro.status)}</TableCell>
+                            <TableCell>{getStatusBadge(registro.status || '')}</TableCell>
                             <TableCell>
                               {registro.aprovador?.nome ? (
                                 <span className="text-sm font-medium">{registro.aprovador.nome}</span>
@@ -1341,20 +1433,28 @@ export default function PontoPage() {
                               )}
                             </TableCell>
                             <TableCell>
-                              {registro.status === "Pendente Aprovação" && (
+                              {(registro.status || '') === "Pendente Aprovação" && (
                                 <div className="flex gap-2">
-                                  <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-green-600 hover:bg-green-700"
+                                    onClick={() => abrirModalAprovacao(registro, 'aprovar')}
+                                  >
                                     Aprovar
                                   </Button>
-                                  <Button size="sm" variant="destructive">
+                                  <Button 
+                                    size="sm" 
+                                    variant="destructive"
+                                    onClick={() => abrirModalAprovacao(registro, 'rejeitar')}
+                                  >
                                     Rejeitar
                                   </Button>
                                 </div>
                               )}
-                              {registro.status === "Aprovado" && (
+                              {(registro.status || '') === "Aprovado" && (
                                 <Badge className="bg-green-100 text-green-800">Aprovado</Badge>
                               )}
-                              {registro.status === "Rejeitado" && (
+                              {(registro.status || '') === "Rejeitado" && (
                                 <Badge className="bg-red-100 text-red-800">Rejeitado</Badge>
                               )}
                             </TableCell>
@@ -1375,7 +1475,7 @@ export default function PontoPage() {
                         <div>
                           <p className="text-sm text-gray-600">Pendentes</p>
                           <p className="text-2xl font-bold">
-                            {data.registrosPonto.filter((r) => r.status === "Pendente Aprovação").length}
+                            {data.registrosPonto.filter((r) => (r.status || '') === "Pendente Aprovação").length}
                           </p>
                         </div>
                       </div>
@@ -1390,7 +1490,7 @@ export default function PontoPage() {
                         <div>
                           <p className="text-sm text-gray-600">Aprovadas</p>
                           <p className="text-2xl font-bold">
-                            {data.registrosPonto.filter((r) => r.status === "Aprovado").length}
+                            {data.registrosPonto.filter((r) => (r.status || '') === "Aprovado").length}
                           </p>
                         </div>
                       </div>
@@ -1450,7 +1550,7 @@ export default function PontoPage() {
                                   size="sm" 
                                   variant="outline" 
                                   className="h-8"
-                                  onClick={() => handleAprovarJustificativa(just.id)}
+                                  onClick={() => handleAprovarJustificativa(String(just.id || ''))}
                                 >
                                   <Check className="w-4 h-4" />
                                 </Button>
@@ -1458,7 +1558,7 @@ export default function PontoPage() {
                                   size="sm" 
                                   variant="outline" 
                                   className="h-8"
-                                  onClick={() => handleRejeitarJustificativa(just.id)}
+                                  onClick={() => handleRejeitarJustificativa(String(just.id || ''))}
                                 >
                                   <X className="w-4 h-4" />
                                 </Button>
@@ -1498,9 +1598,9 @@ export default function PontoPage() {
                 {data.funcionarios.map((func) => {
                   const registrosFuncionario = data.registrosPonto.filter(r => r.funcionario_id === func.id)
                   const totalHoras = registrosFuncionario.reduce((total, r) => total + (r.horas_trabalhadas || 0), 0)
-                  const diasPresentes = registrosFuncionario.filter(r => r.status !== 'Falta').length
-                  const atrasos = registrosFuncionario.filter(r => r.status === 'Atraso').length
-                  const faltas = registrosFuncionario.filter(r => r.status === 'Falta').length
+                  const diasPresentes = registrosFuncionario.filter(r => (r.status || '') !== 'Falta').length
+                  const atrasos = registrosFuncionario.filter(r => (r.status || '') === 'Atraso').length
+                  const faltas = registrosFuncionario.filter(r => (r.status || '') === 'Falta').length
                   
                   return (
                     <Card key={func.id}>
@@ -1564,7 +1664,7 @@ export default function PontoPage() {
                     <div>
                       <p className="text-sm font-medium text-gray-600">Registros Hoje</p>
                       <p className="text-2xl font-bold text-green-600">
-                        {data.registrosPonto.filter(r => r.data === new Date().toISOString().split('T')[0]).length}
+                        {data.registrosPonto.filter(r => (r.data || '') === new Date().toISOString().split('T')[0]).length}
                       </p>
                     </div>
                     <Clock className="w-8 h-8 text-green-600" />
@@ -1578,7 +1678,7 @@ export default function PontoPage() {
                     <div>
                       <p className="text-sm font-medium text-gray-600">Justificativas Pendentes</p>
                       <p className="text-2xl font-bold text-orange-600">
-                        {data.justificativas.filter(j => j.status === 'pendente').length}
+                        {data.justificativas.filter(j => (j.status || '') === 'pendente').length}
                       </p>
                     </div>
                     <AlertCircle className="w-8 h-8 text-orange-600" />
@@ -1686,7 +1786,7 @@ export default function PontoPage() {
                       />
                       <Bar 
                         dataKey="horas" 
-                        fill={(entry: any) => entry.status === 'completo' ? '#10b981' : '#ef4444'}
+                        fill="#10b981"
                       />
                     </RechartsBarChart>
                   </ResponsiveContainer>
@@ -1776,8 +1876,106 @@ export default function PontoPage() {
         isOpen={isAprovacaoOpen}
         onClose={fecharAprovacao}
         registro={registroParaAprovacao}
-        onAprovar={handleAprovarHorasExtras}
       />
+
+      {/* Modal de Aprovação/Rejeição */}
+      <Dialog open={isModalAprovacaoOpen} onOpenChange={setIsModalAprovacaoOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {tipoAcao === 'aprovar' ? (
+                <>
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  Aprovar Horas Extras
+                </>
+              ) : (
+                <>
+                  <X className="w-5 h-5 text-red-600" />
+                  Rejeitar Horas Extras
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {tipoAcao === 'aprovar' 
+                ? 'Confirme a aprovação das horas extras do funcionário'
+                : 'Informe o motivo da rejeição das horas extras'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Informações do registro */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-semibold text-gray-800 mb-2">Registro</h4>
+              <p className="text-sm text-gray-600">
+                <strong>Funcionário:</strong> {registroParaModal?.funcionario?.nome}
+              </p>
+              <p className="text-sm text-gray-600">
+                <strong>Data:</strong> {registroParaModal?.data && new Date(registroParaModal.data).toLocaleDateString("pt-BR")}
+              </p>
+              <p className="text-sm text-gray-600">
+                <strong>Horas Extras:</strong> +{registroParaModal?.horas_extras || 0}h
+              </p>
+            </div>
+
+            {/* Observações */}
+            <div className="space-y-2">
+              <Label htmlFor="observacoes">
+                Observações {tipoAcao === 'aprovar' ? '(opcional)' : '(opcional)'}
+              </Label>
+              <Textarea
+                id="observacoes"
+                value={observacoesModal}
+                onChange={(e) => setObservacoesModal(e.target.value)}
+                placeholder={tipoAcao === 'aprovar' 
+                  ? "Adicione observações sobre a aprovação..."
+                  : "Adicione observações sobre a rejeição..."
+                }
+                rows={3}
+              />
+            </div>
+
+            {/* Justificativa */}
+            <div className="space-y-2">
+              <Label htmlFor="justificativa">
+                {tipoAcao === 'aprovar' ? 'Justificativa da Aprovação' : 'Motivo da Rejeição'} *
+              </Label>
+              <Textarea
+                id="justificativa"
+                value={justificativaModal}
+                onChange={(e) => setJustificativaModal(e.target.value)}
+                placeholder={tipoAcao === 'aprovar' 
+                  ? "Explique por que está aprovando estas horas extras..."
+                  : "Explique por que está rejeitando estas horas extras..."
+                }
+                rows={3}
+                required
+              />
+            </div>
+
+            {/* Botões */}
+            <div className="flex justify-end gap-3 pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsModalAprovacaoOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="button"
+                className={tipoAcao === 'aprovar' 
+                  ? "bg-green-600 hover:bg-green-700" 
+                  : "bg-red-600 hover:bg-red-700"
+                }
+                onClick={tipoAcao === 'aprovar' ? handleAprovarDireto : handleRejeitarDireto}
+              >
+                {tipoAcao === 'aprovar' ? 'Aprovar' : 'Rejeitar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
