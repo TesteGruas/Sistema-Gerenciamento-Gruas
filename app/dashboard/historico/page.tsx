@@ -564,12 +564,18 @@ export default function HistoricoPage() {
                     // Verificar se está em atraso (múltiplas variações do status)
                     const isAtraso = registro.status === 'Atraso' || 
                                     registro.status === 'atraso' || 
-                                    registro.status?.toLowerCase().includes('atraso')
+                                    registro.status?.toLowerCase().includes('atraso') ||
+                                    registro.status === 'Atrasado' ||
+                                    registro.status === 'atrasado'
                     
                     // Verificar se tem registros incompletos (sem saída do almoço, volta do almoço ou saída)
                     const isIncompleto = (!registro.saida_almoco && registro.entrada) || 
                                        (!registro.volta_almoco && registro.saida_almoco) || 
                                        (!registro.saida && registro.volta_almoco)
+                    
+                    // Aplicar cores condicionais
+                    const nomeColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
+                    const dataColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
                     
                     // Debug: log para verificar os valores
                     console.log('Registro:', {
@@ -580,18 +586,31 @@ export default function HistoricoPage() {
                       isIncompleto,
                       saida_almoco: registro.saida_almoco,
                       volta_almoco: registro.volta_almoco,
-                      saida: registro.saida
+                      saida: registro.saida,
+                      nomeColor,
+                      dataColor
                     })
                     
-                    // Aplicar cores condicionais
-                    const nomeColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
-                    const dataColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
+                    // Debug específico para status "Atraso"
+                    if (registro.status === 'Atraso') {
+                      console.log('🔴 REGISTRO COM ATRASO DETECTADO:', {
+                        funcionario: registro.funcionario?.nome,
+                        status: registro.status,
+                        isAtraso,
+                        nomeColor,
+                        dataColor
+                      })
+                    }
+                    
+                    // Forçar aplicação das cores
+                    const nomeClasses = `font-medium ${nomeColor}`
+                    const dataClasses = dataColor
                     
                     return (
                     <TableRow key={registro.id}>
                       <TableCell>
                         <div>
-                          <div className={`font-medium ${nomeColor}`}>
+                          <div className={nomeClasses}>
                             {registro.funcionario?.nome}
                             {isAtraso && <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">ATRASO</span>}
                             {isIncompleto && !isAtraso && <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">INCOMPLETO</span>}
@@ -600,7 +619,7 @@ export default function HistoricoPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className={dataColor}>
+                        <span className={dataClasses}>
                           {format(new Date(registro.data), 'dd/MM/yyyy', { locale: ptBR })}
                         </span>
                       </TableCell>
