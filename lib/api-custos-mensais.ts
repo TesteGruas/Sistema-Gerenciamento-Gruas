@@ -1,419 +1,296 @@
+// API de Custos Mensais integrada com backend real
+
 import api from './api'
 
+// Interfaces
 export interface CustoMensal {
   id: number
-  obra_id: number
-  item: string
-  descricao: string
-  unidade: string
-  quantidade_orcamento: number
-  valor_unitario: number
-  total_orcamento: number
   mes: string // formato YYYY-MM
-  quantidade_realizada: number
-  valor_realizado: number
-  quantidade_acumulada: number
-  valor_acumulado: number
-  quantidade_saldo: number
-  valor_saldo: number
-  tipo: 'contrato' | 'aditivo'
+  ano: number
+  categoria: string
+  subcategoria?: string
+  descricao: string
+  valor: number
+  tipo: 'fixo' | 'variavel' | 'extraordinario'
+  status: 'pendente' | 'aprovado' | 'pago' | 'cancelado'
+  data_vencimento: string
+  data_pagamento?: string
+  forma_pagamento?: string
+  observacoes?: string
   created_at: string
   updated_at: string
-  obras?: {
-    id: number
-    nome: string
-    status: string
-  }
 }
 
 export interface CustoMensalCreate {
-  obra_id: number
-  item: string
-  descricao: string
-  unidade: string
-  quantidade_orcamento: number
-  valor_unitario: number
   mes: string
-  quantidade_realizada?: number
-  quantidade_acumulada?: number
-  valor_acumulado?: number
-  tipo?: 'contrato' | 'aditivo'
+  ano: number
+  categoria: string
+  subcategoria?: string
+  descricao: string
+  valor: number
+  tipo: 'fixo' | 'variavel' | 'extraordinario'
+  status?: 'pendente' | 'aprovado' | 'pago' | 'cancelado'
+  data_vencimento: string
+  data_pagamento?: string
+  forma_pagamento?: string
+  observacoes?: string
 }
 
 export interface CustoMensalUpdate {
-  item?: string
+  categoria?: string
+  subcategoria?: string
   descricao?: string
-  unidade?: string
-  quantidade_orcamento?: number
-  valor_unitario?: number
-  quantidade_realizada?: number
-  quantidade_acumulada?: number
-  valor_acumulado?: number
-  tipo?: 'contrato' | 'aditivo'
+  valor?: number
+  tipo?: 'fixo' | 'variavel' | 'extraordinario'
+  status?: 'pendente' | 'aprovado' | 'pago' | 'cancelado'
+  data_vencimento?: string
+  data_pagamento?: string
+  forma_pagamento?: string
+  observacoes?: string
 }
 
 export interface CustoMensalFilters {
-  obra_id?: number
   mes?: string
-  tipo?: 'contrato' | 'aditivo'
+  ano?: number
+  categoria?: string
+  subcategoria?: string
+  tipo?: string
+  status?: string
+  data_vencimento_inicio?: string
+  data_vencimento_fim?: string
+  search?: string
   page?: number
   limit?: number
 }
 
-export interface ReplicarCustosRequest {
-  obra_id: number
-  mes_origem: string
-  mes_destino: string
+export interface CustoMensalStats {
+  total_custos: number
+  valor_total: number
+  por_categoria: Record<string, number>
+  por_tipo: Record<string, number>
+  por_status: Record<string, number>
+  por_mes: Array<{ mes: string; custos: number; valor: number }>
+  proximos_vencimentos: Array<{ descricao: string; valor: number; data_vencimento: string }>
 }
 
-export interface ApiResponse<T> {
-  success: boolean
-  data: T
-  message?: string
-  pagination?: {
-    page: number
-    limit: number
-    total: number
-    pages: number
-  }
-}
+// API functions
+export const apiCustosMensais = {
+  // Listar custos mensais
+  async listar(filters?: CustoMensalFilters) {
+    const params = new URLSearchParams()
+    
+    if (filters?.mes) params.append('mes', filters.mes)
+    if (filters?.ano) params.append('ano', filters.ano.toString())
+    if (filters?.categoria) params.append('categoria', filters.categoria)
+    if (filters?.subcategoria) params.append('subcategoria', filters.subcategoria)
+    if (filters?.tipo) params.append('tipo', filters.tipo)
+    if (filters?.status) params.append('status', filters.status)
+    if (filters?.data_vencimento_inicio) params.append('data_vencimento_inicio', filters.data_vencimento_inicio)
+    if (filters?.data_vencimento_fim) params.append('data_vencimento_fim', filters.data_vencimento_fim)
+    if (filters?.search) params.append('search', filters.search)
+    if (filters?.page) params.append('page', filters.page.toString())
+    if (filters?.limit) params.append('limit', filters.limit.toString())
 
-export interface ApiError {
-  error: string
-  message: string
-}
+    const response = await api.get(`/custos-mensais?${params.toString()}`)
+    return response.data
+  },
 
-class CustosMensaisApi {
-  private baseUrl = 'custos-mensais'
+  // Obter custo mensal por ID
+  async obter(id: number) {
+    const response = await api.get(`/custos-mensais/${id}`)
+    return response.data
+  },
 
-  /**
-   * Listar custos mensais com filtros opcionais
-   */
-  async listar(filters: CustoMensalFilters = {}): Promise<ApiResponse<CustoMensal[]>> {
-    try {
-      const params = new URLSearchParams()
+  // Criar custo mensal
+  async criar(dados: CustoMensalCreate) {
+    const response = await api.post('/custos-mensais', dados)
+    return response.data
+  },
+
+  // Atualizar custo mensal
+  async atualizar(id: number, dados: CustoMensalUpdate) {
+    const response = await api.put(`/custos-mensais/${id}`, dados)
+    return response.data
+  },
+
+  // Excluir custo mensal
+  async excluir(id: number) {
+    const response = await api.delete(`/custos-mensais/${id}`)
+    return response.data
+  },
+
+  // Atualizar status
+  async atualizarStatus(id: number, status: string) {
+    const response = await api.patch(`/custos-mensais/${id}/status`, { status })
+    return response.data
+  },
+
+  // Marcar como pago
+  async marcarComoPago(id: number, data_pagamento: string, forma_pagamento: string) {
+    const response = await api.patch(`/custos-mensais/${id}/pagar`, {
+      data_pagamento,
+      forma_pagamento
+    })
+    return response.data
+  },
+
+  // Obter custos por período
+  async obterPorPeriodo(mes: string, ano: number) {
+    const response = await api.get(`/custos-mensais/periodo/${ano}/${mes}`)
+    return response.data
+  },
+
+  // Obter custos por categoria
+  async obterPorCategoria(categoria: string, filters?: {
+    mes?: string
+    ano?: number
+  }) {
+    const params = new URLSearchParams()
+    if (filters?.mes) params.append('mes', filters.mes)
+    if (filters?.ano) params.append('ano', filters.ano.toString())
+
+    const response = await api.get(`/custos-mensais/categoria/${categoria}?${params.toString()}`)
+    return response.data
+  },
+
+  // Obter estatísticas
+  async obterEstatisticas(filters?: {
+    mes?: string
+    ano?: number
+    categoria?: string
+  }) {
+    const params = new URLSearchParams()
+    if (filters?.mes) params.append('mes', filters.mes)
+    if (filters?.ano) params.append('ano', filters.ano.toString())
+    if (filters?.categoria) params.append('categoria', filters.categoria)
+
+    const response = await api.get(`/custos-mensais/stats?${params.toString()}`)
+    return response.data
+  },
+
+  // Gerar relatório
+  async gerarRelatorio(filters: {
+    mes: string
+    ano: number
+    formato?: 'pdf' | 'excel'
+    agrupar_por?: 'categoria' | 'tipo' | 'status'
+  }) {
+    const response = await api.post('/custos-mensais/relatorio', filters, {
+      responseType: 'blob'
+    })
+    return response.data
+  },
+
+  // Obter próximos vencimentos
+  async obterProximosVencimentos(dias: number = 30) {
+    const response = await api.get(`/custos-mensais/proximos-vencimentos?dias=${dias}`)
+    return response.data
+  },
+
+  // Duplicar custo
+  async duplicar(id: number, novo_mes: string, novo_ano: number) {
+    const response = await api.post(`/custos-mensais/${id}/duplicar`, {
+      novo_mes,
+      novo_ano
+    })
+    return response.data
+  },
+
+  // Listar custos por obra
+  async listarPorObra(obraId: number) {
+    const response = await api.get(`/custos-mensais/obra/${obraId}`)
+    return response.data
+  },
+
+  // Obter meses disponíveis para uma obra
+  async obterMesesDisponiveis(obraId: number) {
+    const response = await api.get(`/custos-mensais/obra/${obraId}`)
+    const custos = response.data.data || response.data
+    const meses = [...new Set(custos.map((custo: any) => custo.mes))]
+    return meses.sort()
+  },
+
+  // Gerar próximos meses disponíveis
+  gerarProximosMeses(mesesExistentes: string[]) {
+    const meses = []
+    
+    if (mesesExistentes.length === 0) {
+      // Se não há meses existentes, começar do mês atual
+      const hoje = new Date()
+      const anoAtual = hoje.getFullYear()
+      const mesAtual = hoje.getMonth() + 1
       
-      if (filters.obra_id) params.append('obra_id', filters.obra_id.toString())
-      if (filters.mes) params.append('mes', filters.mes)
-      if (filters.tipo) params.append('tipo', filters.tipo)
-      if (filters.page) params.append('page', filters.page.toString())
-      if (filters.limit) params.append('limit', filters.limit.toString())
-
-      const queryString = params.toString()
-      const url = queryString ? `${this.baseUrl}?${queryString}` : this.baseUrl
-
-      const response = await api.get(url)
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao listar custos mensais:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Obter custo mensal por ID
-   */
-  async obter(id: number): Promise<ApiResponse<CustoMensal>> {
-    try {
-      const response = await api.get(`${this.baseUrl}/${id}`)
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao obter custo mensal:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Criar novo custo mensal
-   */
-  async criar(dados: CustoMensalCreate): Promise<ApiResponse<CustoMensal>> {
-    try {
-      const response = await api.post(this.baseUrl, dados)
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao criar custo mensal:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Atualizar custo mensal
-   */
-  async atualizar(id: number, dados: CustoMensalUpdate): Promise<ApiResponse<CustoMensal>> {
-    try {
-      const response = await api.put(`${this.baseUrl}/${id}`, dados)
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao atualizar custo mensal:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Excluir custo mensal
-   */
-  async excluir(id: number): Promise<ApiResponse<void>> {
-    try {
-      const response = await api.delete(`${this.baseUrl}/${id}`)
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao excluir custo mensal:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Listar custos mensais por obra
-   */
-  async listarPorObra(obraId: number, mes?: string): Promise<ApiResponse<CustoMensal[]>> {
-    try {
-      const params = new URLSearchParams()
-      if (mes) params.append('mes', mes)
+      for (let i = 0; i < 12; i++) {
+        const data = new Date(anoAtual, mesAtual + i - 1, 1)
+        const mes = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
+        
+        meses.push({
+          value: mes,
+          label: `${data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+        })
+      }
+    } else {
+      // Se há meses existentes, começar do último mês + 1
+      const ultimoMes = mesesExistentes[mesesExistentes.length - 1]
+      const [ano, mes] = ultimoMes.split('-').map(Number)
       
-      const queryString = params.toString()
-      const url = queryString 
-        ? `${this.baseUrl}/obra/${obraId}?${queryString}` 
-        : `${this.baseUrl}/obra/${obraId}`
-
-      const response = await api.get(url)
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao listar custos mensais por obra:', error)
-      throw this.handleError(error)
+      // Começar do mês seguinte ao último
+      for (let i = 1; i <= 12; i++) {
+        const data = new Date(ano, mes + i - 1, 1)
+        const mesFormatado = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
+        
+        meses.push({
+          value: mesFormatado,
+          label: `${data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+        })
+      }
     }
-  }
+    
+    return meses
+  },
 
-  /**
-   * Replicar custos de um mês para outro
-   */
-  async replicar(dados: ReplicarCustosRequest): Promise<ApiResponse<{
-    replicados: number
+  // Replicar custos de um mês para outro
+  async replicar(dados: {
+    obra_id: number
     mes_origem: string
     mes_destino: string
-    obra: string
-  }>> {
-    try {
-      const response = await api.post(`${this.baseUrl}/replicar`, dados)
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao replicar custos:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Atualizar quantidade realizada de um custo
-   */
-  async atualizarQuantidadeRealizada(
-    id: number, 
-    quantidadeRealizada: number
-  ): Promise<ApiResponse<CustoMensal>> {
-    try {
-      const response = await api.put(`${this.baseUrl}/${id}`, {
-        quantidade_realizada: quantidadeRealizada
-      })
-      return response.data
-    } catch (error: any) {
-      console.error('Erro ao atualizar quantidade realizada:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Obter resumo de custos por obra e mês
-   */
-  async obterResumo(obraId: number, mes?: string): Promise<{
-    totalItens: number
-    totalOrcado: number
-    totalRealizado: number
-    totalAcumulado: number
-    totalSaldo: number
-    totalContrato: number
-    totalAditivo: number
-  }> {
-    try {
-      const custos = await this.listarPorObra(obraId, mes)
-      
-      const resumo = custos.data.reduce((acc, custo) => {
-        acc.totalItens += 1
-        acc.totalOrcado += custo.total_orcamento
-        acc.totalRealizado += custo.valor_realizado
-        acc.totalAcumulado += custo.valor_acumulado
-        acc.totalSaldo += custo.valor_saldo
-        
-        if (custo.tipo === 'contrato') {
-          acc.totalContrato += custo.total_orcamento
-        } else {
-          acc.totalAditivo += custo.total_orcamento
-        }
-        
-        return acc
-      }, {
-        totalItens: 0,
-        totalOrcado: 0,
-        totalRealizado: 0,
-        totalAcumulado: 0,
-        totalSaldo: 0,
-        totalContrato: 0,
-        totalAditivo: 0
-      })
-
-      return resumo
-    } catch (error: any) {
-      console.error('Erro ao obter resumo de custos:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Obter meses disponíveis para uma obra
-   */
-  async obterMesesDisponiveis(obraId: number): Promise<string[]> {
-    try {
-      const custos = await this.listarPorObra(obraId)
-      const meses = [...new Set(custos.data.map(custo => custo.mes))]
-      return meses.sort()
-    } catch (error: any) {
-      console.error('Erro ao obter meses disponíveis:', error)
-      throw this.handleError(error)
-    }
-  }
-
-  /**
-   * Gerar próximos meses disponíveis para criação
-   */
-  gerarProximosMeses(mesesExistentes: string[], quantidade: number = 12): string[] {
-    const mesesDisponiveis: string[] = []
-    const hoje = new Date()
-    
-    for (let i = 0; i < quantidade; i++) {
-      const mes = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1)
-      const mesStr = mes.toISOString().slice(0, 7) // YYYY-MM
-      
-      if (!mesesExistentes.includes(mesStr)) {
-        mesesDisponiveis.push(mesStr)
-      }
-    }
-    
-    return mesesDisponiveis
-  }
-
-  /**
-   * Validar dados de criação de custo mensal
-   */
-  validarDados(dados: CustoMensalCreate): string[] {
-    const erros: string[] = []
-
-    if (!dados.obra_id || dados.obra_id <= 0) {
-      erros.push('ID da obra é obrigatório')
-    }
-
-    if (!dados.item || dados.item.trim().length === 0) {
-      erros.push('Item é obrigatório')
-    }
-
-    if (!dados.descricao || dados.descricao.trim().length === 0) {
-      erros.push('Descrição é obrigatória')
-    }
-
-    if (!dados.unidade || dados.unidade.trim().length === 0) {
-      erros.push('Unidade é obrigatória')
-    }
-
-    if (dados.quantidade_orcamento < 0) {
-      erros.push('Quantidade orçamento deve ser maior ou igual a zero')
-    }
-
-    if (dados.valor_unitario < 0) {
-      erros.push('Valor unitário deve ser maior ou igual a zero')
-    }
-
-    if (!dados.mes || !/^\d{4}-\d{2}$/.test(dados.mes)) {
-      erros.push('Mês deve estar no formato YYYY-MM')
-    }
-
-    return erros
-  }
-
-  /**
-   * Tratar erros da API
-   */
-  private handleError(error: any): ApiError {
-    if (error.response?.data) {
-      return {
-        error: error.response.data.error || 'Erro na API',
-        message: error.response.data.message || 'Erro desconhecido'
-      }
-    }
-
-    if (error.message) {
-      return {
-        error: 'Erro de conexão',
-        message: error.message
-      }
-    }
-
-    return {
-      error: 'Erro desconhecido',
-      message: 'Ocorreu um erro inesperado'
-    }
+  }) {
+    const response = await api.post('/custos-mensais/replicar', dados)
+    return response.data
   }
 }
 
-// Instância singleton da API
-export const custosMensaisApi = new CustosMensaisApi()
-
-// Funções auxiliares para formatação
-export const formatarMes = (mes: string): string => {
-  try {
-    const [ano, mesNum] = mes.split('-')
-    const data = new Date(parseInt(ano), parseInt(mesNum) - 1, 1)
-    return data.toLocaleDateString('pt-BR', { 
-      month: 'long', 
-      year: 'numeric' 
-    })
-  } catch {
-    return mes
-  }
-}
-
-export const formatarValor = (valor: number): string => {
-  return valor.toLocaleString('pt-BR', { 
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+// Funções utilitárias para formatação
+export function formatarValor(valor: number): string {
+  return valor.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
   })
 }
 
-export const formatarQuantidade = (quantidade: number): string => {
-  return quantidade.toFixed(2)
+export function formatarMes(mes: string): string {
+  const meses = {
+    '01': 'Janeiro',
+    '02': 'Fevereiro', 
+    '03': 'Março',
+    '04': 'Abril',
+    '05': 'Maio',
+    '06': 'Junho',
+    '07': 'Julho',
+    '08': 'Agosto',
+    '09': 'Setembro',
+    '10': 'Outubro',
+    '11': 'Novembro',
+    '12': 'Dezembro'
+  }
+  return meses[mes as keyof typeof meses] || mes
 }
 
-// Tipos para componentes React
-export interface CustoMensalFormData {
-  item: string
-  descricao: string
-  unidade: string
-  quantidade_orcamento: number
-  valor_unitario: number
-  quantidade_realizada: number
-  quantidade_acumulada: number
-  valor_acumulado: number
-  tipo: 'contrato' | 'aditivo'
+export function formatarQuantidade(quantidade: number): string {
+  return quantidade.toLocaleString('pt-BR')
 }
 
-export interface CustoMensalTableProps {
-  custos: CustoMensal[]
-  loading?: boolean
-  onEdit?: (custo: CustoMensal) => void
-  onDelete?: (id: number) => void
-  onUpdateQuantidade?: (id: number, quantidade: number) => void
-}
+// Exportar a API com nome mais compatível
+export const custosMensaisApi = apiCustosMensais
 
-export interface CustoMensalFormProps {
-  obraId: number
-  mes: string
-  custo?: CustoMensal
-  onSubmit: (dados: CustoMensalCreate | CustoMensalUpdate) => Promise<void>
-  onCancel: () => void
-  loading?: boolean
-}
+export default apiCustosMensais

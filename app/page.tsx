@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Building2, Lock, User } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import Link from "next/link"
 
 export default function LoginPage() {
@@ -17,7 +17,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
-  const { toast } = useToast()
+  const { showAuthError, showSuccess } = useEnhancedToast()
 
   // Verificar se já está logado
   useEffect(() => {
@@ -51,7 +51,10 @@ export default function LoginPage() {
       if (!response.ok) {
         const errorData = await response.json()
         console.error('Erro na resposta:', errorData)
-        throw new Error(`Erro ${response.status}: ${errorData.message || 'Erro no login'}`)
+        
+        // Usar a mensagem do backend se disponível, senão usar mensagem padrão
+        const errorMessage = errorData.message || errorData.error || 'Erro no login'
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
@@ -79,11 +82,7 @@ export default function LoginPage() {
       window.location.href = '/dashboard'
     } catch (error) {
       console.error('Erro no login:', error)
-      toast({
-        title: "Erro no login",
-        description: error.message,
-        variant: "destructive"
-      })
+      showAuthError(error)
     } finally {
       setLoading(false)
     }
@@ -152,9 +151,7 @@ export default function LoginPage() {
             </Button>
           </form>
           <div className="mt-6 text-center text-xs text-gray-500">
-            Desenvolvido por Samuel Linkon Guedes Figueiredo
-            <br />
-            Contrato de Prestação de Serviços - Julho 2025
+            @Copyright 2025 - IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA 
           </div>
         </CardContent>
       </Card>

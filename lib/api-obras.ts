@@ -33,6 +33,16 @@ export interface ObraBackend {
     email?: string
     telefone?: string
   }
+  // Campos de custos
+  custos_iniciais?: number
+  custos_adicionais?: number
+  total_custos?: number
+  total_custos_mensais?: number
+  total_custos_gerais?: number
+  custos_mensais?: Array<{
+    total_orcamento: number
+  }>
+  
   // Relacionamentos incluídos diretamente
   grua_obra?: Array<{
     id: number
@@ -489,6 +499,8 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
       telefone: obraBackend.clientes.telefone
     } : null,
     budget: obraBackend.orcamento || 0,
+    orcamento: obraBackend.orcamento || 0,
+    valorTotalObra: obraBackend.total_custos || obraBackend.total_custos_mensais || 0,
     location: `${obraBackend.cidade}, ${obraBackend.estado}`,
     client: obraBackend.clientes?.nome || 'Cliente não encontrado',
     observations: obraBackend.observacoes || (obraBackend.contato_obra ? `Contato: ${obraBackend.contato_obra}` : undefined),

@@ -88,7 +88,7 @@ export function usePWAUser(): PWAUserData {
         // Carregar documentos pendentes (silenciosamente, sem quebrar a página)
         try {
           const docsResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/documentos/funcionario/${parsedUser.id}?status=pendente`,
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/assinaturas/pendentes`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -99,7 +99,7 @@ export function usePWAUser(): PWAUserData {
 
           if (docsResponse.ok) {
             const docsData = await docsResponse.json()
-            setDocumentosPendentes(docsData.total || docsData.data?.length || 0)
+            setDocumentosPendentes(docsData.data?.length || 0)
           } else {
             console.warn('[PWA User Hook] Endpoint de documentos não disponível ou retornou erro:', docsResponse.status)
           }

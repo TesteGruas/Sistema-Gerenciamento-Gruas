@@ -87,6 +87,14 @@ export const authenticateToken = async (req, res, next) => {
 
     // Adicionar usuário ao request
     req.user = { ...user, ...userInfo }
+    
+    console.log('🔍 DEBUG: Usuário autenticado:', {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      nome: req.user.nome
+    })
+    
     next()
   } catch (error) {
     console.error('Erro na autenticação:', error)
@@ -168,7 +176,19 @@ export const requirePermission = (permission) => {
       const userPermissions = rolePermissions[userRole] || rolePermissions['user']
       const hasPermission = userPermissions.includes(permission)
 
+      console.log('🔍 DEBUG: Verificação de permissão:', {
+        permission,
+        userRole,
+        hasPermission,
+        userPermissions: userPermissions.slice(0, 10) // Mostrar apenas as primeiras 10 permissões
+      })
+
       if (!hasPermission) {
+        console.log('❌ PERMISSÃO NEGADA:', {
+          permission,
+          userRole,
+          availablePermissions: userPermissions
+        })
         return res.status(403).json({
           error: 'Permissão insuficiente',
           code: 'INSUFFICIENT_PERMISSION',

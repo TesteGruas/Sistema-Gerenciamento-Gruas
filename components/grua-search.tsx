@@ -42,15 +42,15 @@ export default function GruaSearch({
           setError(null)
           
           // Buscar gruas disponíveis
-          const response = await gruasApi.buscarGruasDisponiveis()
+          const response = await gruasApi.listarGruas({ status: 'disponivel' })
           
           if (response.success) {
-            let gruasConvertidas = response.data.map(converterGruaBackendParaFrontend)
+            let gruasConvertidas = response.data
             
             // Filtrar apenas disponíveis se solicitado
             if (onlyAvailable) {
               gruasConvertidas = gruasConvertidas.filter(grua => 
-                grua.status === 'Disponível' || grua.status === 'disponivel'
+                grua.status === 'disponivel'
               )
             }
             
@@ -83,23 +83,23 @@ export default function GruaSearch({
         setError(null)
         
         // Buscar gruas disponíveis
-        const response = await gruasApi.buscarGruasDisponiveis()
+        const response = await gruasApi.listarGruas({ status: 'disponivel' })
         
         if (response.success) {
-          let gruasConvertidas = response.data.map(converterGruaBackendParaFrontend)
+          let gruasConvertidas = response.data
           
           // Filtrar por termo de busca
           gruasConvertidas = gruasConvertidas.filter(grua => 
             (grua.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (grua.model || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (grua.manufacturer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (grua.capacity || '').toLowerCase().includes(searchTerm.toLowerCase())
+            (grua.modelo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (grua.fabricante || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (grua.capacidade || '').toLowerCase().includes(searchTerm.toLowerCase())
           )
           
           // Filtrar apenas disponíveis se solicitado
           if (onlyAvailable) {
             gruasConvertidas = gruasConvertidas.filter(grua => 
-              grua.status === 'Disponível' || grua.status === 'disponivel'
+              grua.status === 'disponivel'
             )
           }
           
@@ -230,10 +230,10 @@ export default function GruaSearch({
                   <div>
                     <p className="font-medium text-blue-900">{selectedGrua.name}</p>
                     <p className="text-sm text-blue-700">
-                      {selectedGrua.manufacturer} {selectedGrua.model} - {selectedGrua.capacity}
+                      {selectedGrua.fabricante} {selectedGrua.modelo} - {selectedGrua.capacidade}
                     </p>
                     <p className="text-xs text-blue-600">
-                      Tipo: {selectedGrua.type}
+                      Tipo: {selectedGrua.tipo}
                     </p>
                   </div>
                 </div>
@@ -279,17 +279,17 @@ export default function GruaSearch({
                       <div className="flex-1">
                         <p className="font-medium text-gray-900">{grua.name}</p>
                         <p className="text-sm text-gray-600">
-                          {grua.manufacturer} {grua.model} - {grua.capacity}
+                          {grua.fabricante} {grua.modelo} - {grua.capacidade}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className={`text-xs ${getStatusColor(grua.status)}`}>
                             {getStatusIcon(grua.status)}
                             <span className="ml-1">{grua.status}</span>
                           </Badge>
-                          <span className="text-xs text-gray-500">{grua.type}</span>
+                          <span className="text-xs text-gray-500">{grua.tipo}</span>
                         </div>
-                        {grua.location && (
-                          <p className="text-xs text-gray-500 mt-1">📍 {grua.location}</p>
+                        {grua.localizacao && (
+                          <p className="text-xs text-gray-500 mt-1">📍 {grua.localizacao}</p>
                         )}
                       </div>
                     </div>

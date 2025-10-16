@@ -73,8 +73,10 @@ export default function GruasPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [gruaToDelete, setGruaToDelete] = useState<GruaFrontend | null>(null)
   const [gruaToEdit, setGruaToEdit] = useState<GruaFrontend | null>(null)
+  const [gruaToView, setGruaToView] = useState<GruaFrontend | null>(null)
   
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
@@ -89,7 +91,6 @@ export default function GruasPage() {
     capacity: string
     status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
     tipo: string
-    obraId: string
     observacoes: string
     createdAt: string
   }>({
@@ -99,7 +100,6 @@ export default function GruasPage() {
     capacity: '',
     status: 'disponivel',
     tipo: '',
-    obraId: '',
     observacoes: '',
     createdAt: ''
   })
@@ -119,6 +119,7 @@ export default function GruasPage() {
       name: grua.name || grua.nome,
       model: grua.model || grua.modelo,
       modelo: grua.modelo || grua.model,
+<<<<<<< HEAD
       fabricante: grua.fabricante,
       tipo: grua.tipo, // O tipo já vem correto do backend
       capacity: grua.capacity || grua.capacidade,
@@ -127,6 +128,16 @@ export default function GruasPage() {
       currentObraId: grua.obra_atual_id || grua.currentObraId || grua.obraId || grua.current_obra_id,
       currentObraName: grua.obra_atual_nome || grua.currentObraName || grua.current_obra_name,
       observacoes: grua.observacoes,
+=======
+      fabricante: grua.fabricante || 'Não informado',
+      tipo: grua.tipo || 'Não informado',
+      capacity: grua.capacity || grua.capacidade,
+      capacidade: grua.capacidade || grua.capacity,
+      status: grua.status || 'disponivel',
+      currentObraId: grua.current_obra_id || grua.currentObraId || grua.obra_id,
+      currentObraName: grua.current_obra_name || grua.currentObraName,
+      observacoes: grua.observacoes || 'Nenhuma observação registrada',
+>>>>>>> 058a119a69255aa5900d0a73a18ff6390588a7c7
       createdAt: grua.created_at || grua.createdAt,
       created_at: grua.created_at || grua.createdAt,
       updated_at: grua.updated_at || grua.updatedAt,
@@ -155,10 +166,17 @@ export default function GruasPage() {
         params.tipo = selectedTipo
       }
       
-      // Nota: obra_id e search não estão na documentação da API
-      // Mantendo apenas os parâmetros documentados: page, limit, status, tipo
+      // Adicionar parâmetros de pesquisa se fornecidos
+      if (searchTerm.trim()) {
+        params.search = searchTerm.trim()
+      }
       
-      console.log('Parâmetros enviados para API:', params)
+      // Adicionar filtro por grua_id se fornecido
+      if (searchTerm.trim() && searchTerm.match(/^G[A-Z0-9-]+$/)) {
+        // Se o termo de busca parece ser um ID de grua (começa com G e tem formato específico)
+        params.grua_id = searchTerm.trim()
+        delete params.search // Remover search se for um ID
+      }
       
       const response = await gruasApi.listarGruas(params) as unknown as GruasApiResponse
       
@@ -173,7 +191,7 @@ export default function GruasPage() {
         } else {
           // Fallback: calcular baseado nos dados recebidos
           setTotalItems(gruasConvertidas.length)
-          setTotalPages(1)
+          setTotalPages(Math.ceil(gruasConvertidas.length / itemsPerPage))
         }
       } else {
         setError('Erro ao carregar gruas')
@@ -192,6 +210,18 @@ export default function GruasPage() {
     carregarGruas()
   }, [selectedStatus, selectedTipo, currentPage, itemsPerPage])
 
+  // Debounce para pesquisa
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchTerm !== undefined) {
+        setCurrentPage(1) // Reset para primeira página ao pesquisar
+        carregarGruas()
+      }
+    }, 500) // 500ms de delay
+
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm])
+
   // Aplicar filtros da URL
   useEffect(() => {
     const obraParam = searchParams.get('obra')
@@ -201,17 +231,12 @@ export default function GruasPage() {
     }
   }, [searchParams])
 
-  // Aplicar filtros locais para campos não suportados pela API
+  // Aplicar filtros locais apenas para campos não suportados pela API
   const filteredGruas = gruas.filter(grua => {
-    // Filtro por busca (nome ou modelo) - aplicado localmente
-    const matchesSearch = searchTerm.trim() === "" || 
-      (grua.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (grua.model || '').toLowerCase().includes(searchTerm.toLowerCase())
-    
-    // Filtro por obra - aplicado localmente
+    // Filtro por obra - aplicado localmente (não suportado pela API)
     const matchesObra = selectedObra === "all" || grua.currentObraId === selectedObra
     
-    return matchesSearch && matchesObra
+    return matchesObra
   })
 
   const getStatusColor = (status: string) => {
@@ -234,8 +259,204 @@ export default function GruasPage() {
     }
   }
 
-  const handleViewDetails = (grua: GruaFrontend) => {
-    setSelectedGrua(grua)
+  const handleViewDetails = async (grua: GruaFrontend) => {
+    try {
+      // Fazer GET específico da grua para obter dados completos
+      const response = await gruasApi.obterGrua(grua.id)
+      
+      if (response.success && response.data) {
+        const gruaCompleta = converterGruaBackend(response.data)
+        setGruaToView(gruaCompleta)
+        setIsViewDialogOpen(true)
+      } else {
+        // Fallback para dados locais
+        setGruaToView(grua)
+        setIsViewDialogOpen(true)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar detalhes da grua:', error)
+      // Fallback para dados locais
+      setGruaToView(grua)
+      setIsViewDialogOpen(true)
+    }
+  }
+
+  // Funções simplificadas para atualizar o formulário
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, name: e.target.value }))
+  }
+
+  const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, model: e.target.value }))
+  }
+
+  const handleFabricanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, fabricante: e.target.value }))
+  }
+
+  const handleTipoChange = (value: string) => {
+    setGruaFormData(prev => ({ ...prev, tipo: value }))
+  }
+
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, capacity: e.target.value }))
+  }
+
+  const handleStatusChange = (value: string) => {
+    setGruaFormData(prev => ({ ...prev, status: value as 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' }))
+  }
+
+  const handleObservacoesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setGruaFormData(prev => ({ ...prev, observacoes: e.target.value }))
+  }
+
+
+  // Função para exportar gruas com GET de 9999 itens
+  const handleExportGruas = async (formato: 'pdf' | 'excel' | 'csv') => {
+    try {
+      // Fazer GET com limite de 9999 itens
+      const response = await gruasApi.listarGruas({ 
+        limit: 9999,
+        page: 1
+      }) as unknown as GruasApiResponse
+      
+      if (response.success && response.data) {
+        const todasGruas = response.data.map(converterGruaBackend)
+        
+        // Exportar usando a função local do ExportButton
+        await exportarLocal(todasGruas, formato)
+      } else {
+        throw new Error('Erro ao carregar dados para exportação')
+      }
+    } catch (error) {
+      console.error('Erro ao exportar gruas:', error)
+      toast({
+        title: "Erro na exportação",
+        description: "Não foi possível exportar as gruas.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Função para exportação local
+  const exportarLocal = async (dados: GruaFrontend[], formato: 'pdf' | 'excel' | 'csv') => {
+    if (formato === 'csv') {
+      exportarCSV(dados)
+    } else if (formato === 'excel') {
+      await exportarExcel(dados)
+    } else if (formato === 'pdf') {
+      await exportarPDF(dados)
+    }
+  }
+
+  const exportarCSV = (dados: GruaFrontend[]) => {
+    const headers = ['Nome', 'Modelo', 'Fabricante', 'Capacidade', 'Status', 'Tipo', 'Obra Atual', 'Data Criação']
+    const csvContent = [
+      headers.join(','),
+      ...dados.map(grua => [
+        grua.name || '',
+        grua.model || '',
+        grua.fabricante || '',
+        grua.capacity || '',
+        grua.status || '',
+        grua.tipo || '',
+        grua.currentObraName || '',
+        grua.createdAt ? new Date(grua.createdAt).toLocaleDateString('pt-BR') : ''
+      ].map(value => typeof value === 'string' && value.includes(',') ? `"${value}"` : value).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `relatorio-gruas-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+
+    toast({
+      title: "Exportação concluída!",
+      description: "Arquivo CSV baixado com sucesso.",
+    })
+  }
+
+  const exportarExcel = async (dados: GruaFrontend[]) => {
+    try {
+      const XLSX = await import('xlsx')
+      
+      const worksheet = XLSX.utils.json_to_sheet(dados.map(grua => ({
+        'Nome': grua.name || '',
+        'Modelo': grua.model || '',
+        'Fabricante': grua.fabricante || '',
+        'Capacidade': grua.capacity || '',
+        'Status': grua.status || '',
+        'Tipo': grua.tipo || '',
+        'Obra Atual': grua.currentObraName || '',
+        'Data Criação': grua.createdAt ? new Date(grua.createdAt).toLocaleDateString('pt-BR') : ''
+      })))
+
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Gruas')
+      
+      XLSX.writeFile(workbook, `relatorio-gruas-${new Date().toISOString().split('T')[0]}.xlsx`)
+
+      toast({
+        title: "Exportação concluída!",
+        description: "Arquivo Excel baixado com sucesso.",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar Excel:', error)
+      throw error
+    }
+  }
+
+  const exportarPDF = async (dados: GruaFrontend[]) => {
+    try {
+      const { jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+
+      const doc = new jsPDF()
+      
+      // Título
+      doc.setFontSize(16)
+      doc.text('Relatório de Gruas', 14, 22)
+      doc.setFontSize(10)
+      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 30)
+      doc.text(`Total de gruas: ${dados.length}`, 14, 36)
+
+      // Dados da tabela
+      const headers = ['Nome', 'Modelo', 'Fabricante', 'Capacidade', 'Status', 'Tipo', 'Obra Atual', 'Data Criação']
+      const tableData = dados.map(grua => [
+        grua.name || '',
+        grua.model || '',
+        grua.fabricante || '',
+        grua.capacity || '',
+        grua.status || '',
+        grua.tipo || '',
+        grua.currentObraName || '',
+        grua.createdAt ? new Date(grua.createdAt).toLocaleDateString('pt-BR') : ''
+      ])
+
+      autoTable(doc, {
+        head: [headers],
+        body: tableData,
+        startY: 45,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [66, 139, 202] },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+      })
+
+      doc.save(`relatorio-gruas-${new Date().toISOString().split('T')[0]}.pdf`)
+
+      toast({
+        title: "Exportação concluída!",
+        description: "Arquivo PDF baixado com sucesso.",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error)
+      throw error
+    }
   }
 
   const handleEditGrua = (grua: GruaFrontend) => {
@@ -263,7 +484,6 @@ export default function GruasPage() {
       capacity: grua.capacity || grua.capacidade || '',
       status: normalizarStatus(grua.status),
       tipo: grua.tipo || '',
-      obraId: grua.currentObraId?.toString() || '',
       observacoes: grua.observacoes || '',
       createdAt: grua.createdAt || grua.created_at || ''
     })
@@ -330,7 +550,7 @@ export default function GruasPage() {
     e.preventDefault()
     
     try {
-      setCreating(true)
+      startCreating()
       
       // Converter dados do formulário para o formato do backend
       const gruaData = {
@@ -340,7 +560,6 @@ export default function GruasPage() {
         status: gruaFormData.status,
         fabricante: gruaFormData.fabricante || undefined,
         tipo: gruaFormData.tipo || undefined,
-        obraId: gruaFormData.obraId || undefined,
         observacoes: gruaFormData.observacoes || undefined,
       }
       
@@ -358,7 +577,6 @@ export default function GruasPage() {
           capacity: '',
           status: 'disponivel',
           tipo: '',
-          obraId: '',
           observacoes: '',
           createdAt: ''
         })
@@ -384,7 +602,7 @@ export default function GruasPage() {
         variant: "destructive"
       })
     } finally {
-      setCreating(false)
+      stopCreating()
     }
   }
 
@@ -394,7 +612,7 @@ export default function GruasPage() {
     if (!gruaToEdit) return
     
     try {
-      setUpdating(true)
+      startUpdating()
       
       // Converter dados do formulário para o formato do backend
       const gruaData = {
@@ -404,7 +622,6 @@ export default function GruasPage() {
         status: gruaFormData.status,
         fabricante: gruaFormData.fabricante || undefined,
         tipo: gruaFormData.tipo || undefined,
-        obraId: gruaFormData.obraId || undefined,
         observacoes: gruaFormData.observacoes || undefined,
       }
       
@@ -422,7 +639,6 @@ export default function GruasPage() {
           capacity: '',
           status: 'disponivel',
           tipo: '',
-          obraId: '',
           observacoes: '',
           createdAt: ''
         })
@@ -449,7 +665,7 @@ export default function GruasPage() {
         variant: "destructive"
       })
     } finally {
-      setUpdating(false)
+      stopUpdating()
     }
   }
 
@@ -489,10 +705,11 @@ export default function GruasPage() {
         </div>
         <div className="flex gap-2">
           <ExportButton
-            dados={filteredGruas}
+            dados={gruas}
             tipo="gruas"
             nomeArquivo="relatorio-gruas"
             titulo="Relatório de Gruas"
+            onExport={handleExportGruas}
           />
           <Button 
             className="flex items-center gap-2"
@@ -533,7 +750,7 @@ export default function GruasPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   id="search"
-                  placeholder="Nome ou modelo..."
+                  placeholder="Nome, modelo ou ID da grua (ex: G001)..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -617,6 +834,41 @@ export default function GruasPage() {
         </Card>
       )}
 
+      {/* Descrição das Funcionalidades */}
+      {!loading && !error && (
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Package className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-1">Componentes</h3>
+                  <p className="text-sm text-gray-600">
+                    Gerencie os componentes e peças da grua, incluindo cabos, ganchos, 
+                    sistemas hidráulicos e outros equipamentos essenciais para o funcionamento.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Settings className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-1">Configurações</h3>
+                  <p className="text-sm text-gray-600">
+                    Configure parâmetros técnicos, limites de operação, especificações 
+                    de segurança e outras configurações específicas da grua.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lista de Gruas */}
       {!loading && !error && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -631,10 +883,43 @@ export default function GruasPage() {
                     <Crane className="w-5 h-5 text-blue-600" />
                     <CardTitle className="text-lg">{grua.name}</CardTitle>
                   </div>
-                  <Badge className={getStatusColor(grua.status)}>
-                    {getStatusIcon(grua.status)}
-                    <span className="ml-1 capitalize">{grua.status.replace('_', ' ')}</span>
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(grua.status)}>
+                      {getStatusIcon(grua.status)}
+                      <span className="ml-1 capitalize">{grua.status.replace('_', ' ')}</span>
+                    </Badge>
+                    
+                    {/* Ações com ícones */}
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleViewDetails(grua)}
+                        className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        title="Ver Detalhes"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditGrua(grua)}
+                        className="h-8 w-8 p-0 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                        title="Editar"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteGrua(grua)}
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
                 <CardDescription>{grua.model} - {grua.capacity}</CardDescription>
                 {grua.tipo && (
@@ -663,6 +948,7 @@ export default function GruasPage() {
                   )}
                   
                   <div className="space-y-2">
+<<<<<<< HEAD
                     {/* Ações Principais */}
                     <div className="flex gap-2">
                       <Button
@@ -700,6 +986,9 @@ export default function GruasPage() {
                     </div>
                     
                     {/* Novas Funcionalidades */}
+=======
+                    {/* Funcionalidades */}
+>>>>>>> 058a119a69255aa5900d0a73a18ff6390588a7c7
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -729,6 +1018,7 @@ export default function GruasPage() {
         </div>
       )}
 
+
       {/* Paginação */}
       {!loading && !error && totalPages > 1 && (
         <Card>
@@ -751,10 +1041,11 @@ export default function GruasPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="25">25</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="9">9</SelectItem>
+                      <SelectItem value="18">18</SelectItem>
+                      <SelectItem value="27">27</SelectItem>
+                      <SelectItem value="36">36</SelectItem>
+                      <SelectItem value="45">45</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -849,7 +1140,7 @@ export default function GruasPage() {
                 <Input
                   id="name"
                   value={gruaFormData.name}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, name: e.target.value })}
+                  onChange={handleNameChange}
                   placeholder="Ex: Grua 001"
                   required
                 />
@@ -859,7 +1150,7 @@ export default function GruasPage() {
                 <Input
                   id="model"
                   value={gruaFormData.model}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, model: e.target.value })}
+                  onChange={handleModelChange}
                   placeholder="Ex: Liebherr 200HC"
                   required
                 />
@@ -872,7 +1163,7 @@ export default function GruasPage() {
                 <Input
                   id="fabricante"
                   value={gruaFormData.fabricante}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, fabricante: e.target.value })}
+                  onChange={handleFabricanteChange}
                   placeholder="Ex: Liebherr, Potain, etc."
                 />
               </div>
@@ -880,7 +1171,7 @@ export default function GruasPage() {
                 <Label htmlFor="tipo">Tipo</Label>
                 <Select
                   value={gruaFormData.tipo}
-                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, tipo: value })}
+                  onValueChange={handleTipoChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
@@ -902,7 +1193,7 @@ export default function GruasPage() {
                 <Input
                   id="capacity"
                   value={gruaFormData.capacity}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, capacity: e.target.value })}
+                  onChange={handleCapacityChange}
                   placeholder="Ex: 200 ton"
                   required
                 />
@@ -911,7 +1202,7 @@ export default function GruasPage() {
                 <Label htmlFor="status">Status *</Label>
                 <Select
                   value={gruaFormData.status}
-                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value as 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' })}
+                  onValueChange={handleStatusChange}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -927,34 +1218,11 @@ export default function GruasPage() {
             </div>
 
             <div>
-              <Label htmlFor="obraId">Obra (Opcional)</Label>
-              <Select
-                value={gruaFormData.obraId || "none"}
-                onValueChange={(value) => setGruaFormData({ ...gruaFormData, obraId: value === "none" ? "" : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma obra (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma obra</SelectItem>
-                  {mockObras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
-                      {obra.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Uma grua pode ser criada sem estar atrelada a uma obra
-              </p>
-            </div>
-
-            <div>
               <Label htmlFor="observacoes">Observações</Label>
               <Textarea
                 id="observacoes"
                 value={gruaFormData.observacoes}
-                onChange={(e) => setGruaFormData({ ...gruaFormData, observacoes: e.target.value })}
+                onChange={handleObservacoesChange}
                 placeholder="Observações sobre a grua..."
                 rows={3}
               />
@@ -1000,7 +1268,7 @@ export default function GruasPage() {
                 <Input
                   id="edit-name"
                   value={gruaFormData.name}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, name: e.target.value })}
+                  onChange={handleNameChange}
                   placeholder="Ex: Grua 001"
                   required
                 />
@@ -1010,7 +1278,7 @@ export default function GruasPage() {
                 <Input
                   id="edit-model"
                   value={gruaFormData.model}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, model: e.target.value })}
+                  onChange={handleModelChange}
                   placeholder="Ex: Liebherr 200HC"
                   required
                 />
@@ -1023,7 +1291,7 @@ export default function GruasPage() {
                 <Input
                   id="edit-fabricante"
                   value={gruaFormData.fabricante}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, fabricante: e.target.value })}
+                  onChange={handleFabricanteChange}
                   placeholder="Ex: Liebherr, Potain, etc."
                 />
               </div>
@@ -1031,7 +1299,7 @@ export default function GruasPage() {
                 <Label htmlFor="edit-tipo">Tipo</Label>
                 <Select
                   value={gruaFormData.tipo}
-                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, tipo: value })}
+                  onValueChange={handleTipoChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
@@ -1053,7 +1321,7 @@ export default function GruasPage() {
                 <Input
                   id="edit-capacity"
                   value={gruaFormData.capacity}
-                  onChange={(e) => setGruaFormData({ ...gruaFormData, capacity: e.target.value })}
+                  onChange={handleCapacityChange}
                   placeholder="Ex: 200 ton"
                   required
                 />
@@ -1062,7 +1330,7 @@ export default function GruasPage() {
                 <Label htmlFor="edit-status">Status *</Label>
                 <Select
                   value={gruaFormData.status}
-                  onValueChange={(value) => setGruaFormData({ ...gruaFormData, status: value as 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' })}
+                  onValueChange={handleStatusChange}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1077,35 +1345,13 @@ export default function GruasPage() {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="edit-obraId">Obra (Opcional)</Label>
-              <Select
-                value={gruaFormData.obraId || "none"}
-                onValueChange={(value) => setGruaFormData({ ...gruaFormData, obraId: value === "none" ? "" : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma obra (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma obra</SelectItem>
-                  {mockObras.map(obra => (
-                    <SelectItem key={obra.id} value={obra.id}>
-                      {obra.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Uma grua pode ser editada sem estar atrelada a uma obra
-              </p>
-            </div>
 
             <div>
               <Label htmlFor="edit-observacoes">Observações</Label>
               <Textarea
                 id="edit-observacoes"
                 value={gruaFormData.observacoes}
-                onChange={(e) => setGruaFormData({ ...gruaFormData, observacoes: e.target.value })}
+                onChange={handleObservacoesChange}
                 placeholder="Observações sobre a grua..."
                 rows={3}
               />
@@ -1200,6 +1446,7 @@ export default function GruasPage() {
         </DialogContent>
       </Dialog>
 
+<<<<<<< HEAD
       {/* Modal de Detalhes da Grua */}
       <Dialog open={!!selectedGrua} onOpenChange={() => setSelectedGrua(null)}>
         <DialogContent className="sm:max-w-lg">
@@ -1303,6 +1550,124 @@ export default function GruasPage() {
               </Button>
             )}
           </div>
+=======
+      {/* Dialog de Visualização de Detalhes */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5 text-blue-600" />
+              Detalhes da Grua
+            </DialogTitle>
+          </DialogHeader>
+          
+          {gruaToView && (
+            <div className="space-y-6">
+              {/* Informações Básicas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Nome</Label>
+                    <p className="text-lg font-semibold">{gruaToView.name}</p>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Modelo</Label>
+                    <p className="text-base">{gruaToView.model}</p>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Fabricante</Label>
+                    <p className="text-base">{gruaToView.fabricante || 'Não informado'}</p>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Capacidade</Label>
+                    <p className="text-base">{gruaToView.capacity}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Status</Label>
+                    <div className="flex items-center gap-2 mt-1">
+                      {getStatusIcon(gruaToView.status)}
+                      <Badge 
+                        variant={gruaToView.status === 'disponivel' ? 'default' : 
+                                gruaToView.status === 'em_obra' ? 'secondary' :
+                                gruaToView.status === 'manutencao' ? 'destructive' : 'outline'}
+                        className="text-xs"
+                      >
+                        {gruaToView.status === 'disponivel' ? 'Disponível' :
+                         gruaToView.status === 'em_obra' ? 'Em Obra' :
+                         gruaToView.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Tipo</Label>
+                    <p className="text-base">{gruaToView.tipo || 'Não informado'}</p>
+                  </div>
+                  
+                  {gruaToView.currentObraName && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Obra Atual</Label>
+                      <p className="text-base">{gruaToView.currentObraName}</p>
+                    </div>
+                  )}
+                  
+                  {gruaToView.createdAt && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Data de Criação</Label>
+                      <p className="text-base">{new Date(gruaToView.createdAt).toLocaleDateString('pt-BR')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Observações */}
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Observações</Label>
+                <p className="text-base mt-1 p-3 bg-gray-50 rounded-md">
+                  {gruaToView.observacoes || 'Nenhuma observação registrada'}
+                </p>
+              </div>
+              
+              {/* Ações */}
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => handleEditGrua(gruaToView)}
+                  className="flex-1"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Editar Grua
+                </Button>
+                
+                {gruaToView.currentObraId && (
+                  <Button
+                    variant="outline"
+                    onClick={() => window.location.href = `/dashboard/obras/${gruaToView.currentObraId}?tab=livro`}
+                    className="flex-1"
+                  >
+                    <Building2 className="w-4 h-4 mr-2" />
+                    Ver na Obra
+                  </Button>
+                )}
+                
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.href = `/dashboard/gruas/${gruaToView.id}/componentes`}
+                  className="flex-1"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  Componentes
+                </Button>
+              </div>
+            </div>
+          )}
+>>>>>>> 058a119a69255aa5900d0a73a18ff6390588a7c7
         </DialogContent>
       </Dialog>
     </div>

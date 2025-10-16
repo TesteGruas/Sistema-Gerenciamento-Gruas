@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NotificacoesAPI, Notificacao, formatarTempoRelativo, NotificationType, ListarNotificacoesResponse } from '@/lib/api-notificacoes'
 import { useToast } from '@/hooks/use-toast'
 import { NovaNotificacaoDialog } from '@/components/nova-notificacao-dialog'
@@ -122,6 +123,8 @@ export default function NotificacoesPage() {
   })
   const [notificacaoSelecionada, setNotificacaoSelecionada] = useState<Notificacao | null>(null)
   const [modalAberto, setModalAberto] = useState(false)
+  const [confirmacaoAberta, setConfirmacaoAberta] = useState(false)
+  const [notificacaoParaDeletar, setNotificacaoParaDeletar] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Carregar notificações com paginação e filtros
@@ -220,10 +223,18 @@ export default function NotificacoesPage() {
     }
   }
 
-  // Deletar notificação
-  const deletarNotificacao = async (id: string) => {
+  // Abrir popup de confirmação para deletar notificação
+  const abrirConfirmacaoDeletar = (id: string) => {
+    setNotificacaoParaDeletar(id)
+    setConfirmacaoAberta(true)
+  }
+
+  // Deletar notificação após confirmação
+  const deletarNotificacao = async () => {
+    if (!notificacaoParaDeletar) return
+    
     try {
-      await NotificacoesAPI.deletar(id)
+      await NotificacoesAPI.deletar(notificacaoParaDeletar)
       await carregarNotificacoes()
       toast({
         title: 'Notificação excluída',
@@ -235,6 +246,9 @@ export default function NotificacoesPage() {
         description: 'Não foi possível excluir a notificação.',
         variant: 'destructive',
       })
+    } finally {
+      setConfirmacaoAberta(false)
+      setNotificacaoParaDeletar(null)
     }
   }
 
@@ -578,7 +592,7 @@ export default function NotificacoesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => deletarNotificacao(notificacao.id)}
+                              onClick={() => abrirConfirmacaoDeletar(notificacao.id)}
                               className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -675,8 +689,41 @@ export default function NotificacoesPage() {
         isOpen={modalAberto}
         onClose={fecharModal}
         onMarcarComoLida={marcarComoLida}
-        onDeletar={deletarNotificacao}
+        onDeletar={abrirConfirmacaoDeletar}
       />
+
+      {/* Dialog de confirmação para deletar notificação */}
+      <Dialog open={confirmacaoAberta} onOpenChange={setConfirmacaoAberta}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              Confirmar exclusão
+            </DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir esta notificação? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmacaoAberta(false)
+                setNotificacaoParaDeletar(null)
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deletarNotificacao}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

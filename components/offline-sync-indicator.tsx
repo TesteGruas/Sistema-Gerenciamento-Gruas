@@ -4,14 +4,14 @@ import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Wifi, WifiOff, Sync, CheckCircle, AlertCircle, Clock } from 'lucide-react'
+import { Wifi, WifiOff, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-interface SyncStatus {
+interface RefreshCwStatus {
   isOnline: boolean
   pendingActions: number
-  lastSync: Date | null
-  isSyncing: boolean
+  lastRefreshCw: Date | null
+  isRefreshCwing: boolean
 }
 
 interface PendingAction {
@@ -23,11 +23,11 @@ interface PendingAction {
 }
 
 export function OfflineSyncIndicator() {
-  const [status, setStatus] = useState<SyncStatus>({
+  const [status, setStatus] = useState<RefreshCwStatus>({
     isOnline: navigator.onLine,
     pendingActions: 0,
-    lastSync: null,
-    isSyncing: false
+    lastRefreshCw: null,
+    isRefreshCwing: false
   })
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([])
   const { toast } = useToast()
@@ -102,7 +102,7 @@ export function OfflineSyncIndicator() {
   const syncPendingActions = async () => {
     if (!status.isOnline || pendingActions.length === 0) return
 
-    setStatus(prev => ({ ...prev, isSyncing: true }))
+    setStatus(prev => ({ ...prev, isRefreshCwing: true }))
 
     try {
       const successfulActions: string[] = []
@@ -129,8 +129,8 @@ export function OfflineSyncIndicator() {
       savePendingActions(remainingActions)
       setStatus(prev => ({ 
         ...prev, 
-        lastSync: new Date(),
-        isSyncing: false 
+        lastRefreshCw: new Date(),
+        isRefreshCwing: false 
       }))
 
       if (successfulActions.length > 0) {
@@ -142,7 +142,7 @@ export function OfflineSyncIndicator() {
 
     } catch (error) {
       console.error('Erro na sincronização:', error)
-      setStatus(prev => ({ ...prev, isSyncing: false }))
+      setStatus(prev => ({ ...prev, isRefreshCwing: false }))
     }
   }
 
@@ -201,19 +201,19 @@ export function OfflineSyncIndicator() {
   }
 
   const getStatusIcon = () => {
-    if (status.isSyncing) return <Sync className="w-4 h-4 animate-spin" />
+    if (status.isRefreshCwing) return <RefreshCw className="w-4 h-4 animate-spin" />
     if (status.isOnline) return <Wifi className="w-4 h-4 text-green-500" />
     return <WifiOff className="w-4 h-4 text-red-500" />
   }
 
   const getStatusText = () => {
-    if (status.isSyncing) return 'Sincronizando...'
+    if (status.isRefreshCwing) return 'Sincronizando...'
     if (status.isOnline) return 'Online'
     return 'Offline'
   }
 
   const getStatusColor = () => {
-    if (status.isSyncing) return 'bg-blue-100 text-blue-800'
+    if (status.isRefreshCwing) return 'bg-blue-100 text-blue-800'
     if (status.isOnline) return 'bg-green-100 text-green-800'
     return 'bg-red-100 text-red-800'
   }
@@ -229,8 +229,8 @@ export function OfflineSyncIndicator() {
               <div>
                 <p className="font-medium">{getStatusText()}</p>
                 <p className="text-sm text-gray-500">
-                  {status.lastSync 
-                    ? `Última sincronização: ${status.lastSync.toLocaleString('pt-BR')}`
+                  {status.lastRefreshCw 
+                    ? `Última sincronização: ${status.lastRefreshCw.toLocaleString('pt-BR')}`
                     : 'Nunca sincronizado'
                   }
                 </p>
@@ -256,7 +256,7 @@ export function OfflineSyncIndicator() {
               <div className="flex gap-2">
                 {status.isOnline && (
                   <Button size="sm" onClick={retryFailedActions}>
-                    <Sync className="w-4 h-4 mr-2" />
+                    <RefreshCw className="w-4 h-4 mr-2" />
                     Sincronizar
                   </Button>
                 )}

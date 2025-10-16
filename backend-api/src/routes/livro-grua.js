@@ -21,6 +21,80 @@ const router = express.Router()
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authenticateToken)
 
+/**
+ * GET /api/livro-grua/relacoes-grua-obra
+ * Listar todas as relações grua-obra para funcionários
+ */
+router.get('/relacoes-grua-obra', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('grua_obra')
+      .select(`
+        id,
+        grua_id,
+        obra_id,
+        data_inicio_locacao,
+        data_fim_locacao,
+        status,
+        valor_locacao_mensal,
+        observacoes,
+        gruas (
+          id,
+          tipo,
+          modelo,
+          fabricante
+        ),
+        obras (
+          id,
+          nome,
+          endereco,
+          cidade,
+          estado,
+          status
+        )
+      `)
+      .in('status', ['Ativa', 'Pausada'])
+      .order('obras(nome)', { ascending: true })
+      .order('gruas(id)', { ascending: true })
+
+    if (error) {
+      console.error('Erro ao buscar relações grua-obra:', error)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar relações',
+        error: error.message
+      })
+    }
+
+    // Transformar os dados para o formato esperado
+    const relacoes = data.map(row => ({
+      id: row.id,
+      grua_id: row.grua_id,
+      obra_id: row.obra_id,
+      data_inicio_locacao: row.data_inicio_locacao,
+      data_fim_locacao: row.data_fim_locacao,
+      status: row.status,
+      valor_locacao_mensal: row.valor_locacao_mensal,
+      observacoes: row.observacoes,
+      grua: row.gruas,
+      obra: row.obras
+    }))
+
+    res.json({
+      success: true,
+      data: relacoes
+    })
+
+  } catch (error) {
+    console.error('Erro ao listar relações grua-obra:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
 // Schemas de validação - baseado nos campos do frontend
 const entradaLivroSchema = Joi.object({
   // Campos obrigatórios (conforme frontend)

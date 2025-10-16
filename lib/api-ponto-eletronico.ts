@@ -137,6 +137,8 @@ export interface Justificativa {
   motivo: string;
   status: string;
   data_aprovacao?: string;
+  anexos?: string[];
+  observacoes?: string;
 }
 
 export interface JustificativaPayload {
@@ -231,7 +233,7 @@ export const apiRegistrosPonto = {
     search?: string;
   }): Promise<{ data: RegistroPonto[]; pagination?: any }> {
     try {
-      const response = await api.get('/api/ponto-eletronico/registros', { params });
+      const response = await api.get('ponto-eletronico/registros', { params });
       return { 
         data: response.data.data || response.data || [],
         pagination: response.data.pagination
@@ -290,12 +292,12 @@ export const apiRegistrosPonto = {
   },
 
   async obter(id: string | number): Promise<RegistroPonto> {
-    const response = await api.get(`/api/ponto-eletronico/registros/${id}`);
+    const response = await api.get(`ponto-eletronico/registros/${id}`);
     return response.data.data || response.data;
   },
 
   async criar(payload: RegistroPontoPayload): Promise<RegistroPonto> {
-    const response = await api.post('/api/ponto-eletronico/registros', payload);
+    const response = await api.post('ponto-eletronico/registros', payload);
     return response.data.data || response.data;
   },
 
@@ -303,23 +305,23 @@ export const apiRegistrosPonto = {
     id: string | number,
     payload: Partial<RegistroPontoPayload>
   ): Promise<RegistroPonto> {
-    const response = await api.put(`/api/ponto-eletronico/registros/${id}`, payload);
+    const response = await api.put(`ponto-eletronico/registros/${id}`, payload);
     return response.data.data || response.data;
   },
 
   async deletar(id: string | number): Promise<void> {
-    await api.delete(`/api/ponto-eletronico/registros/${id}`);
+    await api.delete(`ponto-eletronico/registros/${id}`);
   },
 
   async aprovar(id: string | number, observacoes?: string): Promise<RegistroPonto> {
-    const response = await api.post(`/api/ponto-eletronico/registros/${id}/aprovar`, {
+    const response = await api.post(`ponto-eletronico/registros/${id}/aprovar`, {
       observacoes_aprovacao: observacoes
     });
     return response.data.data || response.data;
   },
 
   async rejeitar(id: string | number, motivo: string): Promise<RegistroPonto> {
-    const response = await api.post(`/api/ponto-eletronico/registros/${id}/rejeitar`, {
+    const response = await api.post(`ponto-eletronico/registros/${id}/rejeitar`, {
       motivo_rejeicao: motivo
     });
     return response.data.data || response.data;
@@ -341,7 +343,7 @@ export const apiJustificativas = {
     search?: string;
   }): Promise<{ data: Justificativa[]; pagination?: any }> {
     try {
-      const response = await api.get('/api/ponto-eletronico/justificativas', { params });
+      const response = await api.get('ponto-eletronico/justificativas', { params });
       return { 
         data: response.data.data || response.data || [],
         pagination: response.data.pagination
@@ -401,17 +403,17 @@ export const apiJustificativas = {
   },
 
   async criar(payload: JustificativaPayload): Promise<Justificativa> {
-    const response = await api.post('/api/ponto-eletronico/justificativas', payload);
+    const response = await api.post('ponto-eletronico/justificativas', payload);
     return response.data.data || response.data;
   },
 
   async aprovar(id: string | number): Promise<Justificativa> {
-    const response = await api.post(`/api/ponto-eletronico/justificativas/${id}/aprovar`);
+    const response = await api.post(`ponto-eletronico/justificativas/${id}/aprovar`);
     return response.data.data || response.data;
   },
 
   async rejeitar(id: string | number, motivo: string): Promise<Justificativa> {
-    const response = await api.post(`/api/ponto-eletronico/justificativas/${id}/rejeitar`, {
+    const response = await api.post(`ponto-eletronico/justificativas/${id}/rejeitar`, {
       motivo_rejeicao: motivo
     });
     return response.data.data || response.data;
@@ -428,7 +430,7 @@ export const apiRelatorios = {
     mes: number;
     ano: number;
   }): Promise<any> {
-    const response = await api.get('/api/ponto-eletronico/espelho', { params });
+    const response = await api.get('ponto-eletronico/espelho', { params });
     return response.data.data || response.data;
   }
 };
@@ -549,7 +551,7 @@ export const getRegistros = async (params: {
   status?: string;
   aprovador_id?: number;
 }): Promise<RegistroPonto[]> => {
-  const response = await api.get('/api/ponto-eletronico/registros', { params });
+  const response = await api.get('ponto-eletronico/registros', { params });
   return response.data.data || response.data;
 };
 
@@ -558,7 +560,7 @@ export const getRegistros = async (params: {
  * @deprecated Use apiRegistrosPonto.obter() em vez disso
  */
 export const getRegistroById = async (registroId: string | number): Promise<RegistroPonto> => {
-  const response = await api.get(`/api/ponto-eletronico/registros/${registroId}`);
+  const response = await api.get(`ponto-eletronico/registros/${registroId}`);
   return response.data.data || response.data;
 };
 
@@ -567,7 +569,7 @@ export const getRegistroById = async (registroId: string | number): Promise<Regi
  * @deprecated Use apiRegistrosPonto.criar() em vez disso
  */
 export const criarRegistro = async (payload: RegistroPontoPayload): Promise<RegistroPonto> => {
-  const response = await api.post('/api/ponto-eletronico/registros', payload);
+  const response = await api.post('ponto-eletronico/registros', payload);
   return response.data.data || response.data;
 };
 
@@ -579,7 +581,7 @@ export const atualizarRegistro = async (
   registroId: string | number,
   payload: Partial<RegistroPontoPayload>
 ): Promise<RegistroPonto> => {
-  const response = await api.put(`/api/ponto-eletronico/registros/${registroId}`, payload);
+  const response = await api.put(`ponto-eletronico/registros/${registroId}`, payload);
   return response.data.data || response.data;
 };
 
@@ -588,7 +590,7 @@ export const atualizarRegistro = async (
  * @deprecated Use apiRegistrosPonto.deletar() em vez disso
  */
 export const deletarRegistro = async (registroId: string | number): Promise<void> => {
-  await api.delete(`/api/ponto-eletronico/registros/${registroId}`);
+  await api.delete(`ponto-eletronico/registros/${registroId}`);
 };
 
 /**
@@ -599,7 +601,7 @@ export const aprovarRegistro = async (
   registroId: string | number,
   observacoes?: string
 ): Promise<RegistroPonto> => {
-  const response = await api.post(`/api/ponto-eletronico/registros/${registroId}/aprovar`, {
+  const response = await api.post(`ponto-eletronico/registros/${registroId}/aprovar`, {
     observacoes_aprovacao: observacoes
   });
   return response.data.data || response.data;
@@ -613,7 +615,7 @@ export const rejeitarRegistro = async (
   registroId: string | number,
   motivo: string
 ): Promise<RegistroPonto> => {
-  const response = await api.post(`/api/ponto-eletronico/registros/${registroId}/rejeitar`, {
+  const response = await api.post(`ponto-eletronico/registros/${registroId}/rejeitar`, {
     motivo_rejeicao: motivo
   });
   return response.data.data || response.data;
@@ -628,6 +630,6 @@ export const getEspelhoPonto = async (params: {
   mes: number;
   ano: number;
 }): Promise<any> => {
-  const response = await api.get('/api/ponto-eletronico/espelho', { params });
+  const response = await api.get('ponto-eletronico/espelho', { params });
   return response.data.data || response.data;
 };

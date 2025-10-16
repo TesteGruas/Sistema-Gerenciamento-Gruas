@@ -70,6 +70,20 @@ const userSchema = Joi.object({
  *       200:
  *         description: Lista de usuários
  */
+// Endpoint de teste para verificar autenticação
+router.get('/test-auth', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Autenticação funcionando',
+    user: {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      nome: req.user.nome
+    }
+  })
+})
+
 router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
@@ -274,6 +288,10 @@ router.get('/:id', authenticateToken, requirePermission('usuarios:visualizar'), 
  *         description: Dados inválidos
  */
 router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (req, res) => {
+  console.log('🔍 DEBUG: Iniciando criação de usuário:', {
+    user: req.user,
+    body: req.body
+  })
   try {
     const { error, value } = userSchema.validate(req.body)
     if (error) {

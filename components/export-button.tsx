@@ -21,6 +21,7 @@ interface ExportButtonProps {
   className?: string
   variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'link' | 'destructive'
   size?: 'default' | 'sm' | 'lg' | 'icon'
+  onExport?: (formato: 'pdf' | 'excel' | 'csv') => Promise<void>
 }
 
 export function ExportButton({
@@ -32,12 +33,31 @@ export function ExportButton({
   titulo,
   className,
   variant = 'outline',
-  size = 'default'
+  size = 'default',
+  onExport
 }: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false)
   const { toast } = useToast()
 
   const handleExport = async (formato: 'pdf' | 'excel' | 'csv') => {
+    if (onExport) {
+      // Usar função customizada se fornecida
+      setIsExporting(true)
+      try {
+        await onExport(formato)
+      } catch (error) {
+        console.error('Erro ao exportar:', error)
+        toast({
+          title: "Erro na exportação",
+          description: "Não foi possível exportar os dados.",
+          variant: "destructive"
+        })
+      } finally {
+        setIsExporting(false)
+      }
+      return
+    }
+
     if (!dados || dados.length === 0) {
       toast({
         title: "Nenhum dado para exportar",

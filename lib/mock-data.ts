@@ -947,6 +947,300 @@ export const getHistoricoByMonth = (gruaId: string, month: number, year: number)
   })
 }
 
+// Dados mock para relações grua-obra
+export interface GruaObraRelacao {
+  id: number
+  grua_id: string
+  obra_id: number
+  data_inicio_locacao: string
+  data_fim_locacao?: string
+  status: string
+  valor_locacao_mensal?: number
+  observacoes?: string
+  grua: {
+    id: string
+    tipo: string
+    modelo: string
+    fabricante: string
+  }
+  obra: {
+    id: number
+    nome: string
+    endereco: string
+    cidade: string
+    estado: string
+    status: string
+  }
+}
+
+export const mockRelacoesGruaObra: GruaObraRelacao[] = [
+  {
+    id: 1,
+    grua_id: "G001",
+    obra_id: 1,
+    data_inicio_locacao: "2024-01-15",
+    data_fim_locacao: "2024-06-15",
+    status: "Ativa",
+    valor_locacao_mensal: 15000,
+    observacoes: "Locação para construção do shopping",
+    grua: {
+      id: "G001",
+      tipo: "Torre",
+      modelo: "TC7030",
+      fabricante: "Liebherr"
+    },
+    obra: {
+      id: 1,
+      nome: "Shopping Center Norte",
+      endereco: "Av. Paulista, 1000",
+      cidade: "São Paulo",
+      estado: "SP",
+      status: "Em Andamento"
+    }
+  },
+  {
+    id: 2,
+    grua_id: "G002",
+    obra_id: 1,
+    data_inicio_locacao: "2024-02-01",
+    status: "Ativa",
+    valor_locacao_mensal: 12000,
+    observacoes: "Grua auxiliar para montagem",
+    grua: {
+      id: "G002",
+      tipo: "Torre",
+      modelo: "TC5013",
+      fabricante: "Liebherr"
+    },
+    obra: {
+      id: 1,
+      nome: "Shopping Center Norte",
+      endereco: "Av. Paulista, 1000",
+      cidade: "São Paulo",
+      estado: "SP",
+      status: "Em Andamento"
+    }
+  },
+  {
+    id: 3,
+    grua_id: "G003",
+    obra_id: 2,
+    data_inicio_locacao: "2024-03-01",
+    data_fim_locacao: "2024-05-01",
+    status: "Pausada",
+    valor_locacao_mensal: 18000,
+    observacoes: "Obra pausada por questões financeiras",
+    grua: {
+      id: "G003",
+      tipo: "Torre",
+      modelo: "TC8030",
+      fabricante: "Potain"
+    },
+    obra: {
+      id: 2,
+      nome: "Residencial Jardim Europa",
+      endereco: "Rua das Flores, 500",
+      cidade: "Rio de Janeiro",
+      estado: "RJ",
+      status: "Pausada"
+    }
+  },
+  {
+    id: 4,
+    grua_id: "G004",
+    obra_id: 3,
+    data_inicio_locacao: "2024-04-01",
+    status: "Ativa",
+    valor_locacao_mensal: 20000,
+    observacoes: "Grua para construção do hospital",
+    grua: {
+      id: "G004",
+      tipo: "Torre",
+      modelo: "TC10040",
+      fabricante: "Potain"
+    },
+    obra: {
+      id: 3,
+      nome: "Hospital Municipal",
+      endereco: "Av. Brasil, 2000",
+      cidade: "Belo Horizonte",
+      estado: "MG",
+      status: "Em Andamento"
+    }
+  },
+  {
+    id: 5,
+    grua_id: "G005",
+    obra_id: 4,
+    data_inicio_locacao: "2024-05-01",
+    status: "Ativa",
+    valor_locacao_mensal: 14000,
+    observacoes: "Grua para construção do prédio comercial",
+    grua: {
+      id: "G005",
+      tipo: "Torre",
+      modelo: "TC6020",
+      fabricante: "Liebherr"
+    },
+    obra: {
+      id: 4,
+      nome: "Edifício Comercial Centro",
+      endereco: "Rua Comercial, 300",
+      cidade: "Salvador",
+      estado: "BA",
+      status: "Em Andamento"
+    }
+  }
+]
+
+// Dados mock para funcionários
+export interface Funcionario {
+  id: number
+  nome: string
+  cargo: string
+  email: string
+  telefone: string
+  obra_id?: number
+  obra_nome?: string
+  status: 'ativo' | 'inativo'
+}
+
+export const mockFuncionarios: Funcionario[] = [
+  {
+    id: 1,
+    nome: "João Silva",
+    cargo: "Operador de Grua",
+    email: "joao.silva@empresa.com",
+    telefone: "(11) 99999-1111",
+    obra_id: 1,
+    obra_nome: "Shopping Center Norte",
+    status: "ativo"
+  },
+  {
+    id: 2,
+    nome: "Maria Santos",
+    cargo: "Engenheira de Segurança",
+    email: "maria.santos@empresa.com",
+    telefone: "(11) 99999-2222",
+    obra_id: 1,
+    obra_nome: "Shopping Center Norte",
+    status: "ativo"
+  },
+  {
+    id: 3,
+    nome: "Pedro Oliveira",
+    cargo: "Supervisor de Obra",
+    email: "pedro.oliveira@empresa.com",
+    telefone: "(11) 99999-3333",
+    obra_id: 2,
+    obra_nome: "Residencial Jardim Europa",
+    status: "ativo"
+  },
+  {
+    id: 4,
+    nome: "Ana Costa",
+    cargo: "Técnica em Manutenção",
+    email: "ana.costa@empresa.com",
+    telefone: "(11) 99999-4444",
+    obra_id: 3,
+    obra_nome: "Hospital Municipal",
+    status: "ativo"
+  },
+  {
+    id: 5,
+    nome: "Carlos Ferreira",
+    cargo: "Operador de Grua",
+    email: "carlos.ferreira@empresa.com",
+    telefone: "(11) 99999-5555",
+    obra_id: 4,
+    obra_nome: "Edifício Comercial Centro",
+    status: "ativo"
+  }
+]
+
+// Dados mock para entradas do livro da grua
+export interface EntradaLivroGrua {
+  id: number
+  grua_id: string
+  funcionario_id: number
+  funcionario_nome: string
+  data_entrada: string
+  tipo_entrada: 'checklist' | 'manutencao' | 'falha'
+  descricao: string
+  status: 'pendente' | 'concluido' | 'cancelado'
+  observacoes?: string
+  created_at: string
+  updated_at: string
+}
+
+export const mockEntradasLivroGrua: EntradaLivroGrua[] = [
+  {
+    id: 1,
+    grua_id: "G001",
+    funcionario_id: 1,
+    funcionario_nome: "João Silva",
+    data_entrada: "2024-01-20",
+    tipo_entrada: "checklist",
+    descricao: "Checklist diário - todos os sistemas funcionando normalmente",
+    status: "concluido",
+    observacoes: "Verificação de cabos, freios e sistema hidráulico OK",
+    created_at: "2024-01-20T08:00:00Z",
+    updated_at: "2024-01-20T08:30:00Z"
+  },
+  {
+    id: 2,
+    grua_id: "G001",
+    funcionario_id: 1,
+    funcionario_nome: "João Silva",
+    data_entrada: "2024-01-22",
+    tipo_entrada: "manutencao",
+    descricao: "Manutenção preventiva - troca de óleo hidráulico",
+    status: "concluido",
+    observacoes: "Óleo trocado conforme cronograma. Próxima manutenção em 30 dias.",
+    created_at: "2024-01-22T14:00:00Z",
+    updated_at: "2024-01-22T16:00:00Z"
+  },
+  {
+    id: 3,
+    grua_id: "G001",
+    funcionario_id: 2,
+    funcionario_nome: "Maria Santos",
+    data_entrada: "2024-01-25",
+    tipo_entrada: "falha",
+    descricao: "Falha no sistema de freio de emergência",
+    status: "pendente",
+    observacoes: "Sistema de freio apresentou falha durante operação. Grua parada para manutenção.",
+    created_at: "2024-01-25T10:30:00Z",
+    updated_at: "2024-01-25T10:30:00Z"
+  },
+  {
+    id: 4,
+    grua_id: "G002",
+    funcionario_id: 1,
+    funcionario_nome: "João Silva",
+    data_entrada: "2024-02-01",
+    tipo_entrada: "checklist",
+    descricao: "Checklist diário - verificação de segurança",
+    status: "concluido",
+    observacoes: "Todos os sistemas operacionais. Grua pronta para uso.",
+    created_at: "2024-02-01T07:00:00Z",
+    updated_at: "2024-02-01T07:15:00Z"
+  },
+  {
+    id: 5,
+    grua_id: "G003",
+    funcionario_id: 3,
+    funcionario_nome: "Pedro Oliveira",
+    data_entrada: "2024-03-05",
+    tipo_entrada: "manutencao",
+    descricao: "Manutenção corretiva - reparo no sistema de elevação",
+    status: "concluido",
+    observacoes: "Sistema de elevação reparado. Testes realizados com sucesso.",
+    created_at: "2024-03-05T09:00:00Z",
+    updated_at: "2024-03-05T17:00:00Z"
+  }
+]
+
 // Funções utilitárias para clientes
 export const getClienteById = (id: string): Cliente | undefined => {
   return mockClientes.find(cliente => cliente.id === id)
