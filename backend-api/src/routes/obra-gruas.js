@@ -132,6 +132,8 @@ router.get('/:obraId', requirePermission('visualizar_obras'), async (req, res) =
  */
 router.post('/', requirePermission('editar_obras'), async (req, res) => {
   try {
+    console.log('📝 Requisição para adicionar grua à obra:', req.body)
+    
     const { error, value } = configuracaoSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
@@ -140,20 +142,47 @@ router.post('/', requirePermission('editar_obras'), async (req, res) => {
       })
     }
 
+    console.log('✅ Dados validados:', value)
+
+    // Listar todas as gruas ativas nesta obra para debug
+    const { data: gruasAtivas, error: listError } = await supabaseAdmin
+      .from('obra_gruas_configuracao')
+      .select('id, grua_id, status')
+      .eq('obra_id', value.obra_id)
+      .eq('status', 'ativa')
+
+    if (listError) {
+      console.error('❌ Erro ao listar gruas ativas:', listError)
+    } else {
+      console.log(`📋 Gruas ativas na obra ${value.obra_id}:`, gruasAtivas)
+    }
+
     // Verificar se a grua já está ativa nesta obra
-    const { data: existente } = await supabaseAdmin
+    const { data: existente, error: checkError } = await supabaseAdmin
       .from('obra_gruas_configuracao')
       .select('id')
       .eq('obra_id', value.obra_id)
       .eq('grua_id', value.grua_id)
       .eq('status', 'ativa')
-      .single()
+      .maybeSingle()
+
+    console.log('🔍 Resultado da verificação:', { existente, checkError })
+
+    // Ignora o erro PGRST116 (nenhum registro encontrado)
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Erro ao verificar grua existente:', checkError)
+      throw checkError
+    }
 
     if (existente) {
+      console.log(`⚠️ Grua ${value.grua_id} já está ativa na obra ${value.obra_id}`)
       return res.status(400).json({
-        error: 'Grua já está ativa nesta obra'
+        error: 'Grua já está ativa nesta obra',
+        details: `A grua ${value.grua_id} já está registrada como ativa nesta obra`
       })
     }
+
+    console.log(`✅ Grua ${value.grua_id} pode ser adicionada à obra ${value.obra_id}`)
 
     const { data, error: insertError } = await supabaseAdmin
       .from('obra_gruas_configuracao')

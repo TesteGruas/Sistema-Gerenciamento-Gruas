@@ -102,6 +102,7 @@ export default function ObrasPage() {
   })
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null)
   const [gruaSelecionada, setGruaSelecionada] = useState<any>(null)
+  const [gruasSelecionadas, setGruasSelecionadas] = useState<any[]>([]) // Múltiplas gruas
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
   const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
   
@@ -219,7 +220,7 @@ export default function ObrasPage() {
     }
   }
 
-  // Função para lidar com seleção de grua
+  // Função para lidar com seleção de grua (para criação - mantém compatibilidade)
   const handleGruaSelect = (grua: any) => {
     console.log('🔧 DEBUG - Grua selecionada:', grua)
     setGruaSelecionada(grua)
@@ -242,6 +243,59 @@ export default function ObrasPage() {
       console.log('🔧 DEBUG - Limpando dados da grua:', newFormData)
       setObraFormData(newFormData)
     }
+  }
+
+  // Função para adicionar grua à lista de selecionadas (para edição com múltiplas gruas)
+  const handleAdicionarGruaSelecionada = (grua: any, valorLocacao?: number, taxaMensal?: number) => {
+    console.log('🔧 DEBUG - Adicionando grua à lista:', grua)
+    
+    // Verificar se a grua já está na lista
+    if (gruasSelecionadas.find(g => g.id === grua.id)) {
+      toast({
+        title: "Atenção",
+        description: "Esta grua já está vinculada à obra",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    const novaGrua = {
+      id: grua.id,
+      name: grua.name || grua.modelo || `Grua ${grua.id}`,
+      model: grua.model || grua.modelo,
+      manufacturer: grua.manufacturer || grua.fabricante,
+      capacity: grua.capacity || grua.capacidade,
+      valor_locacao: valorLocacao || parseFloat(obraFormData.gruaValue) || 0,
+      taxa_mensal: taxaMensal || parseFloat(obraFormData.monthlyFee) || 0
+    }
+    
+    setGruasSelecionadas([...gruasSelecionadas, novaGrua])
+    
+    // Limpar formulário de grua
+    setGruaSelecionada(null)
+    setObraFormData({
+      ...obraFormData,
+      gruaId: '',
+      gruaValue: '',
+      monthlyFee: ''
+    })
+    
+    toast({
+      title: "Sucesso",
+      description: "Grua adicionada à lista",
+      variant: "default"
+    })
+  }
+
+  // Função para remover grua da lista de selecionadas
+  const handleRemoverGruaSelecionada = (gruaId: string) => {
+    console.log('🔧 DEBUG - Removendo grua da lista:', gruaId)
+    setGruasSelecionadas(gruasSelecionadas.filter(g => g.id !== gruaId))
+    toast({
+      title: "Sucesso",
+      description: "Grua removida da lista",
+      variant: "default"
+    })
   }
 
   // Função para adicionar funcionário selecionado
@@ -308,7 +362,7 @@ export default function ObrasPage() {
   // Função de busca via API
   const buscarObras = async () => {
     try {
-      setLoading(true)
+      startLoading()
       setError(null)
       const response = await obrasApi.listarObras({ 
         page: currentPage,
@@ -513,7 +567,7 @@ export default function ObrasPage() {
     }
     
     try {
-      setCreating(true)
+      startCreating()
       
       // Buscar dados do cliente selecionado
       const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
@@ -686,7 +740,7 @@ export default function ObrasPage() {
         variant: "destructive"
       })
     } finally {
-      setCreating(false)
+      stopCreating()
     }
   }
 
@@ -769,17 +823,21 @@ export default function ObrasPage() {
         obrasApi.buscarFuncionariosVinculados(parseInt(obra.id))
       ])
       
-      // Preencher dados da grua se existir
-      let gruaId = ''
-      let gruaValue = ''
-      let monthlyFee = ''
-      if (gruasResponse.data && gruasResponse.data.length > 0) {
-        const gruaVinculada = gruasResponse.data[0]
-        gruaId = gruaVinculada.gruaId
-        monthlyFee = gruaVinculada.valorLocacaoMensal?.toString() || ''
-        // O valor da grua não está disponível nos dados de relacionamento
-        gruaValue = ''
-      }
+      // Carregar TODAS as gruas vinculadas
+      const gruasVinculadas = gruasResponse.data?.map((gruaVinculada: any) => ({
+        id: gruaVinculada.gruaId,
+        name: gruaVinculada.grua?.modelo || `Grua ${gruaVinculada.gruaId}`,
+        model: gruaVinculada.grua?.modelo || 'Modelo não disponível',
+        manufacturer: gruaVinculada.grua?.fabricante || 'Fabricante não disponível',
+        capacity: gruaVinculada.grua?.tipo || 'Tipo não disponível',
+        valor_locacao: 0, // Não disponível nos dados de relacionamento
+        taxa_mensal: parseFloat(gruaVinculada.valorLocacaoMensal) || 0
+      })) || []
+      
+      console.log('✅ Gruas vinculadas carregadas:', gruasVinculadas)
+      
+      // Atualizar estado de gruas selecionadas
+      setGruasSelecionadas(gruasVinculadas)
       
       // Preencher dados dos funcionários se existirem
       const funcionarios = funcionariosResponse.data?.map((func: any) => ({
@@ -803,28 +861,18 @@ export default function ObrasPage() {
         location: obra.location || '',
         clienteId: obra.clienteId || '',
         observations: obra.observations || '',
-        // Dados da grua vinculada
-        gruaId: gruaId,
-        gruaValue: gruaValue,
-        monthlyFee: monthlyFee,
+        // Limpar campos de grua única (serão usadas as múltiplas)
+        gruaId: '',
+        gruaValue: '',
+        monthlyFee: '',
         // Dados do responsável
         responsavelId: obra.responsavelId || '',
         responsavelName: obra.responsavelName || '',
         funcionarios: funcionarios
       })
       
-      // Atualizar estados dos componentes de busca
-      if (gruaId) {
-        // Buscar dados completos da grua
-        // Por enquanto, vamos usar dados básicos
-        setGruaSelecionada({
-          id: gruaId,
-          name: `Grua ${gruaId}`,
-          model: 'Modelo não disponível',
-          manufacturer: 'Fabricante não disponível',
-          capacity: 'Capacidade não disponível'
-        })
-      }
+      // Limpar grua selecionada (vamos usar a lista de múltiplas gruas)
+      setGruaSelecionada(null)
       
       setFuncionariosSelecionados(funcionarios)
       
@@ -858,6 +906,9 @@ export default function ObrasPage() {
         responsavelName: '',
         funcionarios: []
       })
+      
+      // Limpar estados
+      setGruasSelecionadas([])
     }
     
     setIsEditDialogOpen(true)
@@ -886,7 +937,13 @@ export default function ObrasPage() {
         // Dados do responsável
         responsavelId: obraFormData.responsavelId,
         responsavelName: obraFormData.responsavelName,
-        // Dados da grua
+        // MÚLTIPLAS GRUAS - enviar todas as gruas selecionadas
+        gruasSelecionadas: gruasSelecionadas.map(grua => ({
+          id: grua.id,
+          valor_locacao: grua.valor_locacao || 0,
+          taxa_mensal: grua.taxa_mensal || 0
+        })),
+        // Mantém campos para compatibilidade (caso seja adicionada nova grua via formulário)
         gruaId: obraFormData.gruaId || null,
         gruaValue: obraFormData.gruaValue ? parseFloat(obraFormData.gruaValue) : null,
         monthlyFee: obraFormData.monthlyFee ? parseFloat(obraFormData.monthlyFee) : null,
@@ -911,6 +968,7 @@ export default function ObrasPage() {
       }
 
       console.log('📋 Dados preparados para o backend:', obraData)
+      console.log('🏗️ Gruas selecionadas:', gruasSelecionadas)
       console.log('👥 Funcionários selecionados:', funcionariosSelecionados)
       console.log('💰 Custos mensais:', custosMensais)
       
@@ -949,6 +1007,7 @@ export default function ObrasPage() {
       })
       setClienteSelecionado(null)
       setGruaSelecionada(null)
+      setGruasSelecionadas([]) // Limpar lista de gruas
       setFuncionariosSelecionados([])
       
       // Mostrar mensagem de sucesso
@@ -1920,55 +1979,115 @@ export default function ObrasPage() {
                 </div>
               </TabsContent>
 
-              {/* Aba: Grua */}
+              {/* Aba: Grua - Com suporte a múltiplas gruas */}
               <TabsContent value="grua" className="space-y-4">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center gap-2 mb-2">
                     <Crane className="w-5 h-5 text-blue-600" />
-                    <h3 className="font-medium text-blue-900">Selecionar Grua</h3>
+                    <h3 className="font-medium text-blue-900">Gerenciar Gruas</h3>
                   </div>
                   <p className="text-sm text-blue-700">
-                    Selecione uma grua existente para atrelar a esta obra
+                    Adicione ou remova gruas vinculadas a esta obra. Você pode ter múltiplas gruas na mesma obra.
                   </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="edit-gruaId">Grua *</Label>
-                  <GruaSearch
-                    onGruaSelect={handleGruaSelect}
-                    selectedGrua={gruaSelecionada}
-                    placeholder="Buscar grua por nome, modelo ou fabricante..."
-                    className="mt-1"
-                    onlyAvailable={true}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Digite o nome, modelo ou fabricante da grua para buscar
-                  </p>
-                </div>
+                {/* Gruas já vinculadas */}
+                {gruasSelecionadas.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-sm">Gruas Vinculadas ({gruasSelecionadas.length})</h4>
+                    {gruasSelecionadas.map((grua) => (
+                      <div key={grua.id} className="flex gap-2 p-3 border rounded-lg bg-blue-50">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <Crane className="w-4 h-4 text-blue-600" />
+                            <div>
+                              <p className="font-medium text-blue-900">{grua.name || grua.model}</p>
+                              <p className="text-sm text-blue-700">
+                                {grua.manufacturer} - {grua.capacity}
+                              </p>
+                              <p className="text-xs text-blue-600">
+                                Mensalidade: R$ {(grua.taxa_mensal || 0).toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoverGruaSelecionada(grua.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Adicionar nova grua */}
+                <div className="border-t pt-4 space-y-4">
+                  <h4 className="font-medium text-sm">Adicionar Nova Grua</h4>
+                  
                   <div>
-                    <Label htmlFor="edit-gruaValue">Valor da Grua (R$) *</Label>
-                    <Input
-                      id="edit-gruaValue"
-                      type="number"
-                      value={obraFormData.gruaValue}
-                      onChange={(e) => setObraFormData({ ...obraFormData, gruaValue: e.target.value })}
-                      placeholder="Ex: 500000"
-                      required
+                    <Label htmlFor="edit-gruaId">Buscar Grua</Label>
+                    <GruaSearch
+                      onGruaSelect={handleGruaSelect}
+                      selectedGrua={gruaSelecionada}
+                      placeholder="Buscar grua por nome, modelo ou fabricante..."
+                      className="mt-1"
+                      onlyAvailable={true}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Digite o nome, modelo ou fabricante da grua para buscar
+                    </p>
                   </div>
-                  <div>
-                    <Label htmlFor="edit-monthlyFee">Mensalidade (R$) *</Label>
-                    <Input
-                      id="edit-monthlyFee"
-                      type="number"
-                      value={obraFormData.monthlyFee}
-                      onChange={(e) => setObraFormData({ ...obraFormData, monthlyFee: e.target.value })}
-                      placeholder="Ex: 15000"
-                      required
-                    />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="edit-gruaValue">Valor da Grua (R$)</Label>
+                      <Input
+                        id="edit-gruaValue"
+                        type="number"
+                        value={obraFormData.gruaValue}
+                        onChange={(e) => setObraFormData({ ...obraFormData, gruaValue: e.target.value })}
+                        placeholder="Ex: 500000"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-monthlyFee">Mensalidade (R$)</Label>
+                      <Input
+                        id="edit-monthlyFee"
+                        type="number"
+                        value={obraFormData.monthlyFee}
+                        onChange={(e) => setObraFormData({ ...obraFormData, monthlyFee: e.target.value })}
+                        placeholder="Ex: 15000"
+                      />
+                    </div>
                   </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (!gruaSelecionada) {
+                        toast({
+                          title: "Atenção",
+                          description: "Selecione uma grua primeiro",
+                          variant: "destructive"
+                        })
+                        return
+                      }
+                      handleAdicionarGruaSelecionada(
+                        gruaSelecionada,
+                        parseFloat(obraFormData.gruaValue) || 0,
+                        parseFloat(obraFormData.monthlyFee) || 0
+                      )
+                    }}
+                    disabled={!gruaSelecionada}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Grua à Lista
+                  </Button>
                 </div>
               </TabsContent>
 

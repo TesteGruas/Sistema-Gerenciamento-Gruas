@@ -546,13 +546,28 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
   console.log('  - custos_mensais.length:', obraFrontend.custos_mensais?.length || 0)
   
   // Processar múltiplas gruas se disponível
-  const gruas = obraFrontend.gruasSelecionadas && Array.isArray(obraFrontend.gruasSelecionadas) 
-    ? obraFrontend.gruasSelecionadas.map((grua: any) => ({
-        grua_id: grua.id,
-        valor_locacao: grua.valor_locacao || 0,
-        taxa_mensal: grua.taxa_mensal || 0
-      }))
-    : []
+  let gruas = []
+  
+  // Primeiro, adicionar gruas selecionadas (modo edição com múltiplas gruas)
+  if (obraFrontend.gruasSelecionadas && Array.isArray(obraFrontend.gruasSelecionadas) && obraFrontend.gruasSelecionadas.length > 0) {
+    gruas = obraFrontend.gruasSelecionadas.map((grua: any) => ({
+      grua_id: grua.id,
+      valor_locacao: grua.valor_locacao || 0,
+      taxa_mensal: grua.taxa_mensal || 0
+    }))
+  }
+  
+  // Se houver uma nova grua sendo adicionada via formulário, adicionar à lista
+  if (obraFrontend.gruaId && obraFrontend.gruaValue && obraFrontend.monthlyFee) {
+    // Verificar se essa grua já não está na lista
+    if (!gruas.find((g: any) => g.grua_id === obraFrontend.gruaId)) {
+      gruas.push({
+        grua_id: obraFrontend.gruaId,
+        valor_locacao: parseFloat(obraFrontend.gruaValue) || 0,
+        taxa_mensal: parseFloat(obraFrontend.monthlyFee) || 0
+      })
+    }
+  }
   
   console.log('🔍 DEBUG - Gruas processadas:', gruas)
   
