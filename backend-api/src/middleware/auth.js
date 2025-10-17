@@ -67,14 +67,18 @@ export const authenticateToken = async (req, res, next) => {
         if (perfilData && !perfilError) {
           userInfo = {
             ...userData,
-            role: perfilData.perfis?.nome?.toLowerCase() || 'user'
+            role: perfilData.perfis?.nome?.toLowerCase() || 'user',
+            perfil_id: perfilData.perfil_id, // Armazenar perfil_id para buscar permissões
+            funcionario_id: userData.funcionario_id // Armazenar funcionario_id para filtrar obras
           }
-          console.log('🔍 DEBUG: Usuário encontrado com perfil:', perfilData.perfis?.nome)
+          console.log('🔍 DEBUG: Usuário encontrado com perfil:', perfilData.perfis?.nome, 'ID:', perfilData.perfil_id)
+          console.log('🔍 DEBUG: funcionario_id do usuário:', userData.funcionario_id)
         } else {
           console.log('🔍 DEBUG: Perfil não encontrado para o usuário:', userData.email, 'Erro:', perfilError?.message)
           userInfo = {
             ...userData,
-            role: 'user'
+            role: 'user',
+            funcionario_id: userData.funcionario_id
           }
         }
       } else {
@@ -106,7 +110,48 @@ export const authenticateToken = async (req, res, next) => {
 }
 
 /**
- * Middleware para verificar permissões (versão simplificada)
+ * Converte permissão do formato antigo (underscore) para novo formato (modulo:acao)
+ * Ex: visualizar_obras -> obras:visualizar
+ */
+const converterPermissaoParaNovoFormato = (permission) => {
+  // Mapeamento de permissões antigas para novas
+  const mapeamento = {
+    'visualizar_obras': 'obras:visualizar',
+    'criar_obras': 'obras:criar',
+    'editar_obras': 'obras:editar',
+    'excluir_obras': 'obras:deletar',
+    'visualizar_estoque': 'estoque:visualizar',
+    'criar_produtos': 'estoque:criar',
+    'editar_produtos': 'estoque:editar',
+    'excluir_produtos': 'estoque:deletar',
+    'movimentar_estoque': 'estoque:movimentar',
+    'visualizar_clientes': 'clientes:visualizar',
+    'criar_clientes': 'clientes:criar',
+    'editar_clientes': 'clientes:editar',
+    'excluir_clientes': 'clientes:deletar',
+    'visualizar_funcionarios': 'funcionarios:visualizar',
+    'criar_funcionarios': 'funcionarios:criar',
+    'editar_funcionarios': 'funcionarios:editar',
+    'excluir_funcionarios': 'funcionarios:deletar',
+    'visualizar_equipamentos': 'equipamentos:visualizar',
+    'criar_equipamentos': 'equipamentos:criar',
+    'editar_equipamentos': 'equipamentos:editar',
+    'excluir_equipamentos': 'equipamentos:deletar',
+    'visualizar_relacionamentos': 'relacionamentos:visualizar',
+    'criar_relacionamentos': 'relacionamentos:criar',
+    'editar_relacionamentos': 'relacionamentos:editar',
+    'excluir_relacionamentos': 'relacionamentos:deletar',
+    'criar_notificacoes': 'notificacoes:criar',
+    'visualizar_notificacoes': 'notificacoes:visualizar',
+    'editar_notificacoes': 'notificacoes:editar',
+    'excluir_notificacoes': 'notificacoes:deletar'
+  }
+  
+  return mapeamento[permission] || permission
+}
+
+/**
+ * Middleware para verificar permissões (busca do banco de dados)
  */
 export const requirePermission = (permission) => {
   return async (req, res, next) => {
@@ -118,87 +163,134 @@ export const requirePermission = (permission) => {
         })
       }
 
-      // Sistema de permissões simplificado baseado no role do usuário
       const userRole = req.user?.role || 'user'
-      console.log('🔍 DEBUG: Role do usuário:', userRole)
-      // Mapeamento de permissões por role
-      const rolePermissions = {
-        'administrador': [
-          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'excluir_produtos', 'movimentar_estoque',
-          'visualizar_clientes', 'criar_clientes', 'editar_clientes', 'excluir_clientes',
-          'visualizar_obras', 'criar_obras', 'editar_obras', 'excluir_obras',
-          'visualizar_funcionarios', 'criar_funcionarios', 'editar_funcionarios', 'excluir_funcionarios',
-          'visualizar_equipamentos', 'criar_equipamentos', 'editar_equipamentos', 'excluir_equipamentos',
-          'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
-          'usuarios:visualizar', 'usuarios:criar', 'usuarios:editar', 'usuarios:deletar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes',
-          'rh:visualizar', 'rh:criar', 'rh:editar', 'rh:deletar',
-            'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar',
-          'criar_notificacoes', 'visualizar_notificacoes', 'editar_notificacoes', 'excluir_notificacoes'
-        ],
-        'gerente': [
-          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'movimentar_estoque',
-          'visualizar_clientes', 'criar_clientes', 'editar_clientes',
-          'usuarios:visualizar',
-          'rh:visualizar', 'rh:criar', 'rh:editar',
-          'historico:visualizar', 'historico:criar', 'historico:editar',
-          'criar_notificacoes', 'visualizar_notificacoes'
-        ],
-        'supervisor': [
-          'visualizar_estoque', 'visualizar_clientes', 'visualizar_obras',
-          'usuarios:visualizar',
-          'rh:visualizar',
-          'historico:visualizar'
-        ],
-        'operador': [
-          'visualizar_estoque', 'visualizar_clientes'
-        ],
-        'visualizador': [
-          'visualizar_estoque', 'visualizar_clientes'
-        ],
-        'admin': [
-          'visualizar_estoque', 'criar_produtos', 'editar_produtos', 'excluir_produtos', 'movimentar_estoque',
-          'visualizar_clientes', 'criar_clientes', 'editar_clientes', 'excluir_clientes',
-          'visualizar_obras', 'criar_obras', 'editar_obras', 'excluir_obras',
-          'visualizar_funcionarios', 'criar_funcionarios', 'editar_funcionarios', 'excluir_funcionarios',
-          'visualizar_equipamentos', 'criar_equipamentos', 'editar_equipamentos', 'excluir_equipamentos',
-          'visualizar_relacionamentos', 'criar_relacionamentos', 'editar_relacionamentos', 'excluir_relacionamentos',
-          'usuarios:visualizar', 'usuarios:gerenciar_perfis', 'usuarios:gerenciar_permissoes',
-          'rh:visualizar', 'rh:criar', 'rh:editar', 'rh:deletar',
-          'historico:visualizar', 'historico:criar', 'historico:editar', 'historico:deletar',
-          'criar_notificacoes', 'visualizar_notificacoes', 'editar_notificacoes', 'excluir_notificacoes'
-        ],
-        'user': [
-          'visualizar_estoque', 'visualizar_clientes'
-        ]
-      }
-
-      // Verificar se o usuário tem a permissão baseada no seu role
-      const userPermissions = rolePermissions[userRole] || rolePermissions['user']
-      const hasPermission = userPermissions.includes(permission)
-
-      console.log('🔍 DEBUG: Verificação de permissão:', {
+      const perfilId = req.user?.perfil_id
+      
+      console.log('🔍 DEBUG: Verificando permissão:', {
         permission,
         userRole,
-        hasPermission,
-        userPermissions: userPermissions.slice(0, 10) // Mostrar apenas as primeiras 10 permissões
+        perfilId
       })
 
-      if (!hasPermission) {
-        console.log('❌ PERMISSÃO NEGADA:', {
-          permission,
-          userRole,
-          availablePermissions: userPermissions
+      // Converter permissão para novo formato se necessário
+      const permissaoNovoFormato = converterPermissaoParaNovoFormato(permission)
+      
+      // Administrador tem acesso total
+      if (userRole === 'administrador' || userRole === 'admin') {
+        console.log('✅ PERMISSÃO CONCEDIDA: Administrador tem acesso total')
+        return next()
+      }
+
+      // Se não tiver perfil_id, usar permissões hardcoded antigas (fallback)
+      if (!perfilId) {
+        console.log('⚠️ AVISO: Usuário sem perfil_id, usando permissões hardcoded')
+        const rolePermissionsFallback = {
+          'gerente': [
+            'estoque:visualizar', 'estoque:criar', 'estoque:editar', 'estoque:movimentar',
+            'clientes:visualizar', 'clientes:criar', 'clientes:editar',
+            'usuarios:visualizar',
+            'rh:visualizar', 'rh:criar', 'rh:editar',
+            'historico:visualizar', 'historico:criar', 'historico:editar',
+            'notificacoes:criar', 'notificacoes:visualizar'
+          ],
+          'supervisor': [
+            'estoque:visualizar', 'clientes:visualizar', 'obras:visualizar',
+            'usuarios:visualizar',
+            'rh:visualizar',
+            'historico:visualizar'
+          ],
+          'operador': [
+            'estoque:visualizar', 'clientes:visualizar', 'obras:visualizar'
+          ],
+          'visualizador': [
+            'estoque:visualizar', 'clientes:visualizar'
+          ],
+          'user': [
+            'estoque:visualizar', 'clientes:visualizar'
+          ]
+        }
+        
+        const userPermissions = rolePermissionsFallback[userRole] || rolePermissionsFallback['user']
+        const hasPermission = userPermissions.includes(permissaoNovoFormato)
+        
+        if (!hasPermission) {
+          return res.status(403).json({
+            error: 'Permissão insuficiente',
+            code: 'INSUFFICIENT_PERMISSION',
+            required: permission,
+            userRole: userRole,
+            availablePermissions: userPermissions
+          })
+        }
+        
+        return next()
+      }
+
+      // Buscar permissões do banco de dados
+      try {
+        const { data: permissoesData, error: permissoesError } = await supabaseAdmin
+          .from('perfil_permissoes')
+          .select(`
+            status,
+            permissoes!inner (
+              nome,
+              modulo,
+              acao,
+              status
+            )
+          `)
+          .eq('perfil_id', perfilId)
+          .eq('status', 'Ativa')
+
+        if (permissoesError) {
+          console.error('❌ Erro ao buscar permissões:', permissoesError)
+          throw permissoesError
+        }
+
+        // Extrair nomes das permissões ativas
+        const permissoesAtivas = (permissoesData || [])
+          .filter(pp => pp.permissoes?.status === 'Ativa')
+          .map(pp => pp.permissoes.nome)
+
+        console.log('🔍 DEBUG: Permissões do usuário:', {
+          perfilId,
+          total: permissoesAtivas.length,
+          permissoes: permissoesAtivas
         })
-        return res.status(403).json({
-          error: 'Permissão insuficiente',
-          code: 'INSUFFICIENT_PERMISSION',
-          required: permission,
-          userRole: userRole,
-          availablePermissions: userPermissions
+
+        // Verificar se tem a permissão (formato novo ou antigo)
+        const hasPermission = permissoesAtivas.includes(permissaoNovoFormato) || 
+                             permissoesAtivas.includes(permission)
+
+        if (!hasPermission) {
+          console.log('❌ PERMISSÃO NEGADA:', {
+            permissionRequired: permission,
+            permissionNovoFormato: permissaoNovoFormato,
+            userRole,
+            perfilId,
+            availablePermissions: permissoesAtivas
+          })
+          return res.status(403).json({
+            error: 'Permissão insuficiente',
+            code: 'INSUFFICIENT_PERMISSION',
+            required: permission,
+            userRole: userRole,
+            availablePermissions: permissoesAtivas
+          })
+        }
+
+        console.log('✅ PERMISSÃO CONCEDIDA:', permission)
+        next()
+
+      } catch (dbError) {
+        console.error('❌ Erro ao verificar permissões no banco:', dbError)
+        return res.status(500).json({
+          error: 'Erro ao verificar permissões',
+          code: 'PERMISSION_DB_ERROR',
+          message: dbError.message
         })
       }
 
-      next()
     } catch (error) {
       console.error('Erro na verificação de permissão:', error)
       return res.status(500).json({

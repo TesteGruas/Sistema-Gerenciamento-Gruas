@@ -28,7 +28,7 @@ interface LivroGruaFormProps {
   onSave?: (entrada: EntradaLivroGrua) => void
   onCancel?: () => void
   modoEdicao?: boolean
-  funcionarioLogado?: { id: number; nome: string; cargo: string }
+  funcionarioLogado?: { id: number; nome: string; cargo: string; funcionario_id?: number }
 }
 
 export default function LivroGruaForm({
@@ -45,9 +45,10 @@ export default function LivroGruaForm({
   
   const [formData, setFormData] = useState<Partial<EntradaLivroGrua>>(() => {
     console.log('LivroGruaForm - Inicializando formData com funcionarioLogado:', funcionarioLogado)
+    console.log('🔍 funcionarioLogado.funcionario_id:', funcionarioLogado?.funcionario_id)
     return {
       grua_id: gruaId,
-      funcionario_id: entrada?.funcionario_id || funcionarioLogado?.id || 0,
+      funcionario_id: entrada?.funcionario_id || funcionarioLogado?.funcionario_id || 0,
       data_entrada: entrada?.data_entrada || new Date().toISOString().split('T')[0],
       hora_entrada: entrada?.hora_entrada || new Date().toTimeString().slice(0, 5),
       tipo_entrada: entrada?.tipo_entrada || 'checklist',
@@ -65,14 +66,16 @@ export default function LivroGruaForm({
     console.log('LivroGruaForm - funcionarioLogado recebido:', funcionarioLogado)
     if (funcionarioLogado) {
       console.log('LivroGruaForm - Configurando funcionário:', funcionarioLogado)
+      console.log('🔍 funcionarioLogado.funcionario_id no useEffect:', funcionarioLogado.funcionario_id)
       setFuncionarioSelecionado({
-        id: funcionarioLogado.id,
+        id: funcionarioLogado.funcionario_id || funcionarioLogado.id,
         name: funcionarioLogado.nome,
         role: funcionarioLogado.cargo
       })
       setFormData(prev => {
-        const newData = { ...prev, funcionario_id: funcionarioLogado.id }
+        const newData = { ...prev, funcionario_id: funcionarioLogado.funcionario_id || funcionarioLogado.id }
         console.log('LivroGruaForm - FormData atualizado:', newData)
+        console.log('🔍 funcionario_id usado:', newData.funcionario_id)
         return newData
       })
     } else {

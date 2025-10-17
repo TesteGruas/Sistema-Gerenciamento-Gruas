@@ -7,6 +7,7 @@ interface CurrentUser {
   cargo: string
   role?: string
   email?: string
+  funcionario_id?: number // CORREÇÃO: incluir funcionario_id
   isAdmin?: boolean
   isGestor?: boolean
 }

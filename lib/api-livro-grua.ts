@@ -375,7 +375,7 @@ export const livroGruaApi = {
   /**
    * Obter dados do funcionário logado
    */
-  async obterFuncionarioLogado(): Promise<{ id: number; nome: string; cargo: string; role?: string; email?: string }> {
+  async obterFuncionarioLogado(): Promise<{ id: number; nome: string; cargo: string; role?: string; email?: string; funcionario_id?: number }> {
     const response = await httpRequest('/auth/me')
     console.log('Resposta completa do /auth/me:', response)
     
@@ -386,12 +386,15 @@ export const livroGruaApi = {
       throw new Error('Dados do usuário não encontrados na resposta')
     }
     
+    console.log('🔍 obterFuncionarioLogado - userData.funcionario_id:', userData.funcionario_id)
+    
     return {
       id: userData.id,
       nome: userData.nome || userData.name,
       cargo: userData.cargo || userData.role || 'Funcionário',
       role: userData.role || userData.perfil?.nome,
-      email: userData.email
+      email: userData.email,
+      funcionario_id: userData.funcionario_id // CORREÇÃO: incluir funcionario_id
     }
   },
 

@@ -79,10 +79,10 @@ export default function LivrosGruasPage() {
         return
       }
 
-      // TEMPORÁRIO: Usar endpoint de debug para testar
-      console.log('=== TESTE: Usando endpoint de debug ===')
-      const response = await livroGruaApi.listarRelacoesGruaObraDebug()
-      console.log('Resposta da API (debug):', response)
+      // Buscar relações grua-obra (filtradas por perfil do usuário)
+      console.log('=== Buscando relações grua-obra ===')
+      const response = await livroGruaApi.listarRelacoesGruaObra()
+      console.log('Resposta da API:', response)
       
       if (response.success && response.data) {
         console.log('Relações recebidas:', response.data)

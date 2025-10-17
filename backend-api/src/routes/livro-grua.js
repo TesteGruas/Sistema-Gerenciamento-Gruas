@@ -23,13 +23,38 @@ router.use(authenticateToken)
 
 /**
  * GET /api/livro-grua/relacoes-grua-obra
- * Listar todas as relações grua-obra para funcionários
+ * Listar relações grua-obra baseado no perfil do usuário
+ * - Administradores e Gerentes: veem todas as relações
+ * - Outros perfis: veem apenas gruas em obras onde estão alocados
  */
 router.get('/relacoes-grua-obra', async (req, res) => {
   try {
-    const { funcionario_id } = req.query
+    const user = req.user
     
-    let query = supabase
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuário não autenticado'
+      })
+    }
+
+    console.log('🔍 DEBUG: Usuário autenticado (COMPLETO):', JSON.stringify(user, null, 2))
+    console.log('🔍 DEBUG: Resumo do usuário:', {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      perfil_id: user.perfil_id,
+      funcionario_id: user.funcionario_id
+    })
+
+    // Verificar se o usuário é Administrador ou Gerente
+    const isAdminOrManager = user.role === 'administrador' || 
+                            user.role === 'admin' || 
+                            user.role === 'gerente'
+
+    console.log('🔍 DEBUG: É Admin/Gerente?', isAdminOrManager)
+
+    let query = supabaseAdmin
       .from('grua_obra')
       .select(`
         id,
@@ -59,17 +84,39 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       .order('obras(nome)', { ascending: true })
       .order('gruas(id)', { ascending: true })
 
-    // Se funcionario_id fornecido, filtrar apenas obras onde o funcionário trabalha
-    if (funcionario_id) {
-      // Primeiro buscar obras do funcionário
-      const { data: obrasFuncionario, error: obrasError } = await supabase
+    // Se NÃO for admin/gerente, filtrar apenas obras onde o funcionário está alocado
+    if (!isAdminOrManager) {
+      console.log('🔍 DEBUG: Filtrando por obras do funcionário')
+      
+      // Buscar funcionario_id do usuário
+      const funcionarioId = user.funcionario_id
+      
+      console.log('🔍 DEBUG: funcionario_id RAW:', funcionarioId, 'Tipo:', typeof funcionarioId)
+      
+      if (!funcionarioId) {
+        console.log('⚠️ AVISO: Usuário não tem funcionario_id associado')
+        return res.json({
+          success: true,
+          data: [],
+          message: 'Usuário não está associado a um funcionário'
+        })
+      }
+
+      console.log('🔍 DEBUG: Buscando obras para funcionario_id:', funcionarioId)
+
+      // Buscar obras onde o funcionário está alocado
+      const { data: obrasFuncionario, error: obrasError } = await supabaseAdmin
         .from('funcionarios_obras')
-        .select('obra_id')
-        .eq('funcionario_id', funcionario_id)
+        .select('*')  // Selecionar tudo para debug
+        .eq('funcionario_id', funcionarioId)
         .eq('status', 'ativo')
+      
+      console.log('🔍 DEBUG: Query funcionarios_obras executada')
+      console.log('🔍 DEBUG: Resultado RAW:', JSON.stringify(obrasFuncionario, null, 2))
+      console.log('🔍 DEBUG: Erro:', obrasError)
 
       if (obrasError) {
-        console.error('Erro ao buscar obras do funcionário:', obrasError)
+        console.error('❌ Erro ao buscar obras do funcionário:', obrasError)
         return res.status(500).json({
           success: false,
           message: 'Erro ao buscar obras do funcionário',
@@ -77,23 +124,29 @@ router.get('/relacoes-grua-obra', async (req, res) => {
         })
       }
 
+      console.log('🔍 DEBUG: Obras do funcionário:', obrasFuncionario)
+
       if (obrasFuncionario && obrasFuncionario.length > 0) {
         const obraIds = obrasFuncionario.map(o => o.obra_id)
+        console.log('🔍 DEBUG: IDs das obras para filtrar:', obraIds)
         query = query.in('obra_id', obraIds)
       } else {
         // Funcionário não está alocado em nenhuma obra
+        console.log('ℹ️ INFO: Funcionário não está alocado em nenhuma obra ativa')
         return res.json({
           success: true,
           data: [],
-          message: 'Funcionário não está alocado em nenhuma obra ativa'
+          message: 'Você não está alocado em nenhuma obra ativa no momento'
         })
       }
+    } else {
+      console.log('✅ INFO: Admin/Gerente - mostrando todas as relações')
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.error('Erro ao buscar relações grua-obra:', error)
+      console.error('❌ Erro ao buscar relações grua-obra:', error)
       return res.status(500).json({
         success: false,
         message: 'Erro ao buscar relações',
@@ -101,7 +154,7 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       })
     }
 
-    console.log('Dados brutos do Supabase:', JSON.stringify(data, null, 2))
+    console.log('🔍 DEBUG: Total de relações encontradas:', data?.length || 0)
 
     // Transformar os dados para o formato esperado e filtrar dados inválidos
     const relacoes = data
@@ -119,15 +172,16 @@ router.get('/relacoes-grua-obra', async (req, res) => {
         obra: row.obras
       }))
 
-    console.log('Relações processadas:', JSON.stringify(relacoes, null, 2))
+    console.log('✅ SUCCESS: Retornando', relacoes.length, 'relações')
 
     res.json({
       success: true,
-      data: relacoes
+      data: relacoes,
+      filteredByUser: !isAdminOrManager
     })
 
   } catch (error) {
-    console.error('Erro ao listar relações grua-obra:', error)
+    console.error('❌ ERRO FATAL ao listar relações grua-obra:', error)
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
@@ -144,7 +198,7 @@ router.get('/relacoes-grua-obra-debug', async (req, res) => {
   try {
     console.log('=== DEBUG: Buscando todas as relações sem filtro ===')
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('grua_obra')
       .select(`
         id,
@@ -320,6 +374,15 @@ const filtrosSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
+    // Verificar autenticação
+    const user = req.user
+    if (!user) {
+      return res.status(401).json({
+        error: 'Não autenticado',
+        message: 'Usuário não autenticado'
+      })
+    }
+
     // Validar parâmetros
     const { error, value } = filtrosSchema.validate(req.query)
     if (error) {
@@ -342,16 +405,50 @@ router.get('/', async (req, res) => {
 
     const offset = (page - 1) * limit
 
-    // Construir query
-    let query = supabase
+    // Verificar se o usuário pode ver todas as entradas
+    const isAdminManagerSupervisor = user.role === 'administrador' || 
+                                     user.role === 'admin' || 
+                                     user.role === 'gerente' ||
+                                     user.role === 'supervisor'
+
+    console.log('🔍 DEBUG Livro Grua: Listando entradas', {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      funcionarioId: user.funcionario_id,
+      isAdminManagerSupervisor,
+      filtroFuncionarioId: funcionario_id
+    })
+
+    // Construir query usando supabaseAdmin (já validamos autenticação no middleware)
+    let query = supabaseAdmin
       .from('livro_grua_completo')
       .select('*', { count: 'exact' })
 
-    // Aplicar filtros
+    // REGRA DE VISIBILIDADE: Usuários normais só veem suas próprias entradas
+    if (!isAdminManagerSupervisor) {
+      const userFuncionarioId = user.funcionario_id
+      
+      if (!userFuncionarioId) {
+        console.log('⚠️ AVISO: Usuário não tem funcionario_id associado')
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Usuário não tem funcionário associado'
+        })
+      }
+
+      console.log('🔒 Aplicando filtro de visibilidade: apenas entradas do funcionário', userFuncionarioId)
+      query = query.eq('funcionario_id', userFuncionarioId)
+    } else {
+      console.log('👑 Admin/Gerente/Supervisor: mostrando todas as entradas')
+    }
+
+    // Aplicar filtros adicionais
     if (grua_id) {
       query = query.eq('grua_id', grua_id)
     }
-    if (funcionario_id) {
+    if (funcionario_id && isAdminManagerSupervisor) {
+      // Apenas admin/gerente/supervisor pode filtrar por funcionário específico
       query = query.eq('funcionario_id', funcionario_id)
     }
     if (data_inicio) {
@@ -428,8 +525,16 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    const user = req.user
 
-    const { data, error } = await supabase
+    if (!user) {
+      return res.status(401).json({
+        error: 'Não autenticado',
+        message: 'Usuário não autenticado'
+      })
+    }
+
+    const { data, error } = await supabaseAdmin
       .from('livro_grua_completo')
       .select('*')
       .eq('id', id)
@@ -446,6 +551,27 @@ router.get('/:id', async (req, res) => {
         error: 'Erro ao buscar entrada',
         message: error.message
       })
+    }
+
+    // Verificar se o usuário pode ver esta entrada
+    const isAdminManagerSupervisor = user.role === 'administrador' || 
+                                     user.role === 'admin' || 
+                                     user.role === 'gerente' ||
+                                     user.role === 'supervisor'
+
+    if (!isAdminManagerSupervisor) {
+      // Usuário normal só pode ver suas próprias entradas
+      if (data.funcionario_id !== user.funcionario_id) {
+        console.log('🚫 Acesso negado: Usuário tentou acessar entrada de outro funcionário', {
+          userId: user.id,
+          userFuncionarioId: user.funcionario_id,
+          entradaFuncionarioId: data.funcionario_id
+        })
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para visualizar esta entrada'
+        })
+      }
     }
 
     res.json({
@@ -533,6 +659,15 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const user = req.user
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'Não autenticado',
+        message: 'Usuário não autenticado'
+      })
+    }
+
     // Validar dados
     const { error, value } = entradaLivroSchema.validate(req.body)
     if (error) {
@@ -540,6 +675,36 @@ router.post('/', async (req, res) => {
         error: 'Dados inválidos',
         details: error.details[0].message
       })
+    }
+
+    // Verificar se o usuário pode criar entradas para outros funcionários
+    const isAdminManagerSupervisor = user.role === 'administrador' || 
+                                     user.role === 'admin' || 
+                                     user.role === 'gerente' ||
+                                     user.role === 'supervisor'
+
+    // REGRA: Usuários normais só podem criar entradas para si mesmos
+    let funcionarioId = value.funcionario_id
+
+    if (!isAdminManagerSupervisor) {
+      // Forçar que seja o funcionario_id do usuário logado
+      funcionarioId = user.funcionario_id
+
+      if (!funcionarioId) {
+        console.log('⚠️ AVISO: Usuário não tem funcionario_id associado')
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Usuário não tem funcionário associado'
+        })
+      }
+
+      console.log('🔒 Usuário normal criando entrada: forçando funcionario_id', {
+        userId: user.id,
+        funcionarioIdRecebido: value.funcionario_id,
+        funcionarioIdUsado: funcionarioId
+      })
+    } else {
+      console.log('👑 Admin/Gerente/Supervisor criando entrada para funcionário', funcionarioId)
     }
 
     // Verificar se a grua existe
@@ -557,10 +722,10 @@ router.post('/', async (req, res) => {
     }
 
     // Verificar se o funcionário existe
-    const { data: funcionario, error: funcionarioError } = await supabase
+    const { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome, cargo')
-      .eq('id', value.funcionario_id)
+      .eq('id', funcionarioId)
       .single()
 
     if (funcionarioError || !funcionario) {
@@ -570,12 +735,13 @@ router.post('/', async (req, res) => {
       })
     }
 
-    // Preparar dados para inserção
+    // Preparar dados para inserção (usando o funcionarioId correto)
     const entradaData = {
       ...value,
+      funcionario_id: funcionarioId, // CORREÇÃO: usar o funcionarioId determinado acima
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      created_by: req.user?.id || null
+      created_by: user.id
     }
 
     const { data, error: insertError } = await supabaseAdmin
@@ -592,7 +758,7 @@ router.post('/', async (req, res) => {
     }
 
     // Buscar dados completos da entrada criada
-    const { data: entradaCompleta, error: buscaError } = await supabase
+    const { data: entradaCompleta, error: buscaError } = await supabaseAdmin
       .from('livro_grua_completo')
       .select('*')
       .eq('id', data.id)
@@ -673,6 +839,14 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    const user = req.user
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'Não autenticado',
+        message: 'Usuário não autenticado'
+      })
+    }
 
     // Validar dados (todos os campos opcionais para atualização)
     const updateSchema = entradaLivroSchema.fork(Object.keys(entradaLivroSchema.describe().keys), (schema) => schema.optional())
@@ -684,10 +858,10 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Verificar se a entrada existe
+    // Verificar se a entrada existe e obter funcionario_id
     const { data: entradaExistente, error: buscaError } = await supabaseAdmin
       .from('livro_grua')
-      .select('id')
+      .select('id, funcionario_id')
       .eq('id', id)
       .single()
 
@@ -696,6 +870,27 @@ router.put('/:id', async (req, res) => {
         error: 'Entrada não encontrada',
         message: 'A entrada especificada não existe'
       })
+    }
+
+    // Verificar se o usuário pode editar esta entrada
+    const isAdminManagerSupervisor = user.role === 'administrador' || 
+                                     user.role === 'admin' || 
+                                     user.role === 'gerente' ||
+                                     user.role === 'supervisor'
+
+    if (!isAdminManagerSupervisor) {
+      // Usuário normal só pode editar suas próprias entradas
+      if (entradaExistente.funcionario_id !== user.funcionario_id) {
+        console.log('🚫 Acesso negado: Usuário tentou editar entrada de outro funcionário', {
+          userId: user.id,
+          userFuncionarioId: user.funcionario_id,
+          entradaFuncionarioId: entradaExistente.funcionario_id
+        })
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para editar esta entrada'
+        })
+      }
     }
 
     // Preparar dados para atualização
@@ -720,7 +915,7 @@ router.put('/:id', async (req, res) => {
     }
 
     // Buscar dados completos da entrada atualizada
-    const { data: entradaCompleta, error: buscaCompletaError } = await supabase
+    const { data: entradaCompleta, error: buscaCompletaError } = await supabaseAdmin
       .from('livro_grua_completo')
       .select('*')
       .eq('id', id)
@@ -765,11 +960,19 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    const user = req.user
 
-    // Verificar se a entrada existe
+    if (!user) {
+      return res.status(401).json({
+        error: 'Não autenticado',
+        message: 'Usuário não autenticado'
+      })
+    }
+
+    // Verificar se a entrada existe e obter funcionario_id
     const { data: entradaExistente, error: buscaError } = await supabaseAdmin
       .from('livro_grua')
-      .select('id')
+      .select('id, funcionario_id')
       .eq('id', id)
       .single()
 
@@ -778,6 +981,27 @@ router.delete('/:id', async (req, res) => {
         error: 'Entrada não encontrada',
         message: 'A entrada especificada não existe'
       })
+    }
+
+    // Verificar se o usuário pode excluir esta entrada
+    const isAdminManagerSupervisor = user.role === 'administrador' || 
+                                     user.role === 'admin' || 
+                                     user.role === 'gerente' ||
+                                     user.role === 'supervisor'
+
+    if (!isAdminManagerSupervisor) {
+      // Usuário normal só pode excluir suas próprias entradas
+      if (entradaExistente.funcionario_id !== user.funcionario_id) {
+        console.log('🚫 Acesso negado: Usuário tentou excluir entrada de outro funcionário', {
+          userId: user.id,
+          userFuncionarioId: user.funcionario_id,
+          entradaFuncionarioId: entradaExistente.funcionario_id
+        })
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para excluir esta entrada'
+        })
+      }
     }
 
     const { error: deleteError } = await supabaseAdmin
@@ -843,6 +1067,14 @@ router.get('/export/:grua_id', async (req, res) => {
   try {
     const { grua_id } = req.params
     const { data_inicio, data_fim } = req.query
+    const user = req.user
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'Não autenticado',
+        message: 'Usuário não autenticado'
+      })
+    }
 
     // Verificar se a grua existe
     const { data: grua, error: gruaError } = await supabaseAdmin
@@ -858,11 +1090,32 @@ router.get('/export/:grua_id', async (req, res) => {
       })
     }
 
-    // Buscar entradas
-    let query = supabase
+    // Verificar se o usuário pode exportar todas as entradas
+    const isAdminManagerSupervisor = user.role === 'administrador' || 
+                                     user.role === 'admin' || 
+                                     user.role === 'gerente' ||
+                                     user.role === 'supervisor'
+
+    // Buscar entradas usando supabaseAdmin
+    let query = supabaseAdmin
       .from('livro_grua_completo')
       .select('*')
       .eq('grua_id', grua_id)
+
+    // REGRA DE VISIBILIDADE: Usuários normais só exportam suas próprias entradas
+    if (!isAdminManagerSupervisor) {
+      const userFuncionarioId = user.funcionario_id
+      
+      if (!userFuncionarioId) {
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Usuário não tem funcionário associado'
+        })
+      }
+
+      console.log('🔒 Exportação filtrada: apenas entradas do funcionário', userFuncionarioId)
+      query = query.eq('funcionario_id', userFuncionarioId)
+    }
 
     if (data_inicio) {
       query = query.gte('data_entrada', data_inicio)
