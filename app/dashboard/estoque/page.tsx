@@ -102,7 +102,7 @@ export default function EstoquePage() {
   const [categoryFormData, setCategoryFormData] = useState({
     nome: "",
     descricao: "",
-    status: "Ativo" as "Ativo" | "Inativo",
+    status: "Ativa" as "Ativa" | "Inativa",
   })
 
   // Carregar dados iniciais
@@ -413,7 +413,7 @@ export default function EstoquePage() {
       setCategoryFormData({
         nome: "",
         descricao: "",
-        status: "Ativo",
+        status: "Ativa",
       })
       setIsCategoryDialogOpen(false)
     } catch (error) {
@@ -633,14 +633,14 @@ export default function EstoquePage() {
                   <Label htmlFor="categoria-status">Status</Label>
                   <Select
                     value={categoryFormData.status}
-                    onValueChange={(value) => setCategoryFormData({ ...categoryFormData, status: value as "Ativo" | "Inativo" })}
+                    onValueChange={(value) => setCategoryFormData({ ...categoryFormData, status: value as "Ativa" | "Inativa" })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Ativo">Ativo</SelectItem>
-                      <SelectItem value="Inativo">Inativo</SelectItem>
+                      <SelectItem value="Ativa">Ativa</SelectItem>
+                      <SelectItem value="Inativa">Inativa</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

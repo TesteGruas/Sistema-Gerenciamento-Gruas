@@ -58,6 +58,8 @@ interface Movimentacao {
 interface Categoria {
   id: number
   nome: string
+  descricao?: string
+  status?: 'Ativa' | 'Inativa'
 }
 
 interface EstoqueResponse {
@@ -271,7 +273,7 @@ class EstoqueAPI {
   }
 
   // Criar categoria
-  async criarCategoria(dados: { nome: string; descricao?: string; status?: string }): Promise<{ success: boolean; data: Categoria }> {
+  async criarCategoria(dados: { nome: string; descricao?: string; status?: 'Ativa' | 'Inativa' }): Promise<{ success: boolean; data: Categoria }> {
     return this.request<{ success: boolean; data: Categoria }>('/categorias', {
       method: 'POST',
       headers: {

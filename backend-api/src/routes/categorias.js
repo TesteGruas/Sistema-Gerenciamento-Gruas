@@ -9,7 +9,7 @@ const router = express.Router()
 const categoriaSchema = Joi.object({
   nome: Joi.string().min(2).required(),
   descricao: Joi.string().allow('').optional(),
-  status: Joi.string().valid('Ativo', 'Inativo').default('Ativo')
+  status: Joi.string().valid('Ativa', 'Inativa').default('Ativa')
 })
 
 /**
@@ -38,7 +38,7 @@ const categoriaSchema = Joi.object({
  *         name: status
  *         schema:
  *           type: string
- *           enum: [Ativo, Inativo]
+ *           enum: [Ativa, Inativa]
  *         description: Filtrar por status da categoria
  *     responses:
  *       200:
@@ -171,7 +171,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_estoque'), a
  *                 type: string
  *               status:
  *                 type: string
- *                 enum: [Ativo, Inativo]
+ *                 enum: [Ativa, Inativa]
  *     responses:
  *       201:
  *         description: Categoria criada com sucesso
@@ -249,7 +249,7 @@ router.post('/', authenticateToken, requirePermission('criar_produtos'), async (
  *                 type: string
  *               status:
  *                 type: string
- *                 enum: [Ativo, Inativo]
+ *                 enum: [Ativa, Inativa]
  *     responses:
  *       200:
  *         description: Categoria atualizada com sucesso
