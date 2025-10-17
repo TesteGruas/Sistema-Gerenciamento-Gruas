@@ -1,5 +1,8 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+// Debug: verificar a URL da API
+console.log('API_BASE_URL:', API_BASE_URL);
+
 // Interface unificada para atividades misturadas
 interface AtividadeHistorico {
   id: string;
@@ -253,23 +256,34 @@ export const apiHistorico = {
 
   // Registros de ponto
   async listarPonto(params?: { page?: number; limit?: number; }): Promise<{ success: boolean; data: RegistroPonto[]; pagination?: any }> {
+    console.log('🔍 listarPonto chamada com params:', params);
+    
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/historico/ponto?${queryParams}`, {
+    const url = `${API_BASE_URL}/api/ponto-eletronico/registros?${queryParams}`;
+    console.log('🌐 URL da API:', url);
+    console.log('🔑 Token:', token ? 'Presente' : 'Ausente');
+    
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       }
     });
 
+    console.log('📡 Response status:', response.status);
+    console.log('📡 Response ok:', response.ok);
+
     if (!response.ok) {
       throw new Error(`Erro ${response.status}: ${response.statusText}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log('📊 Resultado da API:', result);
+    return result;
   },
 
   // Buscar histórico de uma grua específica

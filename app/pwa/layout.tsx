@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Clock, 
   FileSignature, 
+  FileText,
+  Settings,
   User, 
   LogOut, 
   Menu, 
@@ -90,6 +92,12 @@ export default function PWALayout({ children }: PWALayoutProps) {
       description: "Registrar ponto"
     },
     {
+      name: "Espelho",
+      href: "/pwa/espelho-ponto",
+      icon: FileText,
+      description: "Ver espelho de ponto"
+    },
+    {
       name: "Gruas",
       href: "/pwa/gruas",
       icon: Briefcase,
@@ -102,16 +110,10 @@ export default function PWALayout({ children }: PWALayoutProps) {
       description: "Assinar documentos"
     },
     {
-      name: "Notificações",
-      href: "/pwa/notificacoes",
-      icon: Bell,
-      description: "Ver notificações"
-    },
-    {
-      name: "Perfil",
-      href: "/pwa/perfil",
-      icon: UserCircle,
-      description: "Meu perfil"
+      name: "Config",
+      href: "/pwa/configuracoes",
+      icon: Settings,
+      description: "Configurações"
     }
   ]
 

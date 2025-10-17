@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Clock, 
   FileSignature, 
+  FileText,
   User, 
   Calendar,
   TrendingUp,
@@ -68,7 +69,18 @@ export default function PWAMainPage() {
       href: "/pwa/ponto",
       color: "text-blue-600",
       bgColor: "bg-blue-50",
-      borderColor: "border-blue-100"
+      borderColor: "border-blue-100",
+      priority: true
+    },
+    {
+      title: "Espelho",
+      description: "Ver espelho de ponto",
+      icon: FileText,
+      href: "/pwa/espelho-ponto",
+      color: "text-green-600",
+      bgColor: "bg-green-50",
+      borderColor: "border-green-100",
+      priority: true
     },
     {
       title: "Gruas",
@@ -84,18 +96,18 @@ export default function PWAMainPage() {
       description: "Assinar documentos",
       icon: FileSignature,
       href: "/pwa/documentos",
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-      borderColor: "border-green-100"
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      borderColor: "border-orange-100"
     },
     {
       title: "Notificações",
       description: "Ver alertas",
       icon: Bell,
       href: "/pwa/notificacoes",
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
-      borderColor: "border-orange-100"
+      color: "text-red-600",
+      bgColor: "bg-red-50",
+      borderColor: "border-red-100"
     },
     {
       title: "Perfil",
@@ -260,34 +272,65 @@ export default function PWAMainPage() {
           </Button>
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          {quickActions.slice(0, 6).map((action, index) => {
-            const Icon = action.icon
-            
-            return (
-              <div
-                key={action.title}
-                onClick={() => router.push(action.href)}
-                className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-lg transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
-                style={{
-                  animationDelay: `${index * 50}ms`
-                }}
-              >
-                {/* Efeito de hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                
-                <div className="relative z-10">
-                  <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform`}>
-                    <Icon className={`w-6 h-6 ${action.color}`} />
+        <div className="space-y-3">
+          {/* Ações principais - Ponto e Espelho */}
+          <div className="grid grid-cols-2 gap-3">
+            {quickActions.filter(action => action.priority).map((action, index) => {
+              const Icon = action.icon
+              
+              return (
+                <div
+                  key={action.title}
+                  onClick={() => router.push(action.href)}
+                  className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-lg transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
+                  style={{
+                    animationDelay: `${index * 50}ms`
+                  }}
+                >
+                  {/* Efeito de hover */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  <div className="relative z-10">
+                    <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform`}>
+                      <Icon className={`w-6 h-6 ${action.color}`} />
+                    </div>
+                    <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
+                    <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
+                      {action.description}
+                    </p>
                   </div>
-                  <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
-                  <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
-                    {action.description}
-                  </p>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
+
+          {/* Outras ações */}
+          <div className="grid grid-cols-3 gap-2">
+            {quickActions.filter(action => !action.priority).map((action, index) => {
+              const Icon = action.icon
+              
+              return (
+                <div
+                  key={action.title}
+                  onClick={() => router.push(action.href)}
+                  className="bg-white rounded-xl p-3 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer border border-transparent hover:border-gray-200 relative overflow-hidden group"
+                  style={{
+                    animationDelay: `${(index + 2) * 50}ms`
+                  }}
+                >
+                  <div className="relative z-10">
+                    <div className={`${action.bgColor} w-8 h-8 rounded-lg flex items-center justify-center mb-2 border ${action.borderColor} group-hover:scale-110 transition-transform`}>
+                      <Icon className={`w-4 h-4 ${action.color}`} />
+                    </div>
+                    <h3 className="font-medium text-xs text-gray-900 mb-0.5">{action.title}</h3>
+                    <p className="text-[10px] text-gray-500 leading-tight line-clamp-1">
+                      {action.description}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 

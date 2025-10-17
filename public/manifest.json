@@ -84,8 +84,21 @@
       "url": "/pwa/ponto",
       "icons": [
         {
-          "src": "/shortcut-ponto.png",
-          "sizes": "96x96",
+          "src": "/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Espelho de Ponto",
+      "short_name": "Espelho",
+      "description": "Visualizar e exportar espelho de ponto",
+      "url": "/pwa/espelho-ponto",
+      "icons": [
+        {
+          "src": "/icon-192x192.png",
+          "sizes": "192x192",
           "type": "image/png"
         }
       ]
@@ -97,21 +110,8 @@
       "url": "/pwa/documentos",
       "icons": [
         {
-          "src": "/shortcut-docs.png",
-          "sizes": "96x96",
-          "type": "image/png"
-        }
-      ]
-    },
-    {
-      "name": "Assinaturas",
-      "short_name": "Assinar",
-      "description": "Assinar documentos de obras pendentes",
-      "url": "/pwa/assinatura",
-      "icons": [
-        {
-          "src": "/shortcut-sign.png",
-          "sizes": "96x96",
+          "src": "/icon-192x192.png",
+          "sizes": "192x192",
           "type": "image/png"
         }
       ]
@@ -123,8 +123,8 @@
       "url": "/pwa/notificacoes",
       "icons": [
         {
-          "src": "/shortcut-notif.png",
-          "sizes": "96x96",
+          "src": "/icon-192x192.png",
+          "sizes": "192x192",
           "type": "image/png"
         }
       ]

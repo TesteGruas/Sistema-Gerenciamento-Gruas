@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,12 +16,19 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { FileText, Download, Mail, Loader2, User, Calendar, Clock, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
+import { FileText, Download, Mail, Loader2, User, Calendar, Clock, CheckCircle, AlertTriangle, XCircle, Search, X } from 'lucide-react'
+import { funcionariosApi } from '@/lib/api-funcionarios'
+
+interface Funcionario {
+  id: number
+  nome: string
+  cargo?: string
+  status?: string
+  telefone?: string
+  email?: string
+}
 
 interface EspelhoPontoDialogProps {
-  funcionarioId: number
-  mes: number
-  ano: number
   trigger?: React.ReactNode
 }
 
@@ -49,26 +56,115 @@ interface EspelhoData {
   total_faltas: number
 }
 
-export function EspelhoPontoDialog({ 
-  funcionarioId, 
-  mes, 
-  ano, 
-  trigger 
-}: EspelhoPontoDialogProps) {
+export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [espelhoData, setEspelhoData] = useState<EspelhoData | null>(null)
   const [assinaturaFuncionario, setAssinaturaFuncionario] = useState('')
   const [assinaturaGestor, setAssinaturaGestor] = useState('')
+  
+  // Estados para seleção de funcionário
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([])
+  const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<Funcionario | null>(null)
+  const [pesquisa, setPesquisa] = useState("")
+  const [showResults, setShowResults] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [mes, setMes] = useState(new Date().getMonth() + 1)
+  const [ano, setAno] = useState(new Date().getFullYear())
+  const searchRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
+  // Reset do estado quando abrir o modal
+  useEffect(() => {
+    if (isOpen) {
+      setPesquisa("")
+      setFuncionarioSelecionado(null)
+      setEspelhoData(null)
+      setShowResults(false)
+      setError(null)
+      setAssinaturaFuncionario("")
+      setAssinaturaGestor("")
+    }
+  }, [isOpen])
+
+  // Buscar funcionários quando o termo de busca mudar
+  useEffect(() => {
+    const buscarFuncionarios = async () => {
+      if (pesquisa.length < 2) {
+        setFuncionarios([])
+        setShowResults(false)
+        return
+      }
+
+      try {
+        setError(null)
+        
+        console.log("🔍 Buscando funcionários para:", pesquisa)
+        const response = await funcionariosApi.buscarFuncionarios(pesquisa, {
+          status: 'Ativo'
+        })
+        
+        if (response.success) {
+          console.log("📊 Funcionários encontrados:", response.data)
+          setFuncionarios(response.data || [])
+          setShowResults(true)
+        } else {
+          console.log("❌ Erro na resposta da API:", response)
+          setFuncionarios([])
+          setShowResults(false)
+        }
+      } catch (err: any) {
+        console.error("❌ Erro ao buscar funcionários:", err)
+        setError("Erro ao buscar funcionários")
+        setFuncionarios([])
+        setShowResults(false)
+      }
+    }
+
+    const timeoutId = setTimeout(buscarFuncionarios, 300) // Debounce de 300ms
+    return () => clearTimeout(timeoutId)
+  }, [pesquisa])
+
+  // Fechar resultados quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowResults(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleFuncionarioSelect = (funcionario: Funcionario) => {
+    setFuncionarioSelecionado(funcionario)
+    setPesquisa("")
+    setShowResults(false)
+  }
+
+  const handleClearSelection = () => {
+    setFuncionarioSelecionado(null)
+    setPesquisa("")
+    setShowResults(false)
+    setEspelhoData(null)
+  }
+
   const carregarEspelho = async () => {
+    if (!funcionarioSelecionado) {
+      toast({
+        title: "Funcionário obrigatório",
+        description: "Selecione um funcionário primeiro",
+        variant: "destructive"
+      })
+      return
+    }
     try {
       setLoading(true)
       const token = localStorage.getItem('access_token')
       
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioId}&mes=${mes}&ano=${ano}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -346,9 +442,156 @@ export function EspelhoPontoDialog({
             {espelhoData && ` - ${espelhoData.funcionario_nome}`}
           </DialogTitle>
           <DialogDescription>
-            Período: {mes.toString().padStart(2, '0')}/{ano}
+            Selecione o funcionário e período para gerar o espelho de ponto
           </DialogDescription>
         </DialogHeader>
+
+        <div className="space-y-6">
+          {/* Seleção do Funcionário */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Seleção do Funcionário</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div ref={searchRef} className="relative">
+                {/* Campo de busca */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar funcionário por nome ou cargo..."
+                    value={pesquisa}
+                    onChange={(e) => setPesquisa(e.target.value)}
+                    className="pl-10 pr-10"
+                    disabled={!!funcionarioSelecionado}
+                  />
+                  {funcionarioSelecionado && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearSelection}
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Funcionário selecionado */}
+                {funcionarioSelecionado && (
+                  <div className="mt-2">
+                    <Card className="border-green-200 bg-green-50">
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <User className="w-5 h-5 text-green-600" />
+                            <div>
+                              <p className="font-medium text-green-900">{funcionarioSelecionado.nome}</p>
+                              <p className="text-sm text-green-700">
+                                {funcionarioSelecionado.cargo || 'Sem cargo definido'}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                            Selecionado
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Resultados da busca */}
+                {showResults && (
+                  <Card className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto shadow-lg">
+                    <CardContent className="p-0">
+                      {error ? (
+                        <div className="p-4 text-center text-red-600">
+                          <p className="text-sm">{error}</p>
+                        </div>
+                      ) : funcionarios.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500">
+                          <User className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm">Nenhum funcionário encontrado</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y">
+                          {funcionarios.map((funcionario) => (
+                            <button
+                              key={funcionario.id}
+                              onClick={() => handleFuncionarioSelect(funcionario)}
+                              className="w-full p-3 text-left hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <User className="w-4 h-4 text-gray-500" />
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-900">{funcionario.nome}</p>
+                                  <p className="text-sm text-gray-500">{funcionario.cargo || 'Sem cargo definido'}</p>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Período */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Período</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="mes">Mês *</Label>
+                <Input
+                  id="mes"
+                  type="number"
+                  min="1"
+                  max="12"
+                  value={mes}
+                  onChange={(e) => setMes(parseInt(e.target.value))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="ano">Ano *</Label>
+                <Input
+                  id="ano"
+                  type="number"
+                  min="2020"
+                  max="2030"
+                  value={ano}
+                  onChange={(e) => setAno(parseInt(e.target.value))}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Carregar Espelho */}
+          <div className="flex justify-center">
+            <Button 
+              onClick={carregarEspelho} 
+              disabled={!funcionarioSelecionado || loading}
+              className="w-full max-w-md"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Carregando...
+                </>
+              ) : (
+                <>
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Carregar Espelho
+                </>
+              )}
+            </Button>
+          </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-8">
@@ -499,12 +742,10 @@ export function EspelhoPontoDialog({
           </div>
         ) : (
           <div className="text-center py-8">
-            <p className="text-gray-500">Nenhum dado disponível</p>
-            <Button onClick={carregarEspelho} className="mt-4">
-              Carregar Espelho
-            </Button>
+            <p className="text-gray-500">Selecione um funcionário e período para gerar o espelho</p>
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   )

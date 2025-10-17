@@ -66,6 +66,7 @@ export default function HistoricoPage() {
   }
 
   const carregarDados = async () => {
+    console.log('🔄 carregarDados chamada com activeTab:', activeTab);
     setLoading(true)
     try {
       const params = {
@@ -97,9 +98,12 @@ export default function HistoricoPage() {
           break
 
         case "ponto":
+          console.log('📊 Carregando dados do ponto...');
           const responsePonto = await apiHistorico.listarPonto(params)
+          console.log('📊 Response do ponto:', responsePonto);
           setHistoricoPonto(responsePonto.data || [])
           setPagination(responsePonto.pagination || {})
+          console.log('📊 HistoricoPonto atualizado:', responsePonto.data?.length || 0, 'registros');
           break
       }
     } catch (error) {

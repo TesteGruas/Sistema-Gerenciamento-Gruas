@@ -53,6 +53,7 @@ import {
 } from "@/lib/api-ponto-eletronico"
 import { ExportButton } from "@/components/export-button"
 import { EspelhoPontoDialog } from "@/components/espelho-ponto-dialog"
+import { EspelhoPontoAvancado } from "@/components/espelho-ponto-avancado"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 
 // Estado inicial dos dados
@@ -692,13 +693,18 @@ export default function PontoPage() {
             titulo="Relatório de Ponto Eletrônico"
           />
           <EspelhoPontoDialog
-            funcionarioId={selectedFuncionario ? parseInt(selectedFuncionario) : 1}
-            mes={new Date().getMonth() + 1}
-            ano={new Date().getFullYear()}
             trigger={
               <Button variant="outline">
                 <FileText className="w-4 h-4 mr-2" />
                 Espelho de Ponto
+              </Button>
+            }
+          />
+          <EspelhoPontoAvancado
+            trigger={
+              <Button variant="outline">
+                <FileText className="w-4 h-4 mr-2" />
+                Espelho Avançado
               </Button>
             }
           />
@@ -1295,10 +1301,49 @@ export default function PontoPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRegistros.map((registro) => (
+                    {filteredRegistros.map((registro) => {
+                      // Verificar se está em atraso (múltiplas variações do status)
+                      const isAtraso = registro.status === 'Atraso' || 
+                                      registro.status === 'atraso' || 
+                                      registro.status?.toLowerCase().includes('atraso') ||
+                                      registro.status === 'Atrasado' ||
+                                      registro.status === 'atrasado'
+                      
+                      // Verificar se tem registros incompletos (sem saída do almoço, volta do almoço ou saída)
+                      const isIncompleto = (!registro.saida_almoco && registro.entrada) || 
+                                         (!registro.volta_almoco && registro.saida_almoco) || 
+                                         (!registro.saida && registro.volta_almoco)
+                      
+                      // Aplicar cores condicionais
+                      const nomeColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
+                      const dataColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
+                      
+                      return (
                       <TableRow key={registro.id}>
+<<<<<<< Updated upstream
                         <TableCell className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</TableCell>
                         <TableCell>{utilsPonto.formatarData(registro.data || '')}</TableCell>
+=======
+                        <TableCell className={`font-medium ${nomeColor}`}>
+                          <div className="flex items-center gap-2">
+                            {registro.horas_extras > 0 && registro.status !== 'Pendente Aprovação' && (
+                              <button
+                                onClick={() => abrirAprovacao(registro)}
+                                className="p-2 rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors shadow-sm"
+                                title="Enviar para Aprovação"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" className="w-4 h-4">
+                                  <path fill="currentColor" d="M144 224C161.7 224 176 238.3 176 256L176 512C176 529.7 161.7 544 144 544L96 544C78.3 544 64 529.7 64 512L64 256C64 238.3 78.3 224 96 224L144 224zM334.6 80C361.9 80 384 102.1 384 129.4L384 133.6C384 140.4 382.7 147.2 380.2 153.5L352 224L512 224C538.5 224 560 245.5 560 272C560 291.7 548.1 308.6 531.1 316C548.1 323.4 560 340.3 560 360C560 383.4 543.2 402.9 521 407.1C525.4 414.4 528 422.9 528 432C528 454.2 513 472.8 492.6 478.3C494.8 483.8 496 489.8 496 496C496 522.5 474.5 544 448 544L360.1 544C323.8 544 288.5 531.6 260.2 508.9L248 499.2C232.8 487.1 224 468.7 224 449.2L224 262.6C224 247.7 227.5 233 234.1 219.7L290.3 107.3C298.7 90.6 315.8 80 334.6 80z"/>
+                                </svg>
+                              </button>
+                            )}
+                            <span>{registro.funcionario?.nome || 'Funcionário não encontrado'}</span>
+                            {isAtraso && <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">ATRASO</span>}
+                            {isIncompleto && !isAtraso && <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">INCOMPLETO</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell className={dataColor}>{utilsPonto.formatarData(registro.data)}</TableCell>
+>>>>>>> Stashed changes
                         <TableCell>{registro.entrada || '-'}</TableCell>
                         <TableCell>{registro.saida_almoco || '-'}</TableCell>
                         <TableCell>{registro.volta_almoco || '-'}</TableCell>
@@ -1335,6 +1380,7 @@ export default function PontoPage() {
                             >
                               Editar
                             </Button>
+<<<<<<< Updated upstream
                             {(registro.horas_extras || 0) > 0 && (registro.status || '') !== 'Pendente Aprovação' && (
                               <Button
                                 size="sm"
@@ -1345,10 +1391,13 @@ export default function PontoPage() {
                                 <Check className="h-4 w-4" />
                               </Button>
                             )}
+=======
+>>>>>>> Stashed changes
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>

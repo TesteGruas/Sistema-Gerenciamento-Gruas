@@ -554,14 +554,18 @@ export default function PWAPontoPage() {
           <p className="text-gray-600">Registre sua entrada e saída</p>
         </div>
         <div className="flex items-center gap-2">
-          {isOnline ? (
-            <Wifi className="w-5 h-5 text-green-600" />
-          ) : (
-            <WifiOff className="w-5 h-5 text-red-600" />
-          )}
-          <span className="text-sm text-gray-600">
-            {isOnline ? "Online" : "Offline"}
-          </span>
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+            isOnline 
+              ? "bg-green-100 text-green-700" 
+              : "bg-red-100 text-red-700"
+          }`}>
+            {isOnline ? (
+              <Wifi className="w-3 h-3" />
+            ) : (
+              <WifiOff className="w-3 h-3" />
+            )}
+            <span>{isOnline ? "Online" : "Offline"}</span>
+          </div>
         </div>
       </div>
 
@@ -658,64 +662,83 @@ export default function PWAPontoPage() {
       </Card>
 
       {/* Botões de registro */}
-      <Card>
+      <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
         <CardHeader>
-          <CardTitle>Registrar Ponto</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-blue-600" />
+            Registrar Ponto
+          </CardTitle>
           <CardDescription>
             Clique no botão correspondente ao seu registro
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              onClick={() => registrarPonto("entrada")}
-              disabled={!podeEntrada || isLoading}
-              className={`h-16 flex flex-col gap-1 ${
-                podeEntrada 
-                  ? "bg-green-600 hover:bg-green-700" 
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
-              <Play className="w-5 h-5" />
-              <span className="text-sm">Entrada</span>
-            </Button>
+          <div className="space-y-4">
+            {/* Botões principais */}
+            <div className="grid grid-cols-2 gap-4">
+              <Button
+                onClick={() => registrarPonto("entrada")}
+                disabled={!podeEntrada || isLoading}
+                className={`h-20 flex flex-col gap-2 text-white font-semibold ${
+                  podeEntrada 
+                    ? "bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg" 
+                    : "bg-gray-400 cursor-not-allowed"
+                }`}
+              >
+                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                  <Play className="w-5 h-5" />
+                </div>
+                <span className="text-base">Entrada</span>
+                <span className="text-xs opacity-90">Iniciar jornada</span>
+              </Button>
 
-            <Button
-              onClick={() => registrarPonto("saida")}
-              disabled={!podeSaida || isLoading}
-              className={`h-16 flex flex-col gap-1 ${
-                podeSaida 
-                  ? "bg-red-600 hover:bg-red-700" 
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
-              <Square className="w-5 h-5" />
-              <span className="text-sm">Saída</span>
-            </Button>
+              <Button
+                onClick={() => registrarPonto("saida")}
+                disabled={!podeSaida || isLoading}
+                className={`h-20 flex flex-col gap-2 text-white font-semibold ${
+                  podeSaida 
+                    ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg" 
+                    : "bg-gray-400 cursor-not-allowed"
+                }`}
+              >
+                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                  <Square className="w-5 h-5" />
+                </div>
+                <span className="text-base">Saída</span>
+                <span className="text-xs opacity-90">Finalizar jornada</span>
+              </Button>
+            </div>
 
-            <Button
-              onClick={() => registrarPonto("saida_almoco")}
-              disabled={!podeSaidaAlmoco || isLoading}
-              variant="outline"
-              className={`h-16 flex flex-col gap-1 ${
-                !podeSaidaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              <Coffee className="w-5 h-5" />
-              <span className="text-sm">Saída Almoço</span>
-            </Button>
+            {/* Botões secundários */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                onClick={() => registrarPonto("saida_almoco")}
+                disabled={!podeSaidaAlmoco || isLoading}
+                variant="outline"
+                className={`h-16 flex flex-col gap-1 border-2 ${
+                  podeSaidaAlmoco 
+                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700" 
+                    : "opacity-50 cursor-not-allowed"
+                }`}
+              >
+                <Coffee className="w-4 h-4" />
+                <span className="text-sm font-medium">Saída Almoço</span>
+              </Button>
 
-            <Button
-              onClick={() => registrarPonto("volta_almoco")}
-              disabled={!podeVoltaAlmoco || isLoading}
-              variant="outline"
-              className={`h-16 flex flex-col gap-1 ${
-                !podeVoltaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              <Coffee className="w-5 h-5" />
-              <span className="text-sm">Volta Almoço</span>
-            </Button>
+              <Button
+                onClick={() => registrarPonto("volta_almoco")}
+                disabled={!podeVoltaAlmoco || isLoading}
+                variant="outline"
+                className={`h-16 flex flex-col gap-1 border-2 ${
+                  podeVoltaAlmoco 
+                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700" 
+                    : "opacity-50 cursor-not-allowed"
+                }`}
+              >
+                <Coffee className="w-4 h-4" />
+                <span className="text-sm font-medium">Volta Almoço</span>
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
