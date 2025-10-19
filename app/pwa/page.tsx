@@ -9,6 +9,7 @@ import {
   Clock, 
   FileSignature, 
   FileText,
+  Settings,
   User, 
   Calendar,
   TrendingUp,
@@ -101,15 +102,6 @@ export default function PWAMainPage() {
       borderColor: "border-orange-100"
     },
     {
-      title: "Notificações",
-      description: "Ver alertas",
-      icon: Bell,
-      href: "/pwa/notificacoes",
-      color: "text-red-600",
-      bgColor: "bg-red-50",
-      borderColor: "border-red-100"
-    },
-    {
       title: "Perfil",
       description: "Meus dados",
       icon: UserCircle,
@@ -117,6 +109,15 @@ export default function PWAMainPage() {
       color: "text-indigo-600",
       bgColor: "bg-indigo-50",
       borderColor: "border-indigo-100"
+    },
+    {
+      title: "Config",
+      description: "Configurações",
+      icon: Settings,
+      href: "/pwa/configuracoes",
+      color: "text-gray-600",
+      bgColor: "bg-gray-50",
+      borderColor: "border-gray-100"
     }
   ]
 

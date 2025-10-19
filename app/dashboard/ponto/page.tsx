@@ -1319,14 +1319,10 @@ export default function PontoPage() {
                       const dataColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
                       
                       return (
-                      <TableRow key={registro.id}>
-<<<<<<< Updated upstream
-                        <TableCell className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</TableCell>
-                        <TableCell>{utilsPonto.formatarData(registro.data || '')}</TableCell>
-=======
-                        <TableCell className={`font-medium ${nomeColor}`}>
-                          <div className="flex items-center gap-2">
-                            {registro.horas_extras > 0 && registro.status !== 'Pendente Aprovação' && (
+                        <TableRow key={registro.id}>
+                          <TableCell className={`font-medium ${nomeColor}`}>
+                            <div className="flex items-center gap-2">
+                              {registro.horas_extras > 0 && registro.status !== 'Pendente Aprovação' && (
                               <button
                                 onClick={() => abrirAprovacao(registro)}
                                 className="p-2 rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors shadow-sm"
@@ -1343,7 +1339,6 @@ export default function PontoPage() {
                           </div>
                         </TableCell>
                         <TableCell className={dataColor}>{utilsPonto.formatarData(registro.data)}</TableCell>
->>>>>>> Stashed changes
                         <TableCell>{registro.entrada || '-'}</TableCell>
                         <TableCell>{registro.saida_almoco || '-'}</TableCell>
                         <TableCell>{registro.volta_almoco || '-'}</TableCell>
@@ -1380,7 +1375,6 @@ export default function PontoPage() {
                             >
                               Editar
                             </Button>
-<<<<<<< Updated upstream
                             {(registro.horas_extras || 0) > 0 && (registro.status || '') !== 'Pendente Aprovação' && (
                               <Button
                                 size="sm"
@@ -1391,8 +1385,6 @@ export default function PontoPage() {
                                 <Check className="h-4 w-4" />
                               </Button>
                             )}
-=======
->>>>>>> Stashed changes
                           </div>
                         </TableCell>
                       </TableRow>

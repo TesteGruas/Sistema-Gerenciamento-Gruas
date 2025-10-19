@@ -21,7 +21,7 @@ import {
   Eye,
   RefreshCw
 } from "lucide-react"
-import { AdminGuard } from "@/components/admin-guard"
+import AdminGuard from "@/components/admin-guard"
 
 interface Aprovacao {
   id: string

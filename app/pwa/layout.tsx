@@ -36,6 +36,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const [isOnline, setIsOnline] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string } | null>(null)
+  const [documentosPendentes, setDocumentosPendentes] = useState(0)
   const router = useRouter()
 
   // Verificar status de conexão e carregar dados do usuário
@@ -61,6 +62,9 @@ export default function PWALayout({ children }: PWALayoutProps) {
           nome: parsedUser.nome,
           cargo: parsedUser.cargo || parsedUser.role
         })
+        
+        // Carregar documentos pendentes
+        carregarDocumentosPendentes(parsedUser.id)
       } catch (error) {
         console.error('Erro ao carregar dados do usuário:', error)
       }
@@ -72,11 +76,30 @@ export default function PWALayout({ children }: PWALayoutProps) {
     }
   }, [])
 
+  const carregarDocumentosPendentes = async (userId: number) => {
+    try {
+      // Simular carregamento de documentos pendentes
+      // Em produção, isso viria da API
+      const cachedDocs = localStorage.getItem(`documentos_pendentes_${userId}`)
+      if (cachedDocs) {
+        const docs = JSON.parse(cachedDocs)
+        setDocumentosPendentes(docs.length)
+      } else {
+        // Fallback: simular alguns documentos pendentes
+        setDocumentosPendentes(0)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar documentos pendentes:', error)
+      setDocumentosPendentes(0)
+    }
+  }
+
   const handleLogout = () => {
     if (typeof window === 'undefined') return
     
     // Limpar dados do usuário e localStorage
     setUser(null)
+    setDocumentosPendentes(0)
     localStorage.removeItem('access_token')
     localStorage.removeItem('user_data')
     localStorage.removeItem('refresh_token')
@@ -104,16 +127,16 @@ export default function PWALayout({ children }: PWALayoutProps) {
       description: "Minhas gruas"
     },
     {
-      name: "Documentos",
+      name: "Docs",
       href: "/pwa/documentos",
       icon: FileSignature,
-      description: "Assinar documentos"
+      description: "Documentos"
     },
     {
-      name: "Config",
-      href: "/pwa/configuracoes",
-      icon: Settings,
-      description: "Configurações"
+      name: "Perfil",
+      href: "/pwa/perfil",
+      icon: UserCircle,
+      description: "Meu perfil"
     }
   ]
 
@@ -128,6 +151,17 @@ export default function PWALayout({ children }: PWALayoutProps) {
       href: "/pwa/encarregador",
       icon: User,
       description: "Gerenciar funcionários"
+    })
+  }
+
+  // Adicionar notificações como item secundário se houver notificações pendentes
+  const hasNotifications = documentosPendentes > 0
+  if (hasNotifications) {
+    navigationItems.push({
+      name: "Notif",
+      href: "/pwa/notificacoes",
+      icon: Bell,
+      description: "Notificações"
     })
   }
 

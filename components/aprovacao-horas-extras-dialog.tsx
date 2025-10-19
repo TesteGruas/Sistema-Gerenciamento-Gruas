@@ -42,6 +42,8 @@ export function AprovacaoHorasExtrasDialog({
 }: AprovacaoHorasExtrasDialogProps) {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([])
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<Funcionario | null>(null)
+  const [gestores, setGestores] = useState<Gestor[]>([])
+  const [gestorSelecionado, setGestorSelecionado] = useState<number | null>(null)
   const [observacoes, setObservacoes] = useState("")
   const [loading, setLoading] = useState(false)
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
@@ -56,13 +58,17 @@ export function AprovacaoHorasExtrasDialog({
     if (isOpen) {
       setPesquisa("")
       setFuncionarioSelecionado(null)
+      setGestorSelecionado(null)
       setObservacoes("")
       setShowResults(false)
       setError(null)
+      // Carregar gestores da obra se disponível
+      if (registro?.funcionario?.obra_atual_id) {
+        carregarGestores(registro.funcionario.obra_atual_id)
+      }
     }
-  }, [isOpen])
+  }, [isOpen, registro])
 
-<<<<<<< Updated upstream
   const carregarGestores = async (obraId: number) => {
     try {
       setLoading(true)
@@ -93,10 +99,12 @@ export function AprovacaoHorasExtrasDialog({
       })
     } finally {
       setLoading(false)
-=======
-  // Buscar funcionários quando o termo de busca mudar
+    }
+  }
+
+  // Buscar gestores quando o termo de busca mudar
   useEffect(() => {
-    const buscarFuncionarios = async () => {
+    const buscarGestores = async () => {
       if (pesquisa.length < 2) {
         setFuncionarios([])
         setShowResults(false)
@@ -107,13 +115,13 @@ export function AprovacaoHorasExtrasDialog({
         setLoadingFuncionarios(true)
         setError(null)
         
-        console.log("🔍 Buscando funcionários para:", pesquisa)
+        console.log("🔍 Buscando gestores para:", pesquisa)
         const response = await funcionariosApi.buscarFuncionarios(pesquisa, {
           status: 'Ativo'
         })
         
         if (response.success) {
-          console.log("📊 Funcionários encontrados:", response.data)
+          console.log("📊 Gestores encontrados:", response.data)
           setFuncionarios(response.data || [])
           setShowResults(true)
         } else {
@@ -122,17 +130,16 @@ export function AprovacaoHorasExtrasDialog({
           setShowResults(false)
         }
       } catch (err: any) {
-        console.error("❌ Erro ao buscar funcionários:", err)
-        setError("Erro ao buscar funcionários")
+        console.error("❌ Erro ao buscar gestores:", err)
+        setError("Erro ao buscar gestores")
         setFuncionarios([])
         setShowResults(false)
       } finally {
         setLoadingFuncionarios(false)
       }
->>>>>>> Stashed changes
     }
 
-    const timeoutId = setTimeout(buscarFuncionarios, 300) // Debounce de 300ms
+    const timeoutId = setTimeout(buscarGestores, 300) // Debounce de 300ms
     return () => clearTimeout(timeoutId)
   }, [pesquisa])
 
@@ -148,23 +155,23 @@ export function AprovacaoHorasExtrasDialog({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleFuncionarioSelect = (funcionario: Funcionario) => {
-    setFuncionarioSelecionado(funcionario)
+  const handleGestorSelect = (funcionario: Funcionario) => {
+    setGestorSelecionado(funcionario.id)
     setPesquisa("")
     setShowResults(false)
   }
 
   const handleClearSelection = () => {
-    setFuncionarioSelecionado(null)
+    setGestorSelecionado(null)
     setPesquisa("")
     setShowResults(false)
   }
 
   const handleAprovar = async () => {
-    if (!funcionarioSelecionado) {
+    if (!gestorSelecionado) {
       toast({
         title: "Atenção",
-        description: "Selecione um funcionário para aprovação",
+        description: "Selecione um gestor para aprovação",
         variant: "destructive"
       })
       return
@@ -172,7 +179,6 @@ export function AprovacaoHorasExtrasDialog({
 
     setLoading(true)
     try {
-<<<<<<< Updated upstream
       const response = await fetch(`/api/ponto-eletronico/registros/${registro.id}/enviar-aprovacao`, {
         method: 'POST',
         headers: {
@@ -183,13 +189,6 @@ export function AprovacaoHorasExtrasDialog({
           gestor_id: gestorSelecionado,
           observacoes: observacoes
         })
-=======
-      await onAprovar(funcionarioSelecionado.id, observacoes)
-      toast({
-        title: "Sucesso",
-        description: "Horas extras aprovadas com sucesso",
-        variant: "default"
->>>>>>> Stashed changes
       })
 
       if (!response.ok) {
@@ -209,15 +208,11 @@ export function AprovacaoHorasExtrasDialog({
       } else {
         throw new Error(result.message || 'Erro ao enviar para aprovação')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao enviar para aprovação:", error)
       toast({
         title: "Erro",
-<<<<<<< Updated upstream
         description: error.message || "Erro ao enviar para aprovação",
-=======
-        description: "Erro ao aprovar horas extras",
->>>>>>> Stashed changes
         variant: "destructive"
       })
     } finally {
@@ -236,7 +231,7 @@ export function AprovacaoHorasExtrasDialog({
             Aprovação de Horas Extras
           </DialogTitle>
           <DialogDescription>
-            Aprove as horas extras do funcionário diretamente
+            Envie as horas extras para aprovação do gestor responsável
           </DialogDescription>
         </DialogHeader>
 
@@ -289,27 +284,27 @@ export function AprovacaoHorasExtrasDialog({
             </CardContent>
           </Card>
 
-          {/* Seleção do Funcionário */}
+          {/* Seleção do Gestor */}
           <div className="space-y-2">
-            <Label htmlFor="funcionario">Funcionário Responsável *</Label>
+            <Label htmlFor="gestor">Gestor Responsável *</Label>
             <div ref={searchRef} className="relative">
               {/* Campo de busca */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   type="text"
-                  placeholder="Buscar funcionário por nome ou cargo..."
+                  placeholder="Buscar gestor por nome ou cargo..."
                   value={pesquisa}
                   onChange={(e) => setPesquisa(e.target.value)}
                   className="pl-10 pr-10"
-                  disabled={!!funcionarioSelecionado}
+                  disabled={!!gestorSelecionado}
                 />
                 {loadingFuncionarios && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                   </div>
                 )}
-                {funcionarioSelecionado && (
+                {gestorSelecionado && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -322,8 +317,8 @@ export function AprovacaoHorasExtrasDialog({
                 )}
               </div>
 
-              {/* Funcionário selecionado */}
-              {funcionarioSelecionado && (
+              {/* Gestor selecionado */}
+              {gestorSelecionado && (
                 <div className="mt-2">
                   <Card className="border-green-200 bg-green-50">
                     <CardContent className="p-3">
@@ -331,12 +326,16 @@ export function AprovacaoHorasExtrasDialog({
                         <div className="flex items-center gap-3">
                           <User className="w-5 h-5 text-green-600" />
                           <div>
-                            <p className="font-medium text-green-900">{funcionarioSelecionado.nome}</p>
-                            <p className="text-sm text-green-700">
-                              {funcionarioSelecionado.cargo || 'Sem cargo definido'}
+                            <p className="font-medium text-green-900">
+                              {funcionarios.find(f => f.id === gestorSelecionado)?.nome || 'Gestor selecionado'}
                             </p>
-                            {funcionarioSelecionado.telefone && (
-                              <p className="text-xs text-green-600">Tel: {funcionarioSelecionado.telefone}</p>
+                            <p className="text-sm text-green-700">
+                              {funcionarios.find(f => f.id === gestorSelecionado)?.cargo || 'Sem cargo definido'}
+                            </p>
+                            {funcionarios.find(f => f.id === gestorSelecionado)?.telefone && (
+                              <p className="text-xs text-green-600">
+                                Tel: {funcionarios.find(f => f.id === gestorSelecionado)?.telefone}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -362,7 +361,7 @@ export function AprovacaoHorasExtrasDialog({
                     ) : funcionarios.length === 0 ? (
                       <div className="p-4 text-center text-gray-500">
                         <User className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                        <p className="text-sm">Nenhum funcionário encontrado</p>
+                        <p className="text-sm">Nenhum gestor encontrado</p>
                         <p className="text-xs">Tente buscar por nome ou cargo</p>
                       </div>
                     ) : (
@@ -370,7 +369,7 @@ export function AprovacaoHorasExtrasDialog({
                         {funcionarios.map((funcionario) => (
                           <button
                             key={funcionario.id}
-                            onClick={() => handleFuncionarioSelect(funcionario)}
+                            onClick={() => handleGestorSelect(funcionario)}
                             className="w-full p-3 text-left hover:bg-gray-50 transition-colors"
                           >
                             <div className="flex items-center gap-3">
@@ -404,7 +403,7 @@ export function AprovacaoHorasExtrasDialog({
               )}
             </div>
             <p className="text-xs text-gray-500">
-              Digite pelo menos 2 caracteres para buscar funcionários
+              Digite pelo menos 2 caracteres para buscar gestores
             </p>
           </div>
 
@@ -427,10 +426,10 @@ export function AprovacaoHorasExtrasDialog({
             </Button>
             <Button 
               onClick={handleAprovar} 
-              disabled={loading || !funcionarioSelecionado}
+              disabled={loading || !gestorSelecionado}
               className="bg-green-600 hover:bg-green-700"
             >
-              {loading ? "Aprovando..." : "Aprovar Horas Extras"}
+              {loading ? "Enviando..." : "Enviar para Aprovação"}
             </Button>
           </div>
         </div>
