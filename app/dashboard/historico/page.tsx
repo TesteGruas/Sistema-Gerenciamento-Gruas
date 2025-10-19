@@ -32,6 +32,8 @@ export default function HistoricoPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedModulo, setSelectedModulo] = useState("todos")
   const [selectedAcao, setSelectedAcao] = useState("todas")
+  const [filtroHorasExtras, setFiltroHorasExtras] = useState("todos")
+  const [filtroStatusAprovacao, setFiltroStatusAprovacao] = useState("todos")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(20)
   
@@ -49,7 +51,7 @@ export default function HistoricoPage() {
   useEffect(() => {
     carregarEstatisticas()
     carregarDados()
-  }, [activeTab, currentPage, selectedModulo, selectedAcao])
+  }, [activeTab, currentPage, selectedModulo, selectedAcao, filtroHorasExtras, filtroStatusAprovacao])
 
   const carregarEstatisticas = async () => {
     try {
@@ -101,9 +103,30 @@ export default function HistoricoPage() {
           console.log('📊 Carregando dados do ponto...');
           const responsePonto = await apiHistorico.listarPonto(params)
           console.log('📊 Response do ponto:', responsePonto);
-          setHistoricoPonto(responsePonto.data || [])
+          
+          // Aplicar filtros específicos para horas extras
+          let registrosFiltrados = responsePonto.data || []
+          
+          if (filtroHorasExtras === "com_horas_extras") {
+            registrosFiltrados = registrosFiltrados.filter((reg: any) => reg.horas_extras > 0)
+          } else if (filtroHorasExtras === "sem_horas_extras") {
+            registrosFiltrados = registrosFiltrados.filter((reg: any) => !reg.horas_extras || reg.horas_extras <= 0)
+          }
+          
+          if (filtroStatusAprovacao === "aprovados") {
+            registrosFiltrados = registrosFiltrados.filter((reg: any) => reg.status?.toLowerCase() === 'aprovado')
+          } else if (filtroStatusAprovacao === "pendentes") {
+            registrosFiltrados = registrosFiltrados.filter((reg: any) => 
+              reg.status?.toLowerCase().includes('pendente') || 
+              reg.status?.toLowerCase().includes('pendente aprovação')
+            )
+          } else if (filtroStatusAprovacao === "rejeitados") {
+            registrosFiltrados = registrosFiltrados.filter((reg: any) => reg.status?.toLowerCase() === 'rejeitado')
+          }
+          
+          setHistoricoPonto(registrosFiltrados)
           setPagination(responsePonto.pagination || {})
-          console.log('📊 HistoricoPonto atualizado:', responsePonto.data?.length || 0, 'registros');
+          console.log('📊 HistoricoPonto atualizado:', registrosFiltrados.length, 'registros');
           break
       }
     } catch (error) {
@@ -127,6 +150,15 @@ export default function HistoricoPage() {
       case 'concluída': return 'bg-blue-100 text-blue-800'
       case 'cancelada': return 'bg-gray-100 text-gray-800'
       case 'pendente': return 'bg-yellow-100 text-yellow-800'
+      case 'aprovado': return 'bg-green-100 text-green-800 border-green-200'
+      case 'rejeitado': return 'bg-red-100 text-red-800 border-red-200'
+      case 'pendente aprovação': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'pendente aprovacao': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'completo': return 'bg-blue-100 text-blue-800 border-blue-200'
+      case 'atraso': return 'bg-red-100 text-red-800 border-red-200'
+      case 'atrasado': return 'bg-red-100 text-red-800 border-red-200'
+      case 'falta': return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'em andamento': return 'bg-blue-100 text-blue-800 border-blue-200'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -140,6 +172,15 @@ export default function HistoricoPage() {
       case 'concluída': return '🔵'
       case 'cancelada': return '⚫'
       case 'pendente': return '🟡'
+      case 'aprovado': return '✅'
+      case 'rejeitado': return '❌'
+      case 'pendente aprovação': return '⏳'
+      case 'pendente aprovacao': return '⏳'
+      case 'completo': return '✅'
+      case 'atraso': return '⏰'
+      case 'atrasado': return '⏰'
+      case 'falta': return '❌'
+      case 'em andamento': return '🔄'
       default: return '📋'
     }
   }
@@ -274,6 +315,33 @@ export default function HistoricoPage() {
                     <SelectItem value="editar">Editar</SelectItem>
                     <SelectItem value="deletar">Deletar</SelectItem>
                     <SelectItem value="visualizar">Visualizar</SelectItem>
+                </SelectContent>
+              </Select>
+              </>
+            )}
+
+            {activeTab === "ponto" && (
+              <>
+                <Select value={filtroHorasExtras} onValueChange={setFiltroHorasExtras}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Horas Extras" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="todos">Todos os registros</SelectItem>
+                    <SelectItem value="com_horas_extras">Com horas extras</SelectItem>
+                    <SelectItem value="sem_horas_extras">Sem horas extras</SelectItem>
+                </SelectContent>
+              </Select>
+
+                <Select value={filtroStatusAprovacao} onValueChange={setFiltroStatusAprovacao}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Status Aprovação" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="todos">Todos os status</SelectItem>
+                    <SelectItem value="aprovados">Aprovados</SelectItem>
+                    <SelectItem value="pendentes">Pendentes</SelectItem>
+                    <SelectItem value="rejeitados">Rejeitados</SelectItem>
                 </SelectContent>
               </Select>
               </>
@@ -561,6 +629,8 @@ export default function HistoricoPage() {
                     <TableHead>Horas Extras</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Aprovado Por</TableHead>
+                    <TableHead>Data Aprovação</TableHead>
+                    <TableHead>Observações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -646,15 +716,57 @@ export default function HistoricoPage() {
                         {registro.horas_extras ? `${registro.horas_extras}h` : '-'}
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(registro.status)}>
-                          {getStatusIcon(registro.status)} {registro.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className={getStatusColor(registro.status)}>
+                            {getStatusIcon(registro.status)} {registro.status}
+                          </Badge>
+                          {registro.horas_extras > 0 && (
+                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                              ⏰ {registro.horas_extras}h extras
+                            </Badge>
+                          )}
+                          {registro.status?.toLowerCase() === 'aprovado' && registro.horas_extras > 0 && (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                              ✅ Aprovado
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {registro.aprovado_por_usuario ? (
                           <div>
                             <div className="font-medium">{registro.aprovado_por_usuario.nome}</div>
                             <div className="text-sm text-muted-foreground">{registro.aprovado_por_usuario.email}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {registro.data_aprovacao ? (
+                          <div>
+                            <div className="font-medium">
+                              {format(new Date(registro.data_aprovacao), 'dd/MM/yyyy', { locale: ptBR })}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {format(new Date(registro.data_aprovacao), 'HH:mm', { locale: ptBR })}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {registro.observacoes ? (
+                          <div className="max-w-[200px]">
+                            <div className="text-sm truncate" title={registro.observacoes}>
+                              {registro.observacoes}
+                            </div>
+                            {registro.justificativa_alteracao && (
+                              <div className="text-xs text-muted-foreground mt-1 truncate" title={registro.justificativa_alteracao}>
+                                Justificativa: {registro.justificativa_alteracao}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>

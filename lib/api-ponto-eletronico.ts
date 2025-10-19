@@ -443,6 +443,8 @@ export const apiRelatorios = {
 export const utilsPonto = {
   /**
    * Calcula horas trabalhadas com base nos horários de entrada e saída
+   * Fórmula: (Saída Almoço - Entrada) + (Saída - Volta do Almoço)
+   * Se não houver horários de almoço, calcula como (Saída - Entrada) e pode resultar em negativo
    */
   calcularHorasTrabalhadas(
     entrada?: string,
@@ -450,6 +452,7 @@ export const utilsPonto = {
     saidaAlmoco?: string,
     voltaAlmoco?: string
   ): number {
+    // Se não tem entrada e saída básicos, retorna 0
     if (!entrada || !saida) return 0;
 
     const parseTime = (time: string): number => {
@@ -460,16 +463,23 @@ export const utilsPonto = {
     const horaEntrada = parseTime(entrada);
     const horaSaida = parseTime(saida);
     
-    let totalHoras = horaSaida - horaEntrada;
-
-    // Descontar intervalo de almoço se houver
+    // Se tem horários de almoço, usa fórmula completa
     if (saidaAlmoco && voltaAlmoco) {
       const horaSaidaAlmoco = parseTime(saidaAlmoco);
       const horaVoltaAlmoco = parseTime(voltaAlmoco);
-      totalHoras -= (horaVoltaAlmoco - horaSaidaAlmoco);
-    }
+      
+      // Fórmula correta: (Saída Almoço - Entrada) + (Saída - Volta do Almoço)
+      const periodoManha = horaSaidaAlmoco - horaEntrada;
+      const periodoTarde = horaSaida - horaVoltaAlmoco;
+      const totalHoras = periodoManha + periodoTarde;
 
-    return Math.max(0, totalHoras);
+      return Math.max(0, totalHoras);
+    } else {
+      // Se não tem horários de almoço, calcula como (Saída - Entrada)
+      // Pode resultar em negativo se for menos de 8 horas
+      const totalHoras = horaSaida - horaEntrada;
+      return totalHoras; // Pode ser negativo
+    }
   },
 
   /**
@@ -496,8 +506,12 @@ export const utilsPonto = {
         className: 'bg-green-100 text-green-800'
       },
       'Em Andamento': {
-        text: 'Aberto',
-        className: 'bg-blue-100 text-blue-800'
+        text: 'Incompleto',
+        className: 'bg-yellow-50 text-yellow-700 border-yellow-200'
+      },
+      'Incompleto': {
+        text: 'Incompleto',
+        className: 'bg-yellow-50 text-yellow-700 border-yellow-200'
       },
       'Atraso': {
         text: 'Atraso',
@@ -513,6 +527,10 @@ export const utilsPonto = {
       },
       'Aprovado': {
         text: 'Aprovado',
+        className: 'bg-green-100 text-green-800'
+      },
+      'Autorizado': {
+        text: 'Autorizado',
         className: 'bg-green-100 text-green-800'
       },
       'Rejeitado': {

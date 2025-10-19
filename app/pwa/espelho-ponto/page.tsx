@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 
 interface RegistroPonto {
-  id: number
+  id: string | number
   data: string
   entrada?: string
   saida_almoco?: string
@@ -88,11 +88,10 @@ export default function PWAEspelhoPontoPage() {
       const response = await pontoApi.getRegistros({
         funcionario_id: user.id,
         data_inicio: dataInicio,
-        data_fim: dataFim,
-        limit: 1000
+        data_fim: dataFim
       })
       
-      setRegistros(response || [])
+      setRegistros((response || []) as RegistroPonto[])
       
       toast({
         title: "Sucesso",
@@ -279,6 +278,14 @@ export default function PWAEspelhoPontoPage() {
         return <Badge className="bg-yellow-100 text-yellow-800"><AlertTriangle className="w-3 h-3 mr-1" />Pendente</Badge>
       case 'falta':
         return <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />Falta</Badge>
+      case 'Aprovado':
+        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Aprovado</Badge>
+      case 'Autorizado':
+        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Autorizado</Badge>
+      case 'Pendente Aprovação':
+        return <Badge className="bg-orange-100 text-orange-800"><AlertTriangle className="w-3 h-3 mr-1" />Pendente</Badge>
+      case 'Rejeitado':
+        return <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />Rejeitado</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }

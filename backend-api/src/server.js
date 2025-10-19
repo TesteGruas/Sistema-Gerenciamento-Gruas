@@ -236,6 +236,9 @@ app.post('/test-login', (req, res) => {
 
 // Rotas da API
 app.use('/api/auth', authRoutes)
+
+// Rotas de compatibilidade - redirecionamento para /auth/login
+app.use('/auth', authRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/gruas', gruasRoutes)
 app.use('/api/estoque', estoqueRoutes)

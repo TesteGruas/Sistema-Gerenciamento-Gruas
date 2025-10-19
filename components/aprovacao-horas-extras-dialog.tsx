@@ -44,6 +44,7 @@ export function AprovacaoHorasExtrasDialog({
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<Funcionario | null>(null)
   const [gestores, setGestores] = useState<Gestor[]>([])
   const [gestorSelecionado, setGestorSelecionado] = useState<number | null>(null)
+  const [gestorSelecionadoInfo, setGestorSelecionadoInfo] = useState<Funcionario | null>(null)
   const [observacoes, setObservacoes] = useState("")
   const [loading, setLoading] = useState(false)
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
@@ -59,6 +60,7 @@ export function AprovacaoHorasExtrasDialog({
       setPesquisa("")
       setFuncionarioSelecionado(null)
       setGestorSelecionado(null)
+      setGestorSelecionadoInfo(null)
       setObservacoes("")
       setShowResults(false)
       setError(null)
@@ -157,12 +159,14 @@ export function AprovacaoHorasExtrasDialog({
 
   const handleGestorSelect = (funcionario: Funcionario) => {
     setGestorSelecionado(funcionario.id)
+    setGestorSelecionadoInfo(funcionario)
     setPesquisa("")
     setShowResults(false)
   }
 
   const handleClearSelection = () => {
     setGestorSelecionado(null)
+    setGestorSelecionadoInfo(null)
     setPesquisa("")
     setShowResults(false)
   }
@@ -318,7 +322,7 @@ export function AprovacaoHorasExtrasDialog({
               </div>
 
               {/* Gestor selecionado */}
-              {gestorSelecionado && (
+              {gestorSelecionado && gestorSelecionadoInfo && (
                 <div className="mt-2">
                   <Card className="border-green-200 bg-green-50">
                     <CardContent className="p-3">
@@ -327,14 +331,19 @@ export function AprovacaoHorasExtrasDialog({
                           <User className="w-5 h-5 text-green-600" />
                           <div>
                             <p className="font-medium text-green-900">
-                              {funcionarios.find(f => f.id === gestorSelecionado)?.nome || 'Gestor selecionado'}
+                              {gestorSelecionadoInfo.nome}
                             </p>
                             <p className="text-sm text-green-700">
-                              {funcionarios.find(f => f.id === gestorSelecionado)?.cargo || 'Sem cargo definido'}
+                              {gestorSelecionadoInfo.cargo || 'Sem cargo definido'}
                             </p>
-                            {funcionarios.find(f => f.id === gestorSelecionado)?.telefone && (
+                            {gestorSelecionadoInfo.telefone && (
                               <p className="text-xs text-green-600">
-                                Tel: {funcionarios.find(f => f.id === gestorSelecionado)?.telefone}
+                                Tel: {gestorSelecionadoInfo.telefone}
+                              </p>
+                            )}
+                            {gestorSelecionadoInfo.email && (
+                              <p className="text-xs text-green-600">
+                                ✉️ {gestorSelecionadoInfo.email}
                               </p>
                             )}
                           </div>

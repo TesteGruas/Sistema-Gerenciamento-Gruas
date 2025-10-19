@@ -162,6 +162,13 @@ export default function PontoPage() {
     carregarDados()
   }, [])
 
+  // Recarregar dados quando filtros mudarem
+  useEffect(() => {
+    if (data.registrosPonto.length > 0) {
+      carregarDadosComFiltros()
+    }
+  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus])
+
   // Debug dos registros e filtros (apenas uma vez após carregar)
   useEffect(() => {
     if (data.registrosPonto.length > 0) {
@@ -227,6 +234,67 @@ export default function PontoPage() {
         error: error instanceof Error ? error.message : 'Erro ao carregar dados'
       }))
     }
+  }
+
+  // Função para carregar dados com filtros aplicados
+  const carregarDadosComFiltros = async () => {
+    try {
+      // Construir parâmetros de filtro
+      const filtros: any = {
+        limit: 500
+      }
+
+      // Adicionar filtros se não forem "todos" ou vazios
+      if (filtroFuncionario !== "todos") {
+        filtros.funcionario_id = filtroFuncionario
+      }
+      
+      if (filtroDataInicio) {
+        filtros.data_inicio = filtroDataInicio
+      }
+      
+      if (filtroDataFim) {
+        filtros.data_fim = filtroDataFim
+      }
+      
+      if (filtroStatus !== "todos") {
+        filtros.status = filtroStatus
+      }
+
+      console.log('🔍 Aplicando filtros:', filtros)
+
+      // Carregar registros com filtros
+      const registrosResponse = await apiRegistrosPonto.listar(filtros)
+      const registros = registrosResponse.data || []
+      
+      console.log('📊 Registros filtrados:', registros.length)
+
+      // Atualizar apenas os registros, mantendo outros dados
+      setData(prev => ({
+        ...prev,
+        registrosPonto: registros
+      }))
+    } catch (error) {
+      console.error('Erro ao carregar dados com filtros:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao aplicar filtros. Tente novamente.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Função para limpar todos os filtros
+  const limparFiltros = () => {
+    setFiltroFuncionario("todos")
+    setFiltroDataInicio("")
+    setFiltroDataFim("")
+    setFiltroStatus("todos")
+    setOrdenacaoHorasExtras("data")
+    setSearchTerm("")
+    
+    // Recarregar dados sem filtros
+    carregarDados()
   }
 
   // Função para mapear tipos de registro para campos da API
@@ -373,8 +441,160 @@ export default function PontoPage() {
     })
 
   const getStatusBadge = (status: string) => {
-    const badge = utilsPonto.obterBadgeStatus(status)
+    // Tratar "Em Andamento" como "Incompleto"
+    const statusTratado = status === 'Em Andamento' ? 'Incompleto' : status
+    const badge = utilsPonto.obterBadgeStatus(statusTratado)
     return <Badge className={badge.className}>{badge.text}</Badge>
+  }
+
+  // Nova função para determinar status visual e ações baseadas nas horas extras
+  const getRegistroStatusInfo = (registro: RegistroPonto) => {
+    const horasTrabalhadas = registro.horas_trabalhadas || 0
+    const horasExtras = registro.horas_extras || 0
+    const status = registro.status || ''
+    
+    // Se foi aprovado - Verde / Ver Info
+    if (status === 'Aprovado' || status === 'Autorizado') {
+      return {
+        status: 'aprovado',
+        cor: 'green',
+        badge: <Badge className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 transition-colors whitespace-nowrap flex items-center gap-1">
+          <span className="text-xs">✓</span>
+          <span>Aprovado</span>
+        </Badge>,
+        acoes: [
+          <Button
+            key="info"
+            size="sm"
+            variant="outline"
+            onClick={() => abrirEdicao(registro)}
+            className="text-green-600 hover:text-green-700 hover:bg-green-50"
+          >
+            Ver Info
+          </Button>
+        ]
+      }
+    }
+    
+    // Se tem horas para aprovar - Laranja + Botão aprovar/reprovar
+    if (horasExtras > 0 && (status === 'Pendente Aprovação' || status === 'Pendente')) {
+      return {
+        status: 'pendente_aprovacao',
+        cor: 'orange',
+        badge: <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 transition-colors whitespace-nowrap flex items-center gap-1">
+          <span className="text-xs">⏳</span>
+          <span>Pendente</span>
+        </Badge>,
+        acoes: [
+          <Button
+            key="aprovar"
+            size="sm"
+            onClick={() => abrirModalAprovacao(registro, 'aprovar')}
+            className="bg-green-600 hover:bg-green-700 text-white hover:shadow-md transition-all"
+          >
+            ✓ Aprovar
+          </Button>,
+          <Button
+            key="reprovar"
+            size="sm"
+            variant="outline"
+            onClick={() => abrirModalAprovacao(registro, 'rejeitar')}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+          >
+            ✗ Reprovar
+          </Button>
+        ]
+      }
+    }
+    
+    // Se estiver sem horas extras mas com horas = 8 - Cinza Escuro / Ver info
+    if (horasTrabalhadas >= 8 && horasExtras === 0) {
+      return {
+        status: 'normal',
+        cor: 'gray',
+        badge: <Badge className="bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors whitespace-nowrap flex items-center gap-1">
+          <span className="text-xs">📋</span>
+          <span>Normal</span>
+        </Badge>,
+        acoes: [
+          <Button
+            key="info"
+            size="sm"
+            variant="outline"
+            onClick={() => abrirEdicao(registro)}
+            className="text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+          >
+            Ver Info
+          </Button>
+        ]
+      }
+    }
+    
+    // Se tiver horas negativas - Vermelho / Botão Justificar
+    if (horasTrabalhadas < 8 && horasTrabalhadas > 0) {
+      return {
+        status: 'horas_negativas',
+        cor: 'red',
+        badge: <Badge className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 transition-colors whitespace-nowrap flex items-center gap-1">
+          <span className="text-xs">⚠️</span>
+          <span>Insuficiente</span>
+        </Badge>,
+        acoes: [
+          <Button
+            key="justificar"
+            size="sm"
+            onClick={() => abrirJustificativa(registro)}
+            className="bg-red-600 hover:bg-red-700 text-white hover:shadow-md transition-all"
+          >
+            Justificar
+          </Button>
+        ]
+      }
+    }
+    
+    // Se está em andamento - Amarelo / Incompleto
+    if (status === 'Em Andamento') {
+      return {
+        status: 'incompleto',
+        cor: 'yellow',
+        badge: <Badge className="bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 transition-colors whitespace-nowrap flex items-center gap-1">
+          <span className="text-xs">⚠️</span>
+          <span>Incompleto</span>
+        </Badge>,
+        acoes: [
+          <Button
+            key="info"
+            size="sm"
+            variant="outline"
+            onClick={() => abrirEdicao(registro)}
+            className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
+          >
+            Ver Info
+          </Button>
+        ]
+      }
+    }
+
+    // Status padrão
+    return {
+      status: 'indefinido',
+      cor: 'gray',
+      badge: <Badge className="bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors whitespace-nowrap flex items-center gap-1">
+        <span className="text-xs">❓</span>
+        <span>{status || 'Indefinido'}</span>
+      </Badge>,
+      acoes: [
+        <Button
+          key="info"
+          size="sm"
+          variant="outline"
+          onClick={() => abrirEdicao(registro)}
+          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+        >
+          Ver Info
+        </Button>
+      ]
+    }
   }
 
   const handleJustificativa = async (e: React.FormEvent) => {
@@ -468,6 +688,94 @@ export default function PontoPage() {
     setIsEditarOpen(true)
   }
 
+  const abrirModalAprovacao = (registro: RegistroPonto, tipo: 'aprovar' | 'rejeitar') => {
+    setRegistroParaModal(registro)
+    setTipoAcao(tipo)
+    setObservacoesModal('')
+    setJustificativaModal('')
+    setIsModalAprovacaoOpen(true)
+  }
+
+  const abrirJustificativa = (registro: RegistroPonto) => {
+    setJustificativaData({
+      funcionario_id: registro.funcionario_id.toString(),
+      data: registro.data,
+      tipo: "Falta de Horas",
+      motivo: "",
+    })
+    setIsJustificativaOpen(true)
+  }
+
+  // Componente para toggle de entrada (mostra saída do almoço)
+  const ToggleEntrada = ({ registro }: { registro: RegistroPonto }) => {
+    const [isOpen, setIsOpen] = useState(false)
+    
+    if (!registro.entrada) {
+      return <span className="text-gray-400">-</span>
+    }
+
+    return (
+      <div className="relative">
+        <button
+          className="font-medium cursor-pointer"
+          onMouseEnter={() => setIsOpen(true)}
+          onMouseLeave={() => setIsOpen(false)}
+        >
+          {registro.entrada}
+        </button>
+        {isOpen && (
+          <div className="absolute z-10 top-8 left-0 bg-white border rounded-lg shadow-lg p-3 min-w-[200px]">
+            <div className="text-sm">
+              <div className="font-medium text-gray-900 mb-1">Entrada</div>
+              <div className="text-gray-600">{registro.entrada}</div>
+              {registro.saida_almoco && (
+                <>
+                  <div className="font-medium text-gray-900 mt-2 mb-1">Saída Almoço</div>
+                  <div className="text-gray-600">{registro.saida_almoco}</div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Componente para toggle de saída (mostra volta do almoço)
+  const ToggleSaida = ({ registro }: { registro: RegistroPonto }) => {
+    const [isOpen, setIsOpen] = useState(false)
+    
+    if (!registro.saida) {
+      return <span className="text-gray-400">-</span>
+    }
+
+    return (
+      <div className="relative">
+        <button
+          className="font-medium cursor-pointer"
+          onMouseEnter={() => setIsOpen(true)}
+          onMouseLeave={() => setIsOpen(false)}
+        >
+          {registro.saida}
+        </button>
+        {isOpen && (
+          <div className="absolute z-10 top-8 left-0 bg-white border rounded-lg shadow-lg p-3 min-w-[200px]">
+            <div className="text-sm">
+              <div className="font-medium text-gray-900 mb-1">Saída</div>
+              <div className="text-gray-600">{registro.saida}</div>
+              {registro.volta_almoco && (
+                <>
+                  <div className="font-medium text-gray-900 mt-2 mb-1">Volta Almoço</div>
+                  <div className="text-gray-600">{registro.volta_almoco}</div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Funções para aprovação de horas extras
   const abrirAprovacao = (registro: RegistroPonto) => {
     setRegistroParaAprovacao(registro)
@@ -515,14 +823,6 @@ export default function PontoPage() {
     }
   }
 
-  // Função para abrir modal de aprovação
-  const abrirModalAprovacao = (registro: RegistroPonto, tipo: 'aprovar' | 'rejeitar') => {
-    setRegistroParaModal(registro)
-    setTipoAcao(tipo)
-    setObservacoesModal('')
-    setJustificativaModal('')
-    setIsModalAprovacaoOpen(true)
-  }
 
   // Função para aprovar horas extras diretamente (para administradores)
   const handleAprovarDireto = async () => {
@@ -875,14 +1175,35 @@ export default function PontoPage() {
                   </div>
                   <div>
                     <span className="text-gray-600">Horas Extras:</span>
-                    <span className="ml-2 font-medium text-orange-600">
-                      +{(Math.max(0, utilsPonto.calcularHorasTrabalhadas(
+                    {(() => {
+                      const horasTrabalhadas = utilsPonto.calcularHorasTrabalhadas(
                         dadosEdicao.entrada,
                         dadosEdicao.saida,
                         dadosEdicao.saida_almoco,
                         dadosEdicao.volta_almoco
-                      ) - 8) || 0).toFixed(2)}h
-                    </span>
+                      ) || 0;
+                      const horasExtras = horasTrabalhadas - 8;
+                      
+                      if (horasExtras > 0) {
+                        return (
+                          <span className="ml-2 font-medium text-orange-600">
+                            +{horasExtras.toFixed(2)}h
+                          </span>
+                        );
+                      } else if (horasExtras < 0) {
+                        return (
+                          <span className="ml-2 font-medium text-red-600">
+                            {horasExtras.toFixed(2)}h
+                          </span>
+                        );
+                      } else {
+                        return (
+                          <span className="ml-2 font-medium text-gray-600">
+                            {horasExtras.toFixed(2)}h
+                          </span>
+                        );
+                      }
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1251,14 +1572,7 @@ export default function PontoPage() {
                 <div className="flex justify-end">
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      setFiltroFuncionario("todos")
-                      setFiltroDataInicio("")
-                      setFiltroDataFim("")
-                      setFiltroStatus("todos")
-                      setOrdenacaoHorasExtras("data") // Ordenar por data (padrão)
-                      setSearchTerm("")
-                    }}
+                    onClick={limparFiltros}
                   >
                     Limpar Filtros
                   </Button>
@@ -1290,13 +1604,11 @@ export default function PontoPage() {
                       <TableHead>Funcionário</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead>Entrada</TableHead>
-                      <TableHead>Saída Almoço</TableHead>
-                      <TableHead>Volta Almoço</TableHead>
                       <TableHead>Saída</TableHead>
                       <TableHead>Horas Trabalhadas</TableHead>
                       <TableHead>Horas Extras</TableHead>
+                      <TableHead>Horas Negativas</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Aprovado Por</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1314,15 +1626,19 @@ export default function PontoPage() {
                                          (!registro.volta_almoco && registro.saida_almoco) || 
                                          (!registro.saida && registro.volta_almoco)
                       
-                      // Aplicar cores condicionais
-                      const nomeColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
-                      const dataColor = isAtraso ? 'text-red-600 font-semibold' : isIncompleto ? 'text-orange-600 font-semibold' : ''
+                      // Aplicar cores condicionais (removidas para manter texto preto)
+                      const nomeColor = ''
+                      const dataColor = ''
                       
                       return (
                         <TableRow key={registro.id}>
                           <TableCell className={`font-medium ${nomeColor}`}>
                             <div className="flex items-center gap-2">
-                              {registro.horas_extras > 0 && registro.status !== 'Pendente Aprovação' && (
+                              {(registro.horas_extras || 0) > 0 && 
+                               registro.status !== 'Pendente Aprovação' && 
+                               registro.status !== 'Aprovado' && 
+                               registro.status !== 'Autorizado' && 
+                               registro.status !== 'Rejeitado' && (
                               <button
                                 onClick={() => abrirAprovacao(registro)}
                                 className="p-2 rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors shadow-sm"
@@ -1338,26 +1654,66 @@ export default function PontoPage() {
                             {isIncompleto && !isAtraso && <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">INCOMPLETO</span>}
                           </div>
                         </TableCell>
-                        <TableCell className={dataColor}>{utilsPonto.formatarData(registro.data)}</TableCell>
-                        <TableCell>{registro.entrada || '-'}</TableCell>
-                        <TableCell>{registro.saida_almoco || '-'}</TableCell>
-                        <TableCell>{registro.volta_almoco || '-'}</TableCell>
-                        <TableCell>{registro.saida || '-'}</TableCell>
+                        <TableCell>{utilsPonto.formatarData(registro.data)}</TableCell>
+                        <TableCell>
+                          <ToggleEntrada registro={registro} />
+                        </TableCell>
+                        <TableCell>
+                          <ToggleSaida registro={registro} />
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline">
                             {registro.horas_trabalhadas}h
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {(registro.horas_extras || 0) > 0 ? (
-                            <Badge className="bg-orange-100 text-orange-800">
-                              +{registro.horas_extras || 0}h
-                            </Badge>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
+                          {(() => {
+                            const horasExtras = registro.horas_extras || 0;
+                            if (horasExtras > 0) {
+                              return (
+                                <Badge className="bg-orange-100 text-orange-800">
+                                  +{horasExtras}h
+                                </Badge>
+                              );
+                            } else if (horasExtras < 0) {
+                              return (
+                                <Badge className="bg-red-100 text-red-800">
+                                  {horasExtras}h
+                                </Badge>
+                              );
+                            } else {
+                              return <span className="text-gray-400">-</span>;
+                            }
+                          })()}
                         </TableCell>
-                        <TableCell>{getStatusBadge(registro.status || '')}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            // Calcular horas trabalhadas dinamicamente considerando horários de almoço
+                            const horasTrabalhadas = utilsPonto.calcularHorasTrabalhadas(
+                              registro.entrada,
+                              registro.saida,
+                              registro.saida_almoco,
+                              registro.volta_almoco
+                            );
+                            const horasNegativas = horasTrabalhadas < 8 ? 8 - horasTrabalhadas : 0;
+                            
+                            if (horasNegativas > 0) {
+                              return (
+                                <Badge className="bg-red-50 text-red-700 border-red-200">
+                                  -{horasNegativas.toFixed(1)}h
+                                </Badge>
+                              );
+                            } else {
+                              return <span className="text-gray-400">-</span>;
+                            }
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const statusInfo = getRegistroStatusInfo(registro)
+                            return statusInfo.badge
+                          })()}
+                        </TableCell>
                         <TableCell>
                           {registro.aprovador?.nome ? (
                             <span className="text-sm font-medium">{registro.aprovador.nome}</span>
@@ -1367,24 +1723,10 @@ export default function PontoPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => abrirEdicao(registro)}
-                              className="text-blue-600 hover:text-blue-700"
-                            >
-                              Editar
-                            </Button>
-                            {(registro.horas_extras || 0) > 0 && (registro.status || '') !== 'Pendente Aprovação' && (
-                              <Button
-                                size="sm"
-                                onClick={() => abrirAprovacao(registro)}
-                                className="bg-orange-600 hover:bg-orange-700 text-white"
-                                title="Enviar para Aprovação"
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                            )}
+                            {(() => {
+                              const statusInfo = getRegistroStatusInfo(registro)
+                              return statusInfo.acoes
+                            })()}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1442,9 +1784,9 @@ export default function PontoPage() {
                         <TableHead>Data</TableHead>
                         <TableHead>Horas Trabalhadas</TableHead>
                         <TableHead>Horas Extras</TableHead>
+                        <TableHead>Horas Negativas</TableHead>
                         <TableHead>Justificativa</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Aprovado Por</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1465,40 +1807,42 @@ export default function PontoPage() {
                                 +{registro.horas_extras || 0}h
                               </Badge>
                             </TableCell>
-                            <TableCell className="max-w-xs truncate">{registro.observacoes || '-'}</TableCell>
-                            <TableCell>{getStatusBadge(registro.status || '')}</TableCell>
                             <TableCell>
-                              {registro.aprovador?.nome ? (
-                                <span className="text-sm font-medium">{registro.aprovador.nome}</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
+                              {(() => {
+                                // Calcular horas trabalhadas dinamicamente considerando horários de almoço
+                                const horasTrabalhadas = utilsPonto.calcularHorasTrabalhadas(
+                                  registro.entrada,
+                                  registro.saida,
+                                  registro.saida_almoco,
+                                  registro.volta_almoco
+                                );
+                                const horasNegativas = horasTrabalhadas < 8 ? 8 - horasTrabalhadas : 0;
+                                
+                                if (horasNegativas > 0) {
+                                  return (
+                                    <Badge className="bg-red-50 text-red-700 border-red-200">
+                                      -{horasNegativas.toFixed(1)}h
+                                    </Badge>
+                                  );
+                                } else {
+                                  return <span className="text-gray-400">-</span>;
+                                }
+                              })()}
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate">{registro.observacoes || '-'}</TableCell>
+                            <TableCell>
+                              {(() => {
+                                const statusInfo = getRegistroStatusInfo(registro)
+                                return statusInfo.badge
+                              })()}
                             </TableCell>
                             <TableCell>
-                              {(registro.status || '') === "Pendente Aprovação" && (
-                                <div className="flex gap-2">
-                                  <Button 
-                                    size="sm" 
-                                    className="bg-green-600 hover:bg-green-700"
-                                    onClick={() => abrirModalAprovacao(registro, 'aprovar')}
-                                  >
-                                    Aprovar
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="destructive"
-                                    onClick={() => abrirModalAprovacao(registro, 'rejeitar')}
-                                  >
-                                    Rejeitar
-                                  </Button>
-                                </div>
-                              )}
-                              {(registro.status || '') === "Aprovado" && (
-                                <Badge className="bg-green-100 text-green-800">Aprovado</Badge>
-                              )}
-                              {(registro.status || '') === "Rejeitado" && (
-                                <Badge className="bg-red-100 text-red-800">Rejeitado</Badge>
-                              )}
+                              <div className="flex gap-2">
+                                {(() => {
+                                  const statusInfo = getRegistroStatusInfo(registro)
+                                  return statusInfo.acoes
+                                })()}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}

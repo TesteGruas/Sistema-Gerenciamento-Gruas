@@ -299,6 +299,7 @@ export default function PWAEncarregadorPage() {
     const statusConfig = {
       'Pendente Aprovação': { className: 'bg-yellow-100 text-yellow-800', text: 'Pendente', icon: Clock },
       'Aprovado': { className: 'bg-green-100 text-green-800', text: 'Aprovado', icon: CheckCircle },
+      'Autorizado': { className: 'bg-green-100 text-green-800', text: 'Autorizado', icon: CheckCircle },
       'Rejeitado': { className: 'bg-red-100 text-red-800', text: 'Rejeitado', icon: AlertCircle }
     }
     

@@ -57,24 +57,37 @@ export function usePWAUser(): PWAUserData {
               setPontoHoje(ponto)
 
               // Calcular horas trabalhadas
-              if (ponto.entrada) {
+              if (ponto.entrada && ponto.saida_almoco && ponto.volta_almoco && ponto.saida) {
                 const entrada = new Date(ponto.entrada)
-                const saida = ponto.saida ? new Date(ponto.saida) : new Date()
+                const saida = new Date(ponto.saida)
+                const saidaAlmoco = new Date(ponto.saida_almoco)
+                const voltaAlmoco = new Date(ponto.volta_almoco)
                 
-                let diff = saida.getTime() - entrada.getTime()
+                // Fórmula correta: (Saída Almoço - Entrada) + (Saída - Volta do Almoço)
+                const periodoManha = saidaAlmoco.getTime() - entrada.getTime()
+                const periodoTarde = saida.getTime() - voltaAlmoco.getTime()
+                const totalDiff = periodoManha + periodoTarde
                 
-                // Subtrair tempo de almoço se houver
-                if (ponto.saida_almoco && ponto.volta_almoco) {
-                  const saidaAlmoco = new Date(ponto.saida_almoco)
-                  const voltaAlmoco = new Date(ponto.volta_almoco)
-                  const tempoAlmoco = voltaAlmoco.getTime() - saidaAlmoco.getTime()
-                  diff -= tempoAlmoco
-                }
-                
-                const horas = Math.floor(diff / (1000 * 60 * 60))
-                const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+                const horas = Math.floor(totalDiff / (1000 * 60 * 60))
+                const minutos = Math.floor((totalDiff % (1000 * 60 * 60)) / (1000 * 60))
                 
                 setHorasTrabalhadas(`${horas}h ${minutos}min`)
+              } else if (ponto.entrada && ponto.saida) {
+                // Se não tem horários de almoço, calcula como (Saída - Entrada)
+                const entrada = new Date(ponto.entrada)
+                const saida = new Date(ponto.saida)
+                const totalDiff = saida.getTime() - entrada.getTime()
+                
+                const horas = Math.floor(totalDiff / (1000 * 60 * 60))
+                const minutos = Math.floor((totalDiff % (1000 * 60 * 60)) / (1000 * 60))
+                
+                // Se for menos de 8 horas, mostra como negativo
+                if (horas < 8) {
+                  const horasNegativas = 8 - horas
+                  setHorasTrabalhadas(`${horas}h ${minutos}min (-${horasNegativas}h)`)
+                } else {
+                  setHorasTrabalhadas(`${horas}h ${minutos}min`)
+                }
               }
             }
           } else {

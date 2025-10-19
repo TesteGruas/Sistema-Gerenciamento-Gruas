@@ -190,3 +190,4 @@ CREATE TABLE registros_ponto (
 ---
 
 **O sistema está pronto para uso em produção!** 🚀
+
