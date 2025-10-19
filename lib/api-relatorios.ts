@@ -116,6 +116,19 @@ export interface RelatorioManutencao {
   }>;
 }
 
+export interface RelatorioImpostos {
+  competencia: string;
+  total_impostos: number;
+  total_pago: number;
+  total_pendente: number;
+  impostos_por_tipo: Array<{
+    tipo: string;
+    valor_total: number;
+    valor_pago: number;
+    valor_pendente: number;
+  }>;
+}
+
 export interface DashboardRelatorios {
   resumo_geral: {
     total_gruas: number;
@@ -235,6 +248,31 @@ export const apiRelatorios = {
     
     const token = localStorage.getItem('access_token');
     const response = await fetch(`${API_BASE_URL}/api/relatorios/manutencao?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de impostos financeiros
+  async impostos(params: {
+    mes: number;
+    ano: number;
+  }): Promise<{ success: boolean; data: RelatorioImpostos }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('mes', params.mes.toString());
+    queryParams.append('ano', params.ano.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/impostos-financeiros/relatorio?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

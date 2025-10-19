@@ -176,6 +176,8 @@ export default function RelatoriosPage() {
   const [relatorioFaturamento, setRelatorioFaturamento] = useState<any[]>([])
   const [relatorioLocacoes, setRelatorioLocacoes] = useState<any[]>([])
   const [relatorioEstoque, setRelatorioEstoque] = useState<any[]>([])
+  const [relatorioImpostos, setRelatorioImpostos] = useState<any>(null)
+  const [isLoadingImpostos, setIsLoadingImpostos] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
@@ -183,6 +185,39 @@ export default function RelatoriosPage() {
   useEffect(() => {
     carregarDados()
   }, [])
+
+  // Função para carregar relatório de impostos
+  const carregarRelatorioImpostos = async (mes?: number, ano?: number) => {
+    try {
+      setIsLoadingImpostos(true)
+      
+      const hoje = new Date()
+      const mesAtual = mes || hoje.getMonth() + 1
+      const anoAtual = ano || hoje.getFullYear()
+      
+      const response = await apiRelatorios.impostos({
+        mes: mesAtual,
+        ano: anoAtual
+      })
+      
+      setRelatorioImpostos(response.data)
+      
+      toast({
+        title: "Sucesso",
+        description: "Relatório de impostos carregado com sucesso",
+        variant: "default"
+      })
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de impostos:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar relatório de impostos",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoadingImpostos(false)
+    }
+  }
 
   const carregarDados = async () => {
     try {
@@ -201,6 +236,9 @@ export default function RelatoriosPage() {
       ])
       setObras(obrasData.data || [])
       setGruas(gruasData.data || [])
+      
+      // Carregar relatório de impostos do mês atual
+      await carregarRelatorioImpostos()
       
       // Carregar relatório financeiro
       try {
@@ -924,13 +962,14 @@ export default function RelatoriosPage() {
 
       {/* Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="vendas">Vendas</TabsTrigger>
           <TabsTrigger value="contratos">Contratos</TabsTrigger>
           <TabsTrigger value="faturamento">Faturamento</TabsTrigger>
           <TabsTrigger value="locacoes">Locações</TabsTrigger>
           <TabsTrigger value="estoque">Estoque</TabsTrigger>
+          <TabsTrigger value="impostos">Impostos</TabsTrigger>
         </TabsList>
 
         {/* Relatório Financeiro */}
@@ -1362,6 +1401,182 @@ export default function RelatoriosPage() {
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Impostos */}
+        <TabsContent value="impostos" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Receipt className="w-5 h-5" />
+                Relatório de Impostos
+              </CardTitle>
+              <CardDescription>Análise de impostos por competência</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="mes-impostos">Mês:</Label>
+                  <Select onValueChange={(value) => carregarRelatorioImpostos(parseInt(value), new Date().getFullYear())}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="Mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => (
+                        <SelectItem key={i + 1} value={(i + 1).toString()}>
+                          {new Date(2024, i).toLocaleDateString('pt-BR', { month: 'long' })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="ano-impostos">Ano:</Label>
+                  <Select onValueChange={(value) => carregarRelatorioImpostos(new Date().getMonth() + 1, parseInt(value))}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => {
+                        const ano = new Date().getFullYear() - 2 + i
+                        return (
+                          <SelectItem key={ano} value={ano.toString()}>
+                            {ano}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                  onClick={() => carregarRelatorioImpostos()} 
+                  disabled={isLoadingImpostos}
+                  className="flex items-center gap-2"
+                >
+                  {isLoadingImpostos ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                  Buscar
+                </Button>
+              </div>
+
+              {relatorioImpostos ? (
+                <div className="space-y-6">
+                  {/* Resumo Geral */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total de Impostos</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              R$ {relatorioImpostos.total_impostos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <DollarSign className="w-8 h-8 text-blue-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total Pago</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              R$ {relatorioImpostos.total_pago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-green-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total Pendente</p>
+                            <p className="text-2xl font-bold text-orange-600">
+                              R$ {relatorioImpostos.total_pendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <Clock className="w-8 h-8 text-orange-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Taxa de Pagamento</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              {((relatorioImpostos.total_pago / relatorioImpostos.total_impostos) * 100).toFixed(1)}%
+                            </p>
+                          </div>
+                          <TrendingUp className="w-8 h-8 text-blue-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Detalhamento por Tipo */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Detalhamento por Tipo de Imposto</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Tipo de Imposto</TableHead>
+                            <TableHead>Valor Total</TableHead>
+                            <TableHead>Valor Pago</TableHead>
+                            <TableHead>Valor Pendente</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {relatorioImpostos.impostos_por_tipo.map((imposto, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">{imposto.tipo}</TableCell>
+                              <TableCell>
+                                R$ {imposto.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-green-600">
+                                R$ {imposto.valor_pago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-orange-600">
+                                R$ {imposto.valor_pendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  className={
+                                    imposto.valor_pendente === 0 
+                                      ? "bg-green-100 text-green-800" 
+                                      : "bg-orange-100 text-orange-800"
+                                  }
+                                >
+                                  {imposto.valor_pendente === 0 ? "Pago" : "Pendente"}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  {isLoadingImpostos ? 'Carregando relatório de impostos...' : 'Selecione um período para visualizar o relatório de impostos'}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
