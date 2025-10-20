@@ -199,7 +199,8 @@ export default function PontoPage() {
         apiFuncionarios.listarParaPonto(usuarioId),
         apiRegistrosPonto.listar({ 
           page: currentPage, 
-          limit: pageSize 
+          limit: pageSize,
+          recalcular: true // ✨ Recalcular automaticamente
         }),
         apiJustificativas.listar({})
       ])
@@ -283,8 +284,19 @@ export default function PontoPage() {
 
       // Carregar registros com filtros
       console.log('📡 Chamando API...')
-      const registrosResponse = await apiRegistrosPonto.listar(filtros)
+      const registrosResponse = await apiRegistrosPonto.listar({
+        ...filtros,
+        recalcular: true // ✨ Recalcular automaticamente
+      })
       console.log('📡 Resposta da API:', registrosResponse)
+      
+      // Notificar se houve recalculação
+      if (registrosResponse.recalculated) {
+        toast({
+          title: "✨ Dados Atualizados",
+          description: "Alguns registros foram recalculados automaticamente"
+        })
+      }
       
       const registros = registrosResponse.data || []
       const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }

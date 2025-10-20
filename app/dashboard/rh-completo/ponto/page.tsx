@@ -93,7 +93,20 @@ export default function PontoEletronicoPage() {
         filtros.status = filtroStatus
       }
 
-      const { data: registrosData } = await apiRegistrosPonto.listar(filtros)
+      // ✨ ADICIONAR recalcular: true para corrigir horas zeradas automaticamente
+      const { data: registrosData, recalculated } = await apiRegistrosPonto.listar({
+        ...filtros,
+        recalcular: true
+      })
+
+      // Mostrar notificação se houve recalculação
+      if (recalculated) {
+        toast({
+          title: "Dados Atualizados",
+          description: "Alguns registros foram recalculados automaticamente",
+          duration: 3000
+        })
+      }
       
       // Transformar dados da API para o formato esperado pelo componente
       const registrosFormatados = registrosData.map((reg: any) => ({

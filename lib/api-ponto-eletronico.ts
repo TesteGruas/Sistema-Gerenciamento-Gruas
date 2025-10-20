@@ -232,12 +232,14 @@ export const apiRegistrosPonto = {
     page?: number;
     limit?: number;
     search?: string;
-  }): Promise<{ data: RegistroPonto[]; pagination?: any }> {
+    recalcular?: boolean;
+  }): Promise<{ data: RegistroPonto[]; pagination?: any; recalculated?: boolean }> {
     try {
       const response = await api.get('ponto-eletronico/registros', { params });
       return { 
         data: response.data.data || response.data || [],
-        pagination: response.data.pagination
+        pagination: response.data.pagination,
+        recalculated: response.data.recalculated
       };
     } catch (error) {
       console.warn('API indisponível, usando dados mockados:', error);
@@ -326,6 +328,57 @@ export const apiRegistrosPonto = {
       motivo_rejeicao: motivo
     });
     return response.data.data || response.data;
+  },
+
+  /**
+   * Recalcula horas trabalhadas e status de registros
+   * Útil para corrigir dados inconsistentes em lote
+   */
+  async recalcular(payload?: {
+    funcionario_id?: number;
+    data_inicio?: string;
+    data_fim?: string;
+    recalcular_todos?: boolean;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    atualizados: number;
+    total: number;
+    erros?: Array<{ id: string; error: string }>;
+  }> {
+    const response = await api.post('ponto-eletronico/registros/calcular', payload || {});
+    return response.data;
+  },
+
+  /**
+   * Valida consistência dos registros de ponto
+   * Retorna estatísticas de problemas encontrados
+   */
+  async validar(params?: {
+    funcionario_id?: number;
+    data_inicio?: string;
+    data_fim?: string;
+  }): Promise<{
+    success: boolean;
+    estatisticas: {
+      total: number;
+      com_problemas: number;
+      sem_entrada: number;
+      sem_saida: number;
+      horas_zeradas: number;
+      status_inconsistente: number;
+      horarios_iguais: number;
+    };
+    problemas: Array<{
+      id: string;
+      funcionario: string;
+      data: string;
+      problemas: string[];
+    }>;
+    total_problemas: number;
+  }> {
+    const response = await api.get('ponto-eletronico/registros/validar', { params });
+    return response.data;
   }
 };
 

@@ -6,12 +6,13 @@
  * Calcula as horas trabalhadas baseado nos horários de entrada, saída e intervalos
  * @param {string} entrada - Horário de entrada (HH:MM)
  * @param {string} saida - Horário de saída (HH:MM)
- * @param {string} saidaAlmoco - Horário de saída para almoço (HH:MM)
- * @param {string} voltaAlmoco - Horário de volta do almoço (HH:MM)
+ * @param {string} saidaAlmoco - Horário de saída para almoço (HH:MM) - opcional
+ * @param {string} voltaAlmoco - Horário de volta do almoço (HH:MM) - opcional
  * @returns {number} Total de horas trabalhadas
  */
 function calcularHorasTrabalhadas(entrada, saida, saidaAlmoco, voltaAlmoco) {
-  if (!entrada || !saida || !saidaAlmoco || !voltaAlmoco) {
+  // Apenas entrada e saída são obrigatórios
+  if (!entrada || !saida) {
     return 0;
   }
 
@@ -19,20 +20,21 @@ function calcularHorasTrabalhadas(entrada, saida, saidaAlmoco, voltaAlmoco) {
     // Converter horários para minutos desde meia-noite
     const entradaMinutos = timeToMinutes(entrada);
     const saidaMinutos = timeToMinutes(saida);
-    const saidaAlmocoMinutos = timeToMinutes(saidaAlmoco);
-    const voltaAlmocoMinutos = timeToMinutes(voltaAlmoco);
 
-    // Calcular período da manhã (entrada até saída almoço)
-    const manhaMinutos = saidaAlmocoMinutos - entradaMinutos;
+    // Calcular total de minutos entre entrada e saída
+    let totalMinutos = saidaMinutos - entradaMinutos;
+
+    // Se houver horários de almoço, descontar o intervalo
+    if (saidaAlmoco && voltaAlmoco) {
+      const saidaAlmocoMinutos = timeToMinutes(saidaAlmoco);
+      const voltaAlmocoMinutos = timeToMinutes(voltaAlmoco);
+      const intervaloAlmoco = voltaAlmocoMinutos - saidaAlmocoMinutos;
+      totalMinutos -= intervaloAlmoco;
+    }
     
-    // Calcular período da tarde (volta almoço até saída)
-    const tardeMinutos = saidaMinutos - voltaAlmocoMinutos;
-    
-    // Total de minutos trabalhados
-    const totalMinutos = manhaMinutos + tardeMinutos;
-    
-    // Converter para horas (com 2 casas decimais)
-    return Math.max(0, totalMinutos / 60);
+    // Converter para horas com 2 casas decimais
+    const horas = totalMinutos / 60;
+    return Math.max(0, Math.round(horas * 100) / 100);
   } catch (error) {
     console.error('Erro ao calcular horas trabalhadas:', error);
     return 0;
@@ -54,10 +56,11 @@ function calcularHorasExtras(horasTrabalhadas, jornadaPadrao = 8) {
  * @param {string} entrada - Horário de entrada
  * @param {string} saida - Horário de saída
  * @param {number} horasExtras - Horas extras
+ * @param {number} horasTrabalhadas - Total de horas trabalhadas
  * @param {string} horarioEntradaEsperado - Horário esperado de entrada (opcional)
  * @returns {string} Status do registro
  */
-function determinarStatus(entrada, saida, horasExtras, horarioEntradaEsperado = '08:00') {
+function determinarStatus(entrada, saida, horasExtras, horasTrabalhadas, horarioEntradaEsperado = '08:00') {
   if (!entrada) {
     return 'Falta';
   }
@@ -66,17 +69,36 @@ function determinarStatus(entrada, saida, horasExtras, horarioEntradaEsperado = 
     return 'Em Andamento';
   }
 
-  // Verificar se houve atraso
-  if (entrada > horarioEntradaEsperado) {
-    return horasExtras > 0 ? 'Pendente Aprovação' : 'Atraso';
-  }
+  try {
+    // Calcular atraso em minutos (tolerância de 15 minutos)
+    const entradaMinutos = timeToMinutes(entrada);
+    const entradaEsperadaMinutos = timeToMinutes(horarioEntradaEsperado);
+    const atrasoMinutos = entradaMinutos - entradaEsperadaMinutos;
 
-  // Se tem horas extras, precisa de aprovação
-  if (horasExtras > 0) {
-    return 'Pendente Aprovação';
-  }
+    // Se tem atraso maior que 15 minutos
+    if (atrasoMinutos > 15) {
+      // Se tem horas extras, ainda precisa de aprovação
+      if (horasExtras > 0) {
+        return 'Pendente Aprovação';
+      }
+      return 'Atraso';
+    }
 
-  return 'Completo';
+    // Se tem horas extras, precisa de aprovação
+    if (horasExtras > 0) {
+      return 'Pendente Aprovação';
+    }
+
+    // Verificar se cumpriu a carga horária mínima (7.5 horas considerando tolerância)
+    if (horasTrabalhadas < 7.5) {
+      return 'Incompleto';
+    }
+
+    return 'Completo';
+  } catch (error) {
+    console.error('Erro ao determinar status:', error);
+    return 'Completo';
+  }
 }
 
 /**

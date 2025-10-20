@@ -275,7 +275,8 @@ router.get('/registros', async (req, res) => {
       data_fim, 
       status, 
       page = 1, 
-      limit = 50 
+      limit = 50,
+      recalcular = 'false'
     } = req.query;
 
     let query = supabaseAdmin
@@ -319,6 +320,64 @@ router.get('/registros', async (req, res) => {
       });
     }
 
+    // Se solicitado, recalcular dados inconsistentes
+    if (recalcular === 'true') {
+      const registrosRecalculados = await Promise.all(
+        (data || []).map(async (registro) => {
+          // Verificar se precisa recalcular (horas zeradas mas tem entrada e saída)
+          if ((registro.horas_trabalhadas === 0 || registro.horas_trabalhadas === null) 
+              && registro.entrada && registro.saida) {
+            
+            const horasTrabalhadas = calcularHorasTrabalhadas(
+              registro.entrada,
+              registro.saida,
+              registro.saida_almoco,
+              registro.volta_almoco
+            );
+
+            const horasExtras = calcularHorasExtras(horasTrabalhadas);
+            const novoStatus = determinarStatus(
+              registro.entrada,
+              registro.saida,
+              horasExtras,
+              horasTrabalhadas
+            );
+
+            // Atualizar no banco
+            await supabaseAdmin
+              .from('registros_ponto')
+              .update({
+                horas_trabalhadas: horasTrabalhadas,
+                horas_extras: horasExtras,
+                status: novoStatus,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', registro.id);
+
+            return {
+              ...registro,
+              horas_trabalhadas: horasTrabalhadas,
+              horas_extras: horasExtras,
+              status: novoStatus
+            };
+          }
+          return registro;
+        })
+      );
+
+      return res.json({
+        success: true,
+        data: registrosRecalculados,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count || 0,
+          pages: Math.ceil((count || 0) / limit)
+        },
+        recalculated: true
+      });
+    }
+
     res.json({
       success: true,
       data: data || [],
@@ -335,6 +394,300 @@ router.get('/registros', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Erro interno do servidor' 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/registros/calcular:
+ *   post:
+ *     summary: Recalcula horas trabalhadas e status de registros
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               funcionario_id:
+ *                 type: integer
+ *                 description: ID do funcionário (opcional)
+ *               data_inicio:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de início do período (opcional)
+ *               data_fim:
+ *                 type: string
+ *                 format: date
+ *                 description: Data de fim do período (opcional)
+ *               recalcular_todos:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Se true, recalcula todos os registros. Se false, apenas registros com problemas
+ *     responses:
+ *       200:
+ *         description: Registros recalculados com sucesso
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/registros/calcular', async (req, res) => {
+  try {
+    const { funcionario_id, data_inicio, data_fim, recalcular_todos = false } = req.body;
+
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select('*');
+
+    // Aplicar filtros se fornecidos
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', funcionario_id);
+    }
+
+    if (data_inicio) {
+      query = query.gte('data', data_inicio);
+    }
+
+    if (data_fim) {
+      query = query.lte('data', data_fim);
+    }
+
+    // Se não for para recalcular todos, pegar apenas registros com problemas
+    if (!recalcular_todos) {
+      query = query.or('horas_trabalhadas.is.null,horas_trabalhadas.eq.0');
+    }
+
+    const { data: registros, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar registros:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar registros',
+        error: error.message
+      });
+    }
+
+    let atualizados = 0;
+    const erros = [];
+
+    for (const registro of registros) {
+      try {
+        // Calcular horas trabalhadas
+        const horasTrabalhadas = calcularHorasTrabalhadas(
+          registro.entrada,
+          registro.saida,
+          registro.saida_almoco,
+          registro.volta_almoco
+        );
+
+        // Calcular horas extras
+        const horasExtras = calcularHorasExtras(horasTrabalhadas);
+
+        // Determinar status
+        const status = determinarStatus(
+          registro.entrada,
+          registro.saida,
+          horasExtras,
+          horasTrabalhadas
+        );
+
+        // Atualizar registro
+        const { error: updateError } = await supabaseAdmin
+          .from('registros_ponto')
+          .update({
+            horas_trabalhadas: horasTrabalhadas,
+            horas_extras: horasExtras,
+            status: status,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', registro.id);
+
+        if (updateError) {
+          erros.push({
+            id: registro.id,
+            error: updateError.message
+          });
+        } else {
+          atualizados++;
+        }
+      } catch (error) {
+        erros.push({
+          id: registro.id,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${atualizados} registro(s) atualizado(s)`,
+      atualizados,
+      total: registros.length,
+      erros: erros.length > 0 ? erros : undefined
+    });
+
+  } catch (error) {
+    console.error('Erro ao recalcular registros:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/registros/validar:
+ *   get:
+ *     summary: Valida consistência dos registros de ponto
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário (opcional)
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de início do período (opcional)
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de fim do período (opcional)
+ *     responses:
+ *       200:
+ *         description: Estatísticas de validação dos registros
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/registros/validar', async (req, res) => {
+  try {
+    const { funcionario_id, data_inicio, data_fim } = req.query;
+
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno)
+      `);
+
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', funcionario_id);
+    }
+
+    if (data_inicio) {
+      query = query.gte('data', data_inicio);
+    }
+
+    if (data_fim) {
+      query = query.lte('data', data_fim);
+    }
+
+    const { data: registros, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar registros:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar registros',
+        error: error.message
+      });
+    }
+
+    const problemas = [];
+    const estatisticas = {
+      total: registros.length,
+      com_problemas: 0,
+      sem_entrada: 0,
+      sem_saida: 0,
+      horas_zeradas: 0,
+      status_inconsistente: 0,
+      horarios_iguais: 0
+    };
+
+    for (const registro of registros) {
+      const problemasRegistro = [];
+
+      // Verificar entrada
+      if (!registro.entrada) {
+        problemasRegistro.push('Sem entrada registrada');
+        estatisticas.sem_entrada++;
+      }
+
+      // Verificar saída
+      if (!registro.saida) {
+        problemasRegistro.push('Sem saída registrada');
+        estatisticas.sem_saida++;
+      }
+
+      // Verificar horas trabalhadas
+      if (registro.entrada && registro.saida && 
+          (registro.horas_trabalhadas === 0 || registro.horas_trabalhadas === null)) {
+        problemasRegistro.push('Horas trabalhadas zeradas com entrada e saída');
+        estatisticas.horas_zeradas++;
+      }
+
+      // Verificar status
+      if (!registro.status) {
+        problemasRegistro.push('Status não definido');
+        estatisticas.status_inconsistente++;
+      }
+
+      // Verificar horários iguais (possível erro de registro)
+      if (registro.entrada && registro.saida && 
+          registro.entrada === registro.saida) {
+        problemasRegistro.push('Horário de entrada igual ao de saída');
+        estatisticas.horarios_iguais++;
+      }
+
+      // Verificar se entrada = saida_almoco = volta_almoco = saida
+      if (registro.entrada && registro.saida && 
+          registro.saida_almoco && registro.volta_almoco &&
+          registro.entrada === registro.saida_almoco &&
+          registro.entrada === registro.volta_almoco &&
+          registro.entrada === registro.saida) {
+        problemasRegistro.push('Todos os horários são iguais');
+        if (!estatisticas.horarios_iguais) {
+          estatisticas.horarios_iguais++;
+        }
+      }
+
+      if (problemasRegistro.length > 0) {
+        problemas.push({
+          id: registro.id,
+          funcionario: registro.funcionario?.nome || 'Desconhecido',
+          data: registro.data,
+          problemas: problemasRegistro
+        });
+        estatisticas.com_problemas++;
+      }
+    }
+
+    res.json({
+      success: true,
+      estatisticas,
+      problemas: problemas.slice(0, 100), // Limitar a 100 problemas na resposta
+      total_problemas: problemas.length
+    });
+
+  } catch (error) {
+    console.error('Erro ao validar registros:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
     });
   }
 });
