@@ -46,6 +46,8 @@ import {
   apiRegistrosPonto, 
   apiJustificativas,
   apiRelatorios,
+  apiHorasExtras,
+  apiGraficos,
   utilsPonto,
   type Funcionario,
   type RegistroPonto,
@@ -66,38 +68,21 @@ const estadoInicial = {
   usuarioAtual: null as { id: number, nome: string } | null
 }
 
-// Dados mockados para gráficos
-const dadosGraficos = {
-  horasTrabalhadas: [
-    { dia: 'Seg', horas: 8.5, extras: 0.5 },
-    { dia: 'Ter', horas: 8.0, extras: 0 },
-    { dia: 'Qua', horas: 9.0, extras: 1.0 },
-    { dia: 'Qui', horas: 8.0, extras: 0 },
-    { dia: 'Sex', horas: 7.5, extras: 0 },
-    { dia: 'Sáb', horas: 4.0, extras: 0 },
-    { dia: 'Dom', horas: 0, extras: 0 }
-  ],
-  frequencia: [
-    { mes: 'Jan', presencas: 22, faltas: 1, atrasos: 3 },
-    { mes: 'Fev', presencas: 20, faltas: 2, atrasos: 1 },
-    { mes: 'Mar', presencas: 23, faltas: 0, atrasos: 2 },
-    { mes: 'Abr', presencas: 21, faltas: 1, atrasos: 4 },
-    { mes: 'Mai', presencas: 22, faltas: 1, atrasos: 2 },
-    { mes: 'Jun', presencas: 20, faltas: 2, atrasos: 3 }
-  ],
-  statusFuncionarios: [
-    { nome: 'João Silva', horas: 44, status: 'completo' },
-    { nome: 'Maria Santos', horas: 40, status: 'completo' },
-    { nome: 'Pedro Costa', horas: 36, status: 'incompleto' },
-    { nome: 'Ana Oliveira', horas: 42, status: 'completo' },
-    { nome: 'Carlos Lima', horas: 38, status: 'incompleto' }
-  ],
-  distribuicaoHoras: [
-    { tipo: 'Horas Normais', valor: 160, cor: '#3b82f6' },
-    { tipo: 'Horas Extras', valor: 24, cor: '#10b981' },
-    { tipo: 'Faltas', valor: 8, cor: '#ef4444' },
-    { tipo: 'Atrasos', valor: 12, cor: '#f59e0b' }
-  ]
+// Tipos para dados de gráficos
+interface DadosGraficos {
+  horasTrabalhadas: any[]
+  frequencia: any[]
+  statusFuncionarios: any[]
+  dashboard: any | null
+}
+
+interface EstatisticasHorasExtras {
+  total_registros: number
+  total_horas_extras: number
+  media_horas_extras: number
+  max_horas_extras: number
+  total_funcionarios: number
+  media_por_funcionario: number
 }
 
 export default function PontoPage() {
@@ -154,6 +139,22 @@ export default function PontoPage() {
     total: 0,
     pages: 1
   })
+
+  // Estados para horas extras
+  const [registrosHorasExtras, setRegistrosHorasExtras] = useState<RegistroPonto[]>([])
+  const [estatisticasHorasExtras, setEstatisticasHorasExtras] = useState<EstatisticasHorasExtras | null>(null)
+  const [loadingHorasExtras, setLoadingHorasExtras] = useState(false)
+  const [registrosSelecionadosHorasExtras, setRegistrosSelecionadosHorasExtras] = useState<Set<string | number>>(new Set())
+
+  // Estados para gráficos
+  const [dadosGraficos, setDadosGraficos] = useState<DadosGraficos>({
+    horasTrabalhadas: [],
+    frequencia: [],
+    statusFuncionarios: [],
+    dashboard: null
+  })
+  const [loadingGraficos, setLoadingGraficos] = useState(false)
+  const [periodoGraficos, setPeriodoGraficos] = useState<'semana' | 'mes' | 'trimestre' | 'ano'>('mes')
 
   // Atualizar relógio a cada segundo (apenas no cliente)
   useEffect(() => {
@@ -423,19 +424,269 @@ export default function PontoPage() {
       }
 
       toast({
-        title: "Informação",
-        description: "Ponto registrado: ${tipo} às ${horaAtual}",
+        title: "Sucesso",
+        description: `Ponto registrado: ${tipo} às ${horaAtual}`,
         variant: "default"
       })
     } catch (error) {
       console.error('Erro ao registrar ponto:', error)
       toast({
-        title: "Informação",
+        title: "Erro",
         description: "Erro ao registrar ponto. Tente novamente.",
-        variant: "default"
+        variant: "destructive"
       })
     }
   }
+
+  // ========================================
+  // FUNÇÕES DE HORAS EXTRAS
+  // ========================================
+
+  // Carregar horas extras
+  const carregarHorasExtras = async () => {
+    setLoadingHorasExtras(true)
+    try {
+      const params: any = {
+        ordenacao: ordenacaoHorasExtras,
+        page: 1,
+        limit: 100
+      }
+
+      if (filtroFuncionario !== 'todos') {
+        params.funcionario_id = filtroFuncionario
+      }
+      if (filtroDataInicio) {
+        params.data_inicio = filtroDataInicio
+      }
+      if (filtroDataFim) {
+        params.data_fim = filtroDataFim
+      }
+      if (filtroStatus !== 'todos') {
+        params.status = filtroStatus
+      }
+
+      // Buscar registros com os filtros aplicados
+      const registros = await apiHorasExtras.listar(params)
+      const registrosFiltrados = registros.data || []
+      
+      setRegistrosHorasExtras(registrosFiltrados)
+
+      // Calcular estatísticas localmente baseado nos registros filtrados
+      const estatisticasCalculadas = {
+        total_registros: registrosFiltrados.length,
+        total_horas_extras: registrosFiltrados.reduce((sum, r) => sum + (r.horas_extras || 0), 0),
+        media_horas_extras: registrosFiltrados.length > 0 
+          ? registrosFiltrados.reduce((sum, r) => sum + (r.horas_extras || 0), 0) / registrosFiltrados.length 
+          : 0,
+        max_horas_extras: registrosFiltrados.length > 0 
+          ? Math.max(...registrosFiltrados.map(r => r.horas_extras || 0)) 
+          : 0,
+        total_funcionarios: new Set(registrosFiltrados.map(r => r.funcionario_id)).size,
+        media_por_funcionario: 0
+      }
+      
+      // Calcular média por funcionário
+      if (estatisticasCalculadas.total_funcionarios > 0) {
+        estatisticasCalculadas.media_por_funcionario = 
+          estatisticasCalculadas.total_horas_extras / estatisticasCalculadas.total_funcionarios
+      }
+
+      setEstatisticasHorasExtras(estatisticasCalculadas)
+    } catch (error) {
+      console.error('Erro ao carregar horas extras:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as horas extras",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingHorasExtras(false)
+    }
+  }
+
+  // Aprovar horas extras em lote
+  const aprovarHorasExtrasLote = async (registroIds: (string | number)[]) => {
+    try {
+      const { message } = await apiHorasExtras.aprovarLote({
+        registro_ids: registroIds,
+        observacoes: "Aprovado em lote"
+      })
+
+      toast({
+        title: "Sucesso",
+        description: message
+      })
+
+      setRegistrosSelecionadosHorasExtras(new Set())
+      carregarHorasExtras()
+      carregarDadosComFiltros()
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível aprovar os registros",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Rejeitar horas extras em lote
+  const rejeitarHorasExtrasLote = async (registroIds: (string | number)[], motivo: string) => {
+    try {
+      const { message } = await apiHorasExtras.rejeitarLote({
+        registro_ids: registroIds,
+        motivo
+      })
+
+      toast({
+        title: "Sucesso",
+        description: message
+      })
+
+      setRegistrosSelecionadosHorasExtras(new Set())
+      carregarHorasExtras()
+      carregarDadosComFiltros()
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível rejeitar os registros",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Toggle seleção de registro de hora extra
+  const toggleSelecionarHoraExtra = (id: string | number) => {
+    const novoSet = new Set(registrosSelecionadosHorasExtras)
+    if (novoSet.has(id)) {
+      novoSet.delete(id)
+    } else {
+      novoSet.add(id)
+    }
+    setRegistrosSelecionadosHorasExtras(novoSet)
+  }
+
+  // Selecionar/desselecionar todos
+  const toggleSelecionarTodosHorasExtras = () => {
+    if (registrosSelecionadosHorasExtras.size === registrosHorasExtras.length) {
+      setRegistrosSelecionadosHorasExtras(new Set())
+    } else {
+      const todosIds = new Set(registrosHorasExtras.map(r => r.id!))
+      setRegistrosSelecionadosHorasExtras(todosIds)
+    }
+  }
+
+  // ========================================
+  // FUNÇÕES DE GRÁFICOS
+  // ========================================
+
+  // Carregar dados dos gráficos
+  const carregarGraficos = async () => {
+    setLoadingGraficos(true)
+    try {
+      const periodo = periodoGraficos as any
+      const [horasTrabalhadas, frequencia, status, dashboard] = await Promise.all([
+        apiGraficos.horasTrabalhadas({ periodo }),
+        apiGraficos.frequencia({ periodo }),
+        apiGraficos.status({ periodo, agrupamento: 'funcionario' }),
+        apiGraficos.dashboard({ periodo })
+      ])
+
+      setDadosGraficos({
+        horasTrabalhadas: horasTrabalhadas.data || [],
+        frequencia: frequencia.data || [],
+        statusFuncionarios: status.data || [],
+        dashboard: dashboard.data || null
+      })
+    } catch (error) {
+      console.error('Erro ao carregar gráficos:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os gráficos",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingGraficos(false)
+    }
+  }
+
+  // ========================================
+  // FUNÇÕES DE EXPORTAÇÃO
+  // ========================================
+
+  // Exportar relatório
+  const exportarRelatorio = async (tipo: 'csv' | 'json' | 'pdf') => {
+    try {
+      const hoje = new Date()
+      const mes = hoje.getMonth() + 1
+      const ano = hoje.getFullYear()
+
+      if (tipo === 'pdf') {
+        // Para PDF, fazer requisição direta para baixar o arquivo
+        const token = localStorage.getItem('access_token')
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/relatorios/exportar?tipo=pdf&formato=mensal&mes=${mes}&ano=${ano}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error('Erro ao exportar PDF')
+        }
+
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `relatorio_ponto_${mes}_${ano}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      } else {
+        const data = await apiRelatorios.exportar({
+          tipo,
+          formato: 'mensal',
+          mes,
+          ano
+        })
+
+        if (tipo === 'csv') {
+          // Criar blob e fazer download
+          const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' })
+          const url = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `relatorio_ponto_${mes}_${ano}.csv`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(url)
+        }
+      }
+
+      toast({
+        title: "Sucesso",
+        description: `Relatório exportado em ${tipo.toUpperCase()}`
+      })
+    } catch (error) {
+      console.error('Erro ao exportar relatório:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível exportar o relatório",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // useEffect para carregar horas extras quando filtros mudarem
+  useEffect(() => {
+    carregarHorasExtras()
+  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, ordenacaoHorasExtras])
+
+  // useEffect para carregar gráficos quando período mudar
+  useEffect(() => {
+    carregarGraficos()
+  }, [periodoGraficos])
 
   // Debug: mostrar total de registros antes do filtro
   console.log('🔍 Total de registros antes do filtro:', data.registrosPonto.length)
@@ -1070,6 +1321,16 @@ export default function PontoPage() {
             tipo="ponto"
             nomeArquivo="relatorio-ponto"
             titulo="Relatório de Ponto Eletrônico"
+            onExport={async (formato) => {
+              if (formato === 'pdf') {
+                await exportarRelatorio('pdf')
+              } else if (formato === 'csv') {
+                await exportarRelatorio('csv')
+              } else {
+                // Excel/JSON
+                await exportarRelatorio('json')
+              }
+            }}
           />
           <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
             <DialogTrigger asChild>
@@ -1816,162 +2077,221 @@ export default function PontoPage() {
         <TabsContent value="horas-extras">
           <Card>
             <CardHeader>
-              <CardTitle>Controle de Horas Extras</CardTitle>
-              <CardDescription>Gerencie e aprove horas extras dos funcionários</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Controle de Horas Extras</CardTitle>
+                  <CardDescription>Gerencie e aprove horas extras dos funcionários</CardDescription>
+                </div>
+                {registrosSelecionadosHorasExtras.size > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => aprovarHorasExtrasLote(Array.from(registrosSelecionadosHorasExtras))}
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      Aprovar {registrosSelecionadosHorasExtras.size}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const motivo = prompt('Motivo da rejeição:')
+                        if (motivo) {
+                          rejeitarHorasExtrasLote(Array.from(registrosSelecionadosHorasExtras), motivo)
+                        }
+                      }}
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Rejeitar {registrosSelecionadosHorasExtras.size}
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
+                {/* Estatísticas de Horas Extras */}
+                {estatisticasHorasExtras && (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-orange-100 rounded-full">
+                            <Clock className="w-5 h-5 text-orange-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Total Registros</p>
+                            <p className="text-2xl font-bold">{estatisticasHorasExtras.total_registros}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-purple-100 rounded-full">
+                            <Clock className="w-5 h-5 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Total Horas</p>
+                            <p className="text-2xl font-bold">{estatisticasHorasExtras.total_horas_extras}h</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-100 rounded-full">
+                            <User className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Funcionários</p>
+                            <p className="text-2xl font-bold">{estatisticasHorasExtras.total_funcionarios}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-100 rounded-full">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Média/Funcionário</p>
+                            <p className="text-2xl font-bold">{estatisticasHorasExtras.media_por_funcionario.toFixed(1)}h</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
                 {/* Filtros */}
                 <div className="flex gap-4">
-                  <Select>
+                  <Select value={ordenacaoHorasExtras} onValueChange={setOrdenacaoHorasExtras}>
                     <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Filtrar por status" />
+                      <SelectValue placeholder="Ordenar por" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="todos">Todos</SelectItem>
-                      <SelectItem value="pendente">Pendente Aprovação</SelectItem>
-                      <SelectItem value="aprovado">Aprovado</SelectItem>
-                      <SelectItem value="rejeitado">Rejeitado</SelectItem>
+                      <SelectItem value="data">Data (mais recente)</SelectItem>
+                      <SelectItem value="maior">Maior horas extras</SelectItem>
+                      <SelectItem value="menor">Menor horas extras</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Filtrar por funcionário" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos os funcionários</SelectItem>
-                      {data.funcionarios.map((func) => (
-                        <SelectItem key={func.id} value={func.id.toString()}>
-                          {func.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Button onClick={carregarHorasExtras} variant="outline" size="sm">
+                    Atualizar
+                  </Button>
                 </div>
 
                 {/* Tabela de Horas Extras */}
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Funcionário</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Horas Trabalhadas</TableHead>
-                        <TableHead>Horas Extras</TableHead>
-                        <TableHead>Horas Negativas</TableHead>
-                        <TableHead>Justificativa</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.registrosPonto
-                        .filter((r) => (r.horas_extras || 0) > 0)
-                        .map((registro) => (
-                          <TableRow key={registro.id}>
-                            <TableCell className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</TableCell>
-                            <TableCell>{utilsPonto.formatarData(registro.data || '')}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">
-                                {registro.horas_trabalhadas}h
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className="bg-orange-100 text-orange-800">
-                                +{registro.horas_extras || 0}h
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {(() => {
-                                // Calcular horas trabalhadas dinamicamente considerando horários de almoço
-                                const horasTrabalhadas = utilsPonto.calcularHorasTrabalhadas(
-                                  registro.entrada,
-                                  registro.saida,
-                                  registro.saida_almoco,
-                                  registro.volta_almoco
-                                );
-                                const horasNegativas = horasTrabalhadas < 8 ? 8 - horasTrabalhadas : 0;
-                                
-                                if (horasNegativas > 0) {
-                                  return (
-                                    <Badge className="bg-red-50 text-red-700 border-red-200">
-                                      -{horasNegativas.toFixed(1)}h
-                                    </Badge>
-                                  );
-                                } else {
-                                  return <span className="text-gray-400">-</span>;
-                                }
-                              })()}
-                            </TableCell>
-                            <TableCell className="max-w-xs truncate">{registro.observacoes || '-'}</TableCell>
-                            <TableCell>
-                              {(() => {
-                                const statusInfo = getRegistroStatusInfo(registro)
-                                return statusInfo.badge
-                              })()}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                {(() => {
-                                  const statusInfo = getRegistroStatusInfo(registro)
-                                  return statusInfo.acoes
-                                })()}
-                              </div>
+                {loadingHorasExtras ? (
+                  <div className="flex items-center justify-center h-64">
+                    <Loading />
+                  </div>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">
+                            <input
+                              type="checkbox"
+                              checked={registrosSelecionadosHorasExtras.size === registrosHorasExtras.length && registrosHorasExtras.length > 0}
+                              onChange={toggleSelecionarTodosHorasExtras}
+                              className="cursor-pointer"
+                            />
+                          </TableHead>
+                          <TableHead>Funcionário</TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Horas Trabalhadas</TableHead>
+                          <TableHead>Horas Extras</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Observações</TableHead>
+                          <TableHead>Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {registrosHorasExtras.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                              Nenhum registro de hora extra encontrado
                             </TableCell>
                           </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Resumo de Horas Extras */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-orange-100 rounded-full">
-                          <Clock className="w-5 h-5 text-orange-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Pendentes</p>
-                          <p className="text-2xl font-bold">
-                            {data.registrosPonto.filter((r) => (r.status || '') === "Pendente Aprovação").length}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 rounded-full">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Aprovadas</p>
-                          <p className="text-2xl font-bold">
-                            {data.registrosPonto.filter((r) => (r.status || '') === "Aprovado").length}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 rounded-full">
-                          <Clock className="w-5 h-5 text-purple-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Total Horas</p>
-                          <p className="text-2xl font-bold">
-                            {data.registrosPonto.reduce((total, r) => total + (r.horas_extras || 0), 0)}h
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                        ) : (
+                          registrosHorasExtras.map((registro) => (
+                            <TableRow key={registro.id}>
+                              <TableCell>
+                                <input
+                                  type="checkbox"
+                                  checked={registrosSelecionadosHorasExtras.has(registro.id!)}
+                                  onChange={() => toggleSelecionarHoraExtra(registro.id!)}
+                                  className="cursor-pointer"
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {registro.funcionario?.nome || 'Funcionário não encontrado'}
+                              </TableCell>
+                              <TableCell>{utilsPonto.formatarData(registro.data || '')}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {registro.horas_trabalhadas || 0}h
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className="bg-orange-100 text-orange-800">
+                                  +{registro.horas_extras || 0}h
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {(() => {
+                                  const statusInfo = utilsPonto.obterBadgeStatus(registro.status || '')
+                                  return (
+                                    <Badge className={statusInfo.className}>
+                                      {statusInfo.text}
+                                    </Badge>
+                                  )
+                                })()}
+                              </TableCell>
+                              <TableCell className="max-w-xs truncate">
+                                {registro.observacoes || '-'}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  {registro.status === 'Pendente Aprovação' && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => aprovarHorasExtrasLote([registro.id!])}
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          const motivo = prompt('Motivo da rejeição:')
+                                          if (motivo) {
+                                            rejeitarHorasExtrasLote([registro.id!], motivo)
+                                          }
+                                        }}
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -2050,8 +2370,26 @@ export default function PontoPage() {
         <TabsContent value="relatorio">
           <Card>
             <CardHeader>
-              <CardTitle>Relatório Mensal</CardTitle>
-              <CardDescription>Resumo das horas trabalhadas e frequência dos funcionários</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Relatório Mensal</CardTitle>
+                  <CardDescription>Resumo das horas trabalhadas e frequência dos funcionários</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={() => exportarRelatorio('pdf')} variant="default" size="sm">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Exportar PDF
+                  </Button>
+                  <Button onClick={() => exportarRelatorio('csv')} variant="outline" size="sm">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Exportar CSV
+                  </Button>
+                  <Button onClick={() => exportarRelatorio('json')} variant="outline" size="sm">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Exportar JSON
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2104,229 +2442,213 @@ export default function PontoPage() {
         {/* Nova aba de Gráficos Visuais */}
         <TabsContent value="graficos">
           <div className="space-y-6">
-            {/* Estatísticas Resumidas */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total de Funcionários</p>
-                      <p className="text-2xl font-bold text-blue-600">{data.funcionarios.length}</p>
-                    </div>
-                    <User className="w-8 h-8 text-blue-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Registros Hoje</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {data.registrosPonto.filter(r => (r.data || '') === new Date().toISOString().split('T')[0]).length}
-                      </p>
-                    </div>
-                    <Clock className="w-8 h-8 text-green-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Justificativas Pendentes</p>
-                      <p className="text-2xl font-bold text-orange-600">
-                        {data.justificativas.filter(j => (j.status || '') === 'pendente').length}
-                      </p>
-                    </div>
-                    <AlertCircle className="w-8 h-8 text-orange-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Taxa de Presença</p>
-                      <p className="text-2xl font-bold text-purple-600">94.2%</p>
-                    </div>
-                    <CheckCircle className="w-8 h-8 text-purple-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Gráfico de Horas Trabalhadas por Dia */}
+            {/* Controles de Período */}
             <Card>
-              <CardHeader>
-                <CardTitle>📈 Horas Trabalhadas - Última Semana</CardTitle>
-                <CardDescription>Distribuição das horas normais e extras por dia da semana</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={dadosGraficos.horasTrabalhadas}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="dia" />
-                    <YAxis />
-                    <RechartsTooltip 
-                      formatter={(value: number, name: string) => [
-                        `${value}h`, 
-                        name === 'horas' ? 'Horas Normais' : 'Horas Extras'
-                      ]}
-                    />
-                    <Legend />
-                    <Bar dataKey="horas" fill="#3b82f6" name="Horas Normais" />
-                    <Bar dataKey="extras" fill="#10b981" name="Horas Extras" />
-                  </ComposedChart>
-                </ResponsiveContainer>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <Label>Período:</Label>
+                  <Select value={periodoGraficos} onValueChange={(value: any) => setPeriodoGraficos(value)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Selecione o período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="semana">Última Semana</SelectItem>
+                      <SelectItem value="mes">Último Mês</SelectItem>
+                      <SelectItem value="trimestre">Último Trimestre</SelectItem>
+                      <SelectItem value="ano">Último Ano</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={carregarGraficos} variant="outline" size="sm">
+                    Atualizar
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
-            {/* Gráfico de Frequência Mensal */}
-            <Card>
-              <CardHeader>
-                <CardTitle>📊 Frequência Mensal</CardTitle>
-                <CardDescription>Presenças, faltas e atrasos por mês</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={dadosGraficos.frequencia}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="mes" />
-                    <YAxis />
-                    <RechartsTooltip />
-                    <Legend />
-                    <Area 
-                      type="monotone" 
-                      dataKey="presencas" 
-                      stackId="1" 
-                      stroke="#10b981" 
-                      fill="#10b981" 
-                      name="Presenças"
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="faltas" 
-                      stackId="2" 
-                      stroke="#ef4444" 
-                      fill="#ef4444" 
-                      name="Faltas"
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="atrasos" 
-                      stackId="3" 
-                      stroke="#f59e0b" 
-                      fill="#f59e0b" 
-                      name="Atrasos"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            {loadingGraficos ? (
+              <div className="flex items-center justify-center h-96">
+                <Loading />
+              </div>
+            ) : (
+              <>
+                {/* Estatísticas Resumidas do Dashboard */}
+                {dadosGraficos.dashboard?.estatisticas && (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total Registros</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              {dadosGraficos.dashboard.estatisticas.total_registros}
+                            </p>
+                          </div>
+                          <Clock className="w-8 h-8 text-blue-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total Horas</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              {dadosGraficos.dashboard.estatisticas.total_horas_trabalhadas.toFixed(0)}h
+                            </p>
+                          </div>
+                          <CheckCircle className="w-8 h-8 text-green-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Horas Extras</p>
+                            <p className="text-2xl font-bold text-orange-600">
+                              {dadosGraficos.dashboard.estatisticas.total_horas_extras.toFixed(1)}h
+                            </p>
+                          </div>
+                          <AlertCircle className="w-8 h-8 text-orange-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Func. Ativos</p>
+                            <p className="text-2xl font-bold text-purple-600">
+                              {dadosGraficos.dashboard.estatisticas.funcionarios_ativos}
+                            </p>
+                          </div>
+                          <User className="w-8 h-8 text-purple-600" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
 
-            {/* Gráficos em Linha - Status dos Funcionários */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>👥 Status dos Funcionários</CardTitle>
-                  <CardDescription>Horas trabalhadas por funcionário</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <RechartsBarChart data={dadosGraficos.statusFuncionarios} layout="horizontal">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="nome" type="category" width={100} />
-                      <RechartsTooltip 
-                        formatter={(value: number) => [`${value}h`, 'Horas']}
-                      />
-                      <Bar 
-                        dataKey="horas" 
-                        fill="#10b981"
-                      />
-                    </RechartsBarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                {/* Gráfico de Horas Trabalhadas por Dia */}
+                {dadosGraficos.horasTrabalhadas.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>📈 Horas Trabalhadas por Período</CardTitle>
+                      <CardDescription>Distribuição das horas normais e extras</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <ComposedChart data={dadosGraficos.horasTrabalhadas}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="dia" />
+                          <YAxis />
+                          <RechartsTooltip 
+                            formatter={(value: number, name: string) => [
+                              `${value}h`, 
+                              name === 'horas' ? 'Horas Normais' : 'Horas Extras'
+                            ]}
+                          />
+                          <Legend />
+                          <Bar dataKey="horas" fill="#3b82f6" name="Horas Normais" />
+                          <Bar dataKey="extras" fill="#10b981" name="Horas Extras" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>🥧 Distribuição de Horas</CardTitle>
-                  <CardDescription>Proporção de horas normais, extras, faltas e atrasos</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                      <Pie
-                        data={dadosGraficos.distribuicaoHoras}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ tipo, valor }) => `${tipo}: ${valor}h`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="valor"
-                      >
-                        {dadosGraficos.distribuicaoHoras.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.cor} />
+                {/* Gráfico de Frequência */}
+                {dadosGraficos.frequencia.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>📊 Frequência por Funcionário</CardTitle>
+                      <CardDescription>Presenças, faltas e atrasos</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <RechartsBarChart data={dadosGraficos.frequencia.slice(0, 10)}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="funcionario" angle={-45} textAnchor="end" height={100} />
+                          <YAxis />
+                          <RechartsTooltip />
+                          <Legend />
+                          <Bar dataKey="presencas" fill="#10b981" name="Presenças" />
+                          <Bar dataKey="faltas" fill="#ef4444" name="Faltas" />
+                          <Bar dataKey="atrasos" fill="#f59e0b" name="Atrasos" />
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Gráfico de Status por Funcionário */}
+                {dadosGraficos.statusFuncionarios.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>👥 Horas por Funcionário</CardTitle>
+                      <CardDescription>Total de horas trabalhadas no período</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <RechartsBarChart data={dadosGraficos.statusFuncionarios.slice(0, 10)} layout="horizontal">
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" />
+                          <YAxis dataKey="funcionario" type="category" width={120} />
+                          <RechartsTooltip 
+                            formatter={(value: number) => [`${value}h`, 'Horas']}
+                          />
+                          <Bar dataKey="horas" fill="#10b981" />
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Top Horas Extras */}
+                {dadosGraficos.dashboard?.top_horas_extras && dadosGraficos.dashboard.top_horas_extras.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>🏆 Top 5 - Horas Extras</CardTitle>
+                      <CardDescription>Funcionários com mais horas extras no período</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {dadosGraficos.dashboard.top_horas_extras.map((func: any, index: number) => (
+                          <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center font-bold text-orange-600">
+                                {index + 1}
+                              </div>
+                              <div>
+                                <p className="font-medium">{func.nome}</p>
+                                <p className="text-sm text-gray-500">{func.cargo}</p>
+                              </div>
+                            </div>
+                            <Badge className="bg-orange-100 text-orange-800">
+                              +{func.total_horas_extras}h
+                            </Badge>
+                          </div>
                         ))}
-                      </Pie>
-                      <RechartsTooltip 
-                        formatter={(value: number) => [`${value}h`, '']}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
-            {/* Gráfico de Linha - Tendência de Horas */}
-            <Card>
-              <CardHeader>
-                <CardTitle>📈 Tendência de Horas Trabalhadas</CardTitle>
-                <CardDescription>Evolução das horas ao longo dos meses</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={dadosGraficos.frequencia}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="mes" />
-                    <YAxis />
-                    <RechartsTooltip />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="presencas" 
-                      stroke="#3b82f6" 
-                      strokeWidth={3}
-                      name="Presenças"
-                      dot={{ r: 6 }}
-                      activeDot={{ r: 8 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="faltas" 
-                      stroke="#ef4444" 
-                      strokeWidth={2}
-                      name="Faltas"
-                      dot={{ r: 4 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="atrasos" 
-                      stroke="#f59e0b" 
-                      strokeWidth={2}
-                      name="Atrasos"
-                      dot={{ r: 4 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+                {/* Mensagem se não houver dados */}
+                {!dadosGraficos.dashboard && dadosGraficos.horasTrabalhadas.length === 0 && (
+                  <Card>
+                    <CardContent className="p-12 text-center text-gray-500">
+                      <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                      <p>Nenhum dado disponível para o período selecionado</p>
+                      <p className="text-sm mt-2">Tente selecionar um período diferente ou aguarde o carregamento de dados</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
           </div>
         </TabsContent>
       </Tabs>

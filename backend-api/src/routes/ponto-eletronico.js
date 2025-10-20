@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken } from '../middleware/auth.js';
+import PDFDocument from 'pdfkit';
 import { 
   calcularHorasTrabalhadas, 
   calcularHorasExtras, 
@@ -2863,6 +2864,1322 @@ router.get('/registros/pendentes-aprovacao', async (req, res) => {
 
   } catch (error) {
     console.error('Erro na rota de registros pendentes:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/horas-extras:
+ *   get:
+ *     summary: Lista apenas registros com horas extras
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário para filtrar
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de início do período (YYYY-MM-DD)
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de fim do período (YYYY-MM-DD)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Pendente Aprovação, Aprovado, Rejeitado]
+ *         description: Status do registro
+ *       - in: query
+ *         name: ordenacao
+ *         schema:
+ *           type: string
+ *           enum: [maior, menor, data]
+ *           default: data
+ *         description: Ordenação dos resultados
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Limite de registros por página
+ *     responses:
+ *       200:
+ *         description: Lista de registros com horas extras
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/horas-extras', async (req, res) => {
+  try {
+    const { 
+      funcionario_id, 
+      data_inicio, 
+      data_fim, 
+      status,
+      ordenacao = 'data',
+      page = 1, 
+      limit = 50 
+    } = req.query;
+
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno, departamento),
+        aprovador:usuarios!registros_ponto_aprovado_por_fkey(nome)
+      `, { count: 'exact' })
+      .gt('horas_extras', 0);
+
+    // Aplicar filtros
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', funcionario_id);
+    }
+
+    if (data_inicio) {
+      query = query.gte('data', data_inicio);
+    }
+
+    if (data_fim) {
+      query = query.lte('data', data_fim);
+    }
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    // Aplicar ordenação
+    switch (ordenacao) {
+      case 'maior':
+        query = query.order('horas_extras', { ascending: false });
+        break;
+      case 'menor':
+        query = query.order('horas_extras', { ascending: true });
+        break;
+      case 'data':
+      default:
+        query = query.order('data', { ascending: false });
+        break;
+    }
+
+    // Paginação
+    const offset = (page - 1) * limit;
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar registros de horas extras:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Erro interno do servidor' 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: data || [],
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de horas extras:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erro interno do servidor' 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/horas-extras/estatisticas:
+ *   get:
+ *     summary: Retorna estatísticas agregadas de horas extras
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *           enum: [mes, trimestre, ano]
+ *           default: mes
+ *         description: Período para estatísticas
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário para filtrar (opcional)
+ *       - in: query
+ *         name: mes
+ *         schema:
+ *           type: integer
+ *         description: Mês específico (1-12)
+ *       - in: query
+ *         name: ano
+ *         schema:
+ *           type: integer
+ *         description: Ano específico
+ *     responses:
+ *       200:
+ *         description: Estatísticas de horas extras
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/horas-extras/estatisticas', async (req, res) => {
+  try {
+    const { 
+      periodo = 'mes',
+      funcionario_id,
+      mes,
+      ano
+    } = req.query;
+
+    // Determinar período
+    const hoje = new Date();
+    let dataInicio, dataFim;
+
+    if (mes && ano) {
+      // Período específico
+      dataInicio = `${ano}-${mes.toString().padStart(2, '0')}-01`;
+      const ultimoDia = new Date(ano, mes, 0).getDate();
+      dataFim = `${ano}-${mes.toString().padStart(2, '0')}-${ultimoDia}`;
+    } else {
+      // Período baseado no tipo
+      switch (periodo) {
+        case 'trimestre':
+          dataInicio = new Date(hoje.getFullYear(), Math.floor(hoje.getMonth() / 3) * 3, 1).toISOString().split('T')[0];
+          dataFim = new Date(hoje.getFullYear(), Math.floor(hoje.getMonth() / 3) * 3 + 3, 0).toISOString().split('T')[0];
+          break;
+        case 'ano':
+          dataInicio = `${hoje.getFullYear()}-01-01`;
+          dataFim = `${hoje.getFullYear()}-12-31`;
+          break;
+        case 'mes':
+        default:
+          dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+          dataFim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+          break;
+      }
+    }
+
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select('horas_extras, funcionario_id, data')
+      .gt('horas_extras', 0)
+      .gte('data', dataInicio)
+      .lte('data', dataFim);
+
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', funcionario_id);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar estatísticas de horas extras:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Erro interno do servidor' 
+      });
+    }
+
+    // Calcular estatísticas
+    const registros = data || [];
+    const totalRegistros = registros.length;
+    const totalHorasExtras = registros.reduce((sum, r) => sum + parseFloat(r.horas_extras || 0), 0);
+    const funcionariosUnicos = new Set(registros.map(r => r.funcionario_id)).size;
+    const mediaHorasExtras = totalRegistros > 0 ? totalHorasExtras / totalRegistros : 0;
+    const maxHorasExtras = registros.length > 0 ? Math.max(...registros.map(r => parseFloat(r.horas_extras || 0))) : 0;
+    const mediaPorFuncionario = funcionariosUnicos > 0 ? totalHorasExtras / funcionariosUnicos : 0;
+
+    res.json({
+      success: true,
+      data: {
+        periodo: {
+          tipo: periodo,
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        },
+        total_registros: totalRegistros,
+        total_horas_extras: parseFloat(totalHorasExtras.toFixed(2)),
+        media_horas_extras: parseFloat(mediaHorasExtras.toFixed(2)),
+        max_horas_extras: parseFloat(maxHorasExtras.toFixed(2)),
+        total_funcionarios: funcionariosUnicos,
+        media_por_funcionario: parseFloat(mediaPorFuncionario.toFixed(2))
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de estatísticas de horas extras:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erro interno do servidor' 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/horas-extras/aprovar-lote:
+ *   post:
+ *     summary: Aprova múltiplos registros de horas extras em lote
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - registro_ids
+ *             properties:
+ *               registro_ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array de IDs dos registros a aprovar
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações da aprovação
+ *     responses:
+ *       200:
+ *         description: Registros aprovados com sucesso
+ *       400:
+ *         description: Dados inválidos ou registros não pendentes
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/horas-extras/aprovar-lote', async (req, res) => {
+  try {
+    const { registro_ids, observacoes } = req.body;
+
+    if (!registro_ids || !Array.isArray(registro_ids) || registro_ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Array de IDs de registros é obrigatório'
+      });
+    }
+
+    // Buscar todos os registros
+    const { data: registros, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('id, status, horas_extras')
+      .in('id', registro_ids);
+
+    if (errorBusca) {
+      console.error('Erro ao buscar registros:', errorBusca);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar registros'
+      });
+    }
+
+    // Validar que todos os registros existem
+    if (registros.length !== registro_ids.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Alguns registros não foram encontrados'
+      });
+    }
+
+    // Validar que todos estão pendentes de aprovação
+    const naosPendentes = registros.filter(r => r.status !== 'Pendente Aprovação');
+    if (naosPendentes.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `${naosPendentes.length} registro(s) não estão pendentes de aprovação`,
+        registros_invalidos: naosPendentes.map(r => r.id)
+      });
+    }
+
+    // Aprovar todos os registros
+    const { data: registrosAtualizados, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update({
+        status: 'Aprovado',
+        aprovado_por: req.user.id,
+        data_aprovacao: new Date().toISOString(),
+        observacoes: observacoes || null,
+        updated_at: new Date().toISOString()
+      })
+      .in('id', registro_ids)
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno)
+      `);
+
+    if (errorUpdate) {
+      console.error('Erro ao aprovar registros:', errorUpdate);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao aprovar registros'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: registrosAtualizados,
+      message: `${registrosAtualizados.length} registro(s) aprovado(s) com sucesso`
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de aprovação em lote:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/horas-extras/rejeitar-lote:
+ *   post:
+ *     summary: Rejeita múltiplos registros de horas extras em lote
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - registro_ids
+ *               - motivo
+ *             properties:
+ *               registro_ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array de IDs dos registros a rejeitar
+ *               motivo:
+ *                 type: string
+ *                 description: Motivo da rejeição (obrigatório)
+ *     responses:
+ *       200:
+ *         description: Registros rejeitados com sucesso
+ *       400:
+ *         description: Dados inválidos ou motivo obrigatório
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/horas-extras/rejeitar-lote', async (req, res) => {
+  try {
+    const { registro_ids, motivo } = req.body;
+
+    if (!registro_ids || !Array.isArray(registro_ids) || registro_ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Array de IDs de registros é obrigatório'
+      });
+    }
+
+    if (!motivo) {
+      return res.status(400).json({
+        success: false,
+        message: 'Motivo da rejeição é obrigatório'
+      });
+    }
+
+    // Buscar todos os registros
+    const { data: registros, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('id, status, horas_extras, observacoes')
+      .in('id', registro_ids);
+
+    if (errorBusca) {
+      console.error('Erro ao buscar registros:', errorBusca);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar registros'
+      });
+    }
+
+    // Validar que todos os registros existem
+    if (registros.length !== registro_ids.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Alguns registros não foram encontrados'
+      });
+    }
+
+    // Validar que todos estão pendentes de aprovação
+    const naosPendentes = registros.filter(r => r.status !== 'Pendente Aprovação');
+    if (naosPendentes.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `${naosPendentes.length} registro(s) não estão pendentes de aprovação`,
+        registros_invalidos: naosPendentes.map(r => r.id)
+      });
+    }
+
+    // Rejeitar todos os registros
+    const registrosComMotivo = registros.map(r => ({
+      id: r.id,
+      observacoes: `${r.observacoes || ''}\n\nMotivo da rejeição: ${motivo}`.trim()
+    }));
+
+    // Atualizar cada registro com seu motivo
+    const promises = registrosComMotivo.map(r => 
+      supabaseAdmin
+        .from('registros_ponto')
+        .update({
+          status: 'Rejeitado',
+          aprovado_por: req.user.id,
+          data_aprovacao: new Date().toISOString(),
+          observacoes: r.observacoes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', r.id)
+    );
+
+    await Promise.all(promises);
+
+    // Buscar registros atualizados para retornar
+    const { data: registrosAtualizados, error: errorSelect } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno)
+      `)
+      .in('id', registro_ids);
+
+    if (errorSelect) {
+      console.error('Erro ao buscar registros atualizados:', errorSelect);
+    }
+
+    res.json({
+      success: true,
+      data: registrosAtualizados || [],
+      message: `${registro_ids.length} registro(s) rejeitado(s) com sucesso`
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de rejeição em lote:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/relatorios/mensal/funcionario/{id}:
+ *   get:
+ *     summary: Relatório mensal detalhado por funcionário
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário
+ *       - in: query
+ *         name: mes
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Mês do relatório (1-12)
+ *       - in: query
+ *         name: ano
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Ano do relatório
+ *       - in: query
+ *         name: incluir_graficos
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Incluir dados para gráficos
+ *     responses:
+ *       200:
+ *         description: Relatório detalhado do funcionário
+ *       400:
+ *         description: Parâmetros obrigatórios faltando
+ *       404:
+ *         description: Funcionário não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/relatorios/mensal/funcionario/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mes, ano, incluir_graficos = false } = req.query;
+
+    if (!mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês e ano são obrigatórios'
+      });
+    }
+
+    // Verificar se o funcionário existe
+    const { data: funcionario, error: funcError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, cargo, turno, departamento, data_admissao, salario')
+      .eq('id', id)
+      .single();
+
+    if (funcError || !funcionario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Funcionário não encontrado'
+      });
+    }
+
+    const dataInicio = `${ano}-${mes.padStart(2, '0')}-01`;
+    const dataFim = `${ano}-${mes.padStart(2, '0')}-31`;
+
+    // Buscar registros do período
+    const { data: registros, error } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('*')
+      .eq('funcionario_id', id)
+      .gte('data', dataInicio)
+      .lte('data', dataFim)
+      .order('data', { ascending: true });
+
+    if (error) {
+      console.error('Erro ao buscar registros:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Calcular resumo
+    const resumo = calcularResumoPeriodo(registros || [], dataInicio, dataFim);
+
+    // Adicionar dados do funcionário ao resumo
+    resumo.funcionario = {
+      nome: funcionario.nome,
+      cargo: funcionario.cargo,
+      turno: funcionario.turno,
+      departamento: funcionario.departamento
+    };
+
+    // Buscar justificativas do período
+    const { data: justificativas } = await supabaseAdmin
+      .from('justificativas')
+      .select('*')
+      .eq('funcionario_id', id)
+      .gte('data', dataInicio)
+      .lte('data', dataFim)
+      .order('data', { ascending: false });
+
+    let dadosGraficos = null;
+    if (incluir_graficos === 'true' || incluir_graficos === true) {
+      // Preparar dados para gráficos
+      const horasPorDia = {};
+      registros.forEach(r => {
+        horasPorDia[r.data] = {
+          horas_trabalhadas: parseFloat(r.horas_trabalhadas || 0),
+          horas_extras: parseFloat(r.horas_extras || 0)
+        };
+      });
+
+      dadosGraficos = {
+        horas_por_dia: Object.entries(horasPorDia).map(([data, valores]) => ({
+          data,
+          ...valores
+        }))
+      };
+    }
+
+    res.json({
+      success: true,
+      data: {
+        funcionario,
+        periodo: {
+          mes: parseInt(mes),
+          ano: parseInt(ano),
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        },
+        resumo,
+        registros: registros || [],
+        justificativas: justificativas || [],
+        graficos: dadosGraficos
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de relatório mensal por funcionário:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/relatorios/frequencia:
+ *   get:
+ *     summary: Relatório de frequência com presenças, faltas e atrasos
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: mes
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Mês do relatório (1-12)
+ *       - in: query
+ *         name: ano
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Ano do relatório
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário (opcional)
+ *       - in: query
+ *         name: departamento
+ *         schema:
+ *           type: string
+ *         description: Filtrar por departamento (opcional)
+ *     responses:
+ *       200:
+ *         description: Relatório de frequência
+ *       400:
+ *         description: Parâmetros obrigatórios faltando
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/relatorios/frequencia', async (req, res) => {
+  try {
+    const { mes, ano, funcionario_id, departamento } = req.query;
+
+    if (!mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês e ano são obrigatórios'
+      });
+    }
+
+    const dataInicio = `${ano}-${mes.padStart(2, '0')}-01`;
+    const dataFim = `${ano}-${mes.padStart(2, '0')}-31`;
+
+    // Buscar todos os funcionários ativos
+    let queryFunc = supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, cargo, turno, departamento')
+      .eq('status', 'Ativo');
+
+    if (funcionario_id) {
+      queryFunc = queryFunc.eq('id', funcionario_id);
+    }
+
+    if (departamento) {
+      queryFunc = queryFunc.eq('departamento', departamento);
+    }
+
+    const { data: funcionarios, error: funcError } = await queryFunc;
+
+    if (funcError) {
+      console.error('Erro ao buscar funcionários:', funcError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Buscar registros do período
+    const { data: registros, error: regError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('funcionario_id, status, horas_trabalhadas, horas_extras, data')
+      .gte('data', dataInicio)
+      .lte('data', dataFim);
+
+    if (regError) {
+      console.error('Erro ao buscar registros:', regError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Processar dados por funcionário
+    const relatorio = funcionarios.map(func => {
+      const registrosFunc = registros.filter(r => r.funcionario_id === func.id);
+      
+      const presencas = registrosFunc.filter(r => r.status === 'Completo' || r.status === 'Aprovado').length;
+      const faltas = registrosFunc.filter(r => r.status === 'Falta').length;
+      const atrasos = registrosFunc.filter(r => r.status === 'Atraso').length;
+      const totalHoras = registrosFunc.reduce((sum, r) => sum + parseFloat(r.horas_trabalhadas || 0), 0);
+      const horasExtras = registrosFunc.reduce((sum, r) => sum + parseFloat(r.horas_extras || 0), 0);
+
+      // Calcular taxa de presença (considerando dias úteis aproximados)
+      const diasUteis = 22; // Média de dias úteis por mês
+      const taxaPresenca = diasUteis > 0 ? ((presencas / diasUteis) * 100).toFixed(1) : 0;
+
+      return {
+        funcionario: {
+          id: func.id,
+          nome: func.nome,
+          cargo: func.cargo,
+          turno: func.turno,
+          departamento: func.departamento
+        },
+        frequencia: {
+          presencas,
+          faltas,
+          atrasos,
+          taxa_presenca: parseFloat(taxaPresenca),
+          total_horas: parseFloat(totalHoras.toFixed(2)),
+          horas_extras: parseFloat(horasExtras.toFixed(2)),
+          dias_uteis: diasUteis
+        }
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        periodo: {
+          mes: parseInt(mes),
+          ano: parseInt(ano),
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        },
+        relatorio
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de relatório de frequência:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/relatorios/atrasos:
+ *   get:
+ *     summary: Relatório detalhado de atrasos com análise de padrões
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: mes
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Mês do relatório (1-12)
+ *       - in: query
+ *         name: ano
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Ano do relatório
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário (opcional)
+ *     responses:
+ *       200:
+ *         description: Relatório de atrasos
+ *       400:
+ *         description: Parâmetros obrigatórios faltando
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/relatorios/atrasos', async (req, res) => {
+  try {
+    const { mes, ano, funcionario_id } = req.query;
+
+    if (!mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês e ano são obrigatórios'
+      });
+    }
+
+    const dataInicio = `${ano}-${mes.padStart(2, '0')}-01`;
+    const dataFim = `${ano}-${mes.padStart(2, '0')}-31`;
+
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno, departamento)
+      `)
+      .eq('status', 'Atraso')
+      .gte('data', dataInicio)
+      .lte('data', dataFim)
+      .order('data', { ascending: true });
+
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', funcionario_id);
+    }
+
+    const { data: atrasos, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar atrasos:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Agrupar por funcionário
+    const atrasosPorFuncionario = {};
+    (atrasos || []).forEach(atraso => {
+      const funcId = atraso.funcionario_id;
+      if (!atrasosPorFuncionario[funcId]) {
+        atrasosPorFuncionario[funcId] = {
+          funcionario: {
+            nome: atraso.funcionario?.nome || 'Desconhecido',
+            cargo: atraso.funcionario?.cargo || '',
+            turno: atraso.funcionario?.turno || '',
+            departamento: atraso.funcionario?.departamento || ''
+          },
+          total_atrasos: 0,
+          atrasos_detalhados: []
+        };
+      }
+
+      atrasosPorFuncionario[funcId].total_atrasos += 1;
+      atrasosPorFuncionario[funcId].atrasos_detalhados.push({
+        data: atraso.data,
+        dia_semana: new Date(atraso.data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long' }),
+        hora_entrada: atraso.entrada,
+        observacoes: atraso.observacoes
+      });
+    });
+
+    // Análise de padrões
+    const analise = {
+      total_atrasos: (atrasos || []).length,
+      funcionarios_com_atraso: Object.keys(atrasosPorFuncionario).length,
+      media_atrasos_por_funcionario: Object.keys(atrasosPorFuncionario).length > 0
+        ? parseFloat(((atrasos || []).length / Object.keys(atrasosPorFuncionario).length).toFixed(2))
+        : 0
+    };
+
+    // Atrasos por dia da semana
+    const atrasosPorDiaSemana = {};
+    (atrasos || []).forEach(atraso => {
+      const diaSemana = new Date(atraso.data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long' });
+      atrasosPorDiaSemana[diaSemana] = (atrasosPorDiaSemana[diaSemana] || 0) + 1;
+    });
+
+    analise.atrasos_por_dia_semana = atrasosPorDiaSemana;
+
+    res.json({
+      success: true,
+      data: {
+        periodo: {
+          mes: parseInt(mes),
+          ano: parseInt(ano),
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        },
+        analise,
+        atrasos_por_funcionario: Object.values(atrasosPorFuncionario)
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de relatório de atrasos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/relatorios/exportar:
+ *   get:
+ *     summary: Exporta relatórios em diferentes formatos
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: tipo
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [csv, json, pdf]
+ *         description: Formato de exportação
+ *       - in: query
+ *         name: formato
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [mensal, semanal, diario]
+ *         description: Formato do relatório
+ *       - in: query
+ *         name: mes
+ *         schema:
+ *           type: integer
+ *         description: Mês (1-12)
+ *       - in: query
+ *         name: ano
+ *         schema:
+ *           type: integer
+ *         description: Ano
+ *     responses:
+ *       200:
+ *         description: Relatório exportado
+ *       400:
+ *         description: Parâmetros inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/relatorios/exportar', async (req, res) => {
+  try {
+    const { tipo = 'json', formato = 'mensal', mes, ano } = req.query;
+
+    if (!['csv', 'json', 'pdf'].includes(tipo)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tipo de exportação inválido. Use: csv, json ou pdf'
+      });
+    }
+
+    // Calcular período baseado no formato
+    const hoje = new Date();
+    let dataInicio, dataFim;
+
+    if (formato === 'mensal') {
+      const mesUso = mes || (hoje.getMonth() + 1);
+      const anoUso = ano || hoje.getFullYear();
+      dataInicio = `${anoUso}-${mesUso.toString().padStart(2, '0')}-01`;
+      const ultimoDia = new Date(anoUso, mesUso, 0).getDate();
+      dataFim = `${anoUso}-${mesUso.toString().padStart(2, '0')}-${ultimoDia}`;
+    } else if (formato === 'semanal') {
+      const diaSemana = hoje.getDay();
+      const primeiroDia = new Date(hoje);
+      primeiroDia.setDate(hoje.getDate() - diaSemana);
+      dataInicio = primeiroDia.toISOString().split('T')[0];
+      
+      const ultimoDia = new Date(primeiroDia);
+      ultimoDia.setDate(primeiroDia.getDate() + 6);
+      dataFim = ultimoDia.toISOString().split('T')[0];
+    } else {
+      // diario
+      dataInicio = hoje.toISOString().split('T')[0];
+      dataFim = dataInicio;
+    }
+
+    // Buscar dados
+    const { data: registros, error } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios(nome, cargo, turno, departamento)
+      `)
+      .gte('data', dataInicio)
+      .lte('data', dataFim)
+      .order('data', { ascending: true });
+
+    if (error) {
+      console.error('Erro ao buscar registros para exportação:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Log para debug
+    console.log('📊 Exportação - Total de registros:', registros?.length);
+    if (registros?.length > 0) {
+      console.log('📊 Exemplo de registro:', {
+        id: registros[0].id,
+        funcionario_id: registros[0].funcionario_id,
+        funcionario: registros[0].funcionario
+      });
+    }
+
+    if (tipo === 'csv') {
+      // Gerar CSV
+      const headers = [
+        'ID',
+        'Data',
+        'Funcionário',
+        'Cargo',
+        'Turno',
+        'Departamento',
+        'Entrada',
+        'Saída Almoço',
+        'Volta Almoço',
+        'Saída',
+        'Horas Trabalhadas',
+        'Horas Extras',
+        'Status',
+        'Observações',
+        'Localização'
+      ];
+
+      const linhas = registros.map(r => {
+        // Extrair dados do funcionário de forma segura
+        const nomeFuncionario = r.funcionario?.nome || 'N/A';
+        const cargoFuncionario = r.funcionario?.cargo || 'N/A';
+        const turnoFuncionario = r.funcionario?.turno || 'N/A';
+        const departamentoFuncionario = r.funcionario?.departamento || 'N/A';
+
+        return [
+          r.id || '',
+          r.data || '',
+          nomeFuncionario,
+          cargoFuncionario,
+          turnoFuncionario,
+          departamentoFuncionario,
+          r.entrada || '',
+          r.saida_almoco || '',
+          r.volta_almoco || '',
+          r.saida || '',
+          (r.horas_trabalhadas || 0).toString(),
+          (r.horas_extras || 0).toString(),
+          r.status || '',
+          (r.observacoes || '').replace(/\n/g, ' ').replace(/"/g, '""'),
+          r.localizacao || ''
+        ];
+      });
+
+      const csv = [
+        headers.join(','),
+        ...linhas.map(linha => linha.map(campo => `"${campo}"`).join(','))
+      ].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=relatorio_ponto_${formato}_${dataInicio}.csv`);
+      return res.send('\uFEFF' + csv); // BOM para UTF-8
+    }
+
+    if (tipo === 'pdf') {
+      // Gerar PDF
+      const doc = new PDFDocument({ 
+        size: 'A4', 
+        layout: 'landscape',
+        margin: 40
+      });
+
+      // Headers para o PDF
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=relatorio_ponto_${formato}_${dataInicio}.pdf`);
+      
+      // Pipe do PDF para a resposta
+      doc.pipe(res);
+
+      // Função auxiliar para formatar data
+      const formatarData = (data) => {
+        if (!data) return '-';
+        const d = new Date(data + 'T00:00:00');
+        return d.toLocaleDateString('pt-BR');
+      };
+
+      // Função auxiliar para formatar hora
+      const formatarHora = (hora) => {
+        if (!hora) return '-';
+        return hora.substring(0, 5); // HH:MM
+      };
+
+      // Função auxiliar para formatar número
+      const formatarNumero = (num) => {
+        if (!num || num === 0) return '-';
+        return num.toFixed(2);
+      };
+
+      // Função para desenhar cabeçalho
+      const desenharCabecalho = () => {
+        doc.fontSize(18).font('Helvetica-Bold').text('Relatório de Ponto Eletrônico', 40, 40, { align: 'center', width: doc.page.width - 80 });
+        
+        const periodoTexto = formato === 'mensal' ? 'Mensal' : formato === 'semanal' ? 'Semanal' : 'Diário';
+        doc.fontSize(11).font('Helvetica').text(`Período: ${periodoTexto} - ${formatarData(dataInicio)} a ${formatarData(dataFim)}`, { align: 'center', width: doc.page.width - 80 });
+        doc.fontSize(9).text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, { align: 'center', width: doc.page.width - 80 });
+        doc.moveDown(1.5);
+      };
+
+      // Desenhar cabeçalho inicial
+      desenharCabecalho();
+
+      // Estatísticas gerais
+      const totalRegistros = registros.length;
+      const totalHoras = registros.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0);
+      const totalHorasExtras = registros.reduce((sum, r) => sum + (r.horas_extras || 0), 0);
+      const totalAtrasos = registros.filter(r => r.status === 'Atraso').length;
+      const totalFaltas = registros.filter(r => r.status === 'Falta').length;
+
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.text(`Resumo: ${totalRegistros} registros | ${totalHoras.toFixed(2)}h trabalhadas | ${totalHorasExtras.toFixed(2)}h extras | ${totalAtrasos} atrasos | ${totalFaltas} faltas`, 
+        40, doc.y, { align: 'center', width: doc.page.width - 80 });
+      doc.moveDown(1);
+
+      // Configurações da tabela
+      const margemEsq = 40;
+      const larguraUtil = doc.page.width - 80;
+      
+      // Larguras proporcionais das colunas
+      const colWidths = [55, 80, 50, 40, 40, 40, 40, 45, 45, 65, 80];
+      const totalWidth = colWidths.reduce((a, b) => a + b, 0);
+      
+      const rowHeight = 25;
+      const headerHeight = 30;
+      
+      // Headers da tabela
+      const headers = ['Data', 'Funcionário', 'Cargo', 'Entrada', 'Almoço', 'Volta', 'Saída', 'H.Trab', 'H.Ext', 'Status', 'Obs'];
+
+      // Função para desenhar header da tabela
+      const desenharHeaderTabela = (y) => {
+        doc.rect(margemEsq, y, totalWidth, headerHeight).fillAndStroke('#1e3a8a', '#1e3a8a');
+        
+        let x = margemEsq;
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#FFFFFF');
+        
+        headers.forEach((header, i) => {
+          doc.text(header, x + 3, y + 10, { 
+            width: colWidths[i] - 6, 
+            height: headerHeight - 6,
+            align: 'left',
+            ellipsis: true,
+            lineBreak: false
+          });
+          x += colWidths[i];
+        });
+        
+        return y + headerHeight;
+      };
+
+      // Desenhar header da tabela
+      let currentY = desenharHeaderTabela(doc.y);
+
+      // Desenhar linhas
+      registros.forEach((registro, index) => {
+        // Verificar se precisa de nova página
+        if (currentY + rowHeight > doc.page.height - 60) {
+          doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
+          currentY = desenharHeaderTabela(60);
+        }
+
+        // Cor de fundo alternada
+        const bgColor = index % 2 === 0 ? '#f3f4f6' : '#FFFFFF';
+        doc.rect(margemEsq, currentY, totalWidth, rowHeight).fillAndStroke(bgColor, '#d1d5db');
+
+        // Dados da linha
+        let x = margemEsq;
+        doc.fontSize(7).font('Helvetica').fillColor('#000000');
+
+        const nomeFuncionario = registro.funcionario?.nome || 'N/A';
+        const cargoFuncionario = registro.funcionario?.cargo || '-';
+
+        const valores = [
+          formatarData(registro.data),
+          nomeFuncionario.length > 14 ? nomeFuncionario.substring(0, 14) : nomeFuncionario,
+          cargoFuncionario.length > 10 ? cargoFuncionario.substring(0, 10) : cargoFuncionario,
+          formatarHora(registro.entrada),
+          formatarHora(registro.saida_almoco),
+          formatarHora(registro.volta_almoco),
+          formatarHora(registro.saida),
+          formatarNumero(registro.horas_trabalhadas),
+          formatarNumero(registro.horas_extras),
+          (registro.status || '-').length > 12 ? (registro.status || '-').substring(0, 12) : (registro.status || '-'),
+          (registro.observacoes || '-').length > 15 ? (registro.observacoes || '-').substring(0, 15) + '...' : (registro.observacoes || '-')
+        ];
+
+        valores.forEach((valor, i) => {
+          doc.text(String(valor), x + 3, currentY + 8, { 
+            width: colWidths[i] - 6, 
+            height: rowHeight - 6,
+            align: 'left',
+            ellipsis: true,
+            lineBreak: false
+          });
+          x += colWidths[i];
+        });
+
+        currentY += rowHeight;
+      });
+
+      // Rodapé em todas as páginas
+      const range = doc.bufferedPageRange();
+      for (let i = 0; i < range.count; i++) {
+        doc.switchToPage(i);
+        doc.fontSize(8).font('Helvetica').fillColor('#666666');
+        doc.text(
+          `Página ${i + 1} de ${range.count}`,
+          0,
+          doc.page.height - 50,
+          { align: 'center', width: doc.page.width }
+        );
+      }
+
+      // Finalizar PDF
+      doc.end();
+      return;
+    }
+
+    // Retornar JSON
+    res.json({
+      success: true,
+      data: {
+        periodo: {
+          formato,
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        },
+        registros: registros || []
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de exportação:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor'

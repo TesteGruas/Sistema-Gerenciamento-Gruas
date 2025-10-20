@@ -66,6 +66,7 @@ import orcamentosLocacaoRoutes from './routes/orcamentos-locacao.js'
 import notasDebitoRoutes from './routes/notas-debito.js'
 import notasFiscaisLocacaoRoutes from './routes/notas-fiscais-locacao.js'
 import pontoEletronicoRoutes from './routes/ponto-eletronico.js'
+import pontoEletronicoGraficosRoutes from './routes/ponto-eletronico-graficos.js'
 import gruaComponentesRoutes from './routes/grua-componentes.js'
 import gruaConfiguracoesRoutes from './routes/grua-configuracoes.js'
 import gruaObrasRoutes from './routes/grua-obras.js'
@@ -276,6 +277,7 @@ app.use('/api/orcamentos-locacao', orcamentosLocacaoRoutes)
 app.use('/api/notas-debito', notasDebitoRoutes)
 app.use('/api/notas-fiscais-locacao', notasFiscaisLocacaoRoutes)
 app.use('/api/ponto-eletronico', pontoEletronicoRoutes)
+app.use('/api/ponto-eletronico/graficos', pontoEletronicoGraficosRoutes)
 app.use('/api/grua-componentes', gruaComponentesRoutes)
 app.use('/api/grua-configuracoes', gruaConfiguracoesRoutes)
 app.use('/api/grua-obras', gruaObrasRoutes)

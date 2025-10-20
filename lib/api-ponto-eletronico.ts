@@ -422,6 +422,127 @@ export const apiJustificativas = {
 };
 
 // ========================================
+// API DE HORAS EXTRAS
+// ========================================
+
+export const apiHorasExtras = {
+  async listar(params?: {
+    funcionario_id?: number;
+    data_inicio?: string;
+    data_fim?: string;
+    status?: string;
+    ordenacao?: 'maior' | 'menor' | 'data';
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: RegistroPonto[]; pagination?: any }> {
+    const response = await api.get('ponto-eletronico/horas-extras', { params });
+    return {
+      data: response.data.data || response.data || [],
+      pagination: response.data.pagination
+    };
+  },
+
+  async estatisticas(params?: {
+    periodo?: 'mes' | 'trimestre' | 'ano';
+    funcionario_id?: number;
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/horas-extras/estatisticas', { params });
+    return response.data.data || response.data;
+  },
+
+  async aprovarLote(payload: {
+    registro_ids: (string | number)[];
+    observacoes?: string;
+  }): Promise<{ data: RegistroPonto[]; message: string }> {
+    const response = await api.post('ponto-eletronico/horas-extras/aprovar-lote', payload);
+    return {
+      data: response.data.data || [],
+      message: response.data.message || 'Registros aprovados com sucesso'
+    };
+  },
+
+  async rejeitarLote(payload: {
+    registro_ids: (string | number)[];
+    motivo: string;
+  }): Promise<{ data: RegistroPonto[]; message: string }> {
+    const response = await api.post('ponto-eletronico/horas-extras/rejeitar-lote', payload);
+    return {
+      data: response.data.data || [],
+      message: response.data.message || 'Registros rejeitados com sucesso'
+    };
+  }
+};
+
+// ========================================
+// API DE GRÁFICOS
+// ========================================
+
+export const apiGraficos = {
+  async horasTrabalhadas(params?: {
+    periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
+    funcionario_id?: number;
+    agrupamento?: 'dia' | 'semana' | 'mes';
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/graficos/horas-trabalhadas', { params });
+    return response.data;
+  },
+
+  async frequencia(params?: {
+    periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
+    funcionario_id?: number;
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/graficos/frequencia', { params });
+    return response.data;
+  },
+
+  async status(params?: {
+    periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
+    agrupamento?: 'funcionario' | 'departamento' | 'cargo';
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/graficos/status', { params });
+    return response.data;
+  },
+
+  async horasExtras(params?: {
+    periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
+    funcionario_id?: number;
+    agrupamento?: 'dia' | 'semana' | 'mes';
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/graficos/horas-extras', { params });
+    return response.data;
+  },
+
+  async atrasos(params?: {
+    periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
+    funcionario_id?: number;
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/graficos/atrasos', { params });
+    return response.data;
+  },
+
+  async dashboard(params?: {
+    periodo?: 'hoje' | 'semana' | 'mes' | 'trimestre' | 'ano';
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/graficos/dashboard', { params });
+    return response.data;
+  }
+};
+
+// ========================================
 // API DE RELATÓRIOS
 // ========================================
 
@@ -432,6 +553,56 @@ export const apiRelatorios = {
     ano: number;
   }): Promise<any> {
     const response = await api.get('ponto-eletronico/espelho', { params });
+    return response.data.data || response.data;
+  },
+
+  async mensalFuncionario(
+    funcionario_id: number,
+    params: {
+      mes: number;
+      ano: number;
+      incluir_graficos?: boolean;
+    }
+  ): Promise<any> {
+    const response = await api.get(`ponto-eletronico/relatorios/mensal/funcionario/${funcionario_id}`, { params });
+    return response.data.data || response.data;
+  },
+
+  async frequencia(params: {
+    mes: number;
+    ano: number;
+    funcionario_id?: number;
+    departamento?: string;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/relatorios/frequencia', { params });
+    return response.data.data || response.data;
+  },
+
+  async atrasos(params: {
+    mes: number;
+    ano: number;
+    funcionario_id?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/relatorios/atrasos', { params });
+    return response.data.data || response.data;
+  },
+
+  async exportar(params: {
+    tipo: 'csv' | 'json';
+    formato: 'mensal' | 'semanal' | 'diario';
+    mes?: number;
+    ano?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/relatorios/exportar', { 
+      params,
+      responseType: params.tipo === 'csv' ? 'blob' : 'json'
+    });
+    
+    if (params.tipo === 'csv') {
+      // Para CSV, retornar o blob diretamente
+      return response.data;
+    }
+    
     return response.data.data || response.data;
   }
 };
