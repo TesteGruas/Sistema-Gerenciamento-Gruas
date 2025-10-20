@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -432,12 +433,13 @@ export default function ClientesPage() {
   ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
-          <p className="text-gray-600">Gerenciamento de clientes e suas obras</p>
-        </div>
+    <ProtectedRoute permission="clientes:visualizar">
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
+            <p className="text-gray-600">Gerenciamento de clientes e suas obras</p>
+          </div>
         <Button 
           className="flex items-center gap-2"
           onClick={() => setIsCreateDialogOpen(true)}
@@ -918,7 +920,8 @@ export default function ClientesPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProtectedRoute>
   )
 }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -1031,9 +1032,10 @@ export default function ObrasPage() {
 
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
+    <ProtectedRoute permission="obras:visualizar">
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
           <h1 className="text-3xl font-bold text-gray-900">Gerenciamento de Obras</h1>
           <p className="text-gray-600">Controle e acompanhamento de todas as obras</p>
         </div>
@@ -2479,6 +2481,7 @@ export default function ObrasPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProtectedRoute>
   )
 }

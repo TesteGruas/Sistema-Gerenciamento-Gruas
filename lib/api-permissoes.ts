@@ -124,13 +124,13 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
 export const apiPerfis = {
   // Listar todos os perfis
   listar: async (): Promise<Perfil[]> => {
-    const response = await apiRequest('/permissoes/perfis');
+    const response = await apiRequest('/api/permissoes/perfis');
     return response.data || [];
   },
 
   // Buscar perfil por ID
   buscar: async (id: number): Promise<Perfil> => {
-    const response = await apiRequest(`/permissoes/perfis/${id}`);
+    const response = await apiRequest(`/api/permissoes/perfis/${id}`);
     return response.data;
   },
 
@@ -141,7 +141,7 @@ export const apiPerfis = {
     nivel_acesso?: number;
     status?: 'Ativo' | 'Inativo';
   }): Promise<Perfil> => {
-    const response = await apiRequest('/permissoes/perfis', {
+    const response = await apiRequest('/api/permissoes/perfis', {
       method: 'POST',
       body: JSON.stringify(dados),
     });
@@ -155,7 +155,7 @@ export const apiPerfis = {
     nivel_acesso?: number;
     status?: 'Ativo' | 'Inativo';
   }): Promise<Perfil> => {
-    const response = await apiRequest(`/permissoes/perfis/${id}`, {
+    const response = await apiRequest(`/api/permissoes/perfis/${id}`, {
       method: 'PUT',
       body: JSON.stringify(dados),
     });
@@ -164,7 +164,7 @@ export const apiPerfis = {
 
   // Excluir perfil
   excluir: async (id: number): Promise<void> => {
-    await apiRequest(`/permissoes/perfis/${id}`, {
+    await apiRequest(`/api/permissoes/perfis/${id}`, {
       method: 'DELETE',
     });
   }
@@ -174,7 +174,7 @@ export const apiPerfis = {
 export const apiPermissoes = {
   // Listar todas as permissões
   listar: async (): Promise<Permissao[]> => {
-    const response = await apiRequest('/permissoes/permissoes');
+    const response = await apiRequest('/api/permissoes/permissoes');
     return response.data || [];
   },
 
@@ -193,7 +193,7 @@ export const apiPermissoes = {
     recurso?: string;
     status?: 'Ativa' | 'Inativa';
   }): Promise<Permissao> => {
-    const response = await apiRequest('/permissoes/permissoes', {
+    const response = await apiRequest('/api/permissoes/permissoes', {
       method: 'POST',
       body: JSON.stringify(dados),
     });
@@ -205,13 +205,13 @@ export const apiPermissoes = {
 export const apiPerfilPermissoes = {
   // Obter permissões de um perfil
   obterPermissoes: async (perfilId: number): Promise<PerfilPermissao[]> => {
-    const response = await apiRequest(`/permissoes/perfis/${perfilId}/permissoes`);
+    const response = await apiRequest(`/api/permissoes/perfis/${perfilId}/permissoes`);
     return response.data || [];
   },
 
   // Atualizar permissões de um perfil
   atualizarPermissoes: async (perfilId: number, permissaoIds: number[]): Promise<void> => {
-    await apiRequest(`/permissoes/perfis/${perfilId}/permissoes`, {
+    await apiRequest(`/api/permissoes/perfis/${perfilId}/permissoes`, {
       method: 'POST',
       body: JSON.stringify({ permissoes: permissaoIds }),
     });
@@ -221,6 +221,47 @@ export const apiPerfilPermissoes = {
   temPermissao: async (perfilId: number, permissaoId: number): Promise<boolean> => {
     const permissoes = await apiPerfilPermissoes.obterPermissoes(perfilId);
     return permissoes.some(p => p.permissao_id === permissaoId && p.status === 'Ativa');
+  }
+};
+
+// Usuário Perfis API
+export interface UsuarioPerfil {
+  id: number;
+  usuario_id: number;
+  perfil_id: number;
+  data_atribuicao: string;
+  atribuido_por?: number;
+  status: 'Ativa' | 'Inativa';
+  created_at: string;
+  updated_at: string;
+  perfis?: Perfil;
+}
+
+export const apiUsuarioPerfis = {
+  // Obter perfil de um usuário
+  obterPerfilUsuario: async (usuarioId: number): Promise<UsuarioPerfil | null> => {
+    try {
+      const response = await apiRequest(`/api/permissoes/usuarios/${usuarioId}/perfil`);
+      return response.data || null;
+    } catch (error) {
+      console.warn(`Usuário ${usuarioId} não possui perfil atribuído`);
+      return null;
+    }
+  },
+
+  // Atribuir perfil a um usuário
+  atribuirPerfil: async (usuarioId: number, perfilId: number): Promise<void> => {
+    await apiRequest(`/api/permissoes/usuarios/${usuarioId}/perfil`, {
+      method: 'POST',
+      body: JSON.stringify({ perfil_id: perfilId }),
+    });
+  },
+
+  // Remover perfil de um usuário
+  removerPerfil: async (usuarioId: number, perfilId: number): Promise<void> => {
+    await apiRequest(`/api/permissoes/usuarios/${usuarioId}/perfil/${perfilId}`, {
+      method: 'DELETE',
+    });
   }
 };
 
@@ -264,5 +305,6 @@ export default {
   apiPerfis,
   apiPermissoes,
   apiPerfilPermissoes,
+  apiUsuarioPerfis,
   utilsPermissoes
 };

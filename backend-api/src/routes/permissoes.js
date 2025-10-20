@@ -580,4 +580,271 @@ router.post('/permissoes', authenticateToken, requirePermission('usuarios:gerenc
   }
 })
 
+/**
+ * @swagger
+ * /api/permissoes/usuarios/{usuarioId}/perfil:
+ *   post:
+ *     summary: Atribuir perfil a um usuário
+ *     tags: [Permissões]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: usuarioId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do usuário
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - perfil_id
+ *             properties:
+ *               perfil_id:
+ *                 type: integer
+ *                 description: ID do perfil a ser atribuído
+ *     responses:
+ *       200:
+ *         description: Perfil atribuído com sucesso
+ *       400:
+ *         description: Dados inválidos
+ */
+router.post('/usuarios/:usuarioId/perfil', authenticateToken, requirePermission('usuarios:gerenciar_permissoes'), async (req, res) => {
+  try {
+    const { usuarioId } = req.params
+    const { perfil_id } = req.body
+
+    if (!perfil_id) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'perfil_id é obrigatório'
+      })
+    }
+
+    // Verificar se o perfil existe
+    const { data: perfil, error: perfilError } = await supabaseAdmin
+      .from('perfis')
+      .select('*')
+      .eq('id', perfil_id)
+      .single()
+
+    if (perfilError || !perfil) {
+      return res.status(404).json({
+        error: 'Perfil não encontrado',
+        message: 'O perfil especificado não existe'
+      })
+    }
+
+    // Verificar se o usuário existe
+    const { data: usuario, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nome, email')
+      .eq('id', usuarioId)
+      .single()
+
+    if (usuarioError || !usuario) {
+      return res.status(404).json({
+        error: 'Usuário não encontrado',
+        message: 'O usuário especificado não existe'
+      })
+    }
+
+    // Verificar se já existe uma atribuição ativa
+    const { data: existente } = await supabaseAdmin
+      .from('usuario_perfis')
+      .select('*')
+      .eq('usuario_id', usuarioId)
+      .eq('status', 'Ativa')
+      .single()
+
+    // Se já existe, desativar o perfil anterior
+    if (existente) {
+      await supabaseAdmin
+        .from('usuario_perfis')
+        .update({ status: 'Inativa', updated_at: new Date().toISOString() })
+        .eq('usuario_id', usuarioId)
+        .eq('status', 'Ativa')
+    }
+
+    // Criar nova atribuição
+    const { data, error: insertError } = await supabaseAdmin
+      .from('usuario_perfis')
+      .insert({
+        usuario_id: parseInt(usuarioId),
+        perfil_id: parseInt(perfil_id),
+        data_atribuicao: new Date().toISOString(),
+        atribuido_por: req.user.id,
+        status: 'Ativa',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (insertError) {
+      // Se houver erro de conflito, tentar atualizar o existente
+      if (insertError.code === '23505') {
+        const { data: updated, error: updateError } = await supabaseAdmin
+          .from('usuario_perfis')
+          .update({
+            status: 'Ativa',
+            data_atribuicao: new Date().toISOString(),
+            atribuido_por: req.user.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('usuario_id', usuarioId)
+          .eq('perfil_id', perfil_id)
+          .select()
+          .single()
+
+        if (updateError) {
+          return res.status(500).json({
+            error: 'Erro ao atribuir perfil',
+            message: updateError.message
+          })
+        }
+
+        return res.json({
+          success: true,
+          data: updated,
+          message: 'Perfil atribuído com sucesso'
+        })
+      }
+
+      return res.status(500).json({
+        error: 'Erro ao atribuir perfil',
+        message: insertError.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data,
+      message: `Perfil "${perfil.nome}" atribuído ao usuário "${usuario.nome}" com sucesso`
+    })
+  } catch (error) {
+    console.error('Erro ao atribuir perfil:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/permissoes/usuarios/{usuarioId}/perfil:
+ *   get:
+ *     summary: Obter perfil atual de um usuário
+ *     tags: [Permissões]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: usuarioId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do usuário
+ *     responses:
+ *       200:
+ *         description: Perfil do usuário
+ *       404:
+ *         description: Usuário não possui perfil
+ */
+router.get('/usuarios/:usuarioId/perfil', authenticateToken, async (req, res) => {
+  try {
+    const { usuarioId } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('usuario_perfis')
+      .select(`
+        *,
+        perfis(*)
+      `)
+      .eq('usuario_id', usuarioId)
+      .eq('status', 'Ativa')
+      .single()
+
+    if (error || !data) {
+      return res.status(404).json({
+        error: 'Perfil não encontrado',
+        message: 'O usuário não possui perfil atribuído'
+      })
+    }
+
+    res.json({
+      success: true,
+      data
+    })
+  } catch (error) {
+    console.error('Erro ao buscar perfil do usuário:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/permissoes/usuarios/{usuarioId}/perfil/{perfilId}:
+ *   delete:
+ *     summary: Remover perfil de um usuário
+ *     tags: [Permissões]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: usuarioId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do usuário
+ *       - in: path
+ *         name: perfilId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do perfil
+ *     responses:
+ *       200:
+ *         description: Perfil removido com sucesso
+ *       404:
+ *         description: Atribuição não encontrada
+ */
+router.delete('/usuarios/:usuarioId/perfil/:perfilId', authenticateToken, requirePermission('usuarios:gerenciar_permissoes'), async (req, res) => {
+  try {
+    const { usuarioId, perfilId } = req.params
+
+    const { error } = await supabaseAdmin
+      .from('usuario_perfis')
+      .update({ status: 'Inativa', updated_at: new Date().toISOString() })
+      .eq('usuario_id', usuarioId)
+      .eq('perfil_id', perfilId)
+
+    if (error) {
+      return res.status(404).json({
+        error: 'Atribuição não encontrada',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      message: 'Perfil removido com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao remover perfil:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 export default router

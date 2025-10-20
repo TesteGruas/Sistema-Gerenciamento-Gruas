@@ -29,6 +29,7 @@ import {
   User,
   ChevronDown,
   ChevronRight,
+  Lock,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -81,6 +82,8 @@ const baseNavigation: NavigationItemWithPermission[] = [
 
 const adminNavigation: NavigationItemWithPermission[] = [
   { name: "Usuários", href: "/dashboard/usuarios", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
+  { name: "Perfis de Acesso", href: "/dashboard/perfis", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
+  { name: "Permissões", href: "/dashboard/permissoes", icon: Lock, category: "admin", permission: "usuarios:gerenciar_permissoes" },
   { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail, category: "admin", permission: "email:configurar" },
 ]
 

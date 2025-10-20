@@ -47,10 +47,8 @@ export const usePermissions = () => {
           const userPermissions = data.data?.permissoes || []
           const userPerfil = data.data?.perfil || null
           
-          // Converter permissões para formato string
-          const permissionStrings = userPermissions.map((p: Permission) => 
-            `${p.modulo}:${p.acao}`
-          )
+          // Usar o nome completo da permissão (já vem no formato correto: "modulo:acao")
+          const permissionStrings = userPermissions.map((p: Permission) => p.nome)
           
           setPermissions(permissionStrings)
           setPerfil(userPerfil)
