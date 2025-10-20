@@ -283,7 +283,7 @@ router.get('/registros', async (req, res) => {
         *,
         funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno),
         aprovador:usuarios!registros_ponto_aprovado_por_fkey(nome)
-      `)
+      `, { count: 'exact' })
       .order('data', { ascending: false })
       .order('created_at', { ascending: false });
 

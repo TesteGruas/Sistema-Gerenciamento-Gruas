@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import AdminGuard from "@/components/admin-guard"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 import { useToast } from "@/hooks/use-toast"
 import { apiPerfis, apiPermissoes, apiPerfilPermissoes, utilsPermissoes, type Perfil, type Permissao, type PerfilPermissao } from "@/lib/api-permissoes"
 import { apiUsuarios, utilsUsuarios, type Usuario } from "@/lib/api-usuarios"
@@ -31,17 +31,13 @@ import {
   Eye, 
   Shield, 
   UserCheck, 
-  UserX, 
   Mail, 
   Phone, 
   Calendar,
   AlertCircle,
-  CheckCircle,
   Clock,
   Settings,
   Key,
-  Lock,
-  Unlock,
   ChevronRight,
   Save,
   X,
@@ -98,17 +94,6 @@ const roleColors = {
   user: "bg-gray-100 text-gray-800"
 }
 
-const statusColors = {
-  active: "bg-green-100 text-green-800",
-  inactive: "bg-gray-100 text-gray-800",
-  suspended: "bg-red-100 text-red-800"
-}
-
-const statusLabels = {
-  active: "Ativo",
-  inactive: "Inativo", 
-  suspended: "Suspenso"
-}
 
 export default function UsuariosPage() {
   const { toast } = useToast()
@@ -147,7 +132,6 @@ export default function UsuariosPage() {
     email: '',
     phone: '',
     role: '',
-    status: 'active',
     permissions: [] as string[]
   })
 
@@ -421,14 +405,6 @@ export default function UsuariosPage() {
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active': return <CheckCircle className="w-4 h-4" />
-      case 'inactive': return <UserX className="w-4 h-4" />
-      case 'suspended': return <Lock className="w-4 h-4" />
-      default: return <AlertCircle className="w-4 h-4" />
-    }
-  }
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -442,9 +418,7 @@ export default function UsuariosPage() {
         nome: userFormData.name,
         email: userFormData.email,
         telefone: userFormData.phone,
-        status: (userFormData.status === 'active' ? 'Ativo' : 
-                userFormData.status === 'inactive' ? 'Inativo' : 
-                userFormData.status === 'suspended' ? 'Bloqueado' : 'Pendente') as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
+        status: 'Ativo' as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
         ...(perfilId && { perfil_id: perfilId })
       }
       
@@ -480,7 +454,6 @@ export default function UsuariosPage() {
       email: usuario.email,
       phone: usuario.phone,
       role: usuario.role,
-      status: usuario.status,
       permissions: usuario.permissions
     })
     setIsEditDialogOpen(true)
@@ -503,9 +476,7 @@ export default function UsuariosPage() {
         nome: userFormData.name,
         email: userFormData.email,
         telefone: userFormData.phone,
-        status: (userFormData.status === 'active' ? 'Ativo' : 
-                userFormData.status === 'inactive' ? 'Inativo' : 
-                userFormData.status === 'suspended' ? 'Bloqueado' : 'Pendente') as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
+        status: 'Ativo' as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
         ...(perfilId && { perfil_id: perfilId })
       }
       
@@ -579,38 +550,13 @@ export default function UsuariosPage() {
       email: '',
       phone: '',
       role: '',
-      status: 'active',
       permissions: []
     })
   }
 
-  const toggleUserStatus = async (usuario: any) => {
-    const newStatus = usuario.status === 'active' ? 'inactive' : 'active'
-    const statusBackend = newStatus === 'active' ? 'Ativo' : 'Inativo'
-    
-    try {
-      await apiUsuarios.atualizarStatus(parseInt(usuario.id), statusBackend)
-      
-      // Recarregar lista de usuários
-      await carregarUsuarios(currentPage, itemsPerPage)
-      
-      toast({
-        title: "Sucesso",
-        description: `Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`
-      })
-      
-    } catch (error: any) {
-      console.error('Erro ao alterar status do usuário:', error)
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao alterar status do usuário",
-        variant: "destructive"
-      })
-    }
-  }
 
   return (
-    <AdminGuard>
+    <ProtectedRoute permission="usuarios:visualizar">
       <div className="space-y-6 w-full">
       <div className="flex justify-between items-center">
         <div>
@@ -637,7 +583,7 @@ export default function UsuariosPage() {
       </div>
 
       {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-2">
@@ -650,17 +596,6 @@ export default function UsuariosPage() {
           </CardContent>
         </Card>
         
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-              <div>
-                <p className="text-sm text-gray-600">Usuários Ativos</p>
-                <p className="text-2xl font-bold">{usuarios.filter(u => u.status === 'active').length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
         
         <Card>
           <CardContent className="p-6">
@@ -703,20 +638,6 @@ export default function UsuariosPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-2 items-center">
-              <Label htmlFor="items-per-page" className="text-sm font-medium">Itens por página:</Label>
-              <Select value={itemsPerPage.toString()} onValueChange={(value) => handleItemsPerPageChange(parseInt(value))}>
-                <SelectTrigger className="w-20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">5</SelectItem>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="20">20</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -747,7 +668,6 @@ export default function UsuariosPage() {
                 <TableRow>
                   <TableHead>Usuário</TableHead>
                   <TableHead>Função</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Último Acesso</TableHead>
                   <TableHead>Permissões</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -772,12 +692,6 @@ export default function UsuariosPage() {
                       <Badge className={roleColors[usuario.role as keyof typeof roleColors]}>
                         {getRoleIcon(usuario.role)}
                         <span className="ml-1">{roleLabels[usuario.role as keyof typeof roleLabels]}</span>
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[usuario.status as keyof typeof statusColors]}>
-                        {getStatusIcon(usuario.status)}
-                        <span className="ml-1">{statusLabels[usuario.status as keyof typeof statusLabels]}</span>
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -830,14 +744,6 @@ export default function UsuariosPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => toggleUserStatus(usuario)}
-                          className={usuario.status === 'active' ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
-                        >
-                          {usuario.status === 'active' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
                           onClick={() => handleDeleteUser(usuario)}
                           className="text-red-600 hover:text-red-700"
                         >
@@ -853,58 +759,18 @@ export default function UsuariosPage() {
           )}
         </CardContent>
         
-        {/* Paginação */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t">
-            <div className="text-sm text-gray-700">
-              Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalUsuarios)} de {totalUsuarios} usuários
-            </div>
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious 
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                  />
-                </PaginationItem>
-                
-                {/* Páginas numeradas */}
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNumber;
-                  if (totalPages <= 5) {
-                    pageNumber = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNumber = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNumber = totalPages - 4 + i;
-                  } else {
-                    pageNumber = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <PaginationItem key={pageNumber}>
-                      <PaginationLink
-                        onClick={() => handlePageChange(pageNumber)}
-                        isActive={currentPage === pageNumber}
-                        className="cursor-pointer"
-                      >
-                        {pageNumber}
-                      </PaginationLink>
-                    </PaginationItem>
-                  );
-                })}
-                
-                <PaginationItem>
-                  <PaginationNext 
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
-        )}
       </Card>
+
+      {/* Paginação Avançada */}
+      <AdvancedPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalUsuarios}
+        itemsPerPage={itemsPerPage}
+        onPageChange={handlePageChange}
+        onItemsPerPageChange={handleItemsPerPageChange}
+        itemsPerPageOptions={[5, 10, 20, 50]}
+      />
 
       {/* Dialog de Criação de Usuário */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -956,22 +822,6 @@ export default function UsuariosPage() {
                       onChange={(e) => setUserFormData({ ...userFormData, phone: e.target.value })}
                       placeholder="Ex: (11) 99999-9999"
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="status">Status *</Label>
-                    <Select
-                      value={userFormData.status}
-                      onValueChange={(value) => setUserFormData({ ...userFormData, status: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Ativo</SelectItem>
-                        <SelectItem value="inactive">Inativo</SelectItem>
-                        <SelectItem value="suspended">Suspenso</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
               </TabsContent>
@@ -1085,22 +935,6 @@ export default function UsuariosPage() {
                       onChange={(e) => setUserFormData({ ...userFormData, phone: e.target.value })}
                       placeholder="Ex: (11) 99999-9999"
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="edit-status">Status *</Label>
-                    <Select
-                      value={userFormData.status}
-                      onValueChange={(value) => setUserFormData({ ...userFormData, status: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Ativo</SelectItem>
-                        <SelectItem value="inactive">Inativo</SelectItem>
-                        <SelectItem value="suspended">Suspenso</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
               </TabsContent>
@@ -1344,6 +1178,6 @@ export default function UsuariosPage() {
         </SheetContent>
       </Sheet>
       </div>
-    </AdminGuard>
+    </ProtectedRoute>
   )
 }

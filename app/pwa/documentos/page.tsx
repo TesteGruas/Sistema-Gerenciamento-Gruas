@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -445,7 +446,8 @@ export default function PWADocumentosPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <ProtectedRoute permission="assinatura_digital:visualizar">
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -720,5 +722,6 @@ export default function PWADocumentosPage() {
         </Card>
       )}
     </div>
+    </ProtectedRoute>
   )
 }

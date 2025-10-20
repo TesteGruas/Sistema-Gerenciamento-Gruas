@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
+import { usePermissions } from "@/hooks/use-permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +34,7 @@ interface PWALayoutProps {
 
 export default function PWALayout({ children }: PWALayoutProps) {
   const pathname = usePathname()
+  const { hasPermission, canAccessModule } = usePermissions()
   const [isOnline, setIsOnline] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string } | null>(null)
@@ -112,58 +114,66 @@ export default function PWALayout({ children }: PWALayoutProps) {
       name: "Ponto",
       href: "/pwa/ponto",
       icon: Clock,
-      description: "Registrar ponto"
+      description: "Registrar ponto",
+      permission: "ponto_eletronico:visualizar"
     },
     {
       name: "Espelho",
       href: "/pwa/espelho-ponto",
       icon: FileText,
-      description: "Ver espelho de ponto"
+      description: "Ver espelho de ponto",
+      permission: "ponto_eletronico:visualizar"
     },
     {
       name: "Gruas",
       href: "/pwa/gruas",
       icon: Briefcase,
-      description: "Minhas gruas"
+      description: "Minhas gruas",
+      permission: "gruas:visualizar"
     },
     {
       name: "Docs",
       href: "/pwa/documentos",
       icon: FileSignature,
-      description: "Documentos"
+      description: "Documentos",
+      permission: "assinatura_digital:visualizar"
     },
     {
       name: "Perfil",
       href: "/pwa/perfil",
       icon: UserCircle,
-      description: "Meu perfil"
+      description: "Meu perfil",
+      permission: "perfil:visualizar"
     }
   ]
 
-  // Adicionar item de encarregador se o usuário for encarregador
-  const isEncarregador = user?.cargo?.toLowerCase().includes('encarregador') || 
-                        user?.cargo?.toLowerCase().includes('supervisor') ||
-                        user?.cargo?.toLowerCase().includes('chefe')
-
-  if (isEncarregador) {
+  // Adicionar item de encarregador se o usuário tiver permissão
+  if (hasPermission("encarregador:visualizar")) {
     navigationItems.push({
       name: "Encarregador",
       href: "/pwa/encarregador",
       icon: User,
-      description: "Gerenciar funcionários"
+      description: "Gerenciar funcionários",
+      permission: "encarregador:visualizar"
     })
   }
 
-  // Adicionar notificações como item secundário se houver notificações pendentes
-  const hasNotifications = documentosPendentes > 0
-  if (hasNotifications) {
+  // Adicionar notificações se o usuário tiver permissão e houver notificações pendentes
+  if (hasPermission("notificacoes:visualizar") && documentosPendentes > 0) {
     navigationItems.push({
       name: "Notif",
       href: "/pwa/notificacoes",
       icon: Bell,
-      description: "Notificações"
+      description: "Notificações",
+      permission: "notificacoes:visualizar"
     })
   }
+
+  // Filtrar itens de navegação baseado em permissões
+  const filteredNavigationItems = navigationItems.filter(item => {
+    if (!item.permission) return true
+    return hasPermission(item.permission)
+  })
 
   // Rotas que não precisam do layout (login e redirect)
   const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
@@ -225,7 +235,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
           {/* Bottom Navigation - Típico de Apps */}
           <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50">
             <div className="grid grid-cols-5 h-16">
-              {navigationItems.slice(0, 5).map((item) => {
+              {filteredNavigationItems.slice(0, 5).map((item) => {
                 const Icon = item.icon
                 const isActive = pathname === item.href
                 return (
@@ -273,7 +283,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
               </div>
 
               <div className="space-y-2">
-                {navigationItems.map((item) => {
+                {filteredNavigationItems.map((item) => {
                   const Icon = item.icon
                   return (
                     <Button

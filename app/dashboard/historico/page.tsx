@@ -25,6 +25,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { apiHistorico } from "@/lib/api-historico"
 import { useToast } from "@/hooks/use-toast"
+import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 
 export default function HistoricoPage() {
   const [activeTab, setActiveTab] = useState("geral")
@@ -35,7 +36,7 @@ export default function HistoricoPage() {
   const [filtroHorasExtras, setFiltroHorasExtras] = useState("todos")
   const [filtroStatusAprovacao, setFiltroStatusAprovacao] = useState("todos")
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   // Estados para cada tipo de histórico
   const [historicoGeral, setHistoricoGeral] = useState<any[]>([])
@@ -51,7 +52,17 @@ export default function HistoricoPage() {
   useEffect(() => {
     carregarEstatisticas()
     carregarDados()
-  }, [activeTab, currentPage, selectedModulo, selectedAcao, filtroHorasExtras, filtroStatusAprovacao])
+  }, [activeTab, currentPage, pageSize, selectedModulo, selectedAcao, filtroHorasExtras, filtroStatusAprovacao])
+
+  // Funções de controle de paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  const handleItemsPerPageChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    setCurrentPage(1) // Reset para primeira página
+  }
 
   const carregarEstatisticas = async () => {
     try {
@@ -101,7 +112,15 @@ export default function HistoricoPage() {
 
         case "ponto":
           console.log('📊 Carregando dados do ponto...');
-          const responsePonto = await apiHistorico.listarPonto(params)
+          
+          // Preparar parâmetros da API incluindo filtros
+          const paramsPonto = {
+            ...params,
+            // Adicionar filtros como parâmetros da API se necessário
+            // Por enquanto, vamos aplicar os filtros no frontend mas manter a paginação
+          }
+          
+          const responsePonto = await apiHistorico.listarPonto(paramsPonto)
           console.log('📊 Response do ponto:', responsePonto);
           
           // Aplicar filtros específicos para horas extras
@@ -125,7 +144,26 @@ export default function HistoricoPage() {
           }
           
           setHistoricoPonto(registrosFiltrados)
-          setPagination(responsePonto.pagination || {})
+          
+          // Se não há filtros aplicados, usar a paginação da API
+          const temFiltros = filtroHorasExtras !== "todos" || filtroStatusAprovacao !== "todos"
+          
+          if (temFiltros) {
+            // Com filtros: ajustar paginação baseada nos registros filtrados
+            const paginationAjustada = {
+              page: 1, // Sempre página 1 quando há filtros
+              limit: pageSize,
+              total: registrosFiltrados.length,
+              pages: Math.ceil(registrosFiltrados.length / pageSize)
+            }
+            setPagination(paginationAjustada)
+            console.log('📊 Paginação ajustada para filtros:', paginationAjustada);
+          } else {
+            // Sem filtros: usar paginação da API
+            setPagination(responsePonto.pagination || {})
+            console.log('📊 Paginação da API:', responsePonto.pagination);
+          }
+          
           console.log('📊 HistoricoPonto atualizado:', registrosFiltrados.length, 'registros');
           break
       }
@@ -782,36 +820,16 @@ export default function HistoricoPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Paginação */}
-      {pagination && Object.keys(pagination).length > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                Página {pagination?.page || 1} de {pagination?.pages || 1} ({pagination?.total || 0} registros)
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(Math.min(pagination?.pages || 1, currentPage + 1))}
-                  disabled={currentPage === (pagination?.pages || 1)}
-                >
-                  Próxima
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Paginação Avançada */}
+      <AdvancedPagination
+        currentPage={pagination?.page || currentPage}
+        totalPages={pagination?.pages || 1}
+        totalItems={pagination?.total || 0}
+        itemsPerPage={pageSize}
+        onPageChange={handlePageChange}
+        onItemsPerPageChange={handleItemsPerPageChange}
+        itemsPerPageOptions={[10, 20, 50, 100]}
+      />
     </div>
   )
 }

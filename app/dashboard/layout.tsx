@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { AuthService } from "@/app/lib/auth"
+import { usePermissions } from "@/hooks/use-permissions"
 import { Button } from "@/components/ui/button"
 import {
   Building2,
@@ -44,37 +45,43 @@ interface NavigationItem {
   category?: string
 }
 
-// Navegação reorganizada por categorias lógicas
-const baseNavigation: NavigationItem[] = [
+// Navegação com permissões
+interface NavigationItemWithPermission extends NavigationItem {
+  permission?: string
+  permissions?: string[]
+  requireAll?: boolean
+}
+
+const baseNavigation: NavigationItemWithPermission[] = [
   // SEÇÃO PRINCIPAL
-  { name: "Dashboard", href: "/dashboard", icon: Home, category: "principal" },
-  { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "principal" },
+  { name: "Dashboard", href: "/dashboard", icon: Home, category: "principal", permission: "dashboard:visualizar" },
+  { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "principal", permission: "notificacoes:visualizar" },
   
   // SEÇÃO OPERACIONAL
-  { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional" },
-  { name: "Obras", href: "/dashboard/obras", icon: Building2, category: "operacional" },
-  { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane, category: "operacional" },
-  { name: "Livros de Gruas", href: "/dashboard/livros-gruas", icon: BookOpen, category: "operacional" },
-  { name: "Estoque", href: "/dashboard/estoque", icon: Package, category: "operacional" },
+  { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional", permission: "clientes:visualizar" },
+  { name: "Obras", href: "/dashboard/obras", icon: Building2, category: "operacional", permission: "obras:visualizar" },
+  { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane, category: "operacional", permission: "gruas:visualizar" },
+  { name: "Livros de Gruas", href: "/dashboard/livros-gruas", icon: BookOpen, category: "operacional", permission: "livros_gruas:visualizar" },
+  { name: "Estoque", href: "/dashboard/estoque", icon: Package, category: "operacional", permission: "estoque:visualizar" },
   
   // SEÇÃO RH E PESSOAS
-  { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock, category: "rh" },
-  { name: "RH", href: "/dashboard/rh", icon: UserCheck, category: "rh" },
+  { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock, category: "rh", permission: "ponto_eletronico:visualizar" },
+  { name: "RH", href: "/dashboard/rh", icon: UserCheck, category: "rh", permission: "rh:visualizar" },
   
   // SEÇÃO FINANCEIRA
-  { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign, category: "financeiro" },
+  { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign, category: "financeiro", permission: "financeiro:visualizar" },
   
   // SEÇÃO RELATÓRIOS E ANÁLISES
-  { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3, category: "relatorios" },
-  { name: "Histórico", href: "/dashboard/historico", icon: History, category: "relatorios" },
+  { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3, category: "relatorios", permission: "relatorios:visualizar" },
+  { name: "Histórico", href: "/dashboard/historico", icon: History, category: "relatorios", permission: "historico:visualizar" },
   
   // SEÇÃO DOCUMENTOS
-  { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature, category: "documentos" },
+  { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileSignature, category: "documentos", permission: "assinatura_digital:visualizar" },
 ]
 
-const adminNavigation: NavigationItem[] = [
-  { name: "Usuários", href: "/dashboard/usuarios", icon: Shield, category: "admin" },
-  { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail, category: "admin" },
+const adminNavigation: NavigationItemWithPermission[] = [
+  { name: "Usuários", href: "/dashboard/usuarios", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
+  { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail, category: "admin", permission: "email:configurar" },
 ]
 
 export default function DashboardLayout({
@@ -82,6 +89,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
+  const { hasPermission, hasAnyPermission, hasAllPermissions } = usePermissions()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -93,6 +101,30 @@ export default function DashboardLayout({
     documentos: false,
     admin: false,
   })
+
+  // Filtrar navegação baseada em permissões
+  const filterNavigationByPermissions = (navigation: NavigationItemWithPermission[]) => {
+    return navigation.filter(item => {
+      if (!item.permission && !item.permissions) return true
+      
+      if (item.permission) {
+        return hasPermission(item.permission)
+      }
+      
+      if (item.permissions) {
+        return item.requireAll 
+          ? hasAllPermissions(item.permissions)
+          : hasAnyPermission(item.permissions)
+      }
+      
+      return true
+    })
+  }
+
+  // Navegação filtrada por permissões
+  const filteredBaseNavigation = filterNavigationByPermissions(baseNavigation)
+  const filteredAdminNavigation = filterNavigationByPermissions(adminNavigation)
+
   const pathname = usePathname()
   
   useEffect(() => {
@@ -126,7 +158,7 @@ export default function DashboardLayout({
   }
 
   // Combinar navegação base com navegação de admin se necessário
-  const navigation = isAdmin ? [...baseNavigation, ...adminNavigation] : baseNavigation
+  const navigation = isAdmin ? [...filteredBaseNavigation, ...filteredAdminNavigation] : filteredBaseNavigation
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -376,7 +408,7 @@ export default function DashboardLayout({
               </button>
               {!collapsedSections.admin && (
                 <div className="space-y-1">
-                  {adminNavigation.map((item) => {
+                  {filteredAdminNavigation.map((item) => {
                     const isActive = pathname === item.href
                     return (
                       <Link

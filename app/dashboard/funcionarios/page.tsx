@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -115,6 +115,15 @@ export default function FuncionariosPage() {
     }
   }, [selectedRole, selectedStatus, selectedTurno])
 
+  // Handlers otimizados para evitar re-renders desnecessários
+  const handleFormDataChange = useCallback((field: string, value: string) => {
+    setFuncionarioFormData(prev => ({ ...prev, [field]: value }))
+  }, [])
+
+  const handleFormDataChangeWithType = useCallback((field: string, value: any) => {
+    setFuncionarioFormData(prev => ({ ...prev, [field]: value }))
+  }, [])
+
   // Função para mudar de página
   const handlePageChange = (newPage: number) => {
     carregarFuncionarios(newPage)
@@ -126,15 +135,60 @@ export default function FuncionariosPage() {
     carregarFuncionarios(1) // Reset para primeira página
   }
 
-  // Busca local nos resultados (opcional - para busca mais rápida)
-  const filteredFuncionarios = funcionarios.filter(funcionario =>
-    searchTerm === "" || (
-      (funcionario.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (funcionario.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (funcionario.cpf || '').includes(searchTerm) ||
-      (funcionario.telefone || '').includes(searchTerm)
-    )
-  )
+  // Suavizar digitação com useDeferredValue
+  const searchTermDeferred = useDeferredValue(searchTerm)
+  
+  // Estado para funcionários filtrados da API
+  const [filteredFuncionarios, setFilteredFuncionarios] = useState<FuncionarioBackend[]>([])
+  const [buscando, setBuscando] = useState(false)
+
+  // Buscar funcionários na API quando o termo de busca mudar
+  useEffect(() => {
+    const buscarFuncionarios = async () => {
+      if (searchTermDeferred.trim().length < 2) {
+        // Se termo muito curto, usar lista completa com filtros locais
+        const filtrados = funcionarios.filter(funcionario => {
+          const matchCargo = selectedRole === "all" || funcionario.cargo === selectedRole
+          const matchStatus = selectedStatus === "all" || funcionario.status === selectedStatus
+          const matchTurno = selectedTurno === "all" || funcionario.turno === selectedTurno
+          return matchCargo && matchStatus && matchTurno
+        })
+        setFilteredFuncionarios(filtrados)
+        return
+      }
+
+      try {
+        setBuscando(true)
+        const response = await funcionariosApi.buscarFuncionarios(searchTermDeferred, {
+          cargo: selectedRole !== "all" ? selectedRole : undefined,
+          status: selectedStatus !== "all" ? selectedStatus : undefined
+        })
+        
+        if (response.success) {
+          setFilteredFuncionarios(response.data)
+        }
+      } catch (error) {
+        console.error('Erro ao buscar funcionários:', error)
+        // Em caso de erro, usar filtro local
+        const term = searchTermDeferred.toLowerCase()
+        const filtrados = funcionarios.filter(funcionario => {
+          const matchNome = (funcionario.nome || '').toLowerCase().includes(term) ||
+            (funcionario.email || '').toLowerCase().includes(term) ||
+            (funcionario.cpf || '').includes(term) ||
+            (funcionario.telefone || '').includes(term)
+          const matchCargo = selectedRole === "all" || funcionario.cargo === selectedRole
+          const matchStatus = selectedStatus === "all" || funcionario.status === selectedStatus
+          const matchTurno = selectedTurno === "all" || funcionario.turno === selectedTurno
+          return matchNome && matchCargo && matchStatus && matchTurno
+        })
+        setFilteredFuncionarios(filtrados)
+      } finally {
+        setBuscando(false)
+      }
+    }
+
+    buscarFuncionarios()
+  }, [searchTermDeferred, selectedRole, selectedStatus, selectedTurno, funcionarios])
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -474,6 +528,15 @@ export default function FuncionariosPage() {
       {/* Lista de Funcionários */}
       {loading ? (
         <CardLoader text="Carregando funcionários..." />
+      ) : buscando ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+              <span className="text-gray-600">Buscando funcionários...</span>
+            </div>
+          </CardContent>
+        </Card>
       ) : filteredFuncionarios.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
@@ -645,7 +708,7 @@ export default function FuncionariosPage() {
                 <Input
                   id="name"
                   value={funcionarioFormData.name}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, name: e.target.value })}
+                  onChange={(e) => handleFormDataChange('name', e.target.value)}
                   placeholder="Ex: João Silva"
                   required
                 />
@@ -656,7 +719,7 @@ export default function FuncionariosPage() {
                   id="email"
                   type="email"
                   value={funcionarioFormData.email}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, email: e.target.value })}
+                  onChange={(e) => handleFormDataChange('email', e.target.value)}
                   placeholder="Ex: joao@empresa.com"
                   required
                 />
@@ -669,7 +732,7 @@ export default function FuncionariosPage() {
                 <Input
                   id="phone"
                   value={funcionarioFormData.phone}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, phone: e.target.value })}
+                  onChange={(e) => handleFormDataChange('phone', e.target.value)}
                   placeholder="Ex: (11) 99999-9999"
                 />
               </div>
@@ -678,7 +741,7 @@ export default function FuncionariosPage() {
                 <Input
                   id="cpf"
                   value={funcionarioFormData.cpf}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, cpf: e.target.value })}
+                  onChange={(e) => handleFormDataChange('cpf', e.target.value)}
                   placeholder="Ex: 000.000.000-00"
                 />
               </div>
@@ -689,7 +752,7 @@ export default function FuncionariosPage() {
                 <Label htmlFor="role">Cargo *</Label>
                 <Select
                   value={funcionarioFormData.role}
-                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, role: value as any })}
+                  onValueChange={(value) => handleFormDataChangeWithType('role', value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -707,7 +770,7 @@ export default function FuncionariosPage() {
                 <Label htmlFor="turno">Turno *</Label>
                 <Select
                   value={funcionarioFormData.turno}
-                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, turno: value as any })}
+                  onValueChange={(value) => handleFormDataChangeWithType('turno', value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -726,7 +789,7 @@ export default function FuncionariosPage() {
                 <Label htmlFor="status">Status *</Label>
                 <Select
                   value={funcionarioFormData.status}
-                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, status: value as any })}
+                  onValueChange={(value) => handleFormDataChangeWithType('status', value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -746,7 +809,7 @@ export default function FuncionariosPage() {
                   step="0.01"
                   min="0"
                   value={funcionarioFormData.salary}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, salary: e.target.value })}
+                  onChange={(e) => handleFormDataChange('salary', e.target.value)}
                   placeholder="Ex: 5000.00"
                 />
               </div>
@@ -759,7 +822,7 @@ export default function FuncionariosPage() {
                   id="hireDate"
                   type="date"
                   value={funcionarioFormData.hireDate}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, hireDate: e.target.value })}
+                  onChange={(e) => handleFormDataChange('hireDate', e.target.value)}
                 />
               </div>
             </div>
@@ -773,7 +836,7 @@ export default function FuncionariosPage() {
                   type="checkbox"
                   id="criar_usuario"
                   checked={funcionarioFormData.criar_usuario || false}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, criar_usuario: e.target.checked })}
+                  onChange={(e) => handleFormDataChangeWithType('criar_usuario', e.target.checked)}
                   className="rounded border-gray-300"
                 />
                 <Label htmlFor="criar_usuario" className="text-sm font-medium">
@@ -801,7 +864,7 @@ export default function FuncionariosPage() {
                             id="usuario_senha"
                             type="password"
                             value={funcionarioFormData.usuario_senha || ''}
-                            onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, usuario_senha: e.target.value })}
+                            onChange={(e) => handleFormDataChange('usuario_senha', e.target.value)}
                             placeholder="Mínimo 6 caracteres"
                             required={funcionarioFormData.criar_usuario}
                           />
@@ -821,7 +884,7 @@ export default function FuncionariosPage() {
               <Textarea
                 id="observations"
                 value={funcionarioFormData.observations}
-                onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, observations: e.target.value })}
+                  onChange={(e) => handleFormDataChange('observations', e.target.value)}
                 placeholder="Observações sobre o funcionário..."
                 rows={3}
               />
@@ -921,7 +984,7 @@ export default function FuncionariosPage() {
                 <Label htmlFor="edit-turno">Turno *</Label>
                 <Select
                   value={funcionarioFormData.turno}
-                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, turno: value as any })}
+                  onValueChange={(value) => handleFormDataChangeWithType('turno', value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -940,7 +1003,7 @@ export default function FuncionariosPage() {
                 <Label htmlFor="edit-status">Status *</Label>
                 <Select
                   value={funcionarioFormData.status}
-                  onValueChange={(value) => setFuncionarioFormData({ ...funcionarioFormData, status: value as any })}
+                  onValueChange={(value) => handleFormDataChangeWithType('status', value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -960,7 +1023,7 @@ export default function FuncionariosPage() {
                   step="0.01"
                   min="0"
                   value={funcionarioFormData.salary}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, salary: e.target.value })}
+                  onChange={(e) => handleFormDataChange('salary', e.target.value)}
                   placeholder="Ex: 5000.00"
                 />
               </div>
@@ -973,7 +1036,7 @@ export default function FuncionariosPage() {
                   id="edit-hireDate"
                   type="date"
                   value={funcionarioFormData.hireDate}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, hireDate: e.target.value })}
+                  onChange={(e) => handleFormDataChange('hireDate', e.target.value)}
                 />
               </div>
             </div>
@@ -987,7 +1050,7 @@ export default function FuncionariosPage() {
                   type="checkbox"
                   id="edit-criar_usuario"
                   checked={funcionarioFormData.criar_usuario || false}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, criar_usuario: e.target.checked })}
+                  onChange={(e) => handleFormDataChangeWithType('criar_usuario', e.target.checked)}
                   disabled={!!(editingFuncionario && funcionarioFormData.criar_usuario)}
                   className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
@@ -1023,7 +1086,7 @@ export default function FuncionariosPage() {
                               id="edit-usuario_senha"
                               type="password"
                               value={funcionarioFormData.usuario_senha || ''}
-                              onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, usuario_senha: e.target.value })}
+                              onChange={(e) => handleFormDataChange('usuario_senha', e.target.value)}
                               placeholder="Mínimo 6 caracteres"
                               required={funcionarioFormData.criar_usuario}
                             />
@@ -1044,7 +1107,7 @@ export default function FuncionariosPage() {
               <Textarea
                 id="edit-observations"
                 value={funcionarioFormData.observations}
-                onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, observations: e.target.value })}
+                  onChange={(e) => handleFormDataChange('observations', e.target.value)}
                 placeholder="Observações sobre o funcionário..."
                 rows={3}
               />

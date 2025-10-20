@@ -174,6 +174,7 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
       ...defaultHeaders,
       ...options.headers,
     },
+    signal: options?.signal,
   })
 
   if (!response.ok) {
@@ -243,19 +244,21 @@ export const funcionariosApi = {
   async buscarFuncionarios(termo: string, filtros?: {
     cargo?: string
     status?: string
-  }): Promise<{ success: boolean; data: FuncionarioBackend[] }> {
+  }, options?: { signal?: AbortSignal }): Promise<{ success: boolean; data: FuncionarioBackend[] }> {
     if (!termo || termo.length < 2) {
       return { success: true, data: [] }
     }
 
     const searchParams = new URLSearchParams()
-    searchParams.append('q', termo)
+    searchParams.append('page', '1')
+    searchParams.append('limit', '100')
+    searchParams.append('q', termo) // Parâmetro de pesquisa por nome
     
     if (filtros?.cargo) searchParams.append('cargo', filtros.cargo)
     if (filtros?.status) searchParams.append('status', filtros.status)
 
-    const url = buildApiUrl(`funcionarios/buscar?${searchParams.toString()}`)
-    return apiRequest(url)
+    const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}?${searchParams.toString()}`)
+    return apiRequest(url, { signal: options?.signal })
   },
 
   // Obter funcionário por ID

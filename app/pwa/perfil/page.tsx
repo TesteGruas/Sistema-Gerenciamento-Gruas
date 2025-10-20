@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -152,7 +153,8 @@ export default function PWAPerfilPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <ProtectedRoute permission="perfil:visualizar">
+      <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Meu Perfil</h1>
@@ -450,6 +452,7 @@ export default function PWAPerfilPage() {
         </CardContent>
       </Card>
     </div>
+    </ProtectedRoute>
   )
 }
 

@@ -12,8 +12,9 @@ interface User {
 interface Perfil {
   id: number
   nome: string
-  nivel_acesso: string
+  nivel_acesso: number
   descricao: string
+  status: 'Ativo' | 'Inativo'
 }
 
 interface Permissao {
@@ -22,6 +23,8 @@ interface Permissao {
   descricao: string
   modulo: string
   acao: string
+  recurso?: string
+  status: 'Ativa' | 'Inativa'
 }
 
 interface AuthState {

@@ -124,13 +124,13 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
 export const apiPerfis = {
   // Listar todos os perfis
   listar: async (): Promise<Perfil[]> => {
-    const response = await apiRequest('/api/permissoes/perfis');
+    const response = await apiRequest('/permissoes/perfis');
     return response.data || [];
   },
 
   // Buscar perfil por ID
   buscar: async (id: number): Promise<Perfil> => {
-    const response = await apiRequest(`/api/permissoes/perfis/${id}`);
+    const response = await apiRequest(`/permissoes/perfis/${id}`);
     return response.data;
   },
 
@@ -141,7 +141,7 @@ export const apiPerfis = {
     nivel_acesso?: number;
     status?: 'Ativo' | 'Inativo';
   }): Promise<Perfil> => {
-    const response = await apiRequest('/api/permissoes/perfis', {
+    const response = await apiRequest('/permissoes/perfis', {
       method: 'POST',
       body: JSON.stringify(dados),
     });
@@ -155,7 +155,7 @@ export const apiPerfis = {
     nivel_acesso?: number;
     status?: 'Ativo' | 'Inativo';
   }): Promise<Perfil> => {
-    const response = await apiRequest(`/api/permissoes/perfis/${id}`, {
+    const response = await apiRequest(`/permissoes/perfis/${id}`, {
       method: 'PUT',
       body: JSON.stringify(dados),
     });
@@ -164,7 +164,7 @@ export const apiPerfis = {
 
   // Excluir perfil
   excluir: async (id: number): Promise<void> => {
-    await apiRequest(`/api/permissoes/perfis/${id}`, {
+    await apiRequest(`/permissoes/perfis/${id}`, {
       method: 'DELETE',
     });
   }
@@ -174,7 +174,7 @@ export const apiPerfis = {
 export const apiPermissoes = {
   // Listar todas as permissões
   listar: async (): Promise<Permissao[]> => {
-    const response = await apiRequest('/api/permissoes/permissoes');
+    const response = await apiRequest('/permissoes/permissoes');
     return response.data || [];
   },
 
@@ -193,7 +193,7 @@ export const apiPermissoes = {
     recurso?: string;
     status?: 'Ativa' | 'Inativa';
   }): Promise<Permissao> => {
-    const response = await apiRequest('/api/permissoes/permissoes', {
+    const response = await apiRequest('/permissoes/permissoes', {
       method: 'POST',
       body: JSON.stringify(dados),
     });
@@ -205,13 +205,13 @@ export const apiPermissoes = {
 export const apiPerfilPermissoes = {
   // Obter permissões de um perfil
   obterPermissoes: async (perfilId: number): Promise<PerfilPermissao[]> => {
-    const response = await apiRequest(`/api/permissoes/perfis/${perfilId}/permissoes`);
+    const response = await apiRequest(`/permissoes/perfis/${perfilId}/permissoes`);
     return response.data || [];
   },
 
   // Atualizar permissões de um perfil
   atualizarPermissoes: async (perfilId: number, permissaoIds: number[]): Promise<void> => {
-    await apiRequest(`/api/permissoes/perfis/${perfilId}/permissoes`, {
+    await apiRequest(`/permissoes/perfis/${perfilId}/permissoes`, {
       method: 'POST',
       body: JSON.stringify({ permissoes: permissaoIds }),
     });

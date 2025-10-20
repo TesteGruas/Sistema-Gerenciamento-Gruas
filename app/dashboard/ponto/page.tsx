@@ -52,9 +52,8 @@ import {
   type Justificativa
 } from "@/lib/api-ponto-eletronico"
 import { ExportButton } from "@/components/export-button"
-import { EspelhoPontoDialog } from "@/components/espelho-ponto-dialog"
-import { EspelhoPontoAvancado } from "@/components/espelho-ponto-avancado"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
+import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -146,6 +145,16 @@ export default function PontoPage() {
     justificativa_alteracao: "",
   })
 
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 1
+  })
+
   // Atualizar relógio a cada segundo (apenas no cliente)
   useEffect(() => {
     setIsClient(true)
@@ -162,12 +171,10 @@ export default function PontoPage() {
     carregarDados()
   }, [])
 
-  // Recarregar dados quando filtros mudarem
+  // Recarregar dados quando filtros ou paginação mudarem
   useEffect(() => {
-    if (data.registrosPonto.length > 0) {
-      carregarDadosComFiltros()
-    }
-  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus])
+    carregarDadosComFiltros()
+  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, currentPage, pageSize])
 
   // Debug dos registros e filtros (apenas uma vez após carregar)
   useEffect(() => {
@@ -189,7 +196,10 @@ export default function PontoPage() {
       // Carregar funcionários com verificação de admin e outros dados em paralelo
       const [funcionariosResponse, registrosResponse, justificativasResponse] = await Promise.all([
         apiFuncionarios.listarParaPonto(usuarioId),
-        apiRegistrosPonto.listar({ limit: 500 }), // Aumentado para 500 registros
+        apiRegistrosPonto.listar({ 
+          page: currentPage, 
+          limit: pageSize 
+        }),
         apiJustificativas.listar({})
       ])
 
@@ -203,7 +213,10 @@ export default function PontoPage() {
         : funcionarios[0] || null
 
       const registros = registrosResponse.data || []
+      const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }
+      
       console.log('📊 Total de registros carregados:', registros.length)
+      console.log('📊 Paginação:', paginationData)
       console.log('📅 Primeiros 5 registros:', registros.slice(0, 5).map(r => ({
         id: r.id,
         funcionario: r.funcionario?.nome,
@@ -221,6 +234,8 @@ export default function PontoPage() {
         usuarioAtual,
         loading: false
       }))
+      
+      setPagination(paginationData)
 
       // Se não for admin, selecionar automaticamente o próprio usuário
       if (!isAdmin && usuarioAtual) {
@@ -238,10 +253,12 @@ export default function PontoPage() {
 
   // Função para carregar dados com filtros aplicados
   const carregarDadosComFiltros = async () => {
+    console.log('🚀 carregarDadosComFiltros chamada!')
     try {
       // Construir parâmetros de filtro
       const filtros: any = {
-        limit: 500
+        page: currentPage,
+        limit: pageSize
       }
 
       // Adicionar filtros se não forem "todos" ou vazios
@@ -264,16 +281,27 @@ export default function PontoPage() {
       console.log('🔍 Aplicando filtros:', filtros)
 
       // Carregar registros com filtros
+      console.log('📡 Chamando API...')
       const registrosResponse = await apiRegistrosPonto.listar(filtros)
+      console.log('📡 Resposta da API:', registrosResponse)
+      
       const registros = registrosResponse.data || []
+      const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }
       
       console.log('📊 Registros filtrados:', registros.length)
+      console.log('📊 Paginação filtrada:', paginationData)
+      console.log('📊 Primeiros registros filtrados:', registros.slice(0, 3))
 
-      // Atualizar apenas os registros, mantendo outros dados
+      // Atualizar apenas os registros e paginação, mantendo outros dados
       setData(prev => ({
         ...prev,
         registrosPonto: registros
       }))
+      
+      setPagination(paginationData)
+
+      // Debug: verificar se os dados foram atualizados
+      console.log('📊 Estado atualizado - registrosPonto.length:', registros.length)
     } catch (error) {
       console.error('Erro ao carregar dados com filtros:', error)
       toast({
@@ -295,6 +323,16 @@ export default function PontoPage() {
     
     // Recarregar dados sem filtros
     carregarDados()
+  }
+
+  // Handlers para paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  const handleItemsPerPageChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    setCurrentPage(1) // Reset para primeira página
   }
 
   // Função para mapear tipos de registro para campos da API
@@ -399,6 +437,16 @@ export default function PontoPage() {
     }
   }
 
+  // Debug: mostrar total de registros antes do filtro
+  console.log('🔍 Total de registros antes do filtro:', data.registrosPonto.length)
+  console.log('🔍 Filtros aplicados:', {
+    searchTerm,
+    filtroFuncionario,
+    filtroDataInicio,
+    filtroDataFim,
+    filtroStatus
+  })
+
   const filteredRegistros = data.registrosPonto
     .filter((registro) => {
       // Filtro por termo de busca
@@ -426,8 +474,39 @@ export default function PontoPage() {
         filtroStatus === "todos" || 
         (registro.status || '') === filtroStatus
       
+      // Debug: log para entender por que está filtrando
+      if (registro.funcionario_id === 100) {
+        console.log('🔍 Debug filtro para funcionário 100:', {
+          registro: {
+            id: registro.id,
+            funcionario_id: registro.funcionario_id,
+            data: registro.data,
+            status: registro.status
+          },
+          filtros: {
+            searchTerm,
+            filtroFuncionario,
+            filtroDataInicio,
+            filtroDataFim,
+            filtroStatus
+          },
+          matches: {
+            matchesSearch,
+            matchesFuncionario,
+            matchesData,
+            matchesStatus
+          },
+          final: matchesSearch && matchesFuncionario && matchesData && matchesStatus
+        })
+      }
+      
       return matchesSearch && matchesFuncionario && matchesData && matchesStatus
     })
+
+  // Debug: mostrar total de registros após o filtro
+  console.log('🔍 Total de registros após o filtro:', filteredRegistros.length)
+
+  const sortedRegistros = filteredRegistros
     .sort((a, b) => {
       // Ordenação por horas extras
       if (ordenacaoHorasExtras === "maior") {
@@ -987,26 +1066,10 @@ export default function PontoPage() {
         </div>
         <div className="flex gap-2">
           <ExportButton
-            dados={filteredRegistros}
+            dados={sortedRegistros}
             tipo="ponto"
             nomeArquivo="relatorio-ponto"
             titulo="Relatório de Ponto Eletrônico"
-          />
-          <EspelhoPontoDialog
-            trigger={
-              <Button variant="outline">
-                <FileText className="w-4 h-4 mr-2" />
-                Espelho de Ponto
-              </Button>
-            }
-          />
-          <EspelhoPontoAvancado
-            trigger={
-              <Button variant="outline">
-                <FileText className="w-4 h-4 mr-2" />
-                Espelho Avançado
-              </Button>
-            }
           />
           <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
             <DialogTrigger asChild>
@@ -1583,7 +1646,7 @@ export default function PontoPage() {
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-gray-600" />
                     <span className="text-sm text-gray-600">
-                      {filteredRegistros.length} registro(s) encontrado(s)
+                      {sortedRegistros.length} registro(s) encontrado(s)
                     </span>
                   </div>
                   <div className="text-sm text-gray-500">
@@ -1613,7 +1676,7 @@ export default function PontoPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRegistros.map((registro) => {
+                    {sortedRegistros.map((registro) => {
                       // Verificar se está em atraso (múltiplas variações do status)
                       const isAtraso = registro.status === 'Atraso' || 
                                       registro.status === 'atraso' || 
@@ -1735,6 +1798,17 @@ export default function PontoPage() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Paginação Avançada */}
+              <AdvancedPagination
+                currentPage={pagination?.page || currentPage}
+                totalPages={pagination?.pages || 1}
+                totalItems={pagination?.total || 0}
+                itemsPerPage={pageSize}
+                onPageChange={handlePageChange}
+                onItemsPerPageChange={handleItemsPerPageChange}
+                itemsPerPageOptions={[10, 20, 50, 100]}
+              />
             </CardContent>
           </Card>
         </TabsContent>

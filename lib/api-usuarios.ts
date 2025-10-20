@@ -179,20 +179,20 @@ export const apiUsuarios = {
     if (params?.status) queryParams.append('status', params.status);
     if (params?.search) queryParams.append('search', params.search);
     
-    const url = `/api/users${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    const url = `/users${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     const response = await apiRequest(url);
     return response;
   },
 
   // Buscar usuário por ID
   buscar: async (id: number): Promise<Usuario> => {
-    const response = await apiRequest(`/api/users/${id}`);
+    const response = await apiRequest(`/users/${id}`);
     return response.data;
   },
 
   // Criar novo usuário
   criar: async (dados: UsuarioCreateData): Promise<Usuario> => {
-    const response = await apiRequest('/api/users', {
+    const response = await apiRequest('/users', {
       method: 'POST',
       body: JSON.stringify(dados),
     });
@@ -201,7 +201,7 @@ export const apiUsuarios = {
 
   // Atualizar usuário
   atualizar: async (id: number, dados: UsuarioUpdateData): Promise<Usuario> => {
-    const response = await apiRequest(`/api/users/${id}`, {
+    const response = await apiRequest(`/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(dados),
     });
@@ -210,7 +210,7 @@ export const apiUsuarios = {
 
   // Excluir usuário
   excluir: async (id: number): Promise<void> => {
-    await apiRequest(`/api/users/${id}`, {
+    await apiRequest(`/users/${id}`, {
       method: 'DELETE',
     });
   },

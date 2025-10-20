@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,15 +17,9 @@ import {
   Plus, 
   Search, 
   Mail, 
-  Phone, 
   MapPin, 
   Calendar,
-  UserCheck,
-  UserX,
   Building2,
-  Edit,
-  Trash2,
-  Eye,
   Loader2,
   Filter,
   Download,
@@ -38,6 +32,10 @@ import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { CardLoader, ButtonLoader } from "@/components/ui/loader"
+import { CreateFuncionarioDialog } from "@/components/create-funcionario-dialog"
+import { EditFuncionarioDialog } from "@/components/edit-funcionario-dialog"
+import { FuncionarioRow } from "@/components/funcionario-row"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 interface FuncionarioRH {
   id: number
@@ -77,26 +75,12 @@ interface FuncionarioRH {
 export default function RHPage() {
   const [funcionarios, setFuncionarios] = useState<FuncionarioRH[]>([])
   const [loading, setLoading] = useState(false)
-  const [filtroNome, setFiltroNome] = useState("")
+  const [query, setQuery] = useState("")
   const [filtroCargo, setFiltroCargo] = useState("all")
   const [filtroStatus, setFiltroStatus] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [funcionarioFormData, setFuncionarioFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    cpf: '',
-    role: 'Operador' as 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras',
-    status: 'Ativo' as 'Ativo' | 'Inativo' | 'Férias',
-    turno: 'Diurno' as 'Diurno' | 'Noturno' | 'Sob Demanda',
-    salary: '',
-    hireDate: '',
-    observations: '',
-    criar_usuario: true,
-    usuario_senha: ''
-  })
   const [selectedFuncionario, setSelectedFuncionario] = useState<FuncionarioRH | null>(null)
   const { toast } = useToast()
   const router = useRouter()
@@ -105,6 +89,7 @@ export default function RHPage() {
   useEffect(() => {
     carregarFuncionarios()
   }, [])
+
 
   const carregarFuncionarios = async () => {
     try {
@@ -154,28 +139,11 @@ export default function RHPage() {
   }
 
   // Função para criar funcionário
-  const handleCreateFuncionario = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+  const handleCreateFuncionario = async (payload: FuncionarioCreateData & { usuario_senha?: string, criar_usuario: boolean }) => {
     try {
       setSubmitting(true)
       
-      const funcionarioData: FuncionarioCreateData = {
-        nome: funcionarioFormData.name,
-        cargo: funcionarioFormData.role,
-        telefone: funcionarioFormData.phone,
-        email: funcionarioFormData.email,
-        cpf: funcionarioFormData.cpf,
-        turno: funcionarioFormData.turno,
-        status: funcionarioFormData.status,
-        data_admissao: funcionarioFormData.hireDate,
-        salario: parseFloat(funcionarioFormData.salary) || 0,
-        observacoes: funcionarioFormData.observations,
-        criar_usuario: funcionarioFormData.criar_usuario,
-        usuario_senha: funcionarioFormData.criar_usuario ? funcionarioFormData.usuario_senha : undefined
-      }
-      
-      const response = await funcionariosApi.criarFuncionario(funcionarioData)
+      const response = await funcionariosApi.criarFuncionario(payload)
       
       if (response.success) {
         toast({
@@ -186,22 +154,8 @@ export default function RHPage() {
         // Recarregar lista
         await carregarFuncionarios()
         
-        // Fechar dialog e limpar formulário
+        // Fechar dialog
         setIsCreateDialogOpen(false)
-        setFuncionarioFormData({
-          name: '',
-          email: '',
-          phone: '',
-          cpf: '',
-          role: 'Operador',
-          status: 'Ativo',
-          turno: 'Diurno',
-          salary: '',
-          hireDate: '',
-          observations: '',
-          criar_usuario: true,
-          usuario_senha: ''
-        })
       } else {
         toast({
           title: "Erro",
@@ -222,28 +176,13 @@ export default function RHPage() {
   }
 
   // Função para atualizar funcionário
-  const handleUpdateFuncionario = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+  const handleUpdateFuncionario = async (payload: FuncionarioCreateData) => {
     if (!selectedFuncionario) return
     
     try {
       setSubmitting(true)
       
-      const funcionarioData: any = {
-        nome: funcionarioFormData.name,
-        cargo: funcionarioFormData.role,
-        telefone: funcionarioFormData.phone,
-        email: funcionarioFormData.email,
-        cpf: funcionarioFormData.cpf,
-        turno: funcionarioFormData.turno,
-        status: funcionarioFormData.status,
-        data_admissao: funcionarioFormData.hireDate,
-        salario: parseFloat(funcionarioFormData.salary) || 0,
-        observacoes: funcionarioFormData.observations
-      }
-      
-      const response = await funcionariosApi.atualizarFuncionario(selectedFuncionario.id, funcionarioData)
+      const response = await funcionariosApi.atualizarFuncionario(selectedFuncionario.id, payload)
       
       if (response.success) {
         toast({
@@ -276,8 +215,20 @@ export default function RHPage() {
     }
   }
 
+
+  // Navegar para página de detalhes
+  const handleViewDetails = useCallback((id: number) => {
+    router.push(`/dashboard/rh/${id}`)
+  }, [router])
+
+  // Abrir dialog de edição
+  const handleEditClick = useCallback((funcionario: FuncionarioRH) => {
+    setSelectedFuncionario(funcionario)
+    setIsEditDialogOpen(true)
+  }, [])
+
   // Função para deletar funcionário
-  const handleDeleteFuncionario = async (id: number) => {
+  const handleDeleteFuncionario = useCallback(async (id: number) => {
     if (!confirm('Tem certeza que deseja excluir este funcionário?')) {
       return
     }
@@ -297,61 +248,94 @@ export default function RHPage() {
         variant: "destructive"
       })
     }
-  }
+  }, [toast])
 
-  // Abrir dialog de edição
-  const handleEditClick = (funcionario: FuncionarioRH) => {
-    setSelectedFuncionario(funcionario)
-    setFuncionarioFormData({
-      name: funcionario.nome,
-      email: funcionario.email || '',
-      phone: funcionario.telefone || '',
-      cpf: funcionario.cpf,
-      role: funcionario.cargo as any,
-      status: funcionario.status as any,
-      turno: (funcionario.turno || 'Diurno') as any,
-      salary: funcionario.salario?.toString() || '',
-      hireDate: funcionario.data_admissao,
-      observations: funcionario.observacoes || '',
-      criar_usuario: false,
-      usuario_senha: ''
-    })
-    setIsEditDialogOpen(true)
-  }
+  // Memoizar cálculos pesados
+  const cargosUnicos = useMemo(
+    () => Array.from(new Set(funcionarios.map(f => f.cargo))).sort(),
+    [funcionarios]
+  )
 
-  // Navegar para página de detalhes
-  const handleViewDetails = (id: number) => {
-    router.push(`/dashboard/rh/${id}`)
-  }
+  // Debounce do termo de busca
+  const debouncedQuery = useDebouncedValue(query, 300)
+  
+  // Estado para funcionários filtrados da API
+  const [funcionariosFiltrados, setFuncionariosFiltrados] = useState<FuncionarioRH[]>([])
+  const [buscando, setBuscando] = useState(false)
 
-  // Filtrar funcionários
-  const funcionariosFiltrados = funcionarios.filter(func => {
-    const matchNome = func.nome.toLowerCase().includes(filtroNome.toLowerCase())
-    const matchCargo = filtroCargo === "all" || func.cargo === filtroCargo
-    const matchStatus = filtroStatus === "all" || func.status === filtroStatus
-    return matchNome && matchCargo && matchStatus
-  })
+  // Buscar funcionários na API quando o termo de busca mudar
+  useEffect(() => {
+    let abort = new AbortController()
 
-  // Obter status badge
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Ativo':
-        return <Badge className="bg-green-100 text-green-800 border-green-200 text-xs"><UserCheck className="w-3 h-3 mr-1" /> Ativo</Badge>
-      case 'Inativo':
-        return <Badge className="bg-gray-100 text-gray-800 border-gray-200 text-xs"><UserX className="w-3 h-3 mr-1" /> Inativo</Badge>
-      case 'Afastado':
-        return <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-xs">Afastado</Badge>
-      case 'Férias':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs">Férias</Badge>
-      case 'Demitido':
-        return <Badge className="bg-red-100 text-red-800 border-red-200 text-xs">Demitido</Badge>
-      default:
-        return <Badge className="text-xs">{status}</Badge>
+    const run = async () => {
+      // Termo curto → NÃO chame API; filtre localmente
+      if (debouncedQuery.trim().length < 2) {
+        const list = funcionarios.filter((f) => {
+          const okCargo = filtroCargo === "all" || f.cargo === filtroCargo
+          const okStatus = filtroStatus === "all" || f.status === filtroStatus
+          return okCargo && okStatus
+        })
+        setFuncionariosFiltrados(list)
+        return
+      }
+
+      try {
+        setBuscando(true)
+        const resp = await funcionariosApi.buscarFuncionarios(
+          debouncedQuery,
+          {
+            cargo: filtroCargo !== "all" ? filtroCargo : undefined,
+            status: filtroStatus !== "all" ? filtroStatus : undefined,
+          },
+          { signal: abort.signal }
+        )
+
+        if (resp?.success && resp.data) {
+          const mapped: FuncionarioRH[] = resp.data.map((func: any) => ({
+            id: func.id,
+            nome: func.nome,
+            cpf: func.cpf || "",
+            cargo: func.cargo,
+            departamento: "",
+            salario: func.salario || 0,
+            data_admissao: func.data_admissao || "",
+            telefone: func.telefone,
+            email: func.email,
+            endereco: "",
+            cidade: "",
+            estado: "",
+            cep: "",
+            status: func.status as any,
+            turno: func.turno as any,
+            observacoes: func.observacoes,
+            created_at: func.created_at,
+            updated_at: func.updated_at,
+            usuario: Array.isArray(func.usuario) && func.usuario.length > 0 ? func.usuario[0] : undefined,
+            obra_atual: undefined,
+          }))
+          setFuncionariosFiltrados(mapped)
+        }
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          // fallback local se der erro
+          const q = debouncedQuery.toLowerCase()
+          const list = funcionarios.filter((f) => {
+            const okNome = f.nome.toLowerCase().includes(q)
+            const okCargo = filtroCargo === "all" || f.cargo === filtroCargo
+            const okStatus = filtroStatus === "all" || f.status === filtroStatus
+            return okNome && okCargo && okStatus
+          })
+          setFuncionariosFiltrados(list)
+        }
+      } finally {
+        setBuscando(false)
+      }
     }
-  }
 
-  // Cargos únicos para filtro
-  const cargosUnicos = Array.from(new Set(funcionarios.map(f => f.cargo))).sort()
+    run()
+    return () => abort.abort()
+  }, [debouncedQuery, filtroCargo, filtroStatus, funcionarios])
+
 
   return (
     <div className="space-y-6">
@@ -393,7 +377,7 @@ export default function RHPage() {
                 </p>
               </div>
               <div className="p-3 rounded-full bg-green-100">
-                <UserCheck className="w-6 h-6 text-green-600" />
+                <User className="w-6 h-6 text-green-600" />
               </div>
             </div>
           </CardContent>
@@ -409,7 +393,7 @@ export default function RHPage() {
                 </p>
               </div>
               <div className="p-3 rounded-full bg-gray-100">
-                <UserX className="w-6 h-6 text-gray-600" />
+                <User className="w-6 h-6 text-gray-600" />
               </div>
             </div>
           </CardContent>
@@ -454,12 +438,12 @@ export default function RHPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Buscar por nome..."
-                value={filtroNome}
-                onChange={(e) => setFiltroNome(e.target.value)}
-                className="pl-10"
-              />
+            <Input
+              placeholder="Buscar por nome..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-10"
+            />
             </div>
             
             <Select value={filtroCargo} onValueChange={setFiltroCargo}>
@@ -493,6 +477,11 @@ export default function RHPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             </div>
+          ) : buscando ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+              <span className="text-gray-600">Buscando funcionários...</span>
+            </div>
           ) : funcionariosFiltrados.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -510,82 +499,17 @@ export default function RHPage() {
                     <TableHead className="w-[120px] text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {funcionariosFiltrados.map((funcionario) => (
-                    <TableRow key={funcionario.id} className="hover:bg-gray-50">
-                      <TableCell className="w-[200px] max-w-[200px]">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8 flex-shrink-0">
-                            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${funcionario.nome}`} />
-                            <AvatarFallback className="text-xs">
-                              {funcionario.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-gray-900 text-sm truncate" title={funcionario.nome}>
-                              {funcionario.nome}
-                            </p>
-                            <div className="mt-0.5">
-                              {getStatusBadge(funcionario.status)}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[20%]">
-                        <span className="text-gray-600 text-sm">{funcionario.cpf || '-'}</span>
-                      </TableCell>
-                      <TableCell className="w-[20%]">
-                        {funcionario.telefone ? (
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <span className="text-gray-600 text-sm">{funcionario.telefone}</span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-sm">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="w-[20%]">
-                        <div>
-                          <p className="font-medium text-sm">{funcionario.cargo}</p>
-                          {funcionario.turno && (
-                            <p className="text-xs text-gray-500">{funcionario.turno}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[10%] text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewDetails(funcionario.id)}
-                            title="Ver detalhes"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditClick(funcionario)}
-                            title="Editar"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteFuncionario(funcionario.id)}
-                            title="Excluir"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
+            <TableBody>
+              {funcionariosFiltrados.map((funcionario) => (
+                <FuncionarioRow
+                  key={funcionario.id}
+                  funcionario={funcionario}
+                  onView={handleViewDetails}
+                  onEdit={handleEditClick}
+                  onDelete={handleDeleteFuncionario}
+                />
+              ))}
+            </TableBody>
               </Table>
             </div>
           )}
@@ -593,355 +517,21 @@ export default function RHPage() {
       </Card>
 
       {/* Dialog Criar Funcionário */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Novo Funcionário</DialogTitle>
-          </DialogHeader>
-          
-          <form onSubmit={handleCreateFuncionario} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome Completo *</Label>
-                <Input
-                  id="name"
-                  value={funcionarioFormData.name}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="cpf">CPF *</Label>
-                <Input
-                  id="cpf"
-                  value={funcionarioFormData.cpf}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, cpf: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={funcionarioFormData.email}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, email: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telefone</Label>
-                <Input
-                  id="phone"
-                  value={funcionarioFormData.phone}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, phone: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">Cargo *</Label>
-                <Select
-                  value={funcionarioFormData.role}
-                  onValueChange={(value: any) => setFuncionarioFormData({ ...funcionarioFormData, role: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Operador">Operador</SelectItem>
-                    <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
-                    <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
-                    <SelectItem value="Supervisor">Supervisor</SelectItem>
-                    <SelectItem value="Mecânico">Mecânico</SelectItem>
-                    <SelectItem value="Engenheiro">Engenheiro</SelectItem>
-                    <SelectItem value="Chefe de Obras">Chefe de Obras</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="turno">Turno *</Label>
-                <Select
-                  value={funcionarioFormData.turno}
-                  onValueChange={(value: any) => setFuncionarioFormData({ ...funcionarioFormData, turno: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Diurno">Diurno</SelectItem>
-                    <SelectItem value="Noturno">Noturno</SelectItem>
-                    <SelectItem value="Sob Demanda">Sob Demanda</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="salary">Salário</Label>
-                <Input
-                  id="salary"
-                  type="number"
-                  step="0.01"
-                  value={funcionarioFormData.salary}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, salary: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="hireDate">Data de Admissão *</Label>
-                <Input
-                  id="hireDate"
-                  type="date"
-                  value={funcionarioFormData.hireDate}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, hireDate: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="status">Status *</Label>
-                <Select
-                  value={funcionarioFormData.status}
-                  onValueChange={(value: any) => setFuncionarioFormData({ ...funcionarioFormData, status: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Ativo">Ativo</SelectItem>
-                    <SelectItem value="Inativo">Inativo</SelectItem>
-                    <SelectItem value="Férias">Férias</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="observations">Observações</Label>
-              <Textarea
-                id="observations"
-                value={funcionarioFormData.observations}
-                onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, observations: e.target.value })}
-                rows={3}
-              />
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="criar_usuario"
-                  checked={funcionarioFormData.criar_usuario}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, criar_usuario: e.target.checked })}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="criar_usuario" className="cursor-pointer">
-                  Criar usuário de acesso ao sistema
-                </Label>
-              </div>
-            </div>
-
-            {funcionarioFormData.criar_usuario && (
-              <div className="space-y-2">
-                <Label htmlFor="usuario_senha">Senha do Usuário *</Label>
-                <Input
-                  id="usuario_senha"
-                  type="password"
-                  value={funcionarioFormData.usuario_senha}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, usuario_senha: e.target.value })}
-                  required={funcionarioFormData.criar_usuario}
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsCreateDialogOpen(false)}
-                disabled={submitting}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Criando...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Criar Funcionário
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CreateFuncionarioDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        submitting={submitting}
+        onSubmit={handleCreateFuncionario}
+      />
 
       {/* Dialog Editar Funcionário */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Funcionário</DialogTitle>
-          </DialogHeader>
-          
-          <form onSubmit={handleUpdateFuncionario} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Nome Completo *</Label>
-                <Input
-                  id="edit-name"
-                  value={funcionarioFormData.name}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-cpf">CPF *</Label>
-                <Input
-                  id="edit-cpf"
-                  value={funcionarioFormData.cpf}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, cpf: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">E-mail</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={funcionarioFormData.email}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, email: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-phone">Telefone</Label>
-                <Input
-                  id="edit-phone"
-                  value={funcionarioFormData.phone}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, phone: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-role">Cargo *</Label>
-                <Select
-                  value={funcionarioFormData.role}
-                  onValueChange={(value: any) => setFuncionarioFormData({ ...funcionarioFormData, role: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Operador">Operador</SelectItem>
-                    <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
-                    <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
-                    <SelectItem value="Supervisor">Supervisor</SelectItem>
-                    <SelectItem value="Mecânico">Mecânico</SelectItem>
-                    <SelectItem value="Engenheiro">Engenheiro</SelectItem>
-                    <SelectItem value="Chefe de Obras">Chefe de Obras</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-turno">Turno *</Label>
-                <Select
-                  value={funcionarioFormData.turno}
-                  onValueChange={(value: any) => setFuncionarioFormData({ ...funcionarioFormData, turno: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Diurno">Diurno</SelectItem>
-                    <SelectItem value="Noturno">Noturno</SelectItem>
-                    <SelectItem value="Sob Demanda">Sob Demanda</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-salary">Salário</Label>
-                <Input
-                  id="edit-salary"
-                  type="number"
-                  step="0.01"
-                  value={funcionarioFormData.salary}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, salary: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-hireDate">Data de Admissão *</Label>
-                <Input
-                  id="edit-hireDate"
-                  type="date"
-                  value={funcionarioFormData.hireDate}
-                  onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, hireDate: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Status *</Label>
-                <Select
-                  value={funcionarioFormData.status}
-                  onValueChange={(value: any) => setFuncionarioFormData({ ...funcionarioFormData, status: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Ativo">Ativo</SelectItem>
-                    <SelectItem value="Inativo">Inativo</SelectItem>
-                    <SelectItem value="Férias">Férias</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-observations">Observações</Label>
-              <Textarea
-                id="edit-observations"
-                value={funcionarioFormData.observations}
-                onChange={(e) => setFuncionarioFormData({ ...funcionarioFormData, observations: e.target.value })}
-                rows={3}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsEditDialogOpen(false)}
-                disabled={submitting}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  'Salvar Alterações'
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <EditFuncionarioDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        submitting={submitting}
+        onSubmit={handleUpdateFuncionario}
+        funcionario={selectedFuncionario}
+      />
     </div>
   )
 }

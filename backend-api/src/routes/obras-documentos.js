@@ -162,7 +162,7 @@ const documentoSchema = Joi.object({
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/documentos/todos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/todos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
   try {
     const { status, obra_id } = req.query
 

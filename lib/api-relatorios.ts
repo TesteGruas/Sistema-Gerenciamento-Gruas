@@ -187,7 +187,7 @@ export const apiRelatorios = {
     if (params.pagina) queryParams.append('pagina', params.pagina.toString());
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/relatorios/utilizacao?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/relatorios/utilizacao?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -220,7 +220,7 @@ export const apiRelatorios = {
     if (params.pagina) queryParams.append('pagina', params.pagina.toString());
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/relatorios/financeiro?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/relatorios/financeiro?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -247,7 +247,7 @@ export const apiRelatorios = {
     if (params?.tipo_manutencao) queryParams.append('tipo_manutencao', params.tipo_manutencao);
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/relatorios/manutencao?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/relatorios/manutencao?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -272,7 +272,7 @@ export const apiRelatorios = {
     queryParams.append('ano', params.ano.toString());
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/impostos-financeiros/relatorio?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/impostos-financeiros/relatorio?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -290,7 +290,7 @@ export const apiRelatorios = {
   // Dashboard de relatórios (reutiliza o endpoint do dashboard principal)
   async dashboard(): Promise<{ success: boolean; data: DashboardRelatorios }> {
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/relatorios/dashboard`, {
+    const response = await fetch(`${API_BASE_URL}/relatorios/dashboard`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

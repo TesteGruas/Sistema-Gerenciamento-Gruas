@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -160,7 +161,8 @@ export default function PWAMainPage() {
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500">
+    <ProtectedRoute permission="dashboard:visualizar">
+      <div className="space-y-4 animate-in fade-in duration-500">
       {/* Card de Boas-vindas com Relógio */}
       <div className="relative bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 text-white rounded-3xl p-6 shadow-xl overflow-hidden">
         {/* Padrão decorativo */}
@@ -360,5 +362,6 @@ export default function PWAMainPage() {
         </div>
       )}
     </div>
+    </ProtectedRoute>
   )
 }

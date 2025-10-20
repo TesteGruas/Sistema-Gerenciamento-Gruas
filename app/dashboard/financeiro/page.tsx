@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { getFinancialData, createTransferencia, type FinancialData, type Transferencia } from "@/lib/api-financial"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -246,7 +247,8 @@ export default function FinanceiroPage() {
   }
 
   return (
-    <div className="space-y-6 w-full">
+    <ProtectedRoute permission="financeiro:visualizar">
+      <div className="space-y-6 w-full">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -743,6 +745,7 @@ export default function FinanceiroPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </ProtectedRoute>
   )
 }
 

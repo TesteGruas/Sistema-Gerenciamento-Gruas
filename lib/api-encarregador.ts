@@ -46,7 +46,7 @@ export const getFuncionariosDaObra = async (obraId: number): Promise<Funcionario
  * Buscar registros pendentes de aprovação
  */
 export const getRegistrosPendentes = async (aprovadorId: number): Promise<RegistroPontoEncarregador[]> => {
-  const response = await api.get('/api/ponto-eletronico/registros', {
+  const response = await api.get('/ponto-eletronico/registros', {
     params: {
       status: 'Pendente Aprovação',
       aprovador_id: aprovadorId
@@ -62,7 +62,7 @@ export const aprovarRegistro = async (
   registroId: string, 
   payload: AprovarRegistroPayload
 ): Promise<RegistroPontoEncarregador> => {
-  const response = await api.post(`/api/ponto-eletronico/registros/${registroId}/aprovar`, payload);
+  const response = await api.post(`/ponto-eletronico/registros/${registroId}/aprovar`, payload);
   return response.data.data || response.data;
 };
 
@@ -73,7 +73,7 @@ export const rejeitarRegistro = async (
   registroId: string, 
   payload: RejeitarRegistroPayload
 ): Promise<RegistroPontoEncarregador> => {
-  const response = await api.post(`/api/ponto-eletronico/registros/${registroId}/rejeitar`, payload);
+  const response = await api.post(`/ponto-eletronico/registros/${registroId}/rejeitar`, payload);
   return response.data.data || response.data;
 };
 
@@ -81,7 +81,7 @@ export const rejeitarRegistro = async (
  * Buscar escalas da obra
  */
 export const getEscalasDaObra = async (obraId: number): Promise<any[]> => {
-  const response = await api.get(`/api/ponto-eletronico/escalas/${obraId}`);
+  const response = await api.get(`/ponto-eletronico/escalas/${obraId}`);
   return response.data.data || response.data;
 };
 

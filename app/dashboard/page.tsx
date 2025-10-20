@@ -1,398 +1,275 @@
 "use client"
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  LineChart,
-  Line,
-  BarChart as RechartsBarChart,
-  Bar,
-  PieChart as RechartsPieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-  ResponsiveContainer,
-  Area,
-  AreaChart
-} from 'recharts'
-import {
-  Package,
-  Clock,
-  Users,
+import { Button } from "@/components/ui/button"
+import { 
+  Building2, 
+  Users, 
+  TrendingUp, 
   DollarSign,
   BarChart3,
-  ConeIcon as Crane,
-  TrendingUp,
-  AlertTriangle,
-  Building2,
-  Loader2,
-  PieChart as PieChartIcon
+  Clock,
+  Package,
+  BookOpen,
+  FileSignature,
+  UserCheck,
+  History,
+  Bell
 } from "lucide-react"
-import { apiDashboard, DashboardData } from '@/lib/api-dashboard'
+import Link from "next/link"
+import { useState, useEffect } from "react"
 
-// Cores para gráficos
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+const COLORS = [ '#ef4444', '#8b5cf6', '#ec4899']
 
 export default function Dashboard() {
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const carregarDashboard = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const data = await apiDashboard.carregar();
-      setDashboardData(data);
-    } catch (error: any) {
-      console.error('Erro ao carregar dashboard:', error);
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    carregarDashboard();
-  }, []);
-
-  // Substituir dados hardcoded pelos dados do backend
-  const stats = dashboardData ? [
-    { 
-      title: "Total de Gruas", 
-      value: dashboardData.resumo_geral.total_gruas.toString(), 
-      icon: Crane, 
-      color: "bg-blue-500" 
-    },
-    { 
-      title: "Gruas em Operação", 
-      value: dashboardData.resumo_geral.gruas_ocupadas.toString(), 
-      icon: Building2, 
-      color: "bg-green-500" 
-    },
-    { 
-      title: "Taxa de Utilização", 
-      value: `${dashboardData.resumo_geral.taxa_utilizacao}%`, 
-      icon: BarChart3, 
-      color: "bg-purple-500" 
-    },
-    { 
-      title: "Receita do Mês", 
-      value: `R$ ${dashboardData.resumo_geral.receita_mes_atual.toLocaleString()}`, 
-      icon: DollarSign, 
-      color: "bg-yellow-500" 
-    },
-  ] : [];
-
-  const recentActivities = dashboardData ? 
-    dashboardData.ultimas_atividades.map(atividade => {
-      const timeAgo = new Date(atividade.timestamp);
-      const now = new Date();
-      const diffInMinutes = Math.floor((now.getTime() - timeAgo.getTime()) / (1000 * 60));
-      
-      let timeText = '';
-      if (diffInMinutes < 1) {
-        timeText = 'Agora';
-      } else if (diffInMinutes < 60) {
-        timeText = `${diffInMinutes} min atrás`;
-      } else if (diffInMinutes < 1440) {
-        const hours = Math.floor(diffInMinutes / 60);
-        timeText = `${hours}h atrás`;
-      } else {
-        const days = Math.floor(diffInMinutes / 1440);
-        timeText = `${days} dia${days > 1 ? 's' : ''} atrás`;
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true)
+        // Simular carregamento de dados
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        setDashboardData({
+          totalObras: 12,
+          totalClientes: 45,
+          totalGruas: 8,
+          totalFuncionarios: 156
+        })
+      } catch (error) {
+        console.error('Erro ao carregar dados do dashboard:', error)
+      } finally {
+        setLoading(false)
       }
+    }
 
-      return {
-        action: `${atividade.acao}${atividade.detalhes ? ` - ${atividade.detalhes}` : ''}`,
-        time: timeText,
-        type: atividade.tipo === 'locacao' ? 'info' : 
-              atividade.tipo === 'ponto' ? 'success' : 
-              atividade.tipo === 'auditoria' ? 'warning' : 'info',
-        usuario: atividade.usuario
-      };
-    }) : [];
+    loadDashboardData()
+  }, [])
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-          <p className="text-gray-600">Carregando dashboard...</p>
-        </div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Visão geral do sistema de gestão IRBANA</p>
-        </div>
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              <div>
-                <p className="font-medium text-red-800">Erro ao carregar dashboard</p>
-                <p className="text-sm text-red-700">{error}</p>
-                <button 
-                  onClick={carregarDashboard}
-                  className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                >
-                  Tentar novamente
-                </button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    )
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Visão geral do sistema de gestão IRBANA</p>
-        {dashboardData && (
-          <p className="text-sm text-gray-500 mt-1">
-            Última atualização: {new Date(dashboardData.ultima_atualizacao).toLocaleString('pt-BR')}
-          </p>
-        )}
-      </div>
+    <ProtectedRoute permission="dashboard:visualizar">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">Visão geral do sistema de gestão de gruas</p>
+        </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-full ${stat.color}`}>
-                  <stat.icon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-   {/* Quick Actions - Linha 100% acima dos gráficos */}
-   <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Ações Rápidas
-          </CardTitle>
-          <CardDescription>Acesso rápido às principais funcionalidades</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Link href="/dashboard/obras" className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left transition-colors block">
-              <Building2 className="w-6 h-6 text-blue-600 mb-2" />
-              <p className="font-medium text-gray-900">Obras</p>
-              <p className="text-xs text-gray-600">Gerenciar projetos</p>
-            </Link>
-            <Link href="/dashboard/gruas" className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left transition-colors block">
-              <TrendingUp className="w-6 h-6 text-green-600 mb-2" />
-              <p className="font-medium text-gray-900">Gruas</p>
-              <p className="text-xs text-gray-600">Gerenciar equipamentos</p>
-            </Link>
-            <Link href="/dashboard/clientes" className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-left transition-colors block">
-              <Users className="w-6 h-6 text-purple-600 mb-2" />
-              <p className="font-medium text-gray-900">Clientes</p>
-              <p className="text-xs text-gray-600">Gerenciar clientes</p>
-            </Link>
-            <Link href="/dashboard/financeiro" className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-left transition-colors block">
-              <DollarSign className="w-6 h-6 text-yellow-600 mb-2" />
-              <p className="font-medium text-gray-900">Financeiro</p>
-              <p className="text-xs text-gray-600">Ver relatórios</p>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Gráficos de Visão Geral - 4 gráficos lado a lado */}
-      {dashboardData && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Taxa de Utilização por Mês */}
+        {/* Estatísticas Principais */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                Taxa de Utilização
-              </CardTitle>
-              <CardDescription>Evolução mensal de gruas em operação</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Obras Ativas</CardTitle>
+              <Building2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={[
-                  { mes: 'Jan', taxa: 75, gruas: 12 },
-                  { mes: 'Fev', taxa: 82, gruas: 14 },
-                  { mes: 'Mar', taxa: 78, gruas: 13 },
-                  { mes: 'Abr', taxa: 85, gruas: 15 },
-                  { mes: 'Mai', taxa: 90, gruas: 16 },
-                  { mes: 'Jun', taxa: dashboardData.resumo_geral.taxa_utilizacao, gruas: dashboardData.resumo_geral.gruas_ocupadas }
-                ]}>
-                  <defs>
-                    <linearGradient id="colorTaxa" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <RechartsTooltip 
-                    formatter={(value: number, name: string) => {
-                      if (name === 'taxa') return [`${value}%`, 'Taxa de Utilização']
-                      return [value, 'Gruas Ocupadas']
-                    }}
-                  />
-                  <Area type="monotone" dataKey="taxa" stroke="#3b82f6" fillOpacity={1} fill="url(#colorTaxa)" name="Taxa %" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="text-2xl font-bold">{dashboardData?.totalObras || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                +2 desde o mês passado
+              </p>
             </CardContent>
           </Card>
 
-          {/* Receita Mensal */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Receita Mensal
-              </CardTitle>
-              <CardDescription>Evolução de receitas dos últimos 6 meses</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Clientes</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <RechartsBarChart data={[
-                  { mes: 'Jan', receita: dashboardData.resumo_geral.receita_mes_atual * 0.8 },
-                  { mes: 'Fev', receita: dashboardData.resumo_geral.receita_mes_atual * 0.85 },
-                  { mes: 'Mar', receita: dashboardData.resumo_geral.receita_mes_atual * 0.9 },
-                  { mes: 'Abr', receita: dashboardData.resumo_geral.receita_mes_atual * 0.95 },
-                  { mes: 'Mai', receita: dashboardData.resumo_geral.receita_mes_atual * 1.05 },
-                  { mes: 'Jun', receita: dashboardData.resumo_geral.receita_mes_atual }
-                ]}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <RechartsTooltip 
-                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                  />
-                  <Bar dataKey="receita" fill="#10b981" name="Receita (R$)" />
-                </RechartsBarChart>
-              </ResponsiveContainer>
+              <div className="text-2xl font-bold">{dashboardData?.totalClientes || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                +5 desde o mês passado
+              </p>
             </CardContent>
           </Card>
 
-          {/* Obras por Status */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
-                Obras por Status
-              </CardTitle>
-              <CardDescription>Distribuição de obras ativas</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Gruas</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <RechartsBarChart data={[
-                  { status: 'Em Andamento', quantidade: 8 },
-                  { status: 'Planejamento', quantidade: 4 },
-                  { status: 'Finalização', quantidade: 3 },
-                  { status: 'Paralisada', quantidade: 1 }
-                ]}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="status" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <RechartsTooltip />
-                  <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
-                </RechartsBarChart>
-              </ResponsiveContainer>
+              <div className="text-2xl font-bold">{dashboardData?.totalGruas || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                +1 desde o mês passado
+              </p>
             </CardContent>
           </Card>
 
-          {/* Status das Gruas */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PieChartIcon className="w-5 h-5" />
-                Status das Gruas
-              </CardTitle>
-              <CardDescription>Distribuição atual do parque</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Funcionários</CardTitle>
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <RechartsPieChart>
-                  <Pie
-                    data={[
-                      { name: 'Em Operação', value: dashboardData.resumo_geral.gruas_ocupadas },
-                      { name: 'Disponível', value: dashboardData.resumo_geral.total_gruas - dashboardData.resumo_geral.gruas_ocupadas },
-                      { name: 'Manutenção', value: Math.floor(dashboardData.resumo_geral.total_gruas * 0.1) }
-                    ]}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    <Cell fill="#10b981" />
-                    <Cell fill="#3b82f6" />
-                    <Cell fill="#f59e0b" />
-                  </Pie>
-                  <RechartsTooltip />
-                </RechartsPieChart>
-              </ResponsiveContainer>
+              <div className="text-2xl font-bold">{dashboardData?.totalFuncionarios || 0}</div>
+              <p className="text-xs text-muted-foreground">
+                +3 desde o mês passado
+              </p>
             </CardContent>
           </Card>
         </div>
-      )}
 
-  
-      {/* Atividades Recentes - Ocupando 100% da tela */}
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            Atividades Recentes
-          </CardTitle>
-          <CardDescription>Últimas movimentações do sistema</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recentActivities.map((activity, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  {activity.type === "success" && <div className="w-3 h-3 bg-green-500 rounded-full" />}
-                  {activity.type === "warning" && <div className="w-3 h-3 bg-yellow-500 rounded-full" />}
-                  {activity.type === "info" && <div className="w-3 h-3 bg-blue-500 rounded-full" />}
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-700">{activity.action}</span>
-                    {activity.usuario && (
-                      <span className="text-xs text-gray-500">por {activity.usuario}</span>
-                    )}
-                  </div>
-                </div>
-                <span className="text-xs text-gray-500">{activity.time}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        {/* Quick Actions */}
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Ações Rápidas
+            </CardTitle>
+            <CardDescription>Acesso rápido às principais funcionalidades</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <ProtectedRoute permission="obras:visualizar">
+                <Link href="/dashboard/obras" className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left transition-colors block">
+                  <Building2 className="w-6 h-6 text-blue-600 mb-2" />
+                  <p className="font-medium text-gray-900">Obras</p>
+                  <p className="text-xs text-gray-600">Gerenciar projetos</p>
+                </Link>
+              </ProtectedRoute>
+
+              <ProtectedRoute permission="gruas:visualizar">
+                <Link href="/dashboard/gruas" className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left transition-colors block">
+                  <TrendingUp className="w-6 h-6 text-green-600 mb-2" />
+                  <p className="font-medium text-gray-900">Gruas</p>
+                  <p className="text-xs text-gray-600">Gerenciar equipamentos</p>
+                </Link>
+              </ProtectedRoute>
+
+              <ProtectedRoute permission="clientes:visualizar">
+                <Link href="/dashboard/clientes" className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-left transition-colors block">
+                  <Users className="w-6 h-6 text-purple-600 mb-2" />
+                  <p className="font-medium text-gray-900">Clientes</p>
+                  <p className="text-xs text-gray-600">Gerenciar clientes</p>
+                </Link>
+              </ProtectedRoute>
+
+              <ProtectedRoute permission="financeiro:visualizar">
+                <Link href="/dashboard/financeiro" className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-left transition-colors block">
+                  <DollarSign className="w-6 h-6 text-yellow-600 mb-2" />
+                  <p className="font-medium text-gray-900">Financeiro</p>
+                  <p className="text-xs text-gray-600">Ver relatórios</p>
+                </Link>
+              </ProtectedRoute>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Módulos do Sistema */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <ProtectedRoute permission="ponto_eletronico:visualizar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-600" />
+                  Ponto Eletrônico
+                </CardTitle>
+                <CardDescription>Controle de frequência dos funcionários</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/dashboard/ponto">
+                  <Button className="w-full">Acessar</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </ProtectedRoute>
+
+          <ProtectedRoute permission="rh:visualizar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-green-600" />
+                  Recursos Humanos
+                </CardTitle>
+                <CardDescription>Gestão de funcionários e RH</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/dashboard/rh">
+                  <Button className="w-full">Acessar</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </ProtectedRoute>
+
+          <ProtectedRoute permission="estoque:visualizar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-orange-600" />
+                  Estoque
+                </CardTitle>
+                <CardDescription>Controle de estoque e materiais</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/dashboard/estoque">
+                  <Button className="w-full">Acessar</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </ProtectedRoute>
+
+          <ProtectedRoute permission="livros_gruas:visualizar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-purple-600" />
+                  Livros de Gruas
+                </CardTitle>
+                <CardDescription>Registros e documentação das gruas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/dashboard/livros-gruas">
+                  <Button className="w-full">Acessar</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </ProtectedRoute>
+
+          <ProtectedRoute permission="assinatura_digital:visualizar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileSignature className="w-5 h-5 text-indigo-600" />
+                  Assinatura Digital
+                </CardTitle>
+                <CardDescription>Documentos e assinaturas digitais</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/dashboard/assinatura">
+                  <Button className="w-full">Acessar</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </ProtectedRoute>
+
+          <ProtectedRoute permission="relatorios:visualizar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-red-600" />
+                  Relatórios
+                </CardTitle>
+                <CardDescription>Relatórios e análises do sistema</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/dashboard/relatorios">
+                  <Button className="w-full">Acessar</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </ProtectedRoute>
+        </div>
+      </div>
+    </ProtectedRoute>
   )
 }

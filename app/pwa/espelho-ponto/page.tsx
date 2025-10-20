@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -295,7 +296,8 @@ export default function PWAEspelhoPontoPage() {
   const totalExtras = registros.reduce((sum, r) => sum + (r.horas_extras || 0), 0)
 
   return (
-    <div className="space-y-6">
+    <ProtectedRoute permission="ponto_eletronico:visualizar">
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
@@ -492,5 +494,6 @@ export default function PWAEspelhoPontoPage() {
         </Card>
       )}
     </div>
+    </ProtectedRoute>
   )
 }
