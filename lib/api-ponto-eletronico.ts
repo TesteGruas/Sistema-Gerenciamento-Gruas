@@ -471,6 +471,53 @@ export const apiJustificativas = {
       motivo_rejeicao: motivo
     });
     return response.data.data || response.data;
+  },
+
+  // ========================================
+  // RELATÓRIOS DE JUSTIFICATIVAS
+  // ========================================
+
+  /**
+   * Gera relatório mensal de justificativas
+   */
+  async relatorioMensal(params: {
+    mes: number;
+    ano: number;
+    funcionario_id?: number;
+    obra_id?: number;
+    status?: string;
+    tipo?: string;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/relatorios/justificativas/mensal', { params });
+    return response.data.data || response.data;
+  },
+
+  /**
+   * Gera relatório de justificativas por período
+   */
+  async relatorioPeriodo(params: {
+    data_inicio: string;
+    data_fim: string;
+    funcionario_id?: number;
+    obra_id?: number;
+    status?: string;
+    tipo?: string;
+    agrupar_por?: 'funcionario' | 'tipo' | 'status' | 'dia' | 'semana';
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/relatorios/justificativas/periodo', { params });
+    return response.data.data || response.data;
+  },
+
+  /**
+   * Gera relatório de estatísticas de justificativas
+   */
+  async relatorioEstatisticas(params?: {
+    periodo?: 'ultimo_mes' | 'ultimos_3_meses' | 'ultimo_ano';
+    funcionario_id?: number;
+    obra_id?: number;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/relatorios/justificativas/estatisticas', { params });
+    return response.data.data || response.data;
   }
 };
 

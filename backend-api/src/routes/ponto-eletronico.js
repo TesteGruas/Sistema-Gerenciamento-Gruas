@@ -10,7 +10,11 @@ import {
   gerarIdJustificativa,
   validarHorario,
   validarData,
-  calcularResumoPeriodo
+  calcularResumoPeriodo,
+  calcularResumoJustificativas,
+  calcularTendenciaMensal,
+  agruparJustificativasPor,
+  calcularEstatisticasAvancadas
 } from '../utils/ponto-eletronico.js';
 
 const router = express.Router();
@@ -2218,6 +2222,524 @@ router.post('/justificativas/:id/rejeitar', async (req, res) => {
 
   } catch (error) {
     console.error('Erro na rota de rejeição de justificativa:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+// ============================================================================
+// RELATÓRIOS DE JUSTIFICATIVAS
+// ============================================================================
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/relatorios/justificativas/mensal:
+ *   get:
+ *     summary: Gera relatório mensal de justificativas
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: mes
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Mês do relatório (1-12)
+ *       - in: query
+ *         name: ano
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Ano do relatório
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário para filtrar
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: ID da obra para filtrar
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Pendente, Aprovada, Rejeitada]
+ *         description: Status das justificativas
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [Atraso, Falta, Saída Antecipada, Ausência Parcial]
+ *         description: Tipo das justificativas
+ *     responses:
+ *       200:
+ *         description: Relatório mensal de justificativas
+ *       400:
+ *         description: Mês e ano são obrigatórios
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/relatorios/justificativas/mensal', authenticateToken, async (req, res) => {
+  try {
+    const { funcionario_id, mes, ano, obra_id, status, tipo } = req.query;
+
+    // Validar parâmetros obrigatórios
+    if (!mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês e ano são obrigatórios'
+      });
+    }
+
+    // Validar formato do mês e ano
+    const mesNum = parseInt(mes);
+    const anoNum = parseInt(ano);
+
+    if (isNaN(mesNum) || mesNum < 1 || mesNum > 12) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês deve ser um número entre 1 e 12'
+      });
+    }
+
+    if (isNaN(anoNum) || anoNum < 2000 || anoNum > 2100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ano inválido'
+      });
+    }
+
+    // Calcular datas de início e fim do mês
+    const dataInicio = `${anoNum}-${mesNum.toString().padStart(2, '0')}-01`;
+    const ultimoDiaMes = new Date(anoNum, mesNum, 0).getDate();
+    const dataFim = `${anoNum}-${mesNum.toString().padStart(2, '0')}-${ultimoDiaMes}`;
+
+    // Construir query
+    let query = supabaseAdmin
+      .from('justificativas')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_justificativas_funcionario(
+          id,
+          nome,
+          cargo,
+          turno,
+          obra_atual_id
+        ),
+        aprovador:usuarios!justificativas_aprovado_por_fkey(nome)
+      `)
+      .gte('data', dataInicio)
+      .lte('data', dataFim)
+      .order('data', { ascending: true });
+
+    // Aplicar filtros opcionais
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', parseInt(funcionario_id));
+    }
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    if (tipo) {
+      query = query.eq('tipo', tipo);
+    }
+
+    const { data: justificativas, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar justificativas:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Filtrar por obra se necessário (através do funcionário)
+    let justificativasFiltradas = justificativas || [];
+    if (obra_id) {
+      justificativasFiltradas = justificativasFiltradas.filter(just => 
+        just.funcionario?.obra_atual_id === parseInt(obra_id)
+      );
+    }
+
+    // Calcular resumo
+    const resumo = calcularResumoJustificativas(justificativasFiltradas, dataInicio, dataFim);
+    
+    // Calcular tendência mensal
+    const tendencia = await calcularTendenciaMensal(mesNum, anoNum, justificativasFiltradas.length, supabaseAdmin);
+    resumo.tendencia_mensal = tendencia;
+
+    res.json({
+      success: true,
+      data: {
+        periodo: {
+          mes: mesNum,
+          ano: anoNum,
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        },
+        resumo,
+        justificativas: justificativasFiltradas
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de relatório mensal de justificativas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/relatorios/justificativas/periodo:
+ *   get:
+ *     summary: Gera relatório de justificativas por período
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: data_inicio
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de início (YYYY-MM-DD)
+ *       - in: query
+ *         name: data_fim
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de fim (YYYY-MM-DD)
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário para filtrar
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: ID da obra para filtrar
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Pendente, Aprovada, Rejeitada]
+ *         description: Status das justificativas
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [Atraso, Falta, Saída Antecipada, Ausência Parcial]
+ *         description: Tipo das justificativas
+ *       - in: query
+ *         name: agrupar_por
+ *         schema:
+ *           type: string
+ *           enum: [funcionario, tipo, status, dia, semana]
+ *         description: Critério de agrupamento
+ *     responses:
+ *       200:
+ *         description: Relatório por período de justificativas
+ *       400:
+ *         description: Datas são obrigatórias
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/relatorios/justificativas/periodo', authenticateToken, async (req, res) => {
+  try {
+    const { data_inicio, data_fim, funcionario_id, obra_id, status, tipo, agrupar_por } = req.query;
+
+    // Validar parâmetros obrigatórios
+    if (!data_inicio || !data_fim) {
+      return res.status(400).json({
+        success: false,
+        message: 'Data de início e data de fim são obrigatórias'
+      });
+    }
+
+    // Validar formato das datas
+    if (!validarData(data_inicio) || !validarData(data_fim)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de data inválido. Use YYYY-MM-DD'
+      });
+    }
+
+    // Validar que data_fim >= data_inicio
+    if (new Date(data_fim) < new Date(data_inicio)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Data de fim deve ser maior ou igual à data de início'
+      });
+    }
+
+    // Construir query
+    let query = supabaseAdmin
+      .from('justificativas')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_justificativas_funcionario(
+          id,
+          nome,
+          cargo,
+          turno,
+          obra_atual_id
+        ),
+        aprovador:usuarios!justificativas_aprovado_por_fkey(nome)
+      `)
+      .gte('data', data_inicio)
+      .lte('data', data_fim)
+      .order('data', { ascending: true });
+
+    // Aplicar filtros opcionais
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', parseInt(funcionario_id));
+    }
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    if (tipo) {
+      query = query.eq('tipo', tipo);
+    }
+
+    const { data: justificativas, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar justificativas:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Filtrar por obra se necessário
+    let justificativasFiltradas = justificativas || [];
+    if (obra_id) {
+      justificativasFiltradas = justificativasFiltradas.filter(just => 
+        just.funcionario?.obra_atual_id === parseInt(obra_id)
+      );
+    }
+
+    // Calcular dias úteis e totais
+    const inicio = new Date(data_inicio);
+    const fim = new Date(data_fim);
+    const diasTotais = Math.ceil((fim - inicio) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Calcular dias úteis (aproximado - segunda a sexta)
+    let diasUteis = 0;
+    let currentDate = new Date(inicio);
+    while (currentDate <= fim) {
+      const dayOfWeek = currentDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Não é domingo nem sábado
+        diasUteis++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Calcular resumo
+    const resumo = {
+      total_justificativas: justificativasFiltradas.length,
+      media_diaria: diasUteis > 0 ? (justificativasFiltradas.length / diasUteis).toFixed(2) : 0,
+      por_status: {},
+      por_tipo: {},
+      taxa_aprovacao: 0,
+      funcionarios_com_justificativas: 0
+    };
+
+    // Calcular distribuições
+    const funcionariosUnicos = new Set();
+    let totalAprovadas = 0;
+
+    justificativasFiltradas.forEach(just => {
+      // Status
+      if (!resumo.por_status[just.status]) {
+        resumo.por_status[just.status] = 0;
+      }
+      resumo.por_status[just.status]++;
+
+      // Tipo
+      if (!resumo.por_tipo[just.tipo]) {
+        resumo.por_tipo[just.tipo] = 0;
+      }
+      resumo.por_tipo[just.tipo]++;
+
+      // Funcionários únicos
+      funcionariosUnicos.add(just.funcionario_id);
+
+      // Aprovadas
+      if (just.status === 'Aprovada') {
+        totalAprovadas++;
+      }
+    });
+
+    resumo.funcionarios_com_justificativas = funcionariosUnicos.size;
+    resumo.taxa_aprovacao = justificativasFiltradas.length > 0 
+      ? parseFloat(((totalAprovadas / justificativasFiltradas.length) * 100).toFixed(1))
+      : 0;
+
+    // Aplicar agrupamento se solicitado
+    let agrupamento = {};
+    if (agrupar_por && ['funcionario', 'tipo', 'status', 'dia', 'semana'].includes(agrupar_por)) {
+      agrupamento = agruparJustificativasPor(justificativasFiltradas, agrupar_por);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        periodo: {
+          data_inicio,
+          data_fim,
+          dias_uteis: diasUteis,
+          dias_totais: diasTotais
+        },
+        resumo,
+        agrupamento,
+        justificativas: justificativasFiltradas
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de relatório por período de justificativas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/relatorios/justificativas/estatisticas:
+ *   get:
+ *     summary: Gera relatório de estatísticas de justificativas
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *           enum: [ultimo_mes, ultimos_3_meses, ultimo_ano]
+ *         description: Período pré-definido para análise
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário para filtrar
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: ID da obra para filtrar
+ *     responses:
+ *       200:
+ *         description: Estatísticas de justificativas
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/relatorios/justificativas/estatisticas', authenticateToken, async (req, res) => {
+  try {
+    const { periodo = 'ultimo_mes', funcionario_id, obra_id } = req.query;
+
+    // Calcular range de datas baseado no período
+    const hoje = new Date();
+    let data_inicio, data_fim;
+
+    switch (periodo) {
+      case 'ultimos_3_meses':
+        data_inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1);
+        break;
+      case 'ultimo_ano':
+        data_inicio = new Date(hoje.getFullYear() - 1, hoje.getMonth(), 1);
+        break;
+      case 'ultimo_mes':
+      default:
+        data_inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+        break;
+    }
+
+    data_fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0); // Último dia do mês atual
+
+    const dataInicioStr = data_inicio.toISOString().split('T')[0];
+    const dataFimStr = data_fim.toISOString().split('T')[0];
+
+    // Construir query
+    let query = supabaseAdmin
+      .from('justificativas')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_justificativas_funcionario(
+          id,
+          nome,
+          cargo,
+          turno,
+          obra_atual_id
+        ),
+        aprovador:usuarios!justificativas_aprovado_por_fkey(nome)
+      `)
+      .gte('data', dataInicioStr)
+      .lte('data', dataFimStr)
+      .order('data', { ascending: true });
+
+    // Aplicar filtros opcionais
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', parseInt(funcionario_id));
+    }
+
+    const { data: justificativas, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar justificativas:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Filtrar por obra se necessário
+    let justificativasFiltradas = justificativas || [];
+    if (obra_id) {
+      justificativasFiltradas = justificativasFiltradas.filter(just => 
+        just.funcionario?.obra_atual_id === parseInt(obra_id)
+      );
+    }
+
+    // Calcular estatísticas avançadas
+    const estatisticas = calcularEstatisticasAvancadas(justificativasFiltradas, {
+      data_inicio: dataInicioStr,
+      data_fim: dataFimStr
+    });
+
+    res.json({
+      success: true,
+      data: {
+        periodo: {
+          data_inicio: dataInicioStr,
+          data_fim: dataFimStr
+        },
+        estatisticas
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de estatísticas de justificativas:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor'

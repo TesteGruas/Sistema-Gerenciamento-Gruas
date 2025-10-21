@@ -229,6 +229,371 @@ function calcularResumoPeriodo(registros, dataInicio, dataFim) {
   return resumo;
 }
 
+/**
+ * Calcula resumo agregado de justificativas
+ * @param {Array} justificativas - Array de justificativas
+ * @param {string} dataInicio - Data de início (YYYY-MM-DD)
+ * @param {string} dataFim - Data de fim (YYYY-MM-DD)
+ * @returns {Object} Resumo das justificativas
+ */
+function calcularResumoJustificativas(justificativas, dataInicio, dataFim) {
+  const resumo = {
+    total_justificativas: justificativas.length,
+    por_status: {},
+    por_tipo: {},
+    por_funcionario: []
+  };
+
+  // Mapear justificativas por funcionário
+  const funcionariosMap = {};
+
+  justificativas.forEach(justificativa => {
+    // Agrupar por status
+    if (!resumo.por_status[justificativa.status]) {
+      resumo.por_status[justificativa.status] = 0;
+    }
+    resumo.por_status[justificativa.status]++;
+    
+    // Agrupar por tipo
+    if (!resumo.por_tipo[justificativa.tipo]) {
+      resumo.por_tipo[justificativa.tipo] = 0;
+    }
+    resumo.por_tipo[justificativa.tipo]++;
+    
+    // Agrupar por funcionário
+    const funcionarioId = justificativa.funcionario_id;
+    if (!funcionariosMap[funcionarioId]) {
+      funcionariosMap[funcionarioId] = {
+        funcionario_id: funcionarioId,
+        nome: justificativa.funcionario?.nome || 'Desconhecido',
+        total_justificativas: 0,
+        por_status: {},
+        por_tipo: {}
+      };
+    }
+    
+    funcionariosMap[funcionarioId].total_justificativas++;
+    
+    // Status por funcionário
+    if (!funcionariosMap[funcionarioId].por_status[justificativa.status]) {
+      funcionariosMap[funcionarioId].por_status[justificativa.status] = 0;
+    }
+    funcionariosMap[funcionarioId].por_status[justificativa.status]++;
+    
+    // Tipo por funcionário
+    if (!funcionariosMap[funcionarioId].por_tipo[justificativa.tipo]) {
+      funcionariosMap[funcionarioId].por_tipo[justificativa.tipo] = 0;
+    }
+    funcionariosMap[funcionarioId].por_tipo[justificativa.tipo]++;
+  });
+
+  // Converter map de funcionários para array
+  resumo.por_funcionario = Object.values(funcionariosMap);
+
+  return resumo;
+}
+
+/**
+ * Calcula tendência mensal comparando com o mês anterior
+ * @param {number} mes - Mês atual (1-12)
+ * @param {number} ano - Ano atual
+ * @param {number} totalAtual - Total de justificativas do mês atual
+ * @param {Object} supabase - Instância do Supabase
+ * @returns {Object} Tendência mensal
+ */
+async function calcularTendenciaMensal(mes, ano, totalAtual, supabase) {
+  try {
+    const mesAnterior = mes === 1 ? 12 : mes - 1;
+    const anoAnterior = mes === 1 ? ano - 1 : ano;
+    
+    const dataInicioAnterior = `${anoAnterior}-${mesAnterior.toString().padStart(2, '0')}-01`;
+    const ultimoDiaMesAnterior = new Date(anoAnterior, mesAnterior, 0).getDate();
+    const dataFimAnterior = `${anoAnterior}-${mesAnterior.toString().padStart(2, '0')}-${ultimoDiaMesAnterior}`;
+    
+    const { data: justificativasAnterior, error } = await supabase
+      .from('justificativas')
+      .select('id')
+      .gte('data', dataInicioAnterior)
+      .lte('data', dataFimAnterior);
+    
+    if (error) {
+      console.error('Erro ao buscar justificativas do mês anterior:', error);
+      return {
+        crescimento: 0,
+        comparacao_mes_anterior: 'Dados indisponíveis'
+      };
+    }
+    
+    const totalAnterior = justificativasAnterior?.length || 0;
+    const diferenca = totalAtual - totalAnterior;
+    const crescimento = totalAnterior > 0 ? ((diferenca / totalAnterior) * 100).toFixed(1) : 0;
+    
+    const sinal = diferenca > 0 ? '+' : '';
+    const comparacao = `${sinal}${diferenca} justificativas`;
+    
+    return {
+      crescimento: parseFloat(crescimento),
+      comparacao_mes_anterior: comparacao
+    };
+  } catch (error) {
+    console.error('Erro ao calcular tendência mensal:', error);
+    return {
+      crescimento: 0,
+      comparacao_mes_anterior: 'Erro ao calcular'
+    };
+  }
+}
+
+/**
+ * Agrupa justificativas por critério específico
+ * @param {Array} justificativas - Array de justificativas
+ * @param {string} criterio - Critério de agrupamento (funcionario, tipo, status, dia, semana)
+ * @returns {Object} Dados agrupados
+ */
+function agruparJustificativasPor(justificativas, criterio) {
+  const agrupamento = {};
+
+  if (criterio === 'funcionario') {
+    justificativas.forEach(just => {
+      const key = just.funcionario_id;
+      if (!agrupamento[key]) {
+        agrupamento[key] = {
+          funcionario_id: just.funcionario_id,
+          nome: just.funcionario?.nome || 'Desconhecido',
+          total_justificativas: 0,
+          por_status: {},
+          por_tipo: {}
+        };
+      }
+      agrupamento[key].total_justificativas++;
+      
+      // Status
+      if (!agrupamento[key].por_status[just.status]) {
+        agrupamento[key].por_status[just.status] = 0;
+      }
+      agrupamento[key].por_status[just.status]++;
+      
+      // Tipo
+      if (!agrupamento[key].por_tipo[just.tipo]) {
+        agrupamento[key].por_tipo[just.tipo] = 0;
+      }
+      agrupamento[key].por_tipo[just.tipo]++;
+    });
+    
+    return { funcionario: Object.values(agrupamento) };
+  }
+  
+  if (criterio === 'tipo') {
+    justificativas.forEach(just => {
+      const key = just.tipo;
+      if (!agrupamento[key]) {
+        agrupamento[key] = { tipo: key, total: 0, por_status: {} };
+      }
+      agrupamento[key].total++;
+      if (!agrupamento[key].por_status[just.status]) {
+        agrupamento[key].por_status[just.status] = 0;
+      }
+      agrupamento[key].por_status[just.status]++;
+    });
+    
+    return { tipo: Object.values(agrupamento) };
+  }
+  
+  if (criterio === 'status') {
+    justificativas.forEach(just => {
+      const key = just.status;
+      if (!agrupamento[key]) {
+        agrupamento[key] = { status: key, total: 0, por_tipo: {} };
+      }
+      agrupamento[key].total++;
+      if (!agrupamento[key].por_tipo[just.tipo]) {
+        agrupamento[key].por_tipo[just.tipo] = 0;
+      }
+      agrupamento[key].por_tipo[just.tipo]++;
+    });
+    
+    return { status: Object.values(agrupamento) };
+  }
+  
+  if (criterio === 'dia') {
+    justificativas.forEach(just => {
+      const key = just.data;
+      if (!agrupamento[key]) {
+        agrupamento[key] = { data: key, total: 0, por_tipo: {}, por_status: {} };
+      }
+      agrupamento[key].total++;
+      
+      if (!agrupamento[key].por_tipo[just.tipo]) {
+        agrupamento[key].por_tipo[just.tipo] = 0;
+      }
+      agrupamento[key].por_tipo[just.tipo]++;
+      
+      if (!agrupamento[key].por_status[just.status]) {
+        agrupamento[key].por_status[just.status] = 0;
+      }
+      agrupamento[key].por_status[just.status]++;
+    });
+    
+    return { dia: Object.values(agrupamento).sort((a, b) => a.data.localeCompare(b.data)) };
+  }
+  
+  if (criterio === 'semana') {
+    justificativas.forEach(just => {
+      const date = new Date(just.data + 'T00:00:00');
+      const weekNumber = getWeekNumber(date);
+      const key = `Semana ${weekNumber}`;
+      
+      if (!agrupamento[key]) {
+        agrupamento[key] = { semana: key, total: 0, por_tipo: {}, por_status: {} };
+      }
+      agrupamento[key].total++;
+      
+      if (!agrupamento[key].por_tipo[just.tipo]) {
+        agrupamento[key].por_tipo[just.tipo] = 0;
+      }
+      agrupamento[key].por_tipo[just.tipo]++;
+      
+      if (!agrupamento[key].por_status[just.status]) {
+        agrupamento[key].por_status[just.status] = 0;
+      }
+      agrupamento[key].por_status[just.status]++;
+    });
+    
+    return { semana: Object.values(agrupamento) };
+  }
+  
+  return {};
+}
+
+/**
+ * Calcula número da semana do ano
+ * @param {Date} date - Data
+ * @returns {number} Número da semana
+ */
+function getWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+/**
+ * Calcula estatísticas avançadas de justificativas
+ * @param {Array} justificativas - Array de justificativas
+ * @param {Object} periodo - Objeto com data_inicio e data_fim
+ * @returns {Object} Estatísticas avançadas
+ */
+function calcularEstatisticasAvancadas(justificativas, periodo) {
+  const stats = {
+    total_justificativas: justificativas.length,
+    media_mensal: 0,
+    tendencia: {
+      crescimento_percentual: 0,
+      comparacao_mes_anterior: 'N/A'
+    },
+    distribuicao: {
+      por_status: {},
+      por_tipo: {},
+      por_dia_semana: {
+        'Segunda': 0,
+        'Terça': 0,
+        'Quarta': 0,
+        'Quinta': 0,
+        'Sexta': 0,
+        'Sábado': 0,
+        'Domingo': 0
+      }
+    },
+    funcionarios: {
+      total_com_justificativas: 0,
+      maior_frequencia: null,
+      media_por_funcionario: 0
+    },
+    tempo_medio_aprovacao: {
+      horas: 0,
+      dias: 0
+    }
+  };
+
+  if (justificativas.length === 0) {
+    return stats;
+  }
+
+  // Calcular média mensal
+  const dataInicio = new Date(periodo.data_inicio);
+  const dataFim = new Date(periodo.data_fim);
+  const mesesDiferenca = (dataFim.getFullYear() - dataInicio.getFullYear()) * 12 + 
+                         (dataFim.getMonth() - dataInicio.getMonth()) + 1;
+  stats.media_mensal = (justificativas.length / mesesDiferenca).toFixed(1);
+
+  // Distribuição por status e tipo
+  justificativas.forEach(just => {
+    // Por status
+    if (!stats.distribuicao.por_status[just.status]) {
+      stats.distribuicao.por_status[just.status] = 0;
+    }
+    stats.distribuicao.por_status[just.status]++;
+
+    // Por tipo
+    if (!stats.distribuicao.por_tipo[just.tipo]) {
+      stats.distribuicao.por_tipo[just.tipo] = 0;
+    }
+    stats.distribuicao.por_tipo[just.tipo]++;
+
+    // Por dia da semana
+    const date = new Date(just.data + 'T00:00:00');
+    const diaSemana = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][date.getDay()];
+    stats.distribuicao.por_dia_semana[diaSemana]++;
+  });
+
+  // Análise de funcionários
+  const funcionariosMap = {};
+  justificativas.forEach(just => {
+    const funcId = just.funcionario_id;
+    if (!funcionariosMap[funcId]) {
+      funcionariosMap[funcId] = {
+        funcionario_id: funcId,
+        nome: just.funcionario?.nome || 'Desconhecido',
+        total_justificativas: 0
+      };
+    }
+    funcionariosMap[funcId].total_justificativas++;
+  });
+
+  const funcionariosArray = Object.values(funcionariosMap);
+  stats.funcionarios.total_com_justificativas = funcionariosArray.length;
+  stats.funcionarios.media_por_funcionario = (justificativas.length / funcionariosArray.length).toFixed(1);
+
+  // Funcionário com maior frequência
+  if (funcionariosArray.length > 0) {
+    stats.funcionarios.maior_frequencia = funcionariosArray.reduce((max, func) => 
+      func.total_justificativas > max.total_justificativas ? func : max
+    );
+  }
+
+  // Tempo médio de aprovação (apenas para justificativas aprovadas)
+  const aprovadas = justificativas.filter(just => 
+    just.status === 'Aprovada' && just.data_aprovacao && just.created_at
+  );
+
+  if (aprovadas.length > 0) {
+    let totalHoras = 0;
+    aprovadas.forEach(just => {
+      const criacao = new Date(just.created_at);
+      const aprovacao = new Date(just.data_aprovacao);
+      const diferencaMs = aprovacao - criacao;
+      totalHoras += diferencaMs / (1000 * 60 * 60); // Converter para horas
+    });
+
+    const mediaHoras = totalHoras / aprovadas.length;
+    stats.tempo_medio_aprovacao.horas = parseFloat(mediaHoras.toFixed(2));
+    stats.tempo_medio_aprovacao.dias = parseFloat((mediaHoras / 24).toFixed(2));
+  }
+
+  return stats;
+}
+
 export {
   calcularHorasTrabalhadas,
   calcularHorasExtras,
@@ -241,5 +606,9 @@ export {
   validarData,
   formatarDataBR,
   formatarHorario,
-  calcularResumoPeriodo
+  calcularResumoPeriodo,
+  calcularResumoJustificativas,
+  calcularTendenciaMensal,
+  agruparJustificativasPor,
+  calcularEstatisticasAvancadas
 };
