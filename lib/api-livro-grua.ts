@@ -3,6 +3,8 @@
  * Sistema de Gerenciamento de Gruas
  */
 
+import { fetchWithAuth } from './api'
+
 // Configuração da API
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
 
@@ -32,35 +34,19 @@ const redirectToLogin = () => {
 async function httpRequest(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}/api/${endpoint.replace(/^\//, '')}`
   
-  // Obter token de autenticação
-  const token = getAuthToken()
-  
-  // Verificar se está autenticado
-  if (!token) {
-    console.warn('Token não encontrado, redirecionando para login...')
-    redirectToLogin()
-    throw new Error('Token de acesso requerido')
+  try {
+    const response = await fetchWithAuth(url, options);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('API request error:', error);
+    throw error;
   }
-  
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
-  }
-
-  return response.json()
 }
 
 export interface EntradaLivroGrua {

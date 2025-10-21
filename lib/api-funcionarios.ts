@@ -1,5 +1,5 @@
 // API client para funcionários
-import { buildApiUrl, API_ENDPOINTS } from './api'
+import { buildApiUrl, API_ENDPOINTS, fetchWithAuth } from './api'
 
 // Interfaces baseadas no backend funcionarios.js
 export interface FuncionarioBackend {
@@ -153,69 +153,26 @@ const getAuthToken = (): string | null => {
 
 // Função para fazer requisições autenticadas
 const apiRequest = async (url: string, options: RequestInit = {}) => {
-  const token = getAuthToken()
-  
-  if (!token) {
-    console.warn('Token não encontrado, redirecionando para login...')
-    if (typeof window !== 'undefined') {
-      window.location.href = '/'
-    }
-    throw new Error('Token de acesso requerido')
-  }
-  
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-    signal: options?.signal,
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
+  try {
+    const response = await fetchWithAuth(url, options);
     
-    // TEMPORARIAMENTE DESABILITADO - Interceptor de logout para 403
-    // if (response.status === 403 && errorData.error === "Token inválido ou expirado" && errorData.code === "INVALID_TOKEN") {
-    //   console.warn('Token inválido ou expirado, removendo dados do localStorage e redirecionando para login...')
-    //   localStorage.removeItem('access_token')
-    //   localStorage.removeItem('user_data')
-    //   localStorage.removeItem('refresh_token')
-    //   if (typeof window !== 'undefined') {
-    //     window.location.href = '/'
-    //   }
-    //   throw new Error('Token inválido ou expirado. Redirecionando para login...')
-    // }
-    
-    // TEMPORARIAMENTE DESABILITADO - Interceptor de logout para 401/403
-    // if (response.status === 401 || response.status === 403) {
-    //   console.warn('Erro de autenticação, redirecionando para login...')
-    //   localStorage.removeItem('access_token')
-    //   localStorage.removeItem('user_data')
-    //   localStorage.removeItem('refresh_token')
-    //   if (typeof window !== 'undefined') {
-    //     window.location.href = '/'
-    //   }
-    // }
-    
-    // Criar um erro personalizado que preserva os detalhes
-    const error = new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`)
-    // Adicionar os detalhes do erro como propriedade
-    if (errorData.details) {
-      (error as any).details = errorData.details
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const error = new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+      if (errorData.details) {
+        (error as any).details = errorData.details;
+      }
+      if (errorData.error) {
+        (error as any).error = errorData.error;
+      }
+      throw error;
     }
-    if (errorData.error) {
-      (error as any).error = errorData.error
-    }
-    throw error
+    
+    return await response.json();
+  } catch (error) {
+    console.error('API request error:', error);
+    throw error;
   }
-
-  return response.json()
 }
 
 // API functions

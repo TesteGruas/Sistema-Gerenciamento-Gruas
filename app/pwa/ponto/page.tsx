@@ -277,14 +277,13 @@ export default function PWAPontoPage() {
   }
 
   const registrarPonto = async (tipo: string) => {
-    // Validar localização antes de registrar
-    if (!validacaoLocalizacao || !validacaoLocalizacao.valido) {
+    // Geolocalização agora é opcional - não bloqueia o registro
+    if (validacaoLocalizacao && !validacaoLocalizacao.valido) {
       toast({
-        title: "⚠️ Validação de localização necessária",
-        description: "Capture sua localização e certifique-se de estar próximo à obra",
-        variant: "destructive"
+        title: "⚠️ Localização fora da área",
+        description: "Você está fora da área da obra, mas pode registrar o ponto mesmo assim",
+        variant: "default"
       })
-      return
     }
 
     setIsLoading(true)
@@ -671,7 +670,7 @@ export default function PWAPontoPage() {
             Registrar Ponto
           </CardTitle>
           <CardDescription>
-            Clique no botão correspondente ao seu registro
+            Clique no botão correspondente ao seu registro. A localização é opcional.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -750,23 +749,29 @@ export default function PWAPontoPage() {
         validacaoLocalizacao?.valido 
           ? "border-2 border-green-500 bg-green-50" 
           : validacaoLocalizacao && !validacaoLocalizacao.valido
-          ? "border-2 border-red-500 bg-red-50"
+          ? "border-2 border-orange-500 bg-orange-50"
           : ""
       }>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Navigation className="w-5 h-5" />
-            Validação de Localização
+            Localização (Opcional)
             {validacaoLocalizacao?.valido && (
               <Badge className="bg-green-600 text-white ml-2">
                 <Shield className="w-3 h-3 mr-1" />
                 Validado
               </Badge>
             )}
+            {validacaoLocalizacao && !validacaoLocalizacao.valido && (
+              <Badge className="bg-orange-600 text-white ml-2">
+                <AlertCircle className="w-3 h-3 mr-1" />
+                Fora da Área
+              </Badge>
+            )}
           </CardTitle>
           {obra && (
             <CardDescription>
-              Obra: {obra.nome} • Raio: {obra.raio_permitido}m
+              Obra: {obra.nome} • Raio: {obra.raio_permitido}m • <strong>Localização é opcional</strong>
             </CardDescription>
           )}
         </CardHeader>
@@ -813,22 +818,23 @@ export default function PWAPontoPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 p-3 rounded-md">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>Validação pendente - Capture sua localização para registrar ponto</span>
+                <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+                  <Navigation className="w-4 h-4" />
+                  <span>Localização opcional - Você pode registrar ponto sem capturar localização</span>
                 </div>
                 <Button
                   onClick={obterLocalizacao}
                   disabled={isGettingLocation}
                   size="sm"
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  variant="outline"
+                  className="w-full"
                 >
                   {isGettingLocation ? (
                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <Navigation className="w-4 h-4 mr-2" />
                   )}
-                  {isGettingLocation ? 'Obtendo Localização...' : 'Validar Localização'}
+                  {isGettingLocation ? 'Obtendo Localização...' : 'Capturar Localização (Opcional)'}
                 </Button>
               </div>
             )}
@@ -862,7 +868,7 @@ export default function PWAPontoPage() {
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <MapPin className="w-4 h-4" />
-              <span>Localização: {location ? 'Capturada' : 'Não capturada'}</span>
+              <span>Localização: {location ? 'Capturada (opcional)' : 'Não capturada (opcional)'}</span>
             </div>
           </div>
         </CardContent>

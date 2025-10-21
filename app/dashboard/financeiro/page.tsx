@@ -295,54 +295,55 @@ export default function FinanceiroPage() {
   return (
     <ProtectedRoute permission="financeiro:visualizar">
       <div className="space-y-6 w-full">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Sistema Financeiro</h1>
-          <p className="text-gray-600">Gestão completa das finanças da empresa</p>
-          {lastUpdated && (
-            <p className="text-xs text-gray-500 mt-1">
-              Última atualização: {lastUpdated.toLocaleString('pt-BR')}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadFinancialData}
-            disabled={isLoading}
-            className="flex items-center gap-2"
-          >
-            {isLoading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-            ) : (
-              <Search className="w-4 h-4" />
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Sistema Financeiro</h1>
+            <p className="text-gray-600">Gestão completa das finanças da empresa</p>
+            {lastUpdated && (
+              <p className="text-xs text-gray-500 mt-1">
+                Última atualização: {lastUpdated.toLocaleString('pt-BR')}
+              </p>
             )}
-            {isLoading ? 'Atualizando...' : 'Atualizar'}
-          </Button>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
-            <CreditCard className="w-4 h-4 mr-2" />
-            Transferência Bancária
-          </Button>
-          <ExportButton
-            dados={financialData.fluxoCaixa}
-            tipo="financeiro"
-            nomeArquivo="relatorio-financeiro"
-            titulo="Relatório Financeiro"
-            filtros={{ periodo: selectedPeriod }}
-          />
-          <Button variant="outline" onClick={handleImport}>
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Importar
-          </Button>
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="w-4 h-4 mr-2" />
-            Imprimir
-          </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadFinancialData}
+              disabled={isLoading}
+              className="flex items-center gap-2"
+            >
+              {isLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+              {isLoading ? 'Atualizando...' : 'Atualizar'}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
+                <CreditCard className="w-4 h-4 mr-2" />
+                Transferência Bancária
+              </Button>
+              <ExportButton
+                dados={financialData.fluxoCaixa}
+                tipo="financeiro"
+                nomeArquivo="relatorio-financeiro"
+                titulo="Relatório Financeiro"
+                filtros={{ periodo: selectedPeriod }}
+              />
+              <Button variant="outline" onClick={handleImport}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Importar
+              </Button>
+              <Button variant="outline" onClick={handlePrint}>
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -810,7 +811,7 @@ export default function FinanceiroPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
     </ProtectedRoute>
   )
 }

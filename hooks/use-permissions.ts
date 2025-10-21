@@ -182,7 +182,7 @@ export const usePermissions = () => {
   // Verificar se é admin
   const isAdmin = (): boolean => {
     // Verificar pelo perfil do backend
-    if (perfil && perfil.nome === 'Admin') {
+    if (perfil && perfil.nome === 'Administrador') {
       return true
     }
     
@@ -198,7 +198,7 @@ export const usePermissions = () => {
       if (userPerfil) {
         try {
           const perfilData = JSON.parse(userPerfil)
-          if (perfilData.nome === 'Admin' || perfilData.nivel_acesso >= 10) {
+          if (perfilData.nome === 'Administrador' || perfilData.nivel_acesso >= 10) {
             return true
           }
         } catch (error) {
@@ -220,9 +220,60 @@ export const usePermissions = () => {
     return hasProfile('Supervisor')
   }
 
+  // Verificar se é operador
+  const isOperator = (): boolean => {
+    return hasProfile('Operador')
+  }
+
+  // Verificar se é visualizador
+  const isViewer = (): boolean => {
+    return hasProfile('Visualizador')
+  }
+
   // Verificar se é cliente
   const isClient = (): boolean => {
     return hasProfile('Cliente')
+  }
+
+  // Verificar se tem acesso ao dashboard
+  const canAccessDashboard = (): boolean => {
+    return isAdmin() || isManager()
+  }
+
+  // Verificar se tem acesso ao ponto eletrônico
+  const canAccessPontoEletronico = (): boolean => {
+    return isAdmin() || isManager() || isSupervisor()
+  }
+
+  // Verificar se tem acesso ao financeiro
+  const canAccessFinanceiro = (): boolean => {
+    return isAdmin() || isManager()
+  }
+
+  // Verificar se tem acesso ao RH
+  const canAccessRH = (): boolean => {
+    return isAdmin() || isManager() || isSupervisor()
+  }
+
+  // Verificar se tem acesso às obras
+  const canAccessObras = (): boolean => {
+    // Todos podem acessar obras, mas com limitações
+    return true
+  }
+
+  // Verificar se tem acesso aos clientes
+  const canAccessClientes = (): boolean => {
+    return isAdmin() || isManager()
+  }
+
+  // Verificar se tem acesso aos relatórios
+  const canAccessRelatorios = (): boolean => {
+    return isAdmin() || isManager()
+  }
+
+  // Verificar se tem acesso aos usuários
+  const canAccessUsuarios = (): boolean => {
+    return isAdmin() || isManager()
   }
 
   // Limpar cache de permissões
@@ -265,7 +316,17 @@ export const usePermissions = () => {
     isAdmin,
     isManager,
     isSupervisor,
+    isOperator,
+    isViewer,
     isClient,
+    canAccessDashboard,
+    canAccessPontoEletronico,
+    canAccessFinanceiro,
+    canAccessRH,
+    canAccessObras,
+    canAccessClientes,
+    canAccessRelatorios,
+    canAccessUsuarios,
     clearPermissions,
     refreshPermissions
   }

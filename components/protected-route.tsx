@@ -4,6 +4,7 @@ import React from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { usePermissions } from '@/hooks/use-permissions'
 import { PermissionFallback } from './permission-fallback'
+import { WelcomeScreen } from './welcome-screen'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Shield, Lock, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -29,7 +30,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   redirectTo = '/dashboard'
 }) => {
   const { user, isLoading } = useAuth()
-  const { hasPermission, hasAnyPermission } = usePermissions()
+  const { hasPermission, hasAnyPermission, canAccessDashboard } = usePermissions()
 
   // Mostrar loading enquanto carrega dados do usuário
   if (isLoading) {
@@ -79,6 +80,13 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Se tem acesso, renderiza o conteúdo
   if (hasAccess) {
     return <>{children}</>
+  }
+
+  // Se não tem acesso ao dashboard, mostrar tela de boas-vindas
+  if (permission === 'dashboard:visualizar' || (permissions.length === 0 && !permission)) {
+    if (!canAccessDashboard()) {
+      return <WelcomeScreen user={user} />
+    }
   }
 
   // Se não tem acesso e não deve mostrar fallback customizado

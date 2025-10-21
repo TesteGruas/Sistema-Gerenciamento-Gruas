@@ -94,7 +94,27 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   // Todos os hooks devem ser chamados no topo, antes de qualquer lógica condicional
-  const { hasPermission, hasAnyPermission, hasAllPermissions, isAdmin: isAdminFromPermissions, perfil, loading: permissionsLoading } = usePermissions()
+  const { 
+    hasPermission, 
+    hasAnyPermission, 
+    hasAllPermissions, 
+    isAdmin: isAdminFromPermissions, 
+    isManager,
+    isSupervisor,
+    isOperator,
+    isViewer,
+    isClient,
+    canAccessDashboard,
+    canAccessPontoEletronico,
+    canAccessFinanceiro,
+    canAccessRH,
+    canAccessObras,
+    canAccessClientes,
+    canAccessRelatorios,
+    canAccessUsuarios,
+    perfil, 
+    loading: permissionsLoading 
+  } = usePermissions()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isClient, setIsClient] = useState(false)
@@ -130,16 +150,89 @@ export default function DashboardLayout({
   // Filtrar navegação baseada em permissões
   const filterNavigationByPermissions = (navigation: NavigationItemWithPermission[]) => {
     return navigation.filter(item => {
-      if (!item.permission && !item.permissions) return true
-      
-      if (item.permission) {
-        return hasPermission(item.permission)
+      // Dashboard - apenas Admin e Gerente
+      if (item.href === '/dashboard') {
+        return canAccessDashboard()
       }
       
-      if (item.permissions) {
-        return item.requireAll 
-          ? hasAllPermissions(item.permissions)
-          : hasAnyPermission(item.permissions)
+      // Notificações - apenas Admin e Gerente
+      if (item.href === '/dashboard/notificacoes') {
+        return canAccessDashboard()
+      }
+      
+      // Clientes - apenas Admin e Gerente
+      if (item.href === '/dashboard/clientes') {
+        return canAccessClientes()
+      }
+      
+      // Obras - todos podem acessar (com limitações)
+      if (item.href === '/dashboard/obras') {
+        return canAccessObras()
+      }
+      
+      // Controle de Gruas - Admin, Gerente, Supervisor
+      if (item.href === '/dashboard/gruas') {
+        return isAdminFromPermissions() || isManager() || isSupervisor()
+      }
+      
+      // Livros de Gruas - todos podem acessar
+      if (item.href === '/dashboard/livros-gruas') {
+        return true
+      }
+      
+      // Estoque - Admin, Gerente, Supervisor
+      if (item.href === '/dashboard/estoque') {
+        return isAdminFromPermissions() || isManager() || isSupervisor()
+      }
+      
+      // Ponto Eletrônico - Admin, Gerente, Supervisor
+      if (item.href === '/dashboard/ponto') {
+        return canAccessPontoEletronico()
+      }
+      
+      // RH - Admin, Gerente, Supervisor
+      if (item.href === '/dashboard/rh') {
+        return canAccessRH()
+      }
+      
+      // Financeiro - apenas Admin e Gerente
+      if (item.href === '/dashboard/financeiro') {
+        return canAccessFinanceiro()
+      }
+      
+      // Relatórios - apenas Admin e Gerente
+      if (item.href === '/dashboard/relatorios') {
+        return canAccessRelatorios()
+      }
+      
+      // Histórico - apenas Admin e Gerente
+      if (item.href === '/dashboard/historico') {
+        return canAccessRelatorios()
+      }
+      
+      // Assinatura Digital - todos podem acessar
+      if (item.href === '/dashboard/assinatura') {
+        return true
+      }
+      
+      // Usuários - apenas Admin e Gerente
+      if (item.href === '/dashboard/usuarios') {
+        return canAccessUsuarios()
+      }
+      
+      // Perfis - apenas Admin
+      if (item.href === '/dashboard/perfis') {
+        return isAdminFromPermissions()
+      }
+      
+      // Permissões - apenas Admin
+      if (item.href === '/dashboard/permissoes') {
+        return isAdminFromPermissions()
+      }
+      
+      // Configurações de Email - apenas Admin
+      if (item.href === '/dashboard/configuracoes/email') {
+        return isAdminFromPermissions()
       }
       
       return true

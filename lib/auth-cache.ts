@@ -3,6 +3,8 @@
  * Evita múltiplas chamadas para /api/auth/me
  */
 
+import { fetchWithAuth } from './api'
+
 interface AuthCacheData {
   user: any;
   perfil: any;
@@ -74,9 +76,9 @@ class AuthCache {
     }
 
     try {
-      const response = await fetch('/api/auth/me', {
+      // Usar fetchWithAuth para aplicar refresh token automaticamente
+      const response = await fetchWithAuth('/api/auth/me', {
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });

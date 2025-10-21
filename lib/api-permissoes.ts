@@ -2,6 +2,8 @@
  * API functions for Permissões module
  */
 
+import { fetchWithAuth } from './api'
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Types
@@ -67,49 +69,11 @@ const getAuthToken = () => {
 
 // Helper function to make API requests
 const apiRequest = async (url: string, options: RequestInit = {}) => {
-  const token = getAuthToken();
-  
-  if (!token) {
-    console.warn('Token não encontrado');
-    throw new Error('Token de acesso requerido');
-  }
-  
-  const config: RequestInit = {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...options.headers,
-    },
-  };
-
   try {
-    const response = await fetch(`${API_BASE_URL}${url}`, config);
+    const response = await fetchWithAuth(`${API_BASE_URL}${url}`, options);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      
-    // TEMPORARIAMENTE DESABILITADO - Interceptor de logout para 403
-    // if (response.status === 403 && errorData.error === "Token inválido ou expirado" && errorData.code === "INVALID_TOKEN") {
-    //   console.warn('Token inválido ou expirado, removendo dados do localStorage e redirecionando para login...')
-    //   localStorage.removeItem('access_token')
-    //   localStorage.removeItem('user_data')
-    //   localStorage.removeItem('refresh_token')
-    //   if (typeof window !== 'undefined') {
-    //     window.location.href = '/'
-    //   }
-    // }
-    // TEMPORARIAMENTE DESABILITADO - Interceptor de logout para 401/403
-    // else if (response.status === 401 || response.status === 403) {
-    //   console.warn('Erro de autenticação, redirecionando para login...')
-    //   localStorage.removeItem('access_token')
-    //   localStorage.removeItem('user_data')
-    //   localStorage.removeItem('refresh_token')
-    //   if (typeof window !== 'undefined') {
-    //     window.location.href = '/'
-    //   }
-    // }
-      
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     }
     

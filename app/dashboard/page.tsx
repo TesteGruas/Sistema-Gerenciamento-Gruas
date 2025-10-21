@@ -26,7 +26,18 @@ const COLORS = [ '#ef4444', '#8b5cf6', '#ec4899']
 
 export default function Dashboard() {
   // Todos os hooks devem ser chamados no topo
-  const { permissions, perfil, loading: permissionsLoading } = usePermissions()
+  const { 
+    permissions, 
+    perfil, 
+    loading: permissionsLoading,
+    canAccessDashboard,
+    canAccessPontoEletronico,
+    canAccessFinanceiro,
+    canAccessRH,
+    canAccessObras,
+    canAccessClientes,
+    canAccessRelatorios
+  } = usePermissions()
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -137,44 +148,44 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <ProtectedRoute permission="obras:visualizar">
+              {canAccessObras() && (
                 <Link href="/dashboard/obras" className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left transition-colors block">
                   <Building2 className="w-6 h-6 text-blue-600 mb-2" />
                   <p className="font-medium text-gray-900">Obras</p>
                   <p className="text-xs text-gray-600">Gerenciar projetos</p>
                 </Link>
-              </ProtectedRoute>
+              )}
 
-              <ProtectedRoute permission="gruas:visualizar">
+              {canAccessObras() && (
                 <Link href="/dashboard/gruas" className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left transition-colors block">
                   <TrendingUp className="w-6 h-6 text-green-600 mb-2" />
                   <p className="font-medium text-gray-900">Gruas</p>
                   <p className="text-xs text-gray-600">Gerenciar equipamentos</p>
                 </Link>
-              </ProtectedRoute>
+              )}
 
-              <ProtectedRoute permission="clientes:visualizar">
+              {canAccessClientes() && (
                 <Link href="/dashboard/clientes" className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-left transition-colors block">
                   <Users className="w-6 h-6 text-purple-600 mb-2" />
                   <p className="font-medium text-gray-900">Clientes</p>
                   <p className="text-xs text-gray-600">Gerenciar clientes</p>
                 </Link>
-              </ProtectedRoute>
+              )}
 
-              <ProtectedRoute permission="financeiro:visualizar">
+              {canAccessFinanceiro() && (
                 <Link href="/dashboard/financeiro" className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-left transition-colors block">
                   <DollarSign className="w-6 h-6 text-yellow-600 mb-2" />
                   <p className="font-medium text-gray-900">Financeiro</p>
                   <p className="text-xs text-gray-600">Ver relatórios</p>
                 </Link>
-              </ProtectedRoute>
+              )}
             </div>
           </CardContent>
         </Card>
 
         {/* Módulos do Sistema */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <ProtectedRoute permission="ponto_eletronico:visualizar">
+          {canAccessPontoEletronico() && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -189,9 +200,9 @@ export default function Dashboard() {
                 </Link>
               </CardContent>
             </Card>
-          </ProtectedRoute>
+          )}
 
-          <ProtectedRoute permission="rh:visualizar">
+          {canAccessRH() && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -206,9 +217,9 @@ export default function Dashboard() {
                 </Link>
               </CardContent>
             </Card>
-          </ProtectedRoute>
+          )}
 
-          <ProtectedRoute permission="estoque:visualizar">
+          {canAccessObras() && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -223,43 +234,39 @@ export default function Dashboard() {
                 </Link>
               </CardContent>
             </Card>
-          </ProtectedRoute>
+          )}
 
-          <ProtectedRoute permission="livros_gruas:visualizar">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-purple-600" />
-                  Livros de Gruas
-                </CardTitle>
-                <CardDescription>Registros e documentação das gruas</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link href="/dashboard/livros-gruas">
-                  <Button className="w-full">Acessar</Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </ProtectedRoute>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-purple-600" />
+                Livros de Gruas
+              </CardTitle>
+              <CardDescription>Registros e documentação das gruas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/dashboard/livros-gruas">
+                <Button className="w-full">Acessar</Button>
+              </Link>
+            </CardContent>
+          </Card>
 
-          <ProtectedRoute permission="assinatura_digital:visualizar">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileSignature className="w-5 h-5 text-indigo-600" />
-                  Assinatura Digital
-                </CardTitle>
-                <CardDescription>Documentos e assinaturas digitais</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link href="/dashboard/assinatura">
-                  <Button className="w-full">Acessar</Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </ProtectedRoute>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileSignature className="w-5 h-5 text-indigo-600" />
+                Assinatura Digital
+              </CardTitle>
+              <CardDescription>Documentos e assinaturas digitais</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/dashboard/assinatura">
+                <Button className="w-full">Acessar</Button>
+              </Link>
+            </CardContent>
+          </Card>
 
-          <ProtectedRoute permission="relatorios:visualizar">
+          {canAccessRelatorios() && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -274,7 +281,7 @@ export default function Dashboard() {
                 </Link>
               </CardContent>
             </Card>
-          </ProtectedRoute>
+          )}
         </div>
       </div>
     </ProtectedRoute>

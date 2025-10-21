@@ -1,5 +1,5 @@
 // API client para relacionamentos grua-obra
-import { buildApiUrl, API_ENDPOINTS } from './api'
+import { buildApiUrl, API_ENDPOINTS, fetchWithAuth } from './api'
 
 // Interfaces baseadas no backend
 export interface GruaObraBackend {
@@ -59,57 +59,19 @@ const getAuthToken = (): string | null => {
 
 // Função para fazer requisições autenticadas
 const apiRequest = async (url: string, options: RequestInit = {}) => {
-  const token = getAuthToken()
-  
-  if (!token) {
-    console.warn('Token não encontrado, redirecionando para login...')
-    if (typeof window !== 'undefined') {
-      window.location.href = '/'
+  try {
+    const response = await fetchWithAuth(url, options);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
     }
-    throw new Error('Token de acesso requerido')
-  }
-  
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
     
-    // TEMPORARIAMENTE DESABILITADO - Interceptor de logout para 403
-    // if (response.status === 403 && errorData.error === "Token inválido ou expirado" && errorData.code === "INVALID_TOKEN") {
-    //   console.warn('Token inválido ou expirado, removendo dados do localStorage e redirecionando para login...')
-    //   localStorage.removeItem('access_token')
-    //   localStorage.removeItem('user_data')
-    //   localStorage.removeItem('refresh_token')
-    //   if (typeof window !== 'undefined') {
-    //     window.location.href = '/'
-    //   }
-    // }
-    // TEMPORARIAMENTE DESABILITADO - Interceptor de logout para 401/403
-    // else if (response.status === 401 || response.status === 403) {
-    //   console.warn('Erro de autenticação, redirecionando para login...')
-    //   localStorage.removeItem('access_token')
-    //   localStorage.removeItem('user_data')
-    //   localStorage.removeItem('refresh_token')
-    //   if (typeof window !== 'undefined') {
-    //     window.location.href = '/'
-    //   }
-    // }
-    
-    throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`)
+    return await response.json();
+  } catch (error) {
+    console.error('API request error:', error);
+    throw error;
   }
-
-  return response.json()
 }
 
 // API functions
