@@ -9,6 +9,7 @@ import {
   gerarIdRegistro,
   gerarIdJustificativa,
   validarHorario,
+  normalizarHorario,
   validarData,
   calcularResumoPeriodo,
   calcularResumoJustificativas,
@@ -1742,11 +1743,17 @@ router.put('/registros/:id', async (req, res) => {
       });
     }
 
+    // Normalizar horários (remover segundos se existir)
+    const entradaNormalizada = entrada ? normalizarHorario(entrada) : null;
+    const saidaNormalizada = saida ? normalizarHorario(saida) : null;
+    const saidaAlmocoNormalizada = saida_almoco ? normalizarHorario(saida_almoco) : null;
+    const voltaAlmocoNormalizada = volta_almoco ? normalizarHorario(volta_almoco) : null;
+
     // Calcular novas horas trabalhadas e extras
-    const novaEntrada = entrada || registroAtual.entrada;
-    const novaSaida = saida || registroAtual.saida;
-    const novaSaidaAlmoco = saida_almoco || registroAtual.saida_almoco;
-    const novaVoltaAlmoco = volta_almoco || registroAtual.volta_almoco;
+    const novaEntrada = entradaNormalizada || registroAtual.entrada;
+    const novaSaida = saidaNormalizada || registroAtual.saida;
+    const novaSaidaAlmoco = saidaAlmocoNormalizada || registroAtual.saida_almoco;
+    const novaVoltaAlmoco = voltaAlmocoNormalizada || registroAtual.volta_almoco;
 
     const horasTrabalhadas = calcularHorasTrabalhadas(novaEntrada, novaSaida, novaSaidaAlmoco, novaVoltaAlmoco);
     const horasExtras = calcularHorasExtras(horasTrabalhadas);
@@ -1791,32 +1798,32 @@ router.put('/registros/:id', async (req, res) => {
 
     // Registrar alteração no histórico
     const alteracoes = [];
-    if (entrada && entrada !== registroAtual.entrada) {
+    if (entradaNormalizada && entradaNormalizada !== registroAtual.entrada) {
       alteracoes.push({
         campo_alterado: 'entrada',
         valor_anterior: registroAtual.entrada,
-        valor_novo: entrada
+        valor_novo: entradaNormalizada
       });
     }
-    if (saida_almoco && saida_almoco !== registroAtual.saida_almoco) {
+    if (saidaAlmocoNormalizada && saidaAlmocoNormalizada !== registroAtual.saida_almoco) {
       alteracoes.push({
         campo_alterado: 'saida_almoco',
         valor_anterior: registroAtual.saida_almoco,
-        valor_novo: saida_almoco
+        valor_novo: saidaAlmocoNormalizada
       });
     }
-    if (volta_almoco && volta_almoco !== registroAtual.volta_almoco) {
+    if (voltaAlmocoNormalizada && voltaAlmocoNormalizada !== registroAtual.volta_almoco) {
       alteracoes.push({
         campo_alterado: 'volta_almoco',
         valor_anterior: registroAtual.volta_almoco,
-        valor_novo: volta_almoco
+        valor_novo: voltaAlmocoNormalizada
       });
     }
-    if (saida && saida !== registroAtual.saida) {
+    if (saidaNormalizada && saidaNormalizada !== registroAtual.saida) {
       alteracoes.push({
         campo_alterado: 'saida',
         valor_anterior: registroAtual.saida,
-        valor_novo: saida
+        valor_novo: saidaNormalizada
       });
     }
 

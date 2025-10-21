@@ -152,8 +152,25 @@ function gerarIdJustificativa(prefix = 'JUST') {
 function validarHorario(time) {
   if (!time) return false;
   
-  const regex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+  // Aceita HH:MM ou HH:MM:SS
+  const regex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/;
   return regex.test(time);
+}
+
+/**
+ * Normaliza um horário para o formato HH:MM (remove segundos se existir)
+ * @param {string} time - Horário no formato HH:MM ou HH:MM:SS
+ * @returns {string} Horário no formato HH:MM
+ */
+function normalizarHorario(time) {
+  if (!time) return time;
+  
+  // Se o horário tem segundos (HH:MM:SS), remove-os
+  if (time.length > 5 && time.includes(':')) {
+    return time.substring(0, 5);
+  }
+  
+  return time;
 }
 
 /**
@@ -603,6 +620,7 @@ export {
   gerarIdRegistro,
   gerarIdJustificativa,
   validarHorario,
+  normalizarHorario,
   validarData,
   formatarDataBR,
   formatarHorario,
