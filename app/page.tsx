@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Building2, Lock, User } from "lucide-react"
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
+import { loadUserPermissions } from "@/lib/auth-permissions"
 import Link from "next/link"
 
 export default function LoginPage() {
@@ -35,7 +36,7 @@ export default function LoginPage() {
       console.log('Tentando fazer login com:', { email, password })
       
       // Fazer login com as credenciais do formulário
-      const response = await fetch('http://localhost:3001/api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -77,6 +78,16 @@ export default function LoginPage() {
         perfil: !!data.data.perfil,
         permissoes: data.data.permissoes?.length || 0
       })
+      
+      // Carregar permissões do backend antes do redirect
+      try {
+        console.log('🔐 Carregando permissões do backend...')
+        await loadUserPermissions()
+        console.log('🔐 Permissões carregadas com sucesso!')
+      } catch (error) {
+        console.warn('🔐 Aviso: Não foi possível carregar permissões do backend:', error)
+        // Continuar mesmo se não conseguir carregar permissões
+      }
       
       // Redirecionar para dashboard
       window.location.href = '/dashboard'

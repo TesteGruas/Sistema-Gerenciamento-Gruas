@@ -188,3 +188,4 @@ console.log('- fixMissingPermissions() - Corrigir permissões faltando')
 console.log('- testPermissionVerification() - Testar verificação')
 console.log('- reloadPage() - Recarregar página')
 console.log('- runValidation() - Executar validação completa')
+

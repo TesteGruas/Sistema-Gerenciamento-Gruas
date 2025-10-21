@@ -13,12 +13,7 @@ router.use((req, res, next) => {
   
   // Verificar se a origin é permitida
   const allowedOrigins = [
-    'http://localhost:3000',
     'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'http://72.60.60.118:3000',
-    'http://72.60.60.118:3001',
     /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3000$/,
     /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3001$/
   ]

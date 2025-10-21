@@ -247,7 +247,7 @@ export const NotificacoesAPI = {
    */
   marcarComoLida: async (id: string): Promise<void> => {
     try {
-      await api.patch(`/notificacoes/${id}/marcar-lida`)
+      await api.patch(`/api/notificacoes/${id}/marcar-lida`)
     } catch (error: any) {
       console.warn('API indisponível, simulando marcação como lida:', error.message)
       
@@ -284,7 +284,7 @@ export const NotificacoesAPI = {
    */
   deletar: async (id: string): Promise<void> => {
     try {
-      await api.delete(`/notificacoes/${id}`)
+      await api.delete(`/api/notificacoes/${id}`)
     } catch (error: any) {
       console.warn('API indisponível, simulando deleção:', error.message)
       

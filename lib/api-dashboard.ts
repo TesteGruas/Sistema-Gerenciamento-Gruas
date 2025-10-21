@@ -60,7 +60,7 @@ export const apiDashboard = {
       throw new Error('Token de acesso não encontrado');
     }
 
-    const response = await fetch(`${API_BASE_URL}/relatorios/dashboard`, {
+    const response = await fetch(`${API_BASE_URL}/api/relatorios/dashboard`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

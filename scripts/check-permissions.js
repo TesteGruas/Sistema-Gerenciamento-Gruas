@@ -62,3 +62,4 @@ window.checkPermissions = () => {
 }
 
 console.log('📝 Função checkPermissions() disponível para teste manual')
+

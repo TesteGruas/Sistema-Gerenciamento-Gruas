@@ -30,7 +30,7 @@ const redirectToLogin = () => {
 
 // Função para fazer requisições HTTP
 async function httpRequest(endpoint: string, options: RequestInit = {}) {
-  const url = `${API_BASE_URL}/${endpoint.replace(/^\//, '')}`
+  const url = `${API_BASE_URL}/api/${endpoint.replace(/^\//, '')}`
   
   // Obter token de autenticação
   const token = getAuthToken()
@@ -219,7 +219,7 @@ export const livroGruaApi = {
     if (dataInicio) params.append('data_inicio', dataInicio)
     if (dataFim) params.append('data_fim', dataFim)
     
-    const url = `${API_BASE_URL}/livro-grua/export/${gruaId}?${params.toString()}`
+    const url = `${API_BASE_URL}/api/livro-grua/export/${gruaId}?${params.toString()}`
     const token = getAuthToken()
     
     if (!token) {

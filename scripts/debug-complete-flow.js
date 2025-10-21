@@ -208,3 +208,4 @@ console.log('- simulateCompleteLogin() - Simular login')
 console.log('- testPermissionCheck(permission) - Testar permissão específica')
 console.log('- reloadPage() - Recarregar página')
 console.log('- runCompleteDebug() - Executar debug completo')
+

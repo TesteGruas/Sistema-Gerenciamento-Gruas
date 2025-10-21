@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { AlertCircle, RefreshCw, Shield } from 'lucide-react'
+import { authCache } from '@/lib/auth-cache'
 
 interface PermissionFallbackProps {
   permission: string
@@ -30,36 +31,22 @@ export const PermissionFallback: React.FC<PermissionFallbackProps> = ({
           return
         }
 
-        // Buscar dados do usuário
-        const response = await fetch('/api/auth/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        // Usar cache centralizado
+        console.log('🔐 Verificando permissão usando cache centralizado...')
+        const authData = await authCache.getAuthData()
+        
+        const permissionStrings = authData.permissoes.map((p: any) => p.nome)
+        const hasAccess = permissionStrings.includes(permission)
+        
+        setDebugInfo({
+          perfil: authData.perfil,
+          permissions: permissionStrings,
+          hasAccess,
+          totalPermissions: permissionStrings.length
         })
-
-        if (response.ok) {
-          const data = await response.json()
-          const userPermissions = data.data?.permissoes || []
-          const userPerfil = data.data?.perfil || null
-          
-          const permissionStrings = userPermissions.map((p: any) => 
-            `${p.modulo}:${p.acao}`
-          )
-          
-          const hasAccess = permissionStrings.includes(permission)
-          
-          setDebugInfo({
-            perfil: userPerfil,
-            permissions: permissionStrings,
-            hasAccess,
-            totalPermissions: permissionStrings.length
-          })
-          
-          setHasPermission(hasAccess)
-        } else {
-          console.log('🔐 Erro ao buscar permissões:', response.status)
-          setHasPermission(false)
-        }
+        
+        setHasPermission(hasAccess)
+        
       } catch (error) {
         console.error('🔐 Erro ao verificar permissão:', error)
         setHasPermission(false)

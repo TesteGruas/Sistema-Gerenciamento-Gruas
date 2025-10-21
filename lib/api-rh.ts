@@ -70,7 +70,7 @@ export const apiRH = {
     if (params?.cargo) queryParams.append('cargo', params.cargo)
     
     const token = localStorage.getItem('access_token')
-    const response = await fetch(`${API_BASE_URL}/rh/funcionarios?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/api/rh/funcionarios?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -112,7 +112,7 @@ export const apiRH = {
   // Buscar funcionário por ID
   async buscarFuncionario(id: number): Promise<FuncionarioRH> {
     const token = localStorage.getItem('access_token')
-    const response = await fetch(`${API_BASE_URL}/rh/funcionarios/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/rh/funcionarios/${id}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -155,7 +155,7 @@ export const apiRH = {
   // Criar funcionário
   async criarFuncionario(dados: Partial<FuncionarioRH>): Promise<FuncionarioRH> {
     const token = localStorage.getItem('access_token')
-    const response = await fetch(`${API_BASE_URL}/rh/funcionarios`, {
+    const response = await fetch(`${API_BASE_URL}/api/rh/funcionarios`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -200,7 +200,7 @@ export const apiRH = {
   // Atualizar funcionário
   async atualizarFuncionario(id: number, dados: Partial<FuncionarioRH>): Promise<FuncionarioRH> {
     const token = localStorage.getItem('access_token')
-    const response = await fetch(`${API_BASE_URL}/rh/funcionarios/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/rh/funcionarios/${id}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -245,7 +245,7 @@ export const apiRH = {
   // Obter estatísticas
   async obterEstatisticas(): Promise<EstatisticasRH> {
     const token = localStorage.getItem('access_token')
-    const response = await fetch(`${API_BASE_URL}/rh/estatisticas`, {
+    const response = await fetch(`${API_BASE_URL}/api/rh/estatisticas`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

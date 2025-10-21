@@ -96,3 +96,4 @@ window.forceReload = forceReload
 console.log('📝 Funções disponíveis:')
 console.log('- forceFixPermissions() - Forçar correção')
 console.log('- forceReload() - Recarregar página')
+

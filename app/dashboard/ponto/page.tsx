@@ -635,7 +635,7 @@ export default function PontoPage() {
       if (tipo === 'pdf') {
         // Para PDF, fazer requisição direta para baixar o arquivo
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/relatorios/exportar?tipo=pdf&formato=mensal&mes=${mes}&ano=${ano}`, {
+        const response = await fetch(`/api/ponto-eletronico/relatorios/exportar?tipo=pdf&formato=mensal&mes=${mes}&ano=${ano}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

@@ -127,3 +127,4 @@ console.log('📝 Funções disponíveis:')
 console.log('- fixPermissions() - Aplicar correção')
 console.log('- checkCurrentState() - Verificar estado')
 console.log('- testPermission("dashboard:visualizar") - Testar permissão')
+

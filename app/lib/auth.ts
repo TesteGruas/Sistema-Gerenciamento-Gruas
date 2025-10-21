@@ -29,7 +29,7 @@ export class AuthService {
   // Fazer login e obter token
   static async login(): Promise<string> {
     try {
-      const response = await fetch(`${this.API_BASE_URL}/auth/login`, {
+      const response = await fetch(`${this.API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

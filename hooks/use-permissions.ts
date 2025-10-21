@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from './use-auth'
+import { authCache } from '@/lib/auth-cache'
 
 export interface Permission {
   id: number
@@ -44,7 +45,6 @@ export const usePermissions = () => {
         return
       }
 
-      // Sempre buscar do backend para garantir dados atualizados
       try {
         // Verificar se estamos no cliente
         if (typeof window === 'undefined') {
@@ -61,48 +61,13 @@ export const usePermissions = () => {
           return
         }
 
-        console.log('🔐 Buscando permissões do backend...')
-        const response = await fetch('/api/auth/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          console.log('🔐 Dados do backend:', data)
-          const userPermissions = data.data?.permissoes || []
-          const userPerfil = data.data?.perfil || null
-          
-          // Usar o nome completo da permissão (já vem no formato correto: "modulo:acao")
-          const permissionStrings = userPermissions.map((p: Permission) => p.nome)
-          console.log('🔐 Permissões do backend:', userPermissions)
-          console.log('🔐 Perfil do backend:', userPerfil)
-     
-          
-          console.log('🔐 Permissões convertidas:', permissionStrings)
-          setPermissions(permissionStrings)
-          
-          // Cache das permissões no localStorage
-          localStorage.setItem('user_permissions', JSON.stringify(permissionStrings))
-          localStorage.setItem('user_perfil', JSON.stringify(userPerfil))
-          
-          console.log('🔐 Permissões salvas no localStorage')
-        } else {
-          console.log('🔐 Erro na resposta do backend:', response.status, response.statusText)
-          
-          // Fallback para cache local
-          const cachedPermissions = localStorage.getItem('user_permissions')
-          const cachedPerfil = localStorage.getItem('user_perfil')
-          
-          if (cachedPermissions) {
-            console.log('🔐 Usando permissões do cache local')
-            setPermissions(JSON.parse(cachedPermissions))
-          } else {
-            console.log('🔐 Nenhum cache local encontrado')
-            setPermissions([])
-          }
-        }
+        console.log('🔐 Buscando dados usando cache centralizado...')
+        const authData = await authCache.getAuthData()
+        
+        const permissionStrings = authData.permissoes.map((p: Permission) => p.nome)
+        console.log('🔐 Permissões carregadas:', permissionStrings)
+        setPermissions(permissionStrings)
+        
       } catch (error) {
         console.error('🔐 Erro ao carregar permissões:', error)
         
@@ -271,26 +236,13 @@ export const usePermissions = () => {
   const refreshPermissions = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const userPermissions = data.data?.permissoes || []
-        const userPerfil = data.data?.perfil || null
-        
-        const permissionStrings = userPermissions.map((p: Permission) => 
-          `${p.modulo}:${p.acao}`
-        )
-        
-        setPermissions(permissionStrings)
-        
-        localStorage.setItem('user_permissions', JSON.stringify(permissionStrings))
-        localStorage.setItem('user_perfil', JSON.stringify(userPerfil))
-      }
+      console.log('🔐 Recarregando permissões...')
+      const authData = await authCache.refreshAuthData()
+      
+      const permissionStrings = authData.permissoes.map((p: Permission) => p.nome)
+      setPermissions(permissionStrings)
+      
+      console.log('🔐 Permissões recarregadas:', permissionStrings)
     } catch (error) {
       console.error('Erro ao recarregar permissões:', error)
     } finally {

@@ -79,3 +79,4 @@ console.log('- checkDashboardPermission() - Verificar permissão')
 console.log('- fixDashboardPermission() - Corrigir permissão')
 console.log('- testSystem() - Testar sistema completo')
 console.log('- reload() - Recarregar página')
+

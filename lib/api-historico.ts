@@ -195,7 +195,7 @@ export const apiHistorico = {
     if (params?.acao) queryParams.append('acao', params.acao);
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/historico/geral?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/api/historico/geral?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -219,7 +219,7 @@ export const apiHistorico = {
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/historico/gruas?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/api/historico/gruas?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -240,7 +240,7 @@ export const apiHistorico = {
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/historico/componentes?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/api/historico/componentes?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -263,7 +263,7 @@ export const apiHistorico = {
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     
     const token = localStorage.getItem('access_token');
-    const url = `${API_BASE_URL}/ponto-eletronico/registros?${queryParams}`;
+    const url = `${API_BASE_URL}/api/ponto-eletronico/registros?${queryParams}`;
     console.log('🌐 URL da API:', url);
     console.log('🔑 Token:', token ? 'Presente' : 'Ausente');
     
@@ -297,7 +297,7 @@ export const apiHistorico = {
     if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/historico/gruas/${gruaId}?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/api/historico/gruas/${gruaId}?${queryParams}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -315,7 +315,7 @@ export const apiHistorico = {
   // Obter estatísticas do histórico
   async obterEstatisticas(): Promise<any> {
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/historico/estatisticas`, {
+    const response = await fetch(`${API_BASE_URL}/api/historico/estatisticas`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

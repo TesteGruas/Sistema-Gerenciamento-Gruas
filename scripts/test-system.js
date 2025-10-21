@@ -130,3 +130,4 @@ window.testPermission = testPermission
 window.reload = reload
 
 console.log('✅ Sistema de teste carregado!')
+

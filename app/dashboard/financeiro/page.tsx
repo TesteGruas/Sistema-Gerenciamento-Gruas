@@ -168,6 +168,9 @@ export default function FinanceiroPage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [financialData, setFinancialData] = useState<FinancialData>({
     receberHoje: 0,
     pagarHoje: 0,
@@ -181,10 +184,20 @@ export default function FinanceiroPage() {
   // Função para carregar dados financeiros da API
   const loadFinancialData = async () => {
     try {
+      setIsLoading(true)
+      setError(null)
+      console.log('🔄 Carregando dados financeiros...')
+      
       const data = await getFinancialData()
       setFinancialData(data)
-    } catch (error) {
-      console.error('Erro ao carregar dados financeiros:', error)
+      setLastUpdated(new Date())
+      
+      console.log('✅ Dados financeiros carregados:', data)
+    } catch (error: any) {
+      console.error('❌ Erro ao carregar dados financeiros:', error)
+      setError(error.message || 'Erro ao carregar dados financeiros')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -246,6 +259,39 @@ export default function FinanceiroPage() {
     window.print()
   }
 
+  // Mostrar loading enquanto carrega os dados
+  if (isLoading) {
+    return (
+      <ProtectedRoute permission="financeiro:visualizar">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <div className="text-lg font-medium">Carregando dados financeiros...</div>
+            <div className="text-sm text-gray-500">Aguarde enquanto buscamos as informações mais recentes</div>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  // Mostrar erro se houver problema no carregamento
+  if (error) {
+    return (
+      <ProtectedRoute permission="financeiro:visualizar">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center space-y-4">
+            <div className="text-red-500 text-6xl">⚠️</div>
+            <div className="text-lg font-medium text-red-600">Erro ao carregar dados</div>
+            <div className="text-sm text-gray-500">{error}</div>
+            <Button onClick={loadFinancialData} className="mt-4">
+              Tentar Novamente
+            </Button>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
   return (
     <ProtectedRoute permission="financeiro:visualizar">
       <div className="space-y-6 w-full">
@@ -254,7 +300,27 @@ export default function FinanceiroPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Sistema Financeiro</h1>
           <p className="text-gray-600">Gestão completa das finanças da empresa</p>
+          {lastUpdated && (
+            <p className="text-xs text-gray-500 mt-1">
+              Última atualização: {lastUpdated.toLocaleString('pt-BR')}
+            </p>
+          )}
         </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadFinancialData}
+            disabled={isLoading}
+            className="flex items-center gap-2"
+          >
+            {isLoading ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+            {isLoading ? 'Atualizando...' : 'Atualizar'}
+          </Button>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
             <CreditCard className="w-4 h-4 mr-2" />

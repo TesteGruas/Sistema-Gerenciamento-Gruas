@@ -200,3 +200,4 @@ console.log('- verifyLogin() - Verificar login')
 console.log('- testPermissions() - Testar permissões')
 console.log('- reloadPage() - Recarregar página')
 console.log('- runCompleteTest() - Executar teste completo')
+

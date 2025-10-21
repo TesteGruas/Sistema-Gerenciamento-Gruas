@@ -51,3 +51,4 @@ window.forceReload = forceReload
 console.log('📝 Funções disponíveis:')
 console.log('- fixDashboardPermission() - Corrigir permissão')
 console.log('- forceReload() - Recarregar página')
+

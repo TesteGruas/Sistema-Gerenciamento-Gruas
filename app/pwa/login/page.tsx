@@ -18,6 +18,7 @@ import {
   Clock
 } from "lucide-react"
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
+import { loadUserPermissions } from "@/lib/auth-permissions"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 
 export default function PWALoginPage() {
@@ -120,12 +121,33 @@ export default function PWALoginPage() {
           localStorage.setItem('user_data', JSON.stringify(data.data.user))
         }
         
+        // Salvar dados adicionais se existirem
+        if (data.data.profile) {
+          localStorage.setItem('user_profile', JSON.stringify(data.data.profile))
+        }
+        if (data.data.perfil) {
+          localStorage.setItem('user_perfil', JSON.stringify(data.data.perfil))
+        }
+        if (data.data.permissoes) {
+          localStorage.setItem('user_permissoes', JSON.stringify(data.data.permissoes))
+        }
+        
         // Salvar refresh token se existir
         if (data.data.refresh_token) {
           localStorage.setItem('refresh_token', data.data.refresh_token)
         }
 
         console.log('[PWA Login] Login bem-sucedido!')
+
+        // Carregar permissões do backend antes do redirect
+        try {
+          console.log('🔐 [PWA] Carregando permissões do backend...')
+          await loadUserPermissions()
+          console.log('🔐 [PWA] Permissões carregadas com sucesso!')
+        } catch (error) {
+          console.warn('🔐 [PWA] Aviso: Não foi possível carregar permissões do backend:', error)
+          // Continuar mesmo se não conseguir carregar permissões
+        }
 
         showSuccess(
           "Login realizado com sucesso!",

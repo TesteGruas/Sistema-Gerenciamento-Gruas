@@ -122,3 +122,4 @@ console.log('3. Para verificar status: checkSystemStatus()')
 window.simulateRealLogin = simulateRealLogin
 window.testRealPermissions = testRealPermissions
 window.checkSystemStatus = checkSystemStatus
+

@@ -34,3 +34,4 @@ if (!hasDashboard) {
     window.location.reload()
   }, 1000)
 }
+

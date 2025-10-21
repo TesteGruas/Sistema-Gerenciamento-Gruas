@@ -1,11 +1,11 @@
 import axios from 'axios'
 
 // Configuração da API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
 
 // Criar instância do axios
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: `${API_BASE_URL}/api`,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ export { api }
 export const buildApiUrl = (endpoint: string): string => {
   // Remove barra inicial se existir para evitar dupla barra
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
-  return `${API_BASE_URL}/${cleanEndpoint}`
+  return `${API_BASE_URL}/api/${cleanEndpoint}`
 }
 
 // Endpoints específicos
