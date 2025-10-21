@@ -3,6 +3,7 @@
 import React from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { usePermissions } from '@/hooks/use-permissions'
+import { PermissionFallback } from './permission-fallback'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Shield, Lock, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -85,8 +86,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <>{fallback}</>
   }
 
-  // Se não tem acesso e deve mostrar página de acesso negado
+  // Se não tem acesso, usar o fallback melhorado
   if (showAccessDenied) {
+    return (
+      <PermissionFallback permission={permission || permissions?.[0] || ''}>
+        {children}
+      </PermissionFallback>
+    )
+  }
+
+  // Fallback antigo (mantido para compatibilidade)
+  if (true) {
     return (
       <Card className="max-w-md mx-auto mt-8">
         <CardHeader className="text-center">
