@@ -117,7 +117,7 @@ export default function DashboardLayout({
   } = usePermissions()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isClient, setIsClient] = useState(false)
+  const [isClientSide, setIsClientSide] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     principal: false,
     operacional: false,
@@ -130,11 +130,11 @@ export default function DashboardLayout({
   
   // Todos os useEffect devem estar no topo também
   useEffect(() => {
-    setIsClient(true)
+    setIsClientSide(true)
   }, [])
   
   // Renderizar apenas no cliente para evitar erros de SSR
-  if (!isClient) {
+  if (!isClientSide) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
