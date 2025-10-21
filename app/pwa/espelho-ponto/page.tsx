@@ -89,7 +89,12 @@ export default function PWAEspelhoPontoPage() {
       const response = await pontoApi.getRegistros({
         funcionario_id: user.id,
         data_inicio: dataInicio,
-        data_fim: dataFim
+        data_fim: dataFim,
+        // 🆕 NOVOS FILTROS DISPONÍVEIS:
+        // search: 'termo de busca', // Busca textual
+        // order_by: 'horas_extras', // Ordenar por campo
+        // order_direction: 'desc', // Direção da ordenação
+        // status: 'Aprovado', // Filtrar por status
       })
       
       setRegistros((response || []) as RegistroPonto[])

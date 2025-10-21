@@ -286,7 +286,16 @@ export default function PontoPage() {
       console.log('📡 Chamando API...')
       const registrosResponse = await apiRegistrosPonto.listar({
         ...filtros,
-        recalcular: true // ✨ Recalcular automaticamente
+        recalcular: true, // ✨ Recalcular automaticamente
+        // 🆕 NOVOS FILTROS DISPONÍVEIS:
+        // search: 'termo de busca', // Busca textual em nome, data, status, observações
+        // order_by: 'horas_extras', // Ordenar por: data, funcionario, horas_trabalhadas, horas_extras, status, created_at
+        // order_direction: 'desc', // Direção: asc ou desc
+        // obra_id: 123, // Filtrar por obra
+        // cargo: 'Operador', // Filtrar por cargo
+        // turno: 'Manhã', // Filtrar por turno
+        // horas_extras_min: 2, // Mínimo de horas extras
+        // horas_extras_max: 8, // Máximo de horas extras
       })
       console.log('📡 Resposta da API:', registrosResponse)
       

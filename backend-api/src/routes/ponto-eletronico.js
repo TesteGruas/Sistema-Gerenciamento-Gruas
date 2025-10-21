@@ -9,6 +9,7 @@ import {
   gerarIdRegistro,
   gerarIdJustificativa,
   validarHorario,
+  normalizarHorario,
   validarData,
   calcularResumoPeriodo,
   calcularResumoJustificativas,
@@ -173,8 +174,52 @@ router.get('/funcionarios', async (req, res) => {
  *         name: status
  *         schema:
  *           type: string
- *           enum: [Normal, Pendente Aprovação, Aprovado, Rejeitado]
+ *           enum: [Normal, Pendente Aprovação, Aprovado, Rejeitado, Em Andamento]
  *         description: Status do registro
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Busca textual (nome, data, status, observações) - mínimo 3 caracteres
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: ID da obra para filtrar
+ *       - in: query
+ *         name: cargo
+ *         schema:
+ *           type: string
+ *         description: Cargo do funcionário
+ *       - in: query
+ *         name: turno
+ *         schema:
+ *           type: string
+ *         description: Turno do funcionário
+ *       - in: query
+ *         name: horas_extras_min
+ *         schema:
+ *           type: number
+ *         description: Mínimo de horas extras
+ *       - in: query
+ *         name: horas_extras_max
+ *         schema:
+ *           type: number
+ *         description: Máximo de horas extras
+ *       - in: query
+ *         name: order_by
+ *         schema:
+ *           type: string
+ *           enum: [data, funcionario, horas_trabalhadas, horas_extras, status, created_at]
+ *           default: data
+ *         description: Campo para ordenação
+ *       - in: query
+ *         name: order_direction
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Direção da ordenação
  *       - in: query
  *         name: page
  *         schema:
@@ -277,23 +322,106 @@ router.get('/registros', async (req, res) => {
       funcionario_id, 
       data_inicio, 
       data_fim, 
-      status, 
+      status,
+      search,
+      obra_id,
+      cargo,
+      turno,
+      horas_extras_min,
+      horas_extras_max,
+      order_by = 'data',
+      order_direction = 'desc',
       page = 1, 
       limit = 50,
       recalcular = 'false'
     } = req.query;
 
+    // ========================================
+    // VALIDAÇÕES
+    // ========================================
+    
+    // Validar campos de ordenação
+    const validOrderFields = {
+      'data': 'data',
+      'funcionario': 'funcionario.nome',
+      'horas_trabalhadas': 'horas_trabalhadas',
+      'horas_extras': 'horas_extras',
+      'status': 'status',
+      'created_at': 'created_at'
+    };
+
+    const validOrderDirections = ['asc', 'desc'];
+
+    if (order_by && !validOrderFields[order_by]) {
+      return res.status(400).json({
+        success: false,
+        message: `Campo de ordenação inválido. Campos válidos: ${Object.keys(validOrderFields).join(', ')}`
+      });
+    }
+
+    if (order_direction && !validOrderDirections.includes(order_direction)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Direção de ordenação inválida. Use "asc" ou "desc"'
+      });
+    }
+
+    // Validar busca textual
+    if (search && search.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Termo de busca deve ter pelo menos 3 caracteres'
+      });
+    }
+
+    // Validar filtros numéricos de horas extras
+    if (horas_extras_min !== undefined) {
+      const min = parseFloat(horas_extras_min);
+      if (isNaN(min) || min < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'horas_extras_min deve ser um número positivo'
+        });
+      }
+    }
+
+    if (horas_extras_max !== undefined) {
+      const max = parseFloat(horas_extras_max);
+      if (isNaN(max) || max < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'horas_extras_max deve ser um número positivo'
+        });
+      }
+    }
+
+    if (horas_extras_min !== undefined && horas_extras_max !== undefined) {
+      const min = parseFloat(horas_extras_min);
+      const max = parseFloat(horas_extras_max);
+      if (min > max) {
+        return res.status(400).json({
+          success: false,
+          message: 'horas_extras_min não pode ser maior que horas_extras_max'
+        });
+      }
+    }
+
+    // ========================================
+    // CONSTRUIR QUERY
+    // ========================================
+
     let query = supabaseAdmin
       .from('registros_ponto')
       .select(`
         *,
-        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno),
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno, obra_atual_id),
         aprovador:usuarios!registros_ponto_aprovado_por_fkey(nome)
-      `, { count: 'exact' })
-      .order('data', { ascending: false })
-      .order('created_at', { ascending: false });
+      `, { count: 'exact' });
 
-    // Aplicar filtros
+    // ========================================
+    // APLICAR FILTROS EXISTENTES
+    // ========================================
+    
     if (funcionario_id) {
       query = query.eq('funcionario_id', funcionario_id);
     }
@@ -310,19 +438,115 @@ router.get('/registros', async (req, res) => {
       query = query.eq('status', status);
     }
 
-    // Paginação
-    const offset = (page - 1) * limit;
-    query = query.range(offset, offset + limit - 1);
+    // ========================================
+    // APLICAR NOVOS FILTROS
+    // ========================================
 
-    const { data, error, count } = await query;
+    // Filtro de horas extras (range)
+    if (horas_extras_min !== undefined) {
+      query = query.gte('horas_extras', parseFloat(horas_extras_min));
+    }
 
-    if (error) {
-      console.error('Erro ao buscar registros de ponto:', error);
+    if (horas_extras_max !== undefined) {
+      query = query.lte('horas_extras', parseFloat(horas_extras_max));
+    }
+
+    // ========================================
+    // APLICAR ORDENAÇÃO
+    // ========================================
+    
+    const ascending = order_direction === 'asc';
+    
+    // Nota: Para ordenação por campos relacionados (funcionario.nome), 
+    // o Supabase não suporta diretamente na query. 
+    // Faremos a ordenação desses casos no código após buscar os dados.
+    if (order_by === 'funcionario') {
+      // Ordenar por nome do funcionário será feito após buscar os dados
+      query = query.order('data', { ascending: false });
+    } else {
+      query = query.order(validOrderFields[order_by], { ascending });
+      // Adicionar ordenação secundária por created_at para desempate
+      if (order_by !== 'created_at') {
+        query = query.order('created_at', { ascending: false });
+      }
+    }
+
+    // ========================================
+    // EXECUTAR QUERY PRINCIPAL
+    // ========================================
+    
+    const { data: allData, error: queryError, count: totalCount } = await query;
+
+    if (queryError) {
+      console.error('Erro ao buscar registros de ponto:', queryError);
       return res.status(500).json({ 
         success: false, 
         message: 'Erro interno do servidor' 
       });
     }
+
+    let filteredData = allData || [];
+
+    // ========================================
+    // APLICAR FILTROS QUE REQUEREM DADOS RELACIONADOS
+    // ========================================
+
+    // Filtro por busca textual (aplicar nos dados retornados)
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filteredData = filteredData.filter(registro => {
+        const funcionarioNome = registro.funcionario?.nome?.toLowerCase() || '';
+        const data = registro.data?.toLowerCase() || '';
+        const status = registro.status?.toLowerCase() || '';
+        const observacoes = registro.observacoes?.toLowerCase() || '';
+        
+        return funcionarioNome.includes(searchLower) ||
+               data.includes(searchLower) ||
+               status.includes(searchLower) ||
+               observacoes.includes(searchLower);
+      });
+    }
+
+    // Filtro por obra (através do funcionário)
+    if (obra_id) {
+      filteredData = filteredData.filter(registro => 
+        registro.funcionario?.obra_atual_id === parseInt(obra_id)
+      );
+    }
+
+    // Filtro por cargo
+    if (cargo) {
+      filteredData = filteredData.filter(registro => 
+        registro.funcionario?.cargo === cargo
+      );
+    }
+
+    // Filtro por turno
+    if (turno) {
+      filteredData = filteredData.filter(registro => 
+        registro.funcionario?.turno === turno
+      );
+    }
+
+    // Ordenação por nome do funcionário (se solicitado)
+    if (order_by === 'funcionario') {
+      filteredData.sort((a, b) => {
+        const nomeA = a.funcionario?.nome || '';
+        const nomeB = b.funcionario?.nome || '';
+        return ascending ? nomeA.localeCompare(nomeB) : nomeB.localeCompare(nomeA);
+      });
+    }
+
+    // ========================================
+    // APLICAR PAGINAÇÃO NOS DADOS FILTRADOS
+    // ========================================
+    
+    const totalFiltered = filteredData.length;
+    const offset = (page - 1) * limit;
+    const paginatedData = filteredData.slice(offset, offset + parseInt(limit));
+
+    const data = paginatedData;
+    const count = totalFiltered;
 
     // Se solicitado, recalcular dados inconsistentes
     if (recalcular === 'true') {
@@ -398,6 +622,240 @@ router.get('/registros', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Erro interno do servidor' 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/registros/estatisticas:
+ *   get:
+ *     summary: Obter estatísticas dos registros com filtros
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário para filtrar
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de início do período
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de fim do período
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Status do registro
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: ID da obra para filtrar
+ *       - in: query
+ *         name: cargo
+ *         schema:
+ *           type: string
+ *         description: Cargo do funcionário
+ *       - in: query
+ *         name: turno
+ *         schema:
+ *           type: string
+ *         description: Turno do funcionário
+ *     responses:
+ *       200:
+ *         description: Estatísticas dos registros
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total_registros:
+ *                       type: integer
+ *                     total_horas_trabalhadas:
+ *                       type: number
+ *                     total_horas_extras:
+ *                       type: number
+ *                     por_status:
+ *                       type: object
+ *                     por_funcionario:
+ *                       type: object
+ *                     por_obra:
+ *                       type: object
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/registros/estatisticas', async (req, res) => {
+  try {
+    const { 
+      funcionario_id, 
+      data_inicio, 
+      data_fim, 
+      status,
+      obra_id,
+      cargo,
+      turno
+    } = req.query;
+
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        id,
+        horas_trabalhadas,
+        horas_extras,
+        status,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, obra_atual_id)
+      `);
+
+    // Aplicar mesmos filtros do endpoint principal
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', funcionario_id);
+    }
+    
+    if (data_inicio) {
+      query = query.gte('data', data_inicio);
+    }
+    
+    if (data_fim) {
+      query = query.lte('data', data_fim);
+    }
+    
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar registros para estatísticas:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    let filteredData = data || [];
+
+    // Aplicar filtros adicionais por relacionamento
+    if (obra_id) {
+      filteredData = filteredData.filter(registro => 
+        registro.funcionario?.obra_atual_id === parseInt(obra_id)
+      );
+    }
+
+    if (cargo) {
+      filteredData = filteredData.filter(registro => 
+        registro.funcionario?.cargo === cargo
+      );
+    }
+
+    if (turno) {
+      filteredData = filteredData.filter(registro => 
+        registro.funcionario?.turno === turno
+      );
+    }
+
+    // Calcular estatísticas
+    const estatisticas = {
+      total_registros: filteredData.length,
+      total_horas_trabalhadas: filteredData.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0),
+      total_horas_extras: filteredData.reduce((sum, r) => sum + (r.horas_extras || 0), 0),
+      media_horas_trabalhadas: filteredData.length > 0 
+        ? (filteredData.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0) / filteredData.length).toFixed(2)
+        : 0,
+      media_horas_extras: filteredData.length > 0
+        ? (filteredData.reduce((sum, r) => sum + (r.horas_extras || 0), 0) / filteredData.length).toFixed(2)
+        : 0,
+      por_status: {},
+      por_funcionario: {},
+      por_obra: {}
+    };
+
+    // Agrupar por status
+    filteredData.forEach(registro => {
+      const statusKey = registro.status || 'Indefinido';
+      if (!estatisticas.por_status[statusKey]) {
+        estatisticas.por_status[statusKey] = {
+          quantidade: 0,
+          horas_trabalhadas: 0,
+          horas_extras: 0
+        };
+      }
+      estatisticas.por_status[statusKey].quantidade++;
+      estatisticas.por_status[statusKey].horas_trabalhadas += registro.horas_trabalhadas || 0;
+      estatisticas.por_status[statusKey].horas_extras += registro.horas_extras || 0;
+    });
+
+    // Agrupar por funcionário
+    filteredData.forEach(registro => {
+      const funcionarioId = registro.funcionario?.id;
+      const funcionarioNome = registro.funcionario?.nome || 'Desconhecido';
+      
+      if (!estatisticas.por_funcionario[funcionarioId]) {
+        estatisticas.por_funcionario[funcionarioId] = {
+          nome: funcionarioNome,
+          cargo: registro.funcionario?.cargo || '-',
+          registros: 0,
+          horas_trabalhadas: 0,
+          horas_extras: 0
+        };
+      }
+      estatisticas.por_funcionario[funcionarioId].registros++;
+      estatisticas.por_funcionario[funcionarioId].horas_trabalhadas += registro.horas_trabalhadas || 0;
+      estatisticas.por_funcionario[funcionarioId].horas_extras += registro.horas_extras || 0;
+    });
+
+    // Agrupar por obra
+    filteredData.forEach(registro => {
+      const obraId = registro.funcionario?.obra_atual_id || 'Sem obra';
+      
+      if (!estatisticas.por_obra[obraId]) {
+        estatisticas.por_obra[obraId] = {
+          registros: 0,
+          horas_trabalhadas: 0,
+          horas_extras: 0,
+          funcionarios: new Set()
+        };
+      }
+      estatisticas.por_obra[obraId].registros++;
+      estatisticas.por_obra[obraId].horas_trabalhadas += registro.horas_trabalhadas || 0;
+      estatisticas.por_obra[obraId].horas_extras += registro.horas_extras || 0;
+      if (registro.funcionario?.id) {
+        estatisticas.por_obra[obraId].funcionarios.add(registro.funcionario.id);
+      }
+    });
+
+    // Converter Set de funcionários para contagem
+    Object.keys(estatisticas.por_obra).forEach(obraId => {
+      estatisticas.por_obra[obraId].total_funcionarios = estatisticas.por_obra[obraId].funcionarios.size;
+      delete estatisticas.por_obra[obraId].funcionarios;
+    });
+
+    res.json({
+      success: true,
+      data: estatisticas
+    });
+
+  } catch (error) {
+    console.error('Erro ao obter estatísticas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
     });
   }
 });
@@ -1285,11 +1743,17 @@ router.put('/registros/:id', async (req, res) => {
       });
     }
 
+    // Normalizar horários (remover segundos se existir)
+    const entradaNormalizada = entrada ? normalizarHorario(entrada) : null;
+    const saidaNormalizada = saida ? normalizarHorario(saida) : null;
+    const saidaAlmocoNormalizada = saida_almoco ? normalizarHorario(saida_almoco) : null;
+    const voltaAlmocoNormalizada = volta_almoco ? normalizarHorario(volta_almoco) : null;
+
     // Calcular novas horas trabalhadas e extras
-    const novaEntrada = entrada || registroAtual.entrada;
-    const novaSaida = saida || registroAtual.saida;
-    const novaSaidaAlmoco = saida_almoco || registroAtual.saida_almoco;
-    const novaVoltaAlmoco = volta_almoco || registroAtual.volta_almoco;
+    const novaEntrada = entradaNormalizada || registroAtual.entrada;
+    const novaSaida = saidaNormalizada || registroAtual.saida;
+    const novaSaidaAlmoco = saidaAlmocoNormalizada || registroAtual.saida_almoco;
+    const novaVoltaAlmoco = voltaAlmocoNormalizada || registroAtual.volta_almoco;
 
     const horasTrabalhadas = calcularHorasTrabalhadas(novaEntrada, novaSaida, novaSaidaAlmoco, novaVoltaAlmoco);
     const horasExtras = calcularHorasExtras(horasTrabalhadas);
@@ -1334,32 +1798,32 @@ router.put('/registros/:id', async (req, res) => {
 
     // Registrar alteração no histórico
     const alteracoes = [];
-    if (entrada && entrada !== registroAtual.entrada) {
+    if (entradaNormalizada && entradaNormalizada !== registroAtual.entrada) {
       alteracoes.push({
         campo_alterado: 'entrada',
         valor_anterior: registroAtual.entrada,
-        valor_novo: entrada
+        valor_novo: entradaNormalizada
       });
     }
-    if (saida_almoco && saida_almoco !== registroAtual.saida_almoco) {
+    if (saidaAlmocoNormalizada && saidaAlmocoNormalizada !== registroAtual.saida_almoco) {
       alteracoes.push({
         campo_alterado: 'saida_almoco',
         valor_anterior: registroAtual.saida_almoco,
-        valor_novo: saida_almoco
+        valor_novo: saidaAlmocoNormalizada
       });
     }
-    if (volta_almoco && volta_almoco !== registroAtual.volta_almoco) {
+    if (voltaAlmocoNormalizada && voltaAlmocoNormalizada !== registroAtual.volta_almoco) {
       alteracoes.push({
         campo_alterado: 'volta_almoco',
         valor_anterior: registroAtual.volta_almoco,
-        valor_novo: volta_almoco
+        valor_novo: voltaAlmocoNormalizada
       });
     }
-    if (saida && saida !== registroAtual.saida) {
+    if (saidaNormalizada && saidaNormalizada !== registroAtual.saida) {
       alteracoes.push({
         campo_alterado: 'saida',
         valor_anterior: registroAtual.saida,
-        valor_novo: saida
+        valor_novo: saidaNormalizada
       });
     }
 

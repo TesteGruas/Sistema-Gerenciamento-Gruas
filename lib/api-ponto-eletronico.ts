@@ -233,6 +233,14 @@ export const apiRegistrosPonto = {
     limit?: number;
     search?: string;
     recalcular?: boolean;
+    // Novos parâmetros de filtro
+    obra_id?: number;
+    cargo?: string;
+    turno?: string;
+    horas_extras_min?: number;
+    horas_extras_max?: number;
+    order_by?: 'data' | 'funcionario' | 'horas_trabalhadas' | 'horas_extras' | 'status' | 'created_at';
+    order_direction?: 'asc' | 'desc';
   }): Promise<{ data: RegistroPonto[]; pagination?: any; recalculated?: boolean }> {
     try {
       const response = await api.get('ponto-eletronico/registros', { params });
@@ -378,6 +386,49 @@ export const apiRegistrosPonto = {
     total_problemas: number;
   }> {
     const response = await api.get('ponto-eletronico/registros/validar', { params });
+    return response.data;
+  },
+
+  /**
+   * Obter estatísticas dos registros com filtros
+   */
+  async obterEstatisticas(params?: {
+    funcionario_id?: number;
+    data_inicio?: string;
+    data_fim?: string;
+    status?: string;
+    obra_id?: number;
+    cargo?: string;
+    turno?: string;
+  }): Promise<{
+    success: boolean;
+    data: {
+      total_registros: number;
+      total_horas_trabalhadas: number;
+      total_horas_extras: number;
+      media_horas_trabalhadas: string | number;
+      media_horas_extras: string | number;
+      por_status: Record<string, {
+        quantidade: number;
+        horas_trabalhadas: number;
+        horas_extras: number;
+      }>;
+      por_funcionario: Record<string, {
+        nome: string;
+        cargo: string;
+        registros: number;
+        horas_trabalhadas: number;
+        horas_extras: number;
+      }>;
+      por_obra: Record<string, {
+        registros: number;
+        horas_trabalhadas: number;
+        horas_extras: number;
+        total_funcionarios: number;
+      }>;
+    };
+  }> {
+    const response = await api.get('ponto-eletronico/registros/estatisticas', { params });
     return response.data;
   }
 };
@@ -840,6 +891,17 @@ export const getRegistros = async (params: {
   data_fim?: string;
   status?: string;
   aprovador_id?: number;
+  // Novos parâmetros
+  search?: string;
+  obra_id?: number;
+  cargo?: string;
+  turno?: string;
+  horas_extras_min?: number;
+  horas_extras_max?: number;
+  order_by?: 'data' | 'funcionario' | 'horas_trabalhadas' | 'horas_extras' | 'status' | 'created_at';
+  order_direction?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
 }): Promise<RegistroPonto[]> => {
   const response = await api.get('ponto-eletronico/registros', { params });
   return response.data.data || response.data;
