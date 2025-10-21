@@ -37,6 +37,7 @@ import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { UserDropdown } from "@/components/user-dropdown"
 import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
 import { GlobalSearch } from "@/components/global-search"
+import { PermissionsDebug } from "@/components/permissions-debug"
 
 // Tipos para navegação
 interface NavigationItem {
@@ -92,9 +93,11 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { hasPermission, hasAnyPermission, hasAllPermissions } = usePermissions()
+  // Todos os hooks devem ser chamados no topo, antes de qualquer lógica condicional
+  const { hasPermission, hasAnyPermission, hasAllPermissions, isAdmin: isAdminFromPermissions, perfil, loading: permissionsLoading } = usePermissions()
+  const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     principal: false,
     operacional: false,
@@ -104,6 +107,25 @@ export default function DashboardLayout({
     documentos: false,
     admin: false,
   })
+  
+  // Todos os useEffect devem estar no topo também
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+  
+  // Renderizar apenas no cliente para evitar erros de SSR
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Building2 className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Carregando Dashboard...</h1>
+        </div>
+      </div>
+    )
+  }
 
   // Filtrar navegação baseada em permissões
   const filterNavigationByPermissions = (navigation: NavigationItemWithPermission[]) => {
@@ -128,27 +150,6 @@ export default function DashboardLayout({
   const filteredBaseNavigation = filterNavigationByPermissions(baseNavigation)
   const filteredAdminNavigation = filterNavigationByPermissions(adminNavigation)
 
-  const pathname = usePathname()
-  
-  useEffect(() => {
-    console.log('Layout carregado')
-  }, [])
-
-  useEffect(() => {
-    // Verificar se o usuário é admin
-    const userRole = localStorage.getItem('userRole') || 'funcionario_nivel_1'
-    console.log('User role from localStorage:', userRole)
-    console.log('Is admin:', userRole === 'admin')
-    setIsAdmin(userRole === 'admin')
-    
-    // Para teste: forçar como admin se não estiver definido
-    if (!localStorage.getItem('userRole')) {
-      localStorage.setItem('userRole', 'admin')
-      setIsAdmin(true)
-      console.log('Forçando usuário como admin para teste')
-    }
-  }, [])
-
   const handleLogout = () => {
     AuthService.logout()
   }
@@ -161,7 +162,7 @@ export default function DashboardLayout({
   }
 
   // Combinar navegação base com navegação de admin se necessário
-  const navigation = isAdmin ? [...filteredBaseNavigation, ...filteredAdminNavigation] : filteredBaseNavigation
+  const navigation = isAdminFromPermissions() ? [...filteredBaseNavigation, ...filteredAdminNavigation] : filteredBaseNavigation
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -396,7 +397,7 @@ export default function DashboardLayout({
           </div>
 
           {/* Seção Administrativa (apenas para admin) */}
-          {isAdmin && (
+          {isAdminFromPermissions() && (
             <div>
               <button
                 onClick={() => toggleSection('admin')}
@@ -433,19 +434,12 @@ export default function DashboardLayout({
         </nav>
 
         <div className="p-4 border-t border-gray-200">
-          {/* Botão temporário para forçar admin - remover depois */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full mb-2 text-xs"
-            onClick={() => {
-              localStorage.setItem('userRole', 'admin')
-              setIsAdmin(true)
-              console.log('Forçando admin via botão')
-            }}
-          >
-            🔧 Forçar Admin (Teste)
-          </Button>
+          {/* Debug info */}
+          <div className="mb-2 p-2 bg-gray-100 rounded text-xs">
+            <div>Perfil: {perfil?.nome || 'Carregando...'}</div>
+            <div>Admin: {isAdminFromPermissions() ? 'Sim' : 'Não'}</div>
+            <div>Permissões: {permissionsLoading ? 'Carregando...' : 'Carregadas'}</div>
+          </div>
           
           <Button
             variant="ghost"
@@ -496,6 +490,9 @@ export default function DashboardLayout({
       
       {/* Global Loading */}
       <GlobalLoading show={false} />
+      
+      {/* Debug de Permissões */}
+      <PermissionsDebug />
     </div>
   )
 }

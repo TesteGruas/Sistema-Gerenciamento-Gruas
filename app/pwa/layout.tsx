@@ -33,13 +33,50 @@ interface PWALayoutProps {
 }
 
 export default function PWALayout({ children }: PWALayoutProps) {
+  // Todos os hooks devem ser chamados no topo, antes de qualquer lógica condicional
   const pathname = usePathname()
+  const router = useRouter()
   const { hasPermission, canAccessModule } = usePermissions()
   const [isOnline, setIsOnline] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string } | null>(null)
+  const [isClient, setIsClient] = useState(false)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
-  const router = useRouter()
+  
+  // Verificar se estamos no cliente para evitar erros de SSR
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+  
+  // Verificar status de conexão e carregar dados do usuário
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+  
+  // Renderizar apenas no cliente para evitar erros de SSR
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Smartphone className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Carregando...</h1>
+        </div>
+      </div>
+    )
+  }
 
   // Verificar status de conexão e carregar dados do usuário
   useEffect(() => {

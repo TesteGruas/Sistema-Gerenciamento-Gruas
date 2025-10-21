@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Sistema de Permissões</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        .permission {
+            display: inline-block;
+            background-color: #e9ecef;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .permission.has-access { background-color: #d4edda; color: #155724; }
+        .permission.no-access { background-color: #f8d7da; color: #721c24; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔐 Teste do Sistema de Permissões</h1>
+    
+    <div class="container">
+        <h2>📊 Status do Sistema</h2>
+        <div id="system-status">
+            <div class="status info">Carregando status...</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🎮 Controles de Teste</h2>
+        <button onclick="simulateRealLogin()">🔐 Simular Login Real</button>
+        <button onclick="testRealPermissions()">🧪 Testar Permissões</button>
+        <button onclick="checkSystemStatus()">🔍 Verificar Status</button>
+        <button onclick="clearAllData()">🗑️ Limpar Dados</button>
+    </div>
+
+    <div class="container">
+        <h2>👤 Dados do Usuário</h2>
+        <div id="user-data">
+            <div class="status info">Nenhum usuário logado</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🔐 Permissões Disponíveis</h2>
+        <div id="permissions-list">
+            <div class="status info">Nenhuma permissão carregada</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 Teste de Permissões Específicas</h2>
+        <div id="permission-tests">
+            <div class="status info">Execute o teste para ver os resultados</div>
+        </div>
+    </div>
+
+    <script>
+        // Dados reais obtidos do backend
+        const realUserData = {
+            user: {
+                id: "6b3cd5a8-2991-40a2-8237-c64afc431320",
+                email: "admin@admin.com",
+                nome: "Administrador",
+                role: "admin"
+            },
+            perfil: {
+                id: 1,
+                nome: "Administrador",
+                nivel_acesso: 10,
+                descricao: "Acesso completo ao sistema"
+            },
+            permissoes: [
+                { id: 1, nome: "usuarios:visualizar", modulo: "usuarios", acao: "visualizar" },
+                { id: 2, nome: "usuarios:criar", modulo: "usuarios", acao: "criar" },
+                { id: 3, nome: "usuarios:editar", modulo: "usuarios", acao: "editar" },
+                { id: 4, nome: "usuarios:deletar", modulo: "usuarios", acao: "deletar" },
+                { id: 6, nome: "usuarios:gerenciar_permissoes", modulo: "usuarios", acao: "gerenciar" },
+                { id: 7, nome: "gruas:visualizar", modulo: "gruas", acao: "visualizar" },
+                { id: 8, nome: "gruas:criar", modulo: "gruas", acao: "criar" },
+                { id: 9, nome: "gruas:editar", modulo: "gruas", acao: "editar" },
+                { id: 10, nome: "gruas:deletar", modulo: "gruas", acao: "deletar" },
+                { id: 11, nome: "gruas:gerar_proposta", modulo: "gruas", acao: "gerenciar" },
+                { id: 12, nome: "gruas:gerenciar_contratos", modulo: "gruas", acao: "gerenciar" },
+                { id: 13, nome: "gruas:gerenciar_manutencoes", modulo: "gruas", acao: "gerenciar" },
+                { id: 14, nome: "estoque:visualizar", modulo: "estoque", acao: "visualizar" },
+                { id: 15, nome: "estoque:criar", modulo: "estoque", acao: "criar" },
+                { id: 16, nome: "estoque:editar", modulo: "estoque", acao: "editar" },
+                { id: 17, nome: "estoque:deletar", modulo: "estoque", acao: "deletar" },
+                { id: 18, nome: "estoque:movimentar", modulo: "estoque", acao: "gerenciar" },
+                { id: 19, nome: "estoque:reservar", modulo: "estoque", acao: "gerenciar" },
+                { id: 20, nome: "estoque:exportar", modulo: "estoque", acao: "exportar" },
+                { id: 21, nome: "relatorios:visualizar", modulo: "relatorios", acao: "visualizar" },
+                { id: 22, nome: "relatorios:exportar", modulo: "relatorios", acao: "exportar" },
+                { id: 23, nome: "configuracoes:visualizar", modulo: "configuracoes", acao: "visualizar" },
+                { id: 24, nome: "configuracoes:editar", modulo: "configuracoes", acao: "editar" }
+            ]
+        }
+
+        const realToken = "eyJhbGciOiJIUzI1NiIsImtpZCI6ImIza0FDV3E2dGdIeTRmQWQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL21naGRrdGtvZWpvYnNtZGJ2c3NsLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI2YjNjZDVhOC0yOTkxLTQwYTItODIzNy1jNjRhZmM0MzEzMjAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzYwOTk0OTg5LCJpYXQiOjE3NjA5OTEzODksImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbCI6ImFkbWluQGFkbWluLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJub21lIjoiQWRtaW5pc3RyYWRvciIsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwicm9sZSI6ImFkbWluIiwic3ViIjoiNmIzY2Q1YTgtMjk5MS00MGEyLTgyMzctYzY0YWZjNDMxMzIwIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3NjA5OTEzODl9XSwic2Vzc2lvbl9pZCI6ImRmMzZmNTdjLWU4ZGItNDBhMi05YzVlLTAzZTNhMDJmNzNjNCIsImlzX2Fub255bW91cyI6ZmFsc2V9.TiG90tofCzSTxnaUAxlqQ92y5tUPWhdIKfH6_Jn49MU"
+
+        function simulateRealLogin() {
+            console.log('🔐 Simulando login real com dados do backend...')
+            
+            // Salvar dados reais no localStorage
+            localStorage.setItem('access_token', realToken)
+            localStorage.setItem('user_profile', JSON.stringify(realUserData.user))
+            localStorage.setItem('user_perfil', JSON.stringify(realUserData.perfil))
+            localStorage.setItem('user_permissoes', JSON.stringify(realUserData.permissoes))
+            
+            updateUI()
+            console.log('✅ Dados reais salvos no localStorage')
+        }
+
+        function testRealPermissions() {
+            const permissions = JSON.parse(localStorage.getItem('user_permissoes') || '[]')
+            const permissionStrings = permissions.map(p => `${p.modulo}:${p.acao}`)
+            
+            const testCases = [
+                'dashboard:visualizar',
+                'usuarios:visualizar',
+                'gruas:visualizar',
+                'estoque:visualizar',
+                'relatorios:visualizar',
+                'configuracoes:visualizar',
+                'ponto_eletronico:visualizar',
+                'assinatura_digital:visualizar'
+            ]
+            
+            let html = '<div class="grid">'
+            testCases.forEach(permission => {
+                const hasAccess = permissionStrings.includes(permission)
+                html += `<div class="permission ${hasAccess ? 'has-access' : 'no-access'}">
+                    ${permission}: ${hasAccess ? '✅' : '❌'}
+                </div>`
+            })
+            html += '</div>'
+            
+            document.getElementById('permission-tests').innerHTML = html
+            console.log('🧪 Teste de permissões concluído')
+        }
+
+        function checkSystemStatus() {
+            const token = localStorage.getItem('access_token')
+            const user = localStorage.getItem('user_profile')
+            const perfil = localStorage.getItem('user_perfil')
+            const permissoes = localStorage.getItem('user_permissoes')
+            
+            let status = '<div class="grid">'
+            status += `<div class="status ${token ? 'success' : 'error'}">Token: ${token ? '✅ Presente' : '❌ Ausente'}</div>`
+            status += `<div class="status ${user ? 'success' : 'error'}">Usuário: ${user ? '✅ Presente' : '❌ Ausente'}</div>`
+            status += `<div class="status ${perfil ? 'success' : 'error'}">Perfil: ${perfil ? '✅ Presente' : '❌ Ausente'}</div>`
+            status += `<div class="status ${permissoes ? 'success' : 'error'}">Permissões: ${permissoes ? '✅ Presente' : '❌ Ausente'}</div>`
+            status += '</div>'
+            
+            if (permissoes) {
+                const perms = JSON.parse(permissoes)
+                status += `<div class="status info">Total de permissões: ${perms.length}</div>`
+            }
+            
+            document.getElementById('system-status').innerHTML = status
+        }
+
+        function clearAllData() {
+            localStorage.removeItem('access_token')
+            localStorage.removeItem('user_profile')
+            localStorage.removeItem('user_perfil')
+            localStorage.removeItem('user_permissoes')
+            updateUI()
+            console.log('🗑️ Dados limpos')
+        }
+
+        function updateUI() {
+            checkSystemStatus()
+            updateUserData()
+            updatePermissionsList()
+        }
+
+        function updateUserData() {
+            const user = localStorage.getItem('user_profile')
+            const perfil = localStorage.getItem('user_perfil')
+            
+            if (user && perfil) {
+                const userData = JSON.parse(user)
+                const perfilData = JSON.parse(perfil)
+                
+                let html = '<div class="grid">'
+                html += `<div class="status success">👤 Nome: ${userData.nome}</div>`
+                html += `<div class="status success">📧 Email: ${userData.email}</div>`
+                html += `<div class="status success">👥 Perfil: ${perfilData.nome}</div>`
+                html += `<div class="status success">📊 Nível: ${perfilData.nivel_acesso}</div>`
+                html += '</div>'
+                
+                document.getElementById('user-data').innerHTML = html
+            } else {
+                document.getElementById('user-data').innerHTML = '<div class="status error">Nenhum usuário logado</div>'
+            }
+        }
+
+        function updatePermissionsList() {
+            const permissoes = localStorage.getItem('user_permissoes')
+            
+            if (permissoes) {
+                const perms = JSON.parse(permissoes)
+                const permissionStrings = perms.map(p => `${p.modulo}:${p.acao}`)
+                
+                let html = `<div class="status success">Total: ${perms.length} permissões</div>`
+                html += '<div style="margin-top: 10px;">'
+                permissionStrings.forEach(permission => {
+                    html += `<span class="permission has-access">${permission}</span>`
+                })
+                html += '</div>'
+                
+                document.getElementById('permissions-list').innerHTML = html
+            } else {
+                document.getElementById('permissions-list').innerHTML = '<div class="status error">Nenhuma permissão carregada</div>'
+            }
+        }
+
+        // Inicializar UI
+        updateUI()
+    </script>
+</body>
+</html>

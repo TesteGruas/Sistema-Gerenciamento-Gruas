@@ -1,6 +1,8 @@
 "use client"
 
 import { ProtectedRoute } from "@/components/protected-route"
+import { usePermissions } from "@/hooks/use-permissions"
+import { DebugPermissions } from "@/components/debug-permissions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { 
@@ -23,6 +25,8 @@ import { useState, useEffect } from "react"
 const COLORS = [ '#ef4444', '#8b5cf6', '#ec4899']
 
 export default function Dashboard() {
+  // Todos os hooks devem ser chamados no topo
+  const { permissions, perfil, loading: permissionsLoading } = usePermissions()
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -57,12 +61,15 @@ export default function Dashboard() {
   }
 
   return (
-    <ProtectedRoute permission="dashboard:visualizar">
+    <ProtectedRoute permission="dashboard:visualizar" showAccessDenied={true}>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">Visão geral do sistema de gestão de gruas</p>
         </div>
+
+        {/* Debug - Sistema de Permissões */}
+        <DebugPermissions />
 
         {/* Estatísticas Principais */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
