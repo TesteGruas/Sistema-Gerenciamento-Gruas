@@ -54,7 +54,7 @@ const documentoSchema = Joi.object({
 
 /**
  * @swagger
- * /api/obras/documentos/todos:
+ * /api/obras-documentos/todos:
  *   get:
  *     summary: Listar todos os documentos
  *     tags: [Obras Documentos]
@@ -332,7 +332,7 @@ router.get('/todos', authenticateToken, requirePermission('visualizar_obras'), a
 
 /**
  * @swagger
- * /api/obras/{obraId}/documentos:
+ * /api/obras-documentos/{obraId}/documentos:
  *   get:
  *     summary: Listar documentos de uma obra
  *     tags: [Obras Documentos]
@@ -574,7 +574,7 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('visualiz
 
 /**
  * @swagger
- * /api/obras/{obraId}/documentos:
+ * /api/obras-documentos/{obraId}/documentos:
  *   post:
  *     summary: Criar novo documento para uma obra
  *     tags: [Obras Documentos]
@@ -893,7 +893,7 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_o
 
 /**
  * @swagger
- * /api/obras/{obraId}/documentos/{documentoId}:
+ * /api/obras-documentos/{obraId}/documentos/{documentoId}:
  *   get:
  *     summary: Obter documento específico
  *     tags: [Obras Documentos]
@@ -1056,7 +1056,7 @@ router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermiss
 
 /**
  * @swagger
- * /api/obras/{obraId}/documentos/{documentoId}/enviar:
+ * /api/obras-documentos/{obraId}/documentos/{documentoId}/enviar:
  *   post:
  *     summary: Enviar documento para assinatura
  *     tags: [Obras Documentos]
@@ -1159,7 +1159,7 @@ router.post('/:obraId/documentos/:documentoId/enviar', authenticateToken, requir
 
 /**
  * @swagger
- * /api/obras/{obraId}/documentos/{documentoId}/download:
+ * /api/obras-documentos/{obraId}/documentos/{documentoId}/download:
  *   get:
  *     summary: Download do arquivo do documento
  *     tags: [Obras Documentos]
@@ -1253,7 +1253,7 @@ router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requi
 
 /**
  * @swagger
- * /api/obras/{obraId}/documentos/{documentoId}:
+ * /api/obras-documentos/{obraId}/documentos/{documentoId}:
  *   put:
  *     summary: Atualizar documento
  *     tags: [Obras Documentos]
@@ -1491,7 +1491,7 @@ router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePerm
 
 /**
  * @swagger
- * /api/obras/documentos/{documentoId}:
+ * /api/obras-documentos/documentos/{documentoId}:
  *   get:
  *     summary: Obter documento específico por ID
  *     tags: [Obras Documentos]

@@ -1,5 +1,5 @@
 // API client para alocação de funcionários em obras
-import { buildApiUrl, API_ENDPOINTS } from './api'
+import { buildApiUrl, API_ENDPOINTS, api } from './api'
 
 // Interfaces
 export interface FuncionarioObra {
@@ -61,22 +61,7 @@ export interface FuncionarioObraSingleResponse {
   message?: string
 }
 
-// Função para obter token de autenticação
-const getAuthToken = (): string | null => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('token')
-  }
-  return null
-}
-
-// Headers padrão com autenticação
-const getHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` })
-  }
-}
+// Usar a instância do axios que já tem autenticação configurada
 
 const BASE_URL = 'funcionarios-obras'
 
@@ -98,58 +83,24 @@ export async function getFuncionariosObras(params?: {
   if (params?.obra_id) queryParams.append('obra_id', params.obra_id.toString())
   if (params?.status) queryParams.append('status', params.status)
 
-  const url = buildApiUrl(`${BASE_URL}?${queryParams.toString()}`)
-  
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: getHeaders()
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao buscar alocações' }))
-    throw new Error(error.message || 'Erro ao buscar alocações')
-  }
-
-  return response.json()
+  const response = await api.get(`${BASE_URL}?${queryParams.toString()}`)
+  return response.data
 }
 
 /**
  * Obter alocação por ID
  */
 export async function getFuncionarioObraPorId(id: number): Promise<FuncionarioObraSingleResponse> {
-  const url = buildApiUrl(`${BASE_URL}/${id}`)
-  
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: getHeaders()
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao buscar alocação' }))
-    throw new Error(error.message || 'Erro ao buscar alocação')
-  }
-
-  return response.json()
+  const response = await api.get(`${BASE_URL}/${id}`)
+  return response.data
 }
 
 /**
  * Criar alocação de funcionário em obra
  */
 export async function createFuncionarioObra(data: FuncionarioObraCreateData): Promise<FuncionarioObraSingleResponse> {
-  const url = buildApiUrl(BASE_URL)
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data)
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao criar alocação' }))
-    throw new Error(error.message || 'Erro ao criar alocação')
-  }
-
-  return response.json()
+  const response = await api.post(BASE_URL, data)
+  return response.data
 }
 
 /**
@@ -159,20 +110,8 @@ export async function updateFuncionarioObra(
   id: number,
   data: Partial<FuncionarioObraCreateData>
 ): Promise<FuncionarioObraSingleResponse> {
-  const url = buildApiUrl(`${BASE_URL}/${id}`)
-  
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify(data)
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao atualizar alocação' }))
-    throw new Error(error.message || 'Erro ao atualizar alocação')
-  }
-
-  return response.json()
+  const response = await api.put(`${BASE_URL}/${id}`, data)
+  return response.data
 }
 
 /**
@@ -182,20 +121,8 @@ export async function finalizarFuncionarioObra(
   id: number,
   data_fim: string
 ): Promise<FuncionarioObraSingleResponse> {
-  const url = buildApiUrl(`${BASE_URL}/${id}/finalizar`)
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ data_fim })
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao finalizar alocação' }))
-    throw new Error(error.message || 'Erro ao finalizar alocação')
-  }
-
-  return response.json()
+  const response = await api.post(`${BASE_URL}/${id}/finalizar`, { data_fim })
+  return response.data
 }
 
 /**
@@ -206,39 +133,16 @@ export async function transferirFuncionario(
   nova_obra_id: number,
   data_transferencia?: string
 ): Promise<FuncionarioObraSingleResponse> {
-  const url = buildApiUrl(`${BASE_URL}/${id}/transferir`)
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ nova_obra_id, data_transferencia })
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao transferir funcionário' }))
-    throw new Error(error.message || 'Erro ao transferir funcionário')
-  }
-
-  return response.json()
+  const response = await api.post(`${BASE_URL}/${id}/transferir`, { nova_obra_id, data_transferencia })
+  return response.data
 }
 
 /**
  * Deletar alocação
  */
 export async function deleteFuncionarioObra(id: number): Promise<{ success: boolean; message: string }> {
-  const url = buildApiUrl(`${BASE_URL}/${id}`)
-  
-  const response = await fetch(url, {
-    method: 'DELETE',
-    headers: getHeaders()
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao deletar alocação' }))
-    throw new Error(error.message || 'Erro ao deletar alocação')
-  }
-
-  return response.json()
+  const response = await api.delete(`${BASE_URL}/${id}`)
+  return response.data
 }
 
 /**
@@ -248,19 +152,8 @@ export async function getFuncionariosObra(
   obra_id: number,
   status: string = 'ativo'
 ): Promise<FuncionariosObrasResponse> {
-  const url = buildApiUrl(`${BASE_URL}/obra/${obra_id}/funcionarios?status=${status}`)
-  
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: getHeaders()
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro ao buscar funcionários da obra' }))
-    throw new Error(error.message || 'Erro ao buscar funcionários da obra')
-  }
-
-  return response.json()
+  const response = await api.get(`${BASE_URL}/obra/${obra_id}/funcionarios?status=${status}`)
+  return response.data
 }
 
 /**
