@@ -31,7 +31,7 @@ router.use(authenticateToken)
 // Schema de validação para funcionários
 const funcionarioSchema = Joi.object({
   nome: Joi.string().min(2).max(255).required(),
-  cargo: Joi.string().valid('Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras').required(),
+  cargo: Joi.string().min(2).max(255).required(), // Validação dinâmica - aceita qualquer cargo do banco
   telefone: Joi.string().max(20).allow(null, '').optional(),
   email: Joi.string().email().allow(null, '').optional(),
   cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/).allow(null, '').optional(),
@@ -48,7 +48,7 @@ const funcionarioSchema = Joi.object({
 // Schema para atualização (campos opcionais e sem validação de senha)
 const funcionarioUpdateSchema = Joi.object({
   nome: Joi.string().min(2).max(255).optional(),
-  cargo: Joi.string().valid('Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras').optional(),
+  cargo: Joi.string().min(2).max(255).optional(), // Validação dinâmica - aceita qualquer cargo do banco
   telefone: Joi.string().max(20).allow(null, '').optional(),
   email: Joi.string().email().allow(null, '').optional(),
   cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/).allow(null, '').optional(),
@@ -488,6 +488,32 @@ router.post('/', async (req, res) => {
 
     const { criar_usuario, usuario_senha, ...funcionarioData } = value
 
+    // Validar se cargo existe e está ativo
+    if (value.cargo) {
+      const { data: cargoExiste, error: cargoError } = await supabaseAdmin
+        .from('cargos')
+        .select('id, nome, ativo')
+        .eq('nome', value.cargo)
+        .single()
+
+      if (cargoError || !cargoExiste) {
+        return res.status(400).json({
+          error: 'Cargo inválido',
+          message: 'O cargo especificado não existe no sistema'
+        })
+      }
+
+      if (!cargoExiste.ativo) {
+        return res.status(400).json({
+          error: 'Cargo inativo',
+          message: 'O cargo especificado está inativo e não pode ser utilizado'
+        })
+      }
+
+      // Adicionar cargo_id ao funcionarioData
+      funcionarioData.cargo_id = cargoExiste.id
+    }
+
     // Verificar se CPF já existe (se fornecido)
     if (value.cpf) {
       const { data: existingFuncionario } = await supabaseAdmin
@@ -768,6 +794,32 @@ router.put('/:id', async (req, res) => {
 
     // Filtrar campos que não devem ser salvos na tabela funcionarios
     const { criar_usuario, usuario_senha, ...funcionarioData } = value
+
+    // Validar se cargo existe e está ativo (se fornecido)
+    if (value.cargo) {
+      const { data: cargoExiste, error: cargoError } = await supabaseAdmin
+        .from('cargos')
+        .select('id, nome, ativo')
+        .eq('nome', value.cargo)
+        .single()
+
+      if (cargoError || !cargoExiste) {
+        return res.status(400).json({
+          error: 'Cargo inválido',
+          message: 'O cargo especificado não existe no sistema'
+        })
+      }
+
+      if (!cargoExiste.ativo) {
+        return res.status(400).json({
+          error: 'Cargo inativo',
+          message: 'O cargo especificado está inativo e não pode ser utilizado'
+        })
+      }
+
+      // Adicionar cargo_id ao funcionarioData
+      funcionarioData.cargo_id = cargoExiste.id
+    }
 
     // Verificar se CPF já existe em outro funcionário (se fornecido)
     if (value.cpf) {

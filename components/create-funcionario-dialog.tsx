@@ -25,7 +25,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   onSubmit,
   submitting,
 }: CreateFuncionarioDialogProps) {
-  const { cargosAtivos } = useCargos()
+  const { cargosAtivos, loading: loadingCargos } = useCargos()
   
   const [form, setForm] = useState({
     name: "",
@@ -180,16 +180,28 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
               <Select
                 value={form.role}
                 onValueChange={(value) => handleChange('role', value)}
+                disabled={loadingCargos}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder={loadingCargos ? "Carregando cargos..." : "Selecione um cargo"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {cargosAtivos.map((cargo) => (
-                    <SelectItem key={cargo.id} value={cargo.nome}>
-                      {cargo.nome}
-                    </SelectItem>
-                  ))}
+                  {loadingCargos ? (
+                    <div className="p-2 text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Carregando cargos...
+                    </div>
+                  ) : cargosAtivos.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">
+                      Nenhum cargo disponível
+                    </div>
+                  ) : (
+                    cargosAtivos.map((cargo) => (
+                      <SelectItem key={cargo.id} value={cargo.nome}>
+                        {cargo.nome}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

@@ -1,103 +1,35 @@
 import { useState, useEffect, useCallback } from 'react'
+import { cargosApi, type Cargo, type CargoCreateData } from '@/lib/api/cargos-api'
 
-export interface Cargo {
-  id: number
-  nome: string
-  descricao?: string
-  ativo: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface CargoCreateData {
-  nome: string
-  descricao?: string
-}
+// Re-exportar tipos para compatibilidade
+export type { Cargo, CargoCreateData }
 
 export function useCargos() {
   const [cargos, setCargos] = useState<Cargo[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Cargos padrão do sistema (fallback)
-  const cargosPadrao: Cargo[] = [
-    {
-      id: 1,
-      nome: 'Operador',
-      descricao: 'Operador de equipamentos pesados',
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 2,
-      nome: 'Sinaleiro',
-      descricao: 'Responsável por sinalização em obras',
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 3,
-      nome: 'Técnico Manutenção',
-      descricao: 'Técnico responsável pela manutenção de equipamentos',
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 4,
-      nome: 'Supervisor',
-      descricao: 'Supervisor de equipe e operações',
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 5,
-      nome: 'Mecânico',
-      descricao: 'Mecânico especializado em equipamentos pesados',
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 6,
-      nome: 'Engenheiro',
-      descricao: 'Engenheiro responsável por projetos e obras',
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 7,
-      nome: 'Chefe de Obras',
-      descricao: 'Responsável pela coordenação geral das obras',
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  ]
-
-  // Carregar cargos
+  // Carregar cargos da API
   const carregarCargos = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
       
-      // TODO: Implementar chamada para API de cargos
-      // const response = await cargosApi.listarCargos()
-      // setCargos(response.data)
+      const response = await cargosApi.listarCargos({ ativo: true })
       
-      // Por enquanto, usar cargos padrão
-      setCargos(cargosPadrao)
+      if (response.success && response.data) {
+        setCargos(response.data)
+      } else {
+        throw new Error('Falha ao carregar cargos')
+      }
       
     } catch (err: any) {
       console.error('Erro ao carregar cargos:', err)
-      setError(err.message || 'Erro ao carregar cargos')
+      const errorMessage = err.response?.data?.message || err.message || 'Erro ao carregar cargos'
+      setError(errorMessage)
       
-      // Fallback para cargos padrão
-      setCargos(cargosPadrao)
+      // Em caso de erro, manter lista vazia ou cache anterior
+      // Não usar fallback hardcoded para forçar correção de problemas
     } finally {
       setLoading(false)
     }
@@ -107,29 +39,55 @@ export function useCargos() {
   const criarCargo = useCallback(async (data: CargoCreateData): Promise<Cargo> => {
     try {
       setLoading(true)
+      setError(null)
       
-      // TODO: Implementar chamada para API de cargos
-      // const response = await cargosApi.criarCargo(data)
-      // const novoCargo = response.data
+      const response = await cargosApi.criarCargo(data)
       
-      // Simulação temporária
-      const novoCargo: Cargo = {
-        id: Date.now(), // ID temporário
-        nome: data.nome,
-        descricao: data.descricao,
-        ativo: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      if (response.success && response.data) {
+        const novoCargo = response.data
+        
+        // Adicionar à lista local
+        setCargos(prev => [...prev, novoCargo])
+        
+        return novoCargo
+      } else {
+        throw new Error(response.message || 'Falha ao criar cargo')
       }
-      
-      // Adicionar à lista local
-      setCargos(prev => [...prev, novoCargo])
-      
-      return novoCargo
       
     } catch (err: any) {
       console.error('Erro ao criar cargo:', err)
-      throw new Error(err.message || 'Erro ao criar cargo')
+      const errorMessage = err.response?.data?.message || err.message || 'Erro ao criar cargo'
+      setError(errorMessage)
+      throw new Error(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Atualizar cargo
+  const atualizarCargo = useCallback(async (id: number, data: Partial<CargoCreateData>): Promise<Cargo> => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await cargosApi.atualizarCargo(id, data)
+      
+      if (response.success && response.data) {
+        const cargoAtualizado = response.data
+        
+        // Atualizar na lista local
+        setCargos(prev => prev.map(c => c.id === id ? cargoAtualizado : c))
+        
+        return cargoAtualizado
+      } else {
+        throw new Error(response.message || 'Falha ao atualizar cargo')
+      }
+      
+    } catch (err: any) {
+      console.error('Erro ao atualizar cargo:', err)
+      const errorMessage = err.response?.data?.message || err.message || 'Erro ao atualizar cargo'
+      setError(errorMessage)
+      throw new Error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -139,8 +97,14 @@ export function useCargos() {
   const cargosAtivos = cargos.filter(cargo => cargo.ativo)
 
   // Buscar cargo por nome
-  const buscarCargoPorNome = (nome: string) =>
-    cargosAtivos.find(cargo => cargo.nome === nome)
+  const buscarCargoPorNome = useCallback((nome: string) => {
+    return cargosAtivos.find(cargo => cargo.nome === nome)
+  }, [cargosAtivos])
+
+  // Buscar cargo por ID
+  const buscarCargoPorId = useCallback((id: number) => {
+    return cargos.find(cargo => cargo.id === id)
+  }, [cargos])
 
   // Carregar cargos na inicialização
   useEffect(() => {
@@ -154,6 +118,8 @@ export function useCargos() {
     error,
     carregarCargos,
     criarCargo,
-    buscarCargoPorNome
+    atualizarCargo,
+    buscarCargoPorNome,
+    buscarCargoPorId
   }
 }

@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useCallback, memo } from "react"
+import { useState, useCallback, memo, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, Briefcase } from "lucide-react"
+import { Edit, Loader2, Briefcase } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Select,
@@ -15,28 +15,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import type { Cargo, CargoUpdateData } from "@/lib/api/cargos-api"
 
-interface CargoCreateData {
-  nome: string
-  descricao?: string
-  nivel: 'Operacional' | 'Técnico' | 'Supervisor' | 'Gerencial' | 'Diretoria'
-  salario_minimo?: number
-  salario_maximo?: number
-}
-
-interface CreateCargoDialogProps {
+interface EditCargoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: CargoCreateData) => Promise<void>
+  onSubmit: (data: CargoUpdateData) => Promise<void>
   submitting: boolean
+  cargo: Cargo
 }
 
-const CreateCargoDialog = memo(function CreateCargoDialog({
+const EditCargoDialog = memo(function EditCargoDialog({
   open,
   onOpenChange,
   onSubmit,
   submitting,
-}: CreateCargoDialogProps) {
+  cargo,
+}: EditCargoDialogProps) {
   const { toast } = useToast()
   
   const [form, setForm] = useState({
@@ -46,6 +41,19 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
     salario_minimo: "",
     salario_maximo: ""
   })
+
+  // Atualizar form quando cargo mudar
+  useEffect(() => {
+    if (cargo) {
+      setForm({
+        nome: cargo.nome,
+        descricao: cargo.descricao || "",
+        nivel: cargo.nivel as any,
+        salario_minimo: cargo.salario_minimo?.toString() || "",
+        salario_maximo: cargo.salario_maximo?.toString() || ""
+      })
+    }
+  }, [cargo])
 
   const handleChange = useCallback((field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -85,39 +93,21 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
     })
   }, [form, onSubmit, toast])
 
-  const resetForm = useCallback(() => {
-    setForm({
-      nome: "",
-      descricao: "",
-      nivel: "Operacional",
-      salario_minimo: "",
-      salario_maximo: ""
-    })
-  }, [])
-
-  // Reset form when dialog opens
-  const handleOpenChange = useCallback((open: boolean) => {
-    if (open) {
-      resetForm()
-    }
-    onOpenChange(open)
-  }, [onOpenChange, resetForm])
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Briefcase className="w-5 h-5 text-blue-600" />
-            Novo Cargo
+            <Edit className="w-5 h-5 text-blue-600" />
+            Editar Cargo
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="nome">Nome do Cargo *</Label>
+            <Label htmlFor="edit-nome">Nome do Cargo *</Label>
             <Input
-              id="nome"
+              id="edit-nome"
               value={form.nome}
               onChange={(e) => handleChange('nome', e.target.value)}
               placeholder="Ex: Operador de Guindaste"
@@ -126,9 +116,9 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="descricao">Descrição</Label>
+            <Label htmlFor="edit-descricao">Descrição</Label>
             <Textarea
-              id="descricao"
+              id="edit-descricao"
               value={form.descricao}
               onChange={(e) => handleChange('descricao', e.target.value)}
               placeholder="Descreva as responsabilidades do cargo..."
@@ -137,7 +127,7 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="nivel">Nível Hierárquico *</Label>
+            <Label htmlFor="edit-nivel">Nível Hierárquico *</Label>
             <Select
               value={form.nivel}
               onValueChange={(value) => handleChange('nivel', value)}
@@ -157,9 +147,9 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="salario-minimo">Salário Mínimo</Label>
+              <Label htmlFor="edit-salario-minimo">Salário Mínimo</Label>
               <Input
-                id="salario-minimo"
+                id="edit-salario-minimo"
                 type="number"
                 step="0.01"
                 value={form.salario_minimo}
@@ -169,9 +159,9 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="salario-maximo">Salário Máximo</Label>
+              <Label htmlFor="edit-salario-maximo">Salário Máximo</Label>
               <Input
-                id="salario-maximo"
+                id="edit-salario-maximo"
                 type="number"
                 step="0.01"
                 value={form.salario_maximo}
@@ -195,12 +185,12 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
               {submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Criando...
+                  Salvando...
                 </>
               ) : (
                 <>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Criar Cargo
+                  <Edit className="w-4 h-4 mr-2" />
+                  Salvar Alterações
                 </>
               )}
             </Button>
@@ -211,5 +201,5 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
   )
 })
 
-export { CreateCargoDialog }
-export type { CargoCreateData }
+export { EditCargoDialog }
+
