@@ -47,6 +47,7 @@ interface Perfil {
 
 export default function PerfisPage() {
   const [perfis, setPerfis] = useState<Perfil[]>([])
+  const [niveisDisponiveis, setNiveisDisponiveis] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingPerfil, setEditingPerfil] = useState<Perfil | null>(null)
@@ -73,6 +74,11 @@ export default function PerfisPage() {
       if (response.ok) {
         const data = await response.json()
         setPerfis(data.data || [])
+        
+        // Extrair níveis únicos dos perfis existentes
+        const niveis = [...new Set((data.data || []).map((perfil: Perfil) => perfil.nivel_acesso))]
+          .sort((a, b) => a - b)
+        setNiveisDisponiveis(niveis)
       } else {
         toast({
           title: 'Erro',
@@ -225,14 +231,18 @@ export default function PerfisPage() {
             </p>
           </div>
 
-          <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => setDialogOpen(true)}>
+              <Button onClick={() => {
+                setEditingPerfil(null)
+                resetForm()
+                setDialogOpen(true)
+              }}>
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Perfil
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[425px]">
               <form onSubmit={handleSubmit}>
                 <DialogHeader>
                   <DialogTitle>
@@ -269,26 +279,44 @@ export default function PerfisPage() {
 
                   <div>
                     <Label htmlFor="nivel_acesso">Nível de Acesso</Label>
-                    <Select
-                      value={formData.nivel_acesso.toString()}
-                      onValueChange={(value) => setFormData({ ...formData, nivel_acesso: parseInt(value) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o nível" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 - Básico</SelectItem>
-                        <SelectItem value="2">2 - Limitado</SelectItem>
-                        <SelectItem value="3">3 - Operador</SelectItem>
-                        <SelectItem value="4">4 - Campo</SelectItem>
-                        <SelectItem value="5">5 - Técnico</SelectItem>
-                        <SelectItem value="6">6 - Supervisor</SelectItem>
-                        <SelectItem value="7">7 - Avançado</SelectItem>
-                        <SelectItem value="8">8 - Gerencial</SelectItem>
-                        <SelectItem value="9">9 - Executivo</SelectItem>
-                        <SelectItem value="10">10 - Administrador</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-2">
+                      <Select
+                        value={formData.nivel_acesso.toString()}
+                        onValueChange={(value) => setFormData({ ...formData, nivel_acesso: parseInt(value) })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o nível" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {niveisDisponiveis.map((nivel) => {
+                            const perfilExistente = perfis.find(p => p.nivel_acesso === nivel)
+                            return (
+                              <SelectItem key={nivel} value={nivel.toString()}>
+                                {nivel} - {perfilExistente?.nome || `Nível ${nivel}`}
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Ou digite um novo nível:</span>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={formData.nivel_acesso}
+                          onChange={(e) => {
+                            const valor = parseInt(e.target.value) || 1
+                            setFormData({ ...formData, nivel_acesso: valor })
+                          }}
+                          className="w-20"
+                          placeholder="1-10"
+                        />
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        Níveis existentes: {niveisDisponiveis.join(', ')}
+                      </p>
+                    </div>
                   </div>
 
                   <div>
