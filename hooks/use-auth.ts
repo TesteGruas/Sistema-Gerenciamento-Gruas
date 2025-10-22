@@ -64,16 +64,20 @@ export function useAuth() {
           // Decodificar token JWT para obter informações do usuário
           try {
             const payload = JSON.parse(atob(token.split('.')[1]))
-            const user: User = {
-              id: payload.sub || payload.user_id,
-              email: payload.email,
-              nome: payload.user_metadata?.nome || payload.name,
-              role: payload.user_metadata?.role || payload.role
-            }
             
             // Parsear dados salvos
             const perfil: Perfil | null = userPerfil ? JSON.parse(userPerfil) : null
             const permissoes: Permissao[] = userPermissoes ? JSON.parse(userPermissoes) : []
+            
+            // Obter role do perfil ou do payload
+            const role = perfil?.nome || payload.role || payload.user_metadata?.role
+            
+            const user: User = {
+              id: payload.sub || payload.user_id,
+              email: payload.email,
+              nome: payload.user_metadata?.nome || payload.name,
+              role: role // Role vem do perfil (Admin, Gestores, Supervisores, Operários, Clientes)
+            }
             
             setAuthState({
               isAuthenticated: true,

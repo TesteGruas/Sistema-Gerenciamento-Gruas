@@ -10,16 +10,23 @@ import { Shield, Lock, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
+import type { Permission } from '@/types/permissions'
+
 interface ProtectedRouteProps {
   children: React.ReactNode
-  permission?: string
-  permissions?: string[]
+  permission?: Permission
+  permissions?: Permission[]
   requireAll?: boolean
   fallback?: React.ReactNode
   showAccessDenied?: boolean
   redirectTo?: string
+  minLevel?: number
 }
 
+/**
+ * Componente ProtectedRoute - Versão 2.0 (Sistema Simplificado)
+ * Protege rotas baseado em permissões hardcoded do sistema simplificado.
+ */
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   permission,
@@ -27,10 +34,19 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requireAll = false,
   fallback,
   showAccessDenied = true,
-  redirectTo = '/dashboard'
+  redirectTo = '/dashboard',
+  minLevel
 }) => {
   const { user, isLoading } = useAuth()
-  const { hasPermission, hasAnyPermission, canAccessDashboard } = usePermissions()
+  const { 
+    hasPermission, 
+    hasAnyPermission, 
+    hasAllPermissions,
+    hasMinLevel,
+    canAccessDashboard,
+    userRole,
+    level
+  } = usePermissions()
 
   // Mostrar loading enquanto carrega dados do usuário
   if (isLoading) {
@@ -64,16 +80,24 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Verificar permissões
   let hasAccess = false
 
-  if (permission) {
+  // Verificar nível mínimo se especificado
+  if (minLevel !== undefined) {
+    hasAccess = hasMinLevel(minLevel as any)
+  } 
+  // Verificar permissão única
+  else if (permission) {
     hasAccess = hasPermission(permission)
-  } else if (permissions.length > 0) {
+  } 
+  // Verificar múltiplas permissões
+  else if (permissions.length > 0) {
     if (requireAll) {
-      hasAccess = permissions.every(p => hasPermission(p))
+      hasAccess = hasAllPermissions(permissions)
     } else {
       hasAccess = hasAnyPermission(permissions)
     }
-  } else {
-    // Se não especificou permissões, permite acesso
+  } 
+  // Se não especificou permissões, permite acesso
+  else {
     hasAccess = true
   }
 
@@ -115,15 +139,33 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center space-y-4">
-          <div className="text-sm text-gray-600">
-            <p>Perfil atual: <strong>{user.perfil?.nome || 'Não definido'}</strong></p>
+          <div className="text-sm text-gray-600 space-y-2">
+            <div>
+              <span className="font-medium">Role atual:</span>{' '}
+              <strong className="text-gray-900">{userRole || 'Não definido'}</strong>
+              {level > 0 && <span className="text-gray-500"> (Nível {level})</span>}
+            </div>
+            {minLevel && (
+              <div>
+                <span className="font-medium">Nível requerido:</span>{' '}
+                <strong className="text-red-600">{minLevel}</strong>
+              </div>
+            )}
             {permission && (
-              <p>Permissão necessária: <code className="bg-gray-100 px-2 py-1 rounded">{permission}</code></p>
+              <div>
+                <span className="font-medium">Permissão necessária:</span>{' '}
+                <code className="bg-gray-100 px-2 py-1 rounded text-xs">{permission}</code>
+              </div>
             )}
             {permissions.length > 0 && (
-              <p>Permissões necessárias: {permissions.map(p => (
-                <code key={p} className="bg-gray-100 px-2 py-1 rounded mr-1">{p}</code>
-              ))}</p>
+              <div>
+                <span className="font-medium">Permissões {requireAll ? '(todas)' : '(qualquer uma)'}:</span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {permissions.map(p => (
+                    <code key={p} className="bg-gray-100 px-2 py-1 rounded text-xs">{p}</code>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
           <div className="flex gap-2 justify-center">

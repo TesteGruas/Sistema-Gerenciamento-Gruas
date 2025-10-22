@@ -10,7 +10,6 @@ import {
   FileText, 
   Clock, 
   Shield, 
-  Eye,
   User,
   CheckCircle
 } from 'lucide-react'
@@ -22,95 +21,89 @@ interface WelcomeScreenProps {
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ user }) => {
-  const { perfil, isAdmin, isManager, isSupervisor, isOperator, isViewer, isClient } = usePermissions()
+  const { perfil, isAdmin, isManager, isSupervisor, isOperator, isClient, level, userRole } = usePermissions()
 
   const getProfileInfo = () => {
     if (isAdmin()) {
       return {
-        title: "Administrador",
-        description: "Acesso completo ao sistema",
+        title: "Admin",
+        description: "Acesso completo ao sistema (Nível 10)",
         icon: Shield,
         color: "bg-red-500",
         features: [
           "Dashboard completo",
           "Gestão de usuários",
+          "Configurações do sistema",
           "Relatórios financeiros",
-          "Configurações do sistema"
+          "RH e folha de pagamento",
+          "Todas as funcionalidades"
         ]
       }
     }
     
     if (isManager()) {
       return {
-        title: "Gerente",
-        description: "Acesso gerencial com restrições administrativas",
+        title: "Gestores",
+        description: "Acesso gerencial completo (Nível 9)",
         icon: Building2,
         color: "bg-blue-500",
         features: [
           "Dashboard gerencial",
           "Gestão de equipe",
-          "Relatórios operacionais",
-          "Aprovações"
+          "Relatórios completos",
+          "Financeiro e RH",
+          "Aprovações e validações",
+          "Clientes e obras"
         ]
       }
     }
     
     if (isSupervisor()) {
       return {
-        title: "Supervisor",
-        description: "Supervisão de operações e equipe",
+        title: "Supervisores",
+        description: "Supervisão operacional (Nível 6)",
         icon: Users,
         color: "bg-green-500",
         features: [
-          "Obras atribuídas",
-          "Espelho de ponto da equipe",
-          "Controle de gruas",
-          "Assinatura de documentos"
+          "Gestão de gruas e obras",
+          "Aprovação de ponto",
+          "Controle de estoque",
+          "Livro de gruas",
+          "Documentos e assinaturas",
+          "Relatórios operacionais"
         ]
       }
     }
     
     if (isOperator()) {
       return {
-        title: "Operador",
-        description: "Operação diária do sistema",
+        title: "Operários",
+        description: "Operação diária via APP (Nível 4)",
         icon: Clock,
         color: "bg-orange-500",
         features: [
-          "Acesso ao app móvel",
           "Registro de ponto",
-          "Documentos operacionais",
-          "Assinatura digital"
-        ]
-      }
-    }
-    
-    if (isViewer()) {
-      return {
-        title: "Visualizador",
-        description: "Acesso somente leitura",
-        icon: Eye,
-        color: "bg-purple-500",
-        features: [
-          "Visualizar obras",
-          "Visualizar gruas",
-          "Documentos de consulta",
-          "Relatórios básicos"
+          "Espelho de ponto",
+          "Visualização de documentos",
+          "Assinatura digital",
+          "Notificações",
+          "Acesso via PWA/Mobile"
         ]
       }
     }
     
     if (isClient()) {
       return {
-        title: "Cliente",
-        description: "Acesso limitado para visualização de suas obras",
+        title: "Clientes",
+        description: "Acesso limitado (Nível 1)",
         icon: User,
         color: "bg-gray-500",
         features: [
-          "Suas obras",
-          "Documentos da obra",
-          "Status dos projetos",
-          "Comunicação com a equipe"
+          "Visualizar documentos",
+          "Assinar documentos",
+          "Acompanhar obras",
+          "Notificações",
+          "Comunicação"
         ]
       }
     }
@@ -120,7 +113,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ user }) => {
       description: "Acesso básico ao sistema",
       icon: User,
       color: "bg-gray-500",
-      features: []
+      features: ["Entre em contato com o administrador para atribuição de perfil"]
     }
   }
 
@@ -133,35 +126,36 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ user }) => {
     if (isAdmin() || isManager()) {
       modules.push(
         { name: "Dashboard", href: "/dashboard", icon: Building2 },
+        { name: "Usuários", href: "/dashboard/usuarios", icon: Users },
+        { name: "Gruas", href: "/dashboard/gruas", icon: Building2 },
         { name: "Obras", href: "/dashboard/obras", icon: Building2 },
-        { name: "Clientes", href: "/dashboard/clientes", icon: Users },
+        { name: "Ponto Eletrônico", href: "/dashboard/ponto-eletronico", icon: Clock },
+        { name: "Documentos", href: "/dashboard/documentos", icon: FileText },
+        { name: "Estoque", href: "/dashboard/estoque", icon: FileText },
         { name: "Financeiro", href: "/dashboard/financeiro", icon: FileText },
-        { name: "Relatórios", href: "/dashboard/relatorios", icon: FileText },
-        { name: "Usuários", href: "/dashboard/usuarios", icon: Users }
+        { name: "RH", href: "/dashboard/rh", icon: Users },
+        { name: "Relatórios", href: "/dashboard/relatorios", icon: FileText }
       )
     } else if (isSupervisor()) {
       modules.push(
+        { name: "Dashboard", href: "/dashboard", icon: Building2 },
+        { name: "Gruas", href: "/dashboard/gruas", icon: Building2 },
         { name: "Obras", href: "/dashboard/obras", icon: Building2 },
-        { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Building2 },
+        { name: "Ponto Eletrônico", href: "/dashboard/ponto-eletronico", icon: Clock },
+        { name: "Documentos", href: "/dashboard/documentos", icon: FileText },
         { name: "Livros de Gruas", href: "/dashboard/livros-gruas", icon: FileText },
-        { name: "Ponto Eletrônico", href: "/dashboard/ponto", icon: Clock },
-        { name: "RH", href: "/dashboard/rh", icon: Users },
-        { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileText }
+        { name: "Estoque", href: "/dashboard/estoque", icon: FileText }
       )
     } else if (isOperator()) {
       modules.push(
-        { name: "Obras", href: "/dashboard/obras", icon: Building2 },
-        { name: "Assinatura Digital", href: "/dashboard/assinatura", icon: FileText }
-      )
-    } else if (isViewer()) {
-      modules.push(
-        { name: "Obras", href: "/dashboard/obras", icon: Building2 },
-        { name: "Livros de Gruas", href: "/dashboard/livros-gruas", icon: FileText }
+        { name: "App Móvel (PWA)", href: "/pwa", icon: Clock },
+        { name: "Ponto Eletrônico", href: "/pwa/ponto", icon: Clock },
+        { name: "Documentos", href: "/pwa/documentos", icon: FileText }
       )
     } else if (isClient()) {
       modules.push(
-        { name: "Minhas Obras", href: "/dashboard/obras", icon: Building2 },
-        { name: "Documentos", href: "/dashboard/documentos", icon: FileText }
+        { name: "Documentos", href: "/pwa/documentos", icon: FileText },
+        { name: "Minhas Obras", href: "/dashboard/obras", icon: Building2 }
       )
     }
     
@@ -223,12 +217,18 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ user }) => {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Nível de Acesso:</span>
-                    <Badge variant="secondary">{perfil?.nivel_acesso || 'N/A'}</Badge>
+                    <Badge variant="secondary">{level || perfil?.nivel_acesso || 'N/A'}</Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Role:</span>
+                    <Badge variant="default">
+                      {userRole || 'Não definido'}
+                    </Badge>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Status:</span>
                     <Badge variant={perfil?.status === 'Ativo' ? 'default' : 'secondary'}>
-                      {perfil?.status || 'N/A'}
+                      {perfil?.status || 'Ativo'}
                     </Badge>
                   </div>
                 </div>

@@ -1,310 +1,308 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { useAuth } from './use-auth'
-import { authCache } from '@/lib/auth-cache'
+import {
+  type Permission,
+  type RoleName,
+  type AccessLevel,
+  type ModuleName,
+  ROLES_PERMISSIONS,
+  ROLES_LEVELS,
+  getRolePermissions,
+  getRoleLevel,
+  hasMinLevel as hasMinLevelUtil,
+  matchesPermissionPattern,
+  normalizeRoleName
+} from '@/types/permissions'
 
-export interface Permission {
-  id: number
-  nome: string
-  descricao: string
-  modulo: string
-  acao: string
-  recurso?: string
-  status: 'Ativa' | 'Inativa'
-}
-
-export interface Perfil {
-  id: number
-  nome: string
-  descricao: string
-  nivel_acesso: number
-  status: 'Ativo' | 'Inativo'
-}
-
+/**
+ * Hook de Permissões - Versão 2.0 (Sistema Simplificado)
+ * 
+ * Sistema baseado em 5 roles principais com permissões hardcoded.
+ * Elimina consultas ao backend e simplifica a lógica de verificação.
+ */
 export const usePermissions = () => {
-  const { user, perfil, permissoes, loading: authLoading } = useAuth()
-  const [permissions, setPermissions] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const { user, perfil, loading: authLoading } = useAuth()
 
-  useEffect(() => {
-    const loadPermissions = async () => {
-      console.log('🔐 Iniciando carregamento de permissões...')
-      console.log('🔐 Estado atual:', { user, perfil, permissoes, authLoading })
-      
-      if (authLoading) {
-        console.log('🔐 Auth ainda carregando, aguardando...')
-        setLoading(true)
-        return
-      }
+  // Obter role e permissões do usuário (com normalização para retrocompatibilidade)
+  const rawRole = user?.role
+  const userRole = useMemo(() => normalizeRoleName(rawRole), [rawRole])
+  
+  // Debug temporário
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔐 [use-permissions] Debug:', {
+      user: user,
+      rawRole: rawRole,
+      userRole: userRole,
+      perfil: perfil,
+      authLoading: authLoading
+    })
+  }
+  
+  const permissions = useMemo(() => {
+    if (!userRole) return []
+    return getRolePermissions(userRole)
+  }, [userRole])
 
-      if (!user) {
-        console.log('🔐 Usuário não encontrado, limpando permissões')
-        setPermissions([])
-        setLoading(false)
-        return
-      }
+  const level = useMemo(() => {
+    if (!userRole) return 0 as AccessLevel
+    return getRoleLevel(userRole)
+  }, [userRole])
 
-      try {
-        // Verificar se estamos no cliente
-        if (typeof window === 'undefined') {
-          console.log('🔐 Executando no servidor, aguardando hidratação...')
-          setLoading(true)
-          return
-        }
-
-        const token = localStorage.getItem('access_token')
-        if (!token) {
-          console.log('🔐 Token não encontrado no localStorage')
-          setPermissions([])
-          setLoading(false)
-          return
-        }
-
-        console.log('🔐 Buscando dados usando cache centralizado...')
-        const authData = await authCache.getAuthData()
-        
-        const permissionStrings = authData.permissoes.map((p: Permission) => p.nome)
-        console.log('🔐 Permissões carregadas:', permissionStrings)
-        setPermissions(permissionStrings)
-        
-      } catch (error) {
-        console.error('🔐 Erro ao carregar permissões:', error)
-        
-        // Fallback para cache local
-        const cachedPermissions = localStorage.getItem('user_permissions')
-        
-        if (cachedPermissions) {
-          console.log('🔐 Usando permissões do cache local após erro')
-          setPermissions(JSON.parse(cachedPermissions))
-        } else {
-          console.log('🔐 Nenhum cache local encontrado após erro')
-          setPermissions([])
-        }
-      } finally {
-        setLoading(false)
-        console.log('🔐 Carregamento de permissões finalizado')
-      }
-    }
-
-    loadPermissions()
-  }, [user, authLoading])
-
-  // Verificar se tem uma permissão específica
-  const hasPermission = (permission: string): boolean => {
+  /**
+   * Verifica se tem uma permissão específica
+   */
+  const hasPermission = (permission: Permission): boolean => {
     if (!permission || permission.trim() === '') return false
-    
-    console.log(`🔐 === VERIFICANDO PERMISSÃO: ${permission} ===`)
-    
-    // Se for admin, sempre permitir acesso
-    if (isAdmin()) {
-      console.log(`🔐 Admin detectado - permitindo acesso a ${permission}`)
-      return true
-    }
-    
-    // Sempre verificar localStorage primeiro se disponível
-    if (typeof window !== 'undefined') {
-      const cachedPermissions = localStorage.getItem('user_permissions')
-      console.log(`🔐 localStorage disponível:`, !!cachedPermissions)
-      
-      if (cachedPermissions) {
-        try {
-          const cachedPerms = JSON.parse(cachedPermissions)
-          const hasAccess = cachedPerms.includes(permission)
-          console.log(`🔐 Permissões no localStorage:`, cachedPerms.length, 'itens')
-          console.log(`🔐 Tem ${permission}? ${hasAccess}`)
-          
-          if (!hasAccess) {
-            console.log(`🔐 Permissões similares:`, cachedPerms.filter((p: string) => p.includes(permission.split(':')[0])))
-          }
-          
-          return hasAccess
-        } catch (error) {
-          console.error('🔐 Erro ao parsear permissões do localStorage:', error)
-        }
-      } else {
-        console.log('🔐 Nenhuma permissão encontrada no localStorage')
-      }
-    }
-    
-    // Fallback para estado se localStorage não disponível
-    const hasAccess = permissions.includes(permission)
-    console.log(`🔐 Fallback para estado:`, hasAccess, 'Permissões disponíveis:', permissions.length)
-    return hasAccess
+    if (!userRole) return false
+
+    // Admin e Gestores têm acesso total (wildcard *)
+    if (permissions.includes('*')) return true
+
+    // Verificar permissão exata
+    if (permissions.includes(permission)) return true
+
+    // Verificar wildcard de módulo (ex: "gruas:*" permite "gruas:visualizar")
+    const [module] = permission.split(':')
+    if (permissions.includes(`${module}:*`)) return true
+
+    // Verificar com matchPattern para casos especiais
+    return permissions.some(perm => matchesPermissionPattern(permission, perm))
   }
 
-  // Verificar se tem qualquer uma das permissões (OR)
-  const hasAnyPermission = (permissionList: string[]): boolean => {
+  /**
+   * Verifica se tem qualquer uma das permissões (OR)
+   */
+  const hasAnyPermission = (permissionList: Permission[]): boolean => {
     if (!permissionList || permissionList.length === 0) return false
     return permissionList.some(permission => hasPermission(permission))
   }
 
-  // Verificar se tem todas as permissões (AND)
-  const hasAllPermissions = (permissionList: string[]): boolean => {
+  /**
+   * Verifica se tem todas as permissões (AND)
+   */
+  const hasAllPermissions = (permissionList: Permission[]): boolean => {
     if (!permissionList || permissionList.length === 0) return false
     return permissionList.every(permission => hasPermission(permission))
   }
 
-  // Verificar se tem perfil específico
-  const hasProfile = (profileName: string): boolean => {
-    if (!perfil) return false
-    return perfil.nome === profileName
+  /**
+   * Verifica se tem perfil específico
+   */
+  const hasProfile = (profileName: RoleName): boolean => {
+    return userRole === profileName
   }
 
-  // Verificar se tem nível de acesso mínimo
-  const hasMinLevel = (minLevel: number): boolean => {
-    if (!perfil) return false
-    return perfil.nivel_acesso >= minLevel
+  /**
+   * Verifica se tem nível de acesso mínimo
+   */
+  const hasMinLevel = (minLevel: AccessLevel): boolean => {
+    if (!userRole) return false
+    return hasMinLevelUtil(userRole, minLevel)
   }
 
-  // Verificar se pode acessar módulo
-  const canAccessModule = (module: string): boolean => {
-    const modulePermissions = [
-      `${module}:visualizar`,
-      `${module}:criar`,
-      `${module}:editar`,
-      `${module}:excluir`,
-      `${module}:gerenciar`
-    ]
-    return hasAnyPermission(modulePermissions)
+  /**
+   * Verifica se pode acessar módulo (qualquer ação)
+   */
+  const canAccessModule = (module: ModuleName): boolean => {
+    if (!userRole) return false
+
+    // Wildcard total
+    if (permissions.includes('*')) return true
+
+    // Wildcard do módulo
+    if (permissions.includes(`${module}:*`)) return true
+
+    // Qualquer permissão do módulo
+    return permissions.some(perm => perm.startsWith(`${module}:`))
   }
 
-  // Verificar se pode realizar ação específica
-  const canPerformAction = (module: string, action: string): boolean => {
+  /**
+   * Verifica se pode realizar ação específica em um módulo
+   */
+  const canPerformAction = (module: ModuleName, action: string): boolean => {
     return hasPermission(`${module}:${action}`)
   }
 
-  // Obter permissões por módulo
-  const getModulePermissions = (module: string): string[] => {
+  /**
+   * Obtém permissões de um módulo específico
+   */
+  const getModulePermissions = (module: ModuleName): Permission[] => {
     return permissions.filter(p => p.startsWith(`${module}:`))
   }
 
-  // Verificar se é admin
+  // ========================================
+  // VERIFICAÇÕES POR ROLE
+  // ========================================
+
+  /**
+   * Verifica se é Admin
+   */
   const isAdmin = (): boolean => {
-    // Verificar pelo perfil do backend
-    if (perfil && perfil.nome === 'Administrador') {
-      return true
-    }
-    
-    // Verificar pelo localStorage como fallback
-    if (typeof window !== 'undefined') {
-      const userRole = localStorage.getItem('userRole')
-      const userPerfil = localStorage.getItem('user_perfil')
-      
-      if (userRole === 'admin') {
-        return true
-      }
-      
-      if (userPerfil) {
-        try {
-          const perfilData = JSON.parse(userPerfil)
-          if (perfilData.nome === 'Administrador' || perfilData.nivel_acesso >= 10) {
-            return true
-          }
-        } catch (error) {
-          console.error('Erro ao parsear perfil do localStorage:', error)
-        }
-      }
-    }
-    
-    return false
+    return userRole === 'Admin'
   }
 
-  // Verificar se é gerente
+  /**
+   * Verifica se é Gestor
+   */
   const isManager = (): boolean => {
-    return hasProfile('Gerente')
+    return userRole === 'Gestores'
   }
 
-  // Verificar se é supervisor
+  /**
+   * Verifica se é Supervisor
+   */
   const isSupervisor = (): boolean => {
-    return hasProfile('Supervisor')
+    return userRole === 'Supervisores'
   }
 
-  // Verificar se é operador
+  /**
+   * Verifica se é Operário
+   */
   const isOperator = (): boolean => {
-    return hasProfile('Operador')
+    return userRole === 'Operários'
   }
 
-  // Verificar se é visualizador
-  const isViewer = (): boolean => {
-    return hasProfile('Visualizador')
-  }
-
-  // Verificar se é cliente
+  /**
+   * Verifica se é Cliente
+   */
   const isClient = (): boolean => {
-    return hasProfile('Cliente')
+    return userRole === 'Clientes'
   }
 
-  // Verificar se tem acesso ao dashboard
+  // ========================================
+  // VERIFICAÇÕES DE ACESSO POR MÓDULO
+  // ========================================
+
+  /**
+   * Verifica se tem acesso ao dashboard web
+   */
   const canAccessDashboard = (): boolean => {
-    return isAdmin() || isManager()
+    // Admin, Gestores e Supervisores têm acesso ao dashboard
+    return hasMinLevel(6 as AccessLevel) || hasPermission('dashboard:visualizar')
   }
 
-  // Verificar se tem acesso ao ponto eletrônico
+  /**
+   * Verifica se tem acesso ao ponto eletrônico
+   */
   const canAccessPontoEletronico = (): boolean => {
-    return isAdmin() || isManager() || isSupervisor()
+    return canAccessModule('ponto') || canAccessModule('ponto_eletronico')
   }
 
-  // Verificar se tem acesso ao financeiro
+  /**
+   * Verifica se tem acesso ao financeiro
+   */
   const canAccessFinanceiro = (): boolean => {
-    return isAdmin() || isManager()
+    return hasMinLevel(9 as AccessLevel) || canAccessModule('financeiro')
   }
 
-  // Verificar se tem acesso ao RH
+  /**
+   * Verifica se tem acesso ao RH
+   */
   const canAccessRH = (): boolean => {
-    return isAdmin() || isManager() || isSupervisor()
+    return hasMinLevel(9 as AccessLevel) || canAccessModule('rh')
   }
 
-  // Verificar se tem acesso às obras
+  /**
+   * Verifica se tem acesso às obras
+   */
   const canAccessObras = (): boolean => {
-    // Todos podem acessar obras, mas com limitações
-    return true
+    return canAccessModule('obras')
   }
 
-  // Verificar se tem acesso aos clientes
+  /**
+   * Verifica se tem acesso aos clientes
+   */
   const canAccessClientes = (): boolean => {
-    return isAdmin() || isManager()
+    return hasMinLevel(9 as AccessLevel) || canAccessModule('clientes')
   }
 
-  // Verificar se tem acesso aos relatórios
+  /**
+   * Verifica se tem acesso aos relatórios
+   */
   const canAccessRelatorios = (): boolean => {
-    return isAdmin() || isManager()
+    return hasMinLevel(6 as AccessLevel) || canAccessModule('relatorios')
   }
 
-  // Verificar se tem acesso aos usuários
+  /**
+   * Verifica se tem acesso aos usuários
+   */
   const canAccessUsuarios = (): boolean => {
-    return isAdmin() || isManager()
+    return hasMinLevel(9 as AccessLevel) || canAccessModule('usuarios')
   }
 
-  // Limpar cache de permissões
-  const clearPermissions = () => {
-    setPermissions([])
-    localStorage.removeItem('user_permissions')
-    localStorage.removeItem('user_perfil')
+  /**
+   * Verifica se tem acesso às gruas
+   */
+  const canAccessGruas = (): boolean => {
+    return canAccessModule('gruas')
   }
 
-  // Recarregar permissões
-  const refreshPermissions = async () => {
-    setLoading(true)
-    try {
-      console.log('🔐 Recarregando permissões...')
-      const authData = await authCache.refreshAuthData()
-      
-      const permissionStrings = authData.permissoes.map((p: Permission) => p.nome)
-      setPermissions(permissionStrings)
-      
-      console.log('🔐 Permissões recarregadas:', permissionStrings)
-    } catch (error) {
-      console.error('Erro ao recarregar permissões:', error)
-    } finally {
-      setLoading(false)
-    }
+  /**
+   * Verifica se tem acesso ao estoque
+   */
+  const canAccessEstoque = (): boolean => {
+    return canAccessModule('estoque')
   }
+
+  /**
+   * Verifica se tem acesso aos livros de gruas
+   */
+  const canAccessLivrosGruas = (): boolean => {
+    return canAccessModule('livros_gruas')
+  }
+
+  /**
+   * Verifica se pode aprovar horas extras / ponto
+   */
+  const canApprovePonto = (): boolean => {
+    return hasPermission('ponto:aprovacoes') || hasPermission('ponto_eletronico:aprovacoes')
+  }
+
+  /**
+   * Verifica se pode gerenciar documentos
+   */
+  const canManageDocuments = (): boolean => {
+    return hasPermission('documentos:gerenciar')
+  }
+
+  /**
+   * Verifica se pode assinar documentos
+   */
+  const canSignDocuments = (): boolean => {
+    return hasPermission('documentos:assinatura') || hasPermission('assinatura_digital:visualizar')
+  }
+
+  // ========================================
+  // DEBUGGING (apenas desenvolvimento)
+  // ========================================
+
+  const debugPermissions = () => {
+    if (process.env.NODE_ENV !== 'development') return
+
+    console.group('🔐 Informações de Permissões')
+    console.log('Role:', userRole)
+    console.log('Nível:', level)
+    console.log('Total de permissões:', permissions.length)
+    console.log('Permissões:', permissions)
+    console.groupEnd()
+  }
+
+  // ========================================
+  // RETURN
+  // ========================================
 
   return {
+    // Estado
     permissions,
+    permissoes: permissions, // Alias para compatibilidade
     perfil,
-    loading,
+    loading: authLoading,
+    level,
+    userRole,
+
+    // Verificações básicas
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
@@ -313,12 +311,15 @@ export const usePermissions = () => {
     canAccessModule,
     canPerformAction,
     getModulePermissions,
+
+    // Verificações por role
     isAdmin,
     isManager,
     isSupervisor,
     isOperator,
-    isViewer,
     isClient,
+
+    // Verificações por módulo
     canAccessDashboard,
     canAccessPontoEletronico,
     canAccessFinanceiro,
@@ -327,7 +328,18 @@ export const usePermissions = () => {
     canAccessClientes,
     canAccessRelatorios,
     canAccessUsuarios,
-    clearPermissions,
-    refreshPermissions
+    canAccessGruas,
+    canAccessEstoque,
+    canAccessLivrosGruas,
+
+    // Verificações de ações específicas
+    canApprovePonto,
+    canManageDocuments,
+    canSignDocuments,
+
+    // Debug
+    debugPermissions
   }
 }
+
+export default usePermissions

@@ -4,6 +4,7 @@ import { supabase } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { generateToken, hashToken, isTokenExpired, getTokenExpiry } from '../utils/token.js'
 import { sendResetPasswordEmail, sendPasswordChangedEmail } from '../services/email.service.js'
+import { getRolePermissions, getRoleLevel } from '../config/roles.js'
 
 const router = express.Router()
 
@@ -205,9 +206,11 @@ router.post('/login', async (req, res) => {
       console.error('Erro ao buscar perfil:', profileError)
     }
 
-    // Buscar perfil e permissões do usuário
+    // Buscar perfil do usuário (Sistema Simplificado v2.0)
     let perfilData = null
     let permissoes = []
+    let role = null
+    let level = 0
 
     if (profile) {
       // Buscar o perfil do usuário
@@ -228,38 +231,35 @@ router.post('/login', async (req, res) => {
         .single()
 
       if (perfilUsuario && !perfilError) {
+        const roleName = perfilUsuario.perfis.nome
+        
         perfilData = {
           id: perfilUsuario.perfil_id,
-          nome: perfilUsuario.perfis.nome,
+          nome: roleName,
           nivel_acesso: perfilUsuario.perfis.nivel_acesso,
           descricao: perfilUsuario.perfis.descricao
         }
 
-        // Buscar permissões do perfil
-        const { data: perfilPermissoes, error: permissoesError } = await supabase
-          .from('perfil_permissoes')
-          .select(`
-            *,
-            permissoes(
-              id,
-              nome,
-              descricao,
-              modulo,
-              acao
-            )
-          `)
-          .eq('perfil_id', perfilUsuario.perfil_id)
-          .eq('status', 'Ativa')
+        // Obter permissões hardcoded baseadas no role (v2.0)
+        role = roleName
+        level = getRoleLevel(roleName)
+        const rolePermissions = getRolePermissions(roleName)
+        
+        // Converter para formato compatível com frontend antigo (transição)
+        permissoes = rolePermissions.map((permissao, index) => {
+          const [modulo, acao] = permissao.split(':')
+          return {
+            id: index + 1, // ID fictício para compatibilidade
+            nome: permissao,
+            descricao: `Permissão ${permissao}`,
+            modulo: modulo || 'sistema',
+            acao: acao || 'acesso'
+          }
+        })
 
-        if (perfilPermissoes && !permissoesError) {
-          permissoes = perfilPermissoes.map(pp => ({
-            id: pp.permissoes.id,
-            nome: pp.permissoes.nome,
-            descricao: pp.permissoes.descricao,
-            modulo: pp.permissoes.modulo,
-            acao: pp.permissoes.acao
-          }))
-        }
+        console.log(`✓ Login bem-sucedido: ${email} (${roleName}, nível ${level}, ${rolePermissions.length} permissões)`)
+      } else {
+        console.warn(`⚠️  Usuário sem perfil ativo: ${email}`)
       }
     }
 
@@ -270,9 +270,12 @@ router.post('/login', async (req, res) => {
         session: data.session,
         profile: profile,
         perfil: perfilData,
+        role: role, // Nome do role (v2.0)
+        level: level, // Nível de acesso (v2.0)
         permissoes: permissoes,
         access_token: data.session.access_token
-      }
+      },
+      message: 'Login realizado com sucesso'
     })
   } catch (error) {
     console.error('Erro no login:', error)
