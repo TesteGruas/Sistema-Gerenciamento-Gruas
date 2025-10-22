@@ -189,3 +189,4 @@ Se o problema persistir:
 
 **Última atualização**: Janeiro 2025  
 **Versão**: 1.0.0
+

@@ -169,3 +169,4 @@ console.log('2. Execute as migrações SQL no Supabase')
 console.log('3. Configure o bucket arquivos-obras no Supabase Storage')
 console.log('4. Execute: npm install')
 console.log('5. Execute: npm start')
+

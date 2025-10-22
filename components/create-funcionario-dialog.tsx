@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Plus, Loader2, User } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
+import { useCargos } from "@/hooks/use-cargos"
 
 interface CreateFuncionarioDialogProps {
   open: boolean
@@ -24,6 +25,8 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   onSubmit,
   submitting,
 }: CreateFuncionarioDialogProps) {
+  const { cargosAtivos } = useCargos()
+  
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -182,13 +185,11 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Operador">Operador</SelectItem>
-                  <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
-                  <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
-                  <SelectItem value="Supervisor">Supervisor</SelectItem>
-                  <SelectItem value="Mecânico">Mecânico</SelectItem>
-                  <SelectItem value="Engenheiro">Engenheiro</SelectItem>
-                  <SelectItem value="Chefe de Obras">Chefe de Obras</SelectItem>
+                  {cargosAtivos.map((cargo) => (
+                    <SelectItem key={cargo.id} value={cargo.nome}>
+                      {cargo.nome}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

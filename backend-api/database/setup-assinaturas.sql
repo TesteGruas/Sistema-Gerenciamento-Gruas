@@ -194,3 +194,4 @@ WHERE table_schema = 'public'
 
 -- Verificar bucket criado
 SELECT * FROM storage.buckets WHERE id = 'arquivos-obras';
+

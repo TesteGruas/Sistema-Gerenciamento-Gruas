@@ -254,3 +254,4 @@ console.log('Arquivo enviado:', {
 **Desenvolvido por**: Sistema de Gerenciamento de Guindastes  
 **Versão**: 1.0.0  
 **Última Atualização**: Janeiro 2025
+

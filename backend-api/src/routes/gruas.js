@@ -1122,7 +1122,7 @@ router.delete('/:id', async (req, res) => {
  *         name:
  *           type: string
  *           minLength: 2
- *           description: Nome da grua (ex: "Grua 001")
+ *           description: Nome da grua (ex: Grua 001)
  *         model:
  *           type: string
  *           minLength: 2

@@ -35,7 +35,9 @@ import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 import { CreateFuncionarioDialog } from "@/components/create-funcionario-dialog"
 import { EditFuncionarioDialog } from "@/components/edit-funcionario-dialog"
 import { FuncionarioRow } from "@/components/funcionario-row"
+import { CreateCargoDialog } from "@/components/create-cargo-dialog"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
+import { useCargos } from "@/hooks/use-cargos"
 
 interface FuncionarioRH {
   id: number
@@ -73,6 +75,7 @@ interface FuncionarioRH {
 }
 
 export default function RHPage() {
+  const { cargosAtivos, criarCargo } = useCargos()
   const [funcionarios, setFuncionarios] = useState<FuncionarioRH[]>([])
   const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState("")
@@ -80,7 +83,9 @@ export default function RHPage() {
   const [filtroStatus, setFiltroStatus] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isCreateCargoDialogOpen, setIsCreateCargoDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [submittingCargo, setSubmittingCargo] = useState(false)
   const [selectedFuncionario, setSelectedFuncionario] = useState<FuncionarioRH | null>(null)
   const { toast } = useToast()
   const router = useRouter()
@@ -250,6 +255,33 @@ export default function RHPage() {
     }
   }, [toast])
 
+  // Função para criar novo cargo
+  const handleCreateCargo = useCallback(async (data: any) => {
+    try {
+      setSubmittingCargo(true)
+      
+      await criarCargo(data)
+      
+      toast({
+        title: "Sucesso",
+        description: "Cargo criado com sucesso!",
+        variant: "default"
+      })
+      
+      setIsCreateCargoDialogOpen(false)
+      
+    } catch (error: any) {
+      console.error("Erro ao criar cargo:", error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar cargo",
+        variant: "destructive"
+      })
+    } finally {
+      setSubmittingCargo(false)
+    }
+  }, [criarCargo, toast])
+
   // Memoizar cálculos pesados
   const cargosUnicos = useMemo(
     () => Array.from(new Set(funcionarios.map(f => f.cargo))).sort(),
@@ -345,10 +377,16 @@ export default function RHPage() {
           <h1 className="text-3xl font-bold text-gray-900">Recursos Humanos</h1>
           <p className="text-gray-600 mt-1">Gerencie os funcionários da empresa</p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Funcionário
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setIsCreateCargoDialogOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Cargo
+          </Button>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Funcionário
+          </Button>
+        </div>
       </div>
 
       {/* Estatísticas */}
@@ -531,6 +569,14 @@ export default function RHPage() {
         submitting={submitting}
         onSubmit={handleUpdateFuncionario}
         funcionario={selectedFuncionario}
+      />
+
+      {/* Dialog Criar Cargo */}
+      <CreateCargoDialog
+        open={isCreateCargoDialogOpen}
+        onOpenChange={setIsCreateCargoDialogOpen}
+        submitting={submittingCargo}
+        onSubmit={handleCreateCargo}
       />
     </div>
   )

@@ -28,7 +28,7 @@
   "license": "MIT",
   "dependencies": {
     "-": "^0.0.1",
-    "@supabase/supabase-js": "^2.38.4",
+    "@supabase/supabase-js": "^2.76.1",
     "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
