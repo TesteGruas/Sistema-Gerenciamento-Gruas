@@ -151,7 +151,7 @@ export const NotificacoesAPI = {
   listar: async (params?: ListarNotificacoesParams): Promise<ListarNotificacoesResponse> => {
     try {
       const response = await apiWithRetry(
-        () => api.get<ListarNotificacoesResponse>('/api/notificacoes', { params }),
+        () => api.get<ListarNotificacoesResponse>('/notificacoes', { params }),
         { maxRetries: 2 }
       )
       return response.data
@@ -206,7 +206,7 @@ export const NotificacoesAPI = {
   listarNaoLidas: async (): Promise<Notificacao[]> => {
     try {
       const response = await apiWithRetry(
-        () => api.get<{ success: boolean; data: Notificacao[] }>('/api/notificacoes/nao-lidas'),
+        () => api.get<{ success: boolean; data: Notificacao[] }>('/notificacoes'),
         { maxRetries: 2 }
       )
       return response.data.data || []
@@ -227,7 +227,7 @@ export const NotificacoesAPI = {
   contarNaoLidas: async (): Promise<number> => {
     try {
       const response = await apiWithRetry(
-        () => api.get<{ success: boolean; count: number }>('/api/notificacoes/count/nao-lidas'),
+        () => api.get<{ success: boolean; count: number }>('/notificacoes/count/nao-lidas'),
         { maxRetries: 2 }
       )
       return response.data.count || 0
@@ -247,7 +247,7 @@ export const NotificacoesAPI = {
    */
   marcarComoLida: async (id: string): Promise<void> => {
     try {
-      await api.patch(`/api/notificacoes/${id}/marcar-lida`)
+      await api.patch(`/notificacoes/${id}/marcar-lida`)
     } catch (error: any) {
       console.warn('API indisponível, simulando marcação como lida:', error.message)
       
@@ -267,7 +267,7 @@ export const NotificacoesAPI = {
    */
   marcarTodasComoLidas: async (): Promise<void> => {
     try {
-      await api.patch('/api/notificacoes/marcar-todas-lidas')
+      await api.patch('/notificacoes/marcar-todas-lidas')
     } catch (error: any) {
       console.warn('API indisponível, simulando marcação de todas como lidas:', error.message)
       
@@ -284,7 +284,7 @@ export const NotificacoesAPI = {
    */
   deletar: async (id: string): Promise<void> => {
     try {
-      await api.delete(`/api/notificacoes/${id}`)
+      await api.delete(`/notificacoes/${id}`)
     } catch (error: any) {
       console.warn('API indisponível, simulando deleção:', error.message)
       
@@ -304,7 +304,7 @@ export const NotificacoesAPI = {
    */
   deletarTodas: async (): Promise<void> => {
     try {
-      await api.delete('/api/notificacoes/todas')
+      await api.delete('/notificacoes/todas')
     } catch (error: any) {
       console.warn('API indisponível, simulando deleção de todas:', error.message)
       
@@ -322,7 +322,7 @@ export const NotificacoesAPI = {
   criar: async (notificacao: CriarNotificacaoInput): Promise<Notificacao> => {
     try {
       const response = await api.post<{ success: boolean; data: Notificacao | Notificacao[] }>(
-        '/api/notificacoes',
+        '/notificacoes',
         notificacao
       )
       
