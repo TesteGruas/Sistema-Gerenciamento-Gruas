@@ -162,7 +162,7 @@ const documentoSchema = Joi.object({
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/todos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/todos', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { status, obra_id } = req.query
 
@@ -417,7 +417,7 @@ router.get('/todos', authenticateToken, requirePermission('visualizar_obras'), a
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/:obraId/documentos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:obraId/documentos', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obraId } = req.params
     const { status } = req.query
@@ -644,7 +644,7 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('visualiz
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_obras'), upload.single('arquivo'), async (req, res) => {
+router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:criar'), upload.single('arquivo'), async (req, res) => {
   try {
     const { obraId } = req.params
     const { titulo, descricao, ordem_assinatura } = req.body
@@ -996,7 +996,7 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('criar_o
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obraId, documentoId } = req.params
 
@@ -1092,7 +1092,7 @@ router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermiss
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/:obraId/documentos/:documentoId/enviar', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.post('/:obraId/documentos/:documentoId/enviar', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { obraId, documentoId } = req.params
 
@@ -1202,7 +1202,7 @@ router.post('/:obraId/documentos/:documentoId/enviar', authenticateToken, requir
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obraId, documentoId } = req.params
 
@@ -1345,7 +1345,7 @@ router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requi
  *       500:
  *         description: Erro interno do servidor
  */
-router.put('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { obraId, documentoId } = req.params
     const { titulo, descricao, status } = req.body
@@ -1431,7 +1431,7 @@ router.put('/:obraId/documentos/:documentoId', authenticateToken, requirePermiss
   }
 })
 
-router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { obraId, documentoId } = req.params
 
@@ -1594,7 +1594,7 @@ router.delete('/:obraId/documentos/:documentoId', authenticateToken, requirePerm
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/documentos/:documentoId', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/documentos/:documentoId', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { documentoId } = req.params
 

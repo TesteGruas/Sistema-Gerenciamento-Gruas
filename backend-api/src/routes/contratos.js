@@ -65,7 +65,7 @@ const contratoSchema = Joi.object({
  *       200:
  *         description: Lista de contratos
  */
-router.get('/', authenticateToken, requirePermission('visualizar_contratos'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('contratos:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
@@ -154,7 +154,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_contratos'), as
  *       404:
  *         description: Contrato não encontrado
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_contratos'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('contratos:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -253,7 +253,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_contratos'),
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_contratos'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('contratos:criar'), async (req, res) => {
   try {
     const { error, value } = contratoSchema.validate(req.body)
     if (error) {
@@ -364,7 +364,7 @@ router.post('/', authenticateToken, requirePermission('criar_contratos'), async 
  *       404:
  *         description: Contrato não encontrado
  */
-router.put('/:id', authenticateToken, requirePermission('editar_contratos'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('contratos:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -436,7 +436,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_contratos'), asy
  *       404:
  *         description: Contrato não encontrado
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_contratos'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('contratos:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 

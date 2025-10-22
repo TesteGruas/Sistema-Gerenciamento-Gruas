@@ -86,7 +86,7 @@ const calcularCustosAutomaticos = async (medicaoId) => {
  *       400:
  *         description: Dados inválidos ou componente já está incluído
  */
-router.post('/', requirePermission('editar_obras'), async (req, res) => {
+router.post('/', requirePermission('obras:editar'), async (req, res) => {
   try {
     const { error, value } = medicaoComponenteSchema.validate(req.body)
     if (error) {
@@ -165,7 +165,7 @@ router.post('/', requirePermission('editar_obras'), async (req, res) => {
  *       200:
  *         description: Lista de componentes da medição
  */
-router.get('/:medicaoId/componentes', requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:medicaoId/componentes', requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { medicaoId } = req.params
 
@@ -238,7 +238,7 @@ router.get('/:medicaoId/componentes', requirePermission('visualizar_obras'), asy
  *       404:
  *         description: Componente não encontrado na medição
  */
-router.put('/:id', requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
     const { error, value } = medicaoComponenteSchema.validate(req.body)
@@ -318,7 +318,7 @@ router.put('/:id', requirePermission('editar_obras'), async (req, res) => {
  *       404:
  *         description: Componente não encontrado na medição
  */
-router.delete('/:id', requirePermission('editar_obras'), async (req, res) => {
+router.delete('/:id', requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
 

@@ -153,7 +153,7 @@ const arquivoSchema = Joi.object({
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/:obraId/arquivos', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:obraId/arquivos', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obraId } = req.params
     const { categoria, tipo_arquivo, grua_id } = req.query
@@ -278,7 +278,7 @@ router.get('/:obraId/arquivos', authenticateToken, requirePermission('visualizar
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/:obraId/arquivos', authenticateToken, requirePermission('editar_obras'), upload.single('arquivo'), async (req, res) => {
+router.post('/:obraId/arquivos', authenticateToken, requirePermission('obras:editar'), upload.single('arquivo'), async (req, res) => {
   try {
     const { obraId } = req.params
     const { descricao, categoria, grua_id, is_public } = req.body
@@ -493,7 +493,7 @@ router.post('/:obraId/arquivos', authenticateToken, requirePermission('editar_ob
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obraId, arquivoId } = req.params
 
@@ -570,7 +570,7 @@ router.get('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission(
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/:obraId/arquivos/:arquivoId/download', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:obraId/arquivos/:arquivoId/download', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obraId, arquivoId } = req.params
 
@@ -696,7 +696,7 @@ router.get('/:obraId/arquivos/:arquivoId/download', authenticateToken, requirePe
  *       500:
  *         description: Erro interno do servidor
  */
-router.put('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { obraId, arquivoId } = req.params
     const { descricao, categoria, is_public } = req.body
@@ -809,7 +809,7 @@ router.put('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission(
  *       500:
  *         description: Erro interno do servidor
  */
-router.delete('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.delete('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { obraId, arquivoId } = req.params
 
@@ -938,7 +938,7 @@ router.delete('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermissi
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/:obraId/arquivos/upload-multiple', authenticateToken, requirePermission('editar_obras'), upload.array('arquivos', 10), async (req, res) => {
+router.post('/:obraId/arquivos/upload-multiple', authenticateToken, requirePermission('obras:editar'), upload.array('arquivos', 10), async (req, res) => {
   try {
     const { obraId } = req.params
     const { categoria } = req.body

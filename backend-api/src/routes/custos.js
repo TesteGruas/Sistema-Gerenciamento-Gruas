@@ -78,7 +78,7 @@ const custoUpdateSchema = custoSchema.fork(
  *       200:
  *         description: Lista de custos operacionais
  */
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obra_id, tipo, status, data_inicio, data_fim, page = 1, limit = 50 } = req.query
     const offset = (page - 1) * limit
@@ -203,7 +203,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *               type: string
  *               format: binary
  */
-router.get('/export', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/export', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { format = 'csv', obra_id, tipo, status, data_inicio, data_fim } = req.query
     
@@ -304,7 +304,7 @@ router.get('/export', authenticateToken, requirePermission('visualizar_obras'), 
  *       404:
  *         description: Custo não encontrado
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -399,7 +399,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
     const { error: validationError, value } = custoSchema.validate(req.body)
     
@@ -532,7 +532,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
  *       404:
  *         description: Custo não encontrado
  */
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
     const { error: validationError, value } = custoUpdateSchema.validate(req.body)
@@ -626,7 +626,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
  *       404:
  *         description: Custo não encontrado
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -700,7 +700,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), asy
  *       200:
  *         description: Resumo financeiro
  */
-router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/resumo', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obra_id, data_inicio, data_fim } = req.query
     
@@ -785,7 +785,7 @@ router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), 
  *       200:
  *         description: Lista de custos da obra
  */
-router.get('/obra/:obra_id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/obra/:obra_id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obra_id } = req.params
     const { data_inicio, data_fim } = req.query
@@ -868,7 +868,7 @@ router.get('/obra/:obra_id', authenticateToken, requirePermission('visualizar_ob
  *       404:
  *         description: Custo não encontrado
  */
-router.patch('/:id/status', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.patch('/:id/status', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
     const { status } = req.body
@@ -949,7 +949,7 @@ router.patch('/:id/status', authenticateToken, requirePermission('editar_obras')
  *       404:
  *         description: Custo não encontrado
  */
-router.patch('/:id/confirm', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.patch('/:id/confirm', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -1028,7 +1028,7 @@ router.patch('/:id/confirm', authenticateToken, requirePermission('editar_obras'
  *       404:
  *         description: Custo não encontrado
  */
-router.patch('/:id/cancel', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.patch('/:id/cancel', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
 

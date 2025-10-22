@@ -81,7 +81,7 @@ const reservaSchema = Joi.object({
  *       200:
  *         description: Lista de produtos
  */
-router.get('/', authenticateToken, requirePermission('visualizar_estoque'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('estoque:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
@@ -184,7 +184,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_estoque'), asyn
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_produtos'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('produtos:criar'), async (req, res) => {
   try {
     const { error, value } = produtoSchema.validate(req.body)
     if (error) {
@@ -282,7 +282,7 @@ router.post('/', authenticateToken, requirePermission('criar_produtos'), async (
  *       404:
  *         description: Produto não encontrado
  */
-router.put('/:id', authenticateToken, requirePermission('editar_produtos'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('produtos:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -354,7 +354,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_produtos'), asyn
  *       404:
  *         description: Produto não encontrado
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_produtos'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('produtos:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -420,7 +420,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_produtos'), 
  *       400:
  *         description: Dados inválidos
  */
-router.post('/movimentar', authenticateToken, requirePermission('movimentar_estoque'), async (req, res) => {
+router.post('/movimentar', authenticateToken, requirePermission('estoque:movimentacoes'), async (req, res) => {
   try {
     const { error, value } = movimentacaoSchema.validate(req.body)
     if (error) {
@@ -699,7 +699,7 @@ router.post('/movimentar', authenticateToken, requirePermission('movimentar_esto
  *       400:
  *         description: Dados inválidos ou estoque insuficiente
  */
-router.post('/reservar', authenticateToken, requirePermission('movimentar_estoque'), async (req, res) => {
+router.post('/reservar', authenticateToken, requirePermission('estoque:movimentacoes'), async (req, res) => {
   try {
     const { error, value } = reservaSchema.validate(req.body)
     if (error) {
@@ -865,7 +865,7 @@ router.post('/reservar', authenticateToken, requirePermission('movimentar_estoqu
  *       400:
  *         description: Dados inválidos ou reserva insuficiente
  */
-router.post('/liberar-reserva', authenticateToken, requirePermission('movimentar_estoque'), async (req, res) => {
+router.post('/liberar-reserva', authenticateToken, requirePermission('estoque:movimentacoes'), async (req, res) => {
   try {
     const { error, value } = reservaSchema.validate(req.body)
     if (error) {
@@ -1025,7 +1025,7 @@ router.post('/liberar-reserva', authenticateToken, requirePermission('movimentar
  *       200:
  *         description: Relatório de estoque
  */
-router.get('/relatorio', authenticateToken, requirePermission('visualizar_estoque'), async (req, res) => {
+router.get('/relatorio', authenticateToken, requirePermission('estoque:visualizar'), async (req, res) => {
   try {
     const { categoria_id, status, estoque_baixo } = req.query
 
@@ -1111,7 +1111,7 @@ router.get('/relatorio', authenticateToken, requirePermission('visualizar_estoqu
 
 
 // Endpoint para listar movimentações de estoque
-router.get('/movimentacoes', authenticateToken, requirePermission('visualizar_estoque'), async (req, res) => {
+router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 50
@@ -1202,7 +1202,7 @@ router.get('/movimentacoes', authenticateToken, requirePermission('visualizar_es
  *       404:
  *         description: Produto não encontrado
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_estoque'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('estoque:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 

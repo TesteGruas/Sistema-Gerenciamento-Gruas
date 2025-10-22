@@ -316,7 +316,7 @@ router.get('/count/nao-lidas', authenticateToken, async (req, res) => {
  *       201:
  *         description: Notificação criada com sucesso
  */
-router.post('/', authenticateToken, requirePermission('criar_notificacoes'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('notificacoes:criar'), async (req, res) => {
   try {
     const { error: validationError, value } = notificacaoSchema.validate(req.body)
     

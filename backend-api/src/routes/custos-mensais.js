@@ -75,7 +75,7 @@ const updateCustoMensalSchema = Joi.object({
  *       200:
  *         description: Lista de custos mensais
  */
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 50
@@ -156,7 +156,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *       404:
  *         description: Custo mensal não encontrado
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -257,7 +257,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
     const { error: validationError, value } = custoMensalSchema.validate(req.body)
     
@@ -383,7 +383,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
  *       404:
  *         description: Custo mensal não encontrado
  */
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
     const { error: validationError, value } = updateCustoMensalSchema.validate(req.body)
@@ -488,7 +488,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
  *       404:
  *         description: Custo mensal não encontrado
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -557,7 +557,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), asy
  *       200:
  *         description: Lista de custos mensais da obra
  */
-router.get('/obra/:obra_id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/obra/:obra_id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obra_id } = req.params
     const { mes } = req.query
@@ -635,7 +635,7 @@ router.get('/obra/:obra_id', authenticateToken, requirePermission('visualizar_ob
  *       400:
  *         description: Dados inválidos
  */
-router.post('/replicar', authenticateToken, requirePermission('criar_obras'), async (req, res) => {
+router.post('/replicar', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
     const { obra_id, mes_origem, mes_destino } = req.body
 
@@ -775,7 +775,7 @@ router.post('/replicar', authenticateToken, requirePermission('criar_obras'), as
  *       200:
  *         description: Lista de meses disponíveis
  */
-router.get('/meses-disponiveis/:obra_id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/meses-disponiveis/:obra_id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obra_id } = req.params
 
@@ -826,7 +826,7 @@ router.get('/meses-disponiveis/:obra_id', authenticateToken, requirePermission('
  *       200:
  *         description: Lista de próximos meses disponíveis
  */
-router.post('/proximos-meses/:obra_id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.post('/proximos-meses/:obra_id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obra_id } = req.params
 
@@ -906,7 +906,7 @@ router.post('/proximos-meses/:obra_id', authenticateToken, requirePermission('vi
  *       404:
  *         description: Custo mensal não encontrado
  */
-router.patch('/:id/quantidade', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.patch('/:id/quantidade', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
     const { quantidade_realizada } = req.body

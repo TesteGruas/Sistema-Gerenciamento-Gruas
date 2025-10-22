@@ -44,7 +44,7 @@ const categoriaSchema = Joi.object({
  *       200:
  *         description: Lista de categorias
  */
-router.get('/', authenticateToken, requirePermission('visualizar_estoque'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('estoque:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
@@ -112,7 +112,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_estoque'), asyn
  *       404:
  *         description: Categoria não encontrada
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_estoque'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('estoque:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -178,7 +178,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_estoque'), a
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_produtos'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('produtos:criar'), async (req, res) => {
   try {
     const { error, value } = categoriaSchema.validate(req.body)
     if (error) {
@@ -256,7 +256,7 @@ router.post('/', authenticateToken, requirePermission('criar_produtos'), async (
  *       404:
  *         description: Categoria não encontrada
  */
-router.put('/:id', authenticateToken, requirePermission('editar_produtos'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('produtos:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -328,7 +328,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_produtos'), asyn
  *       404:
  *         description: Categoria não encontrada
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_produtos'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('produtos:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 

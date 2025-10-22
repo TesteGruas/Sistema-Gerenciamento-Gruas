@@ -145,7 +145,7 @@ const router = express.Router();
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     console.log('📋 GET /api/receitas - Query params:', req.query);
     
@@ -286,7 +286,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/export', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/export', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { error: validationError, value } = receitaExportSchema.validate(req.query);
     if (validationError) {
@@ -407,7 +407,7 @@ router.get('/export', authenticateToken, requirePermission('visualizar_obras'), 
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -515,7 +515,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { error: validationError, value } = receitaSchema.validate(req.body);
     if (validationError) {
@@ -632,7 +632,7 @@ router.post('/', authenticateToken, requirePermission('editar_obras'), async (re
  *       500:
  *         description: Erro interno do servidor
  */
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
     const { error: validationError, value } = receitaUpdateSchema.validate(req.body);
@@ -719,7 +719,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
  *       500:
  *         description: Erro interno do servidor
  */
-router.delete('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -801,7 +801,7 @@ router.delete('/:id', authenticateToken, requirePermission('editar_obras'), asyn
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/resumo', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { error: validationError, value } = receitaResumoSchema.validate(req.query);
     if (validationError) {
@@ -936,7 +936,7 @@ router.get('/resumo', authenticateToken, requirePermission('visualizar_obras'), 
  *       500:
  *         description: Erro interno do servidor
  */
-router.patch('/:id/confirm', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.patch('/:id/confirm', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1017,7 +1017,7 @@ router.patch('/:id/confirm', authenticateToken, requirePermission('editar_obras'
  *       500:
  *         description: Erro interno do servidor
  */
-router.patch('/:id/cancel', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.patch('/:id/cancel', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
 

@@ -33,7 +33,7 @@ const produtoUpdateSchema = produtoSchema.fork(
  *     summary: Listar produtos
  *     tags: [Produtos]
  */
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { categoria, tipo, status, fornecedor_id, search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
@@ -90,7 +90,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *     summary: Buscar produto por ID
  *     tags: [Produtos]
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -135,7 +135,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *     summary: Criar produto
  *     tags: [Produtos]
  */
-router.post('/', authenticateToken, requirePermission('criar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
     const { error: validationError, value } = produtoSchema.validate(req.body);
     
@@ -196,7 +196,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
  *     summary: Atualizar produto
  *     tags: [Produtos]
  */
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
     const { error: validationError, value } = produtoUpdateSchema.validate(req.body);
@@ -269,7 +269,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
  *     summary: Excluir produto
  *     tags: [Produtos]
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -307,7 +307,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), asy
  *     summary: Estatísticas de produtos
  *     tags: [Produtos]
  */
-router.get('/stats', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/stats', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('produtos')
@@ -351,7 +351,7 @@ router.get('/stats', authenticateToken, requirePermission('visualizar_obras'), a
  *     summary: Produtos com estoque baixo
  *     tags: [Produtos]
  */
-router.get('/baixo-estoque', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/baixo-estoque', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('produtos')

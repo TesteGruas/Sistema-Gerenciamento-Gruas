@@ -38,7 +38,7 @@ const pagamentoSchema = Joi.object({
  *     summary: Listar impostos
  *     tags: [Impostos]
  */
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { competencia, tipo, status, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
@@ -99,7 +99,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *     summary: Buscar imposto por ID
  *     tags: [Impostos]
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -138,7 +138,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *     summary: Criar imposto
  *     tags: [Impostos]
  */
-router.post('/', authenticateToken, requirePermission('criar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
     const { error: validationError, value } = impostoSchema.validate(req.body);
     
@@ -181,7 +181,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
  *     summary: Atualizar imposto
  *     tags: [Impostos]
  */
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
     const { error: validationError, value } = impostoUpdateSchema.validate(req.body);
@@ -233,7 +233,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
  *     summary: Excluir imposto
  *     tags: [Impostos]
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -271,7 +271,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), asy
  *     summary: Registrar pagamento de imposto
  *     tags: [Impostos]
  */
-router.post('/:id/pagamento', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.post('/:id/pagamento', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
     const { error: validationError, value } = pagamentoSchema.validate(req.body);
@@ -341,7 +341,7 @@ router.post('/:id/pagamento', authenticateToken, requirePermission('editar_obras
  *     summary: Calcular valor de imposto
  *     tags: [Impostos]
  */
-router.post('/calcular', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.post('/calcular', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { receita_bruta, tipo_imposto, competencia } = req.body;
 
@@ -390,7 +390,7 @@ router.post('/calcular', authenticateToken, requirePermission('visualizar_obras'
  *     summary: Relatório de impostos por período
  *     tags: [Impostos]
  */
-router.get('/relatorio', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/relatorio', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { mes, ano } = req.query;
 
@@ -455,7 +455,7 @@ router.get('/relatorio', authenticateToken, requirePermission('visualizar_obras'
  *     summary: Impostos vencendo em X dias
  *     tags: [Impostos]
  */
-router.get('/vencendo', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/vencendo', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { dias = 7 } = req.query;
     
@@ -492,7 +492,7 @@ router.get('/vencendo', authenticateToken, requirePermission('visualizar_obras')
  *     summary: Impostos atrasados
  *     tags: [Impostos]
  */
-router.get('/atrasados', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/atrasados', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const hoje = new Date().toISOString().split('T')[0];
 

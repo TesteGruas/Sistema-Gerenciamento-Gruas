@@ -239,7 +239,7 @@ const obraSchema = Joi.object({
  *                     pages:
  *                       type: integer
  */
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
@@ -471,7 +471,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *       404:
  *         description: Obra não encontrada
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -702,7 +702,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
     console.log('🔍 DEBUG - Dados recebidos para criação de obra:', req.body)
     
@@ -1115,7 +1115,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
  *       404:
  *         description: Obra não encontrada
  */
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -1335,7 +1335,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
  *       404:
  *         description: Obra não encontrada
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 

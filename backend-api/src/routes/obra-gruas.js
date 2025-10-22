@@ -39,7 +39,7 @@ const configuracaoSchema = Joi.object({
  *       200:
  *         description: Lista de gruas da obra
  */
-router.get('/:obraId', requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:obraId', requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obraId } = req.params
     
@@ -130,7 +130,7 @@ router.get('/:obraId', requirePermission('visualizar_obras'), async (req, res) =
  *       400:
  *         description: Dados inválidos ou grua já está ativa
  */
-router.post('/', requirePermission('editar_obras'), async (req, res) => {
+router.post('/', requirePermission('obras:editar'), async (req, res) => {
   try {
     console.log('📝 Requisição para adicionar grua à obra:', req.body)
     
@@ -250,7 +250,7 @@ router.post('/', requirePermission('editar_obras'), async (req, res) => {
  *       404:
  *         description: Configuração não encontrada
  */
-router.put('/:id', requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
     const { error, value } = configuracaoSchema.validate(req.body)
@@ -315,7 +315,7 @@ router.put('/:id', requirePermission('editar_obras'), async (req, res) => {
  *       404:
  *         description: Configuração não encontrada
  */
-router.delete('/:id', requirePermission('editar_obras'), async (req, res) => {
+router.delete('/:id', requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
 

@@ -33,7 +33,7 @@ const fornecedorUpdateSchema = fornecedorSchema.fork(
  *     summary: Listar fornecedores
  *     tags: [Fornecedores]
  */
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { status, categoria, search, page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
@@ -82,7 +82,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
  *     summary: Buscar fornecedor por ID
  *     tags: [Fornecedores]
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -121,7 +121,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
  *     summary: Criar fornecedor
  *     tags: [Fornecedores]
  */
-router.post('/', authenticateToken, requirePermission('criar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
     const { error: validationError, value } = fornecedorSchema.validate(req.body);
     
@@ -175,7 +175,7 @@ router.post('/', authenticateToken, requirePermission('criar_obras'), async (req
  *     summary: Atualizar fornecedor
  *     tags: [Fornecedores]
  */
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
     const { error: validationError, value } = fornecedorUpdateSchema.validate(req.body);
@@ -244,7 +244,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
  *     summary: Excluir fornecedor
  *     tags: [Fornecedores]
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -282,7 +282,7 @@ router.delete('/:id', authenticateToken, requirePermission('excluir_obras'), asy
  *     summary: Estatísticas de fornecedores
  *     tags: [Fornecedores]
  */
-router.get('/stats', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/stats', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('fornecedores')

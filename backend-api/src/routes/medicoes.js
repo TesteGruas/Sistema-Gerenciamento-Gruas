@@ -6,7 +6,7 @@ import { medicaoSchema, medicaoUpdateSchema, medicaoFiltersSchema } from '../sch
 const router = express.Router();
 
 // GET /api/medicoes - Listar medições com filtros
-router.get('/', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { error: validationError, value } = medicaoFiltersSchema.validate(req.query);
     if (validationError) {
@@ -81,7 +81,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_obras'), async 
 });
 
 // GET /api/medicoes/:id - Buscar medição por ID
-router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -127,7 +127,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_obras'), asy
 });
 
 // POST /api/medicoes - Criar nova medição
-router.post('/', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { error: validationError, value } = medicaoSchema.validate(req.body);
     if (validationError) {
@@ -180,7 +180,7 @@ router.post('/', authenticateToken, requirePermission('editar_obras'), async (re
 });
 
 // PUT /api/medicoes/:id - Atualizar medição
-router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
     const { error: validationError, value } = medicaoUpdateSchema.validate(req.body);
@@ -239,7 +239,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_obras'), async (
 });
 
 // DELETE /api/medicoes/:id - Deletar medição
-router.delete('/:id', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -269,7 +269,7 @@ router.delete('/:id', authenticateToken, requirePermission('editar_obras'), asyn
 });
 
 // PATCH /api/medicoes/:id/finalizar - Finalizar medição
-router.patch('/:id/finalizar', authenticateToken, requirePermission('editar_obras'), async (req, res) => {
+router.patch('/:id/finalizar', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
 

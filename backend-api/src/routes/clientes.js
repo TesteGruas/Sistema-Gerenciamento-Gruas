@@ -94,7 +94,7 @@ const clienteUpdateSchema = Joi.object({
  *       200:
  *         description: Lista de clientes
  */
-router.get('/', authenticateToken, requirePermission('visualizar_clientes'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('clientes:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
@@ -182,7 +182,7 @@ router.get('/', authenticateToken, requirePermission('visualizar_clientes'), asy
  *       404:
  *         description: Cliente não encontrado
  */
-router.get('/:id', authenticateToken, requirePermission('visualizar_clientes'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('clientes:visualizar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -266,7 +266,7 @@ router.get('/:id', authenticateToken, requirePermission('visualizar_clientes'), 
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('criar_clientes'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('clientes:criar'), async (req, res) => {
   try {
     const { error, value } = clienteSchema.validate(req.body)
     if (error) {
@@ -482,7 +482,7 @@ router.post('/', authenticateToken, requirePermission('criar_clientes'), async (
  *       404:
  *         description: Cliente não encontrado
  */
-router.put('/:id', authenticateToken, requirePermission('editar_clientes'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('clientes:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -557,7 +557,7 @@ router.put('/:id', authenticateToken, requirePermission('editar_clientes'), asyn
  *       404:
  *         description: Cliente não encontrado
  */
-router.delete('/:id', authenticateToken, requirePermission('excluir_clientes'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('clientes:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 
