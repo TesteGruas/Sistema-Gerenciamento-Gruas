@@ -337,7 +337,7 @@ export default function AssinaturaDocumentoPage() {
 
       if (response.success) {
         // Atualizar status da assinatura
-        const assinatura = documento.assinaturas?.find(a => a.user_id.toString() === assinaturaId)
+        const assinatura = documento.assinaturas?.find(a => a.id.toString() === assinaturaId)
         if (assinatura) {
           assinatura.status = 'assinado'
           assinatura.data_assinatura = new Date().toISOString()
@@ -383,6 +383,62 @@ export default function AssinaturaDocumentoPage() {
       toast({
         title: "Erro",
         description: error.message || "Erro interno do servidor",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Extrair nome legível do arquivo da URL
+  const getArquivoNome = (arquivoUrl: string | undefined): string => {
+    if (!arquivoUrl) return 'Arquivo não disponível'
+    
+    // Se for uma URL do Supabase Storage, extrair o nome do arquivo
+    if (arquivoUrl.includes('supabase.co/storage')) {
+      const parts = arquivoUrl.split('/')
+      const filename = parts[parts.length - 1]
+      // Remover o hash único e manter apenas a extensão
+      const match = filename.match(/assinado_\d+_([^.]+)\.(.+)$/)
+      if (match) {
+        return `documento_assinado.${match[2]}`
+      }
+      return filename
+    }
+    
+    // Se for apenas um nome de arquivo
+    return arquivoUrl
+  }
+
+  const handleDownloadArquivoAssinado = async (arquivoUrl: string, nomeArquivo?: string) => {
+    if (!arquivoUrl) return
+
+    try {
+      setIsLoading(true)
+      
+      // Se for uma URL completa, abrir diretamente
+      if (arquivoUrl.startsWith('http')) {
+        window.open(arquivoUrl, '_blank')
+        toast({
+          title: "Download",
+          description: "Arquivo aberto em nova aba",
+          variant: "default"
+        })
+        return
+      }
+
+      // Se for apenas nome do arquivo, tentar buscar da API
+      toast({
+        title: "Download",
+        description: "Baixando arquivo assinado...",
+        variant: "default"
+      })
+      
+    } catch (error) {
+      console.error('Erro ao baixar arquivo:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível baixar o arquivo assinado",
         variant: "destructive"
       })
     } finally {
@@ -658,7 +714,7 @@ export default function AssinaturaDocumentoPage() {
                     <FileSignature className="w-5 h-5 text-green-600" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        {assinaturaAtual.arquivo_assinado}
+                        {getArquivoNome(assinaturaAtual.arquivo_assinado)}
                       </p>
                       <p className="text-xs text-gray-500">
                         Documento assinado por você
@@ -669,6 +725,7 @@ export default function AssinaturaDocumentoPage() {
                     variant="outline" 
                     size="sm"
                     className="flex items-center gap-2 text-green-600 border-green-300 hover:bg-green-100"
+                    onClick={() => handleDownloadArquivoAssinado(assinaturaAtual.arquivo_assinado || '')}
                   >
                     <Download className="w-4 h-4" />
                     Baixar
@@ -957,7 +1014,7 @@ export default function AssinaturaDocumentoPage() {
                                     <FileSignature className="w-5 h-5 text-green-600" />
                                     <div>
                                       <p className="text-sm font-medium text-gray-900">
-                                        {assinatura.arquivo_assinado}
+                                        {getArquivoNome(assinatura.arquivo_assinado)}
                                       </p>
                                       <p className="text-xs text-gray-500">
                                         Arquivo assinado enviado
@@ -968,6 +1025,7 @@ export default function AssinaturaDocumentoPage() {
                                     variant="outline" 
                                     size="sm"
                                     className="text-green-600 border-green-300 hover:bg-green-100"
+                                    onClick={() => handleDownloadArquivoAssinado(assinatura.arquivo_assinado || '')}
                                   >
                                     <Download className="w-4 h-4 mr-1" />
                                     Baixar
@@ -982,7 +1040,7 @@ export default function AssinaturaDocumentoPage() {
                                   </p>
                                   <Button
                                     size="sm"
-                                    onClick={() => setUploadDialogOpen(assinatura.user_id.toString())}
+                                    onClick={() => setUploadDialogOpen(assinatura.id.toString())}
                                     className="bg-blue-600 hover:bg-blue-700"
                                   >
                                     <Upload className="w-4 h-4 mr-2" />
@@ -1072,8 +1130,12 @@ export default function AssinaturaDocumentoPage() {
                               <Label className="text-sm font-medium text-gray-700">Arquivo Assinado</Label>
                               <div className="mt-1 flex items-center gap-2">
                                 <FileText className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm text-gray-900">{assinatura.arquivo_assinado}</span>
-                                <Button size="sm" variant="outline">
+                                <span className="text-sm text-gray-900">{getArquivoNome(assinatura.arquivo_assinado)}</span>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => handleDownloadArquivoAssinado(assinatura.arquivo_assinado || '')}
+                                >
                                   <Download className="w-4 h-4" />
                                 </Button>
                               </div>
@@ -1097,6 +1159,7 @@ export default function AssinaturaDocumentoPage() {
                                       size="sm"
                                       variant="outline"
                                       className="flex-1"
+                                      onClick={() => handleDownloadArquivoAssinado(assinatura.arquivo_assinado || '')}
                                     >
                                       <Download className="w-4 h-4 mr-2" />
                                       Baixar Assinado

@@ -721,20 +721,58 @@ router.post('/:id/upload-assinado', authenticateToken, upload.single('arquivo'),
       })
     }
 
-    // Buscar assinatura
+    // Buscar assinatura (permite qualquer usuário autenticado fazer upload)
+    // Aceita status 'aguardando' OU 'pendente' se for ordem=1 (primeira assinatura)
     const { data: assinatura, error: assinaturaError } = await supabaseAdmin
       .from('obras_documento_assinaturas')
       .select('*')
       .eq('id', id)
-      .eq('user_id', userId)
-      .eq('status', 'aguardando')
       .single()
 
     if (assinaturaError || !assinatura) {
-      return res.status(403).json({
-        success: false,
-        message: 'Você não tem permissão para assinar este documento ou a assinatura não está aguardando'
+      console.log('❌ Assinatura não encontrada:', {
+        id: id,
+        currentUserId: userId,
+        error: assinaturaError
       })
+      
+      return res.status(404).json({
+        success: false,
+        message: 'Assinatura não encontrada'
+      })
+    }
+
+    // Verificar se a assinatura está em status válido para upload
+    const statusValido = assinatura.status === 'aguardando' || 
+                        (assinatura.status === 'pendente' && assinatura.ordem === 1)
+
+    if (!statusValido) {
+      console.log('❌ Status inválido para upload:', {
+        id: id,
+        status: assinatura.status,
+        ordem: assinatura.ordem
+      })
+      
+      return res.status(400).json({
+        success: false,
+        message: `Esta assinatura não pode receber upload agora (status: ${assinatura.status}, ordem: ${assinatura.ordem})`,
+        debug: process.env.NODE_ENV === 'development' ? {
+          currentStatus: assinatura.status,
+          ordem: assinatura.ordem,
+          hint: assinatura.ordem > 1 ? 'Aguarde a assinatura anterior ser concluída' : null
+        } : undefined
+      })
+    }
+
+    // Se era pendente e ordem=1, ativar automaticamente
+    if (assinatura.status === 'pendente' && assinatura.ordem === 1) {
+      console.log('🔄 Ativando primeira assinatura automaticamente:', assinatura.id)
+      await supabaseAdmin
+        .from('obras_documento_assinaturas')
+        .update({ status: 'aguardando', updated_at: new Date().toISOString() })
+        .eq('id', assinatura.id)
+      
+      assinatura.status = 'aguardando' // Atualizar objeto local
     }
 
     // Buscar documento
@@ -785,6 +823,16 @@ router.post('/:id/upload-assinado', authenticateToken, upload.single('arquivo'),
       .from('arquivos-obras')
       .getPublicUrl(filePath)
 
+    // Log de auditoria se upload foi feito por outro usuário
+    if (assinatura.user_id !== userId) {
+      console.log(`📝 Upload feito por usuário diferente:`, {
+        assinaturaId: assinatura.id,
+        responsavel: assinatura.user_id,
+        uploadPor: userId,
+        documento: documento.id
+      })
+    }
+
     // Atualizar assinatura
     const { error: updateAssinaturaError } = await supabaseAdmin
       .from('obras_documento_assinaturas')
@@ -793,6 +841,7 @@ router.post('/:id/upload-assinado', authenticateToken, upload.single('arquivo'),
         arquivo_assinado: urlData.publicUrl,
         data_assinatura: new Date().toISOString(),
         observacoes: observacoes || null,
+        uploaded_por: userId, // Registrar quem fez o upload
         updated_at: new Date().toISOString()
       })
       .eq('id', assinatura.id)
