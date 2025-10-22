@@ -27,6 +27,7 @@ import {
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import { PWAAuthGuard } from "@/components/pwa-auth-guard"
 import { OfflineSyncIndicator } from "@/components/offline-sync-indicator"
+import { PWAErrorBoundary } from "@/components/pwa-error-boundary"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -78,19 +79,10 @@ export default function PWALayout({ children }: PWALayoutProps) {
     )
   }
 
-  // Verificar status de conexão e carregar dados do usuário
+  // Carregar dados do usuário
   useEffect(() => {
     if (typeof window === 'undefined') return
     
-    const handleOnline = () => setIsOnline(true)
-    const handleOffline = () => setIsOnline(false)
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    // Verificar status inicial
-    setIsOnline(navigator.onLine)
-
     // Carregar dados do usuário do localStorage
     const userData = localStorage.getItem('user_data')
     if (userData) {
@@ -107,11 +99,6 @@ export default function PWALayout({ children }: PWALayoutProps) {
       } catch (error) {
         console.error('Erro ao carregar dados do usuário:', error)
       }
-    }
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
     }
   }, [])
 
@@ -217,8 +204,9 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
 
   return (
-    <PWAAuthGuard>
-      {shouldShowLayout ? (
+    <PWAErrorBoundary>
+      <PWAAuthGuard>
+        {shouldShowLayout ? (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 pb-20">
           {/* Header Minimalista */}
           <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white sticky top-0 z-40 shadow-lg">
@@ -378,6 +366,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
           {children}
         </div>
       )}
-    </PWAAuthGuard>
+      </PWAAuthGuard>
+    </PWAErrorBoundary>
   )
 }

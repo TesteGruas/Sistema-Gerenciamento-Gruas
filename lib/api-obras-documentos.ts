@@ -107,7 +107,7 @@ export const obrasDocumentosApi = {
     const params = new URLSearchParams()
     if (status) params.append('status', status)
     
-    const response = await api.get(`/obras/${obraId}/documentos?${params.toString()}`)
+    const response = await api.get(`/obras-documentos/${obraId}/documentos?${params.toString()}`)
     return response.data
   },
 
@@ -120,20 +120,20 @@ export const obrasDocumentosApi = {
     if (params?.status) queryParams.append('status', params.status)
     if (params?.obra_id) queryParams.append('obra_id', params.obra_id.toString())
     
-    const url = `/obras/documentos/todos${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+    const url = `/obras-documentos/todos${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
     const response = await api.get(url)
     return response.data
   },
 
   // Obter documento específico por obra
   async obter(obraId: number, documentoId: number): Promise<DocumentoResponse> {
-    const response = await api.get(`/obras/${obraId}/documentos/${documentoId}`)
+    const response = await api.get(`/obras-documentos/${obraId}/documentos/${documentoId}`)
     return response.data
   },
 
   // Obter documento específico (geral)
   async obterPorId(documentoId: number): Promise<DocumentoResponse> {
-    const response = await api.get(`/obras/documentos/${documentoId}`)
+    const response = await api.get(`/obras-documentos/documentos/${documentoId}`)
     return response.data
   },
 
@@ -145,7 +145,7 @@ export const obrasDocumentosApi = {
     formData.append('arquivo', dados.arquivo)
     formData.append('ordem_assinatura', JSON.stringify(dados.ordem_assinatura))
 
-    const response = await api.post(`/obras/${obraId}/documentos`, formData, {
+    const response = await api.post(`/obras-documentos/${obraId}/documentos`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -155,25 +155,19 @@ export const obrasDocumentosApi = {
 
   // Enviar documento para assinatura
   async enviarParaAssinatura(obraId: number, documentoId: number): Promise<DocumentoResponse> {
-    const response = await api.post(`/obras/${obraId}/documentos/${documentoId}/enviar`)
-    return response.data
-  },
-
-  // Atualizar documento
-  async atualizar(obraId: number, documentoId: number, dados: DocumentoUpdate): Promise<DocumentoResponse> {
-    const response = await api.put(`/obras/${obraId}/documentos/${documentoId}`, dados)
+    const response = await api.post(`/obras-documentos/${obraId}/documentos/${documentoId}/enviar`)
     return response.data
   },
 
   // Excluir documento
   async excluir(obraId: number, documentoId: number): Promise<DocumentoResponse> {
-    const response = await api.delete(`/obras/${obraId}/documentos/${documentoId}`)
+    const response = await api.delete(`/obras-documentos/${obraId}/documentos/${documentoId}`)
     return response.data
   },
 
   // Download do arquivo
   async download(obraId: number, documentoId: number): Promise<{ download_url: string; nome_arquivo: string }> {
-    const response = await api.get(`/obras/${obraId}/documentos/${documentoId}/download`)
+    const response = await api.get(`/obras-documentos/${obraId}/documentos/${documentoId}/download`)
     return response.data.data
   },
 
@@ -181,16 +175,6 @@ export const obrasDocumentosApi = {
   async obterUrlDownload(obraId: number, documentoId: number): Promise<string> {
     const dados = await this.download(obraId, documentoId)
     return dados.download_url
-  },
-
-  // Atualizar documento
-  async atualizar(obraId: number, documentoId: number, dados: {
-    titulo?: string
-    descricao?: string
-    status?: 'rascunho' | 'aguardando_assinatura' | 'em_assinatura' | 'assinado' | 'rejeitado'
-  }): Promise<DocumentoResponse> {
-    const response = await api.put(`/obras/${obraId}/documentos/${documentoId}`, dados)
-    return response.data
   }
 }
 

@@ -73,13 +73,13 @@ export const obrasArquivosApi = {
     if (tipo_arquivo) params.append('tipo_arquivo', tipo_arquivo)
     if (grua_id) params.append('grua_id', grua_id)
     
-    const response = await api.get(`/obras/${obraId}/arquivos?${params.toString()}`)
+    const response = await api.get(`/obras-arquivos/${obraId}/arquivos?${params.toString()}`)
     return response.data
   },
 
   // Obter arquivo específico
   async obter(obraId: number, arquivoId: number): Promise<ArquivoResponse> {
-    const response = await api.get(`/obras/${obraId}/arquivos/${arquivoId}`)
+    const response = await api.get(`/obras-arquivos/${obraId}/arquivos/${arquivoId}`)
     return response.data
   },
 
@@ -93,7 +93,7 @@ export const obrasArquivosApi = {
     if (dados.grua_id) formData.append('grua_id', dados.grua_id)
     if (dados.is_public !== undefined) formData.append('is_public', dados.is_public.toString())
 
-    const response = await api.post(`/obras/${dados.obra_id}/arquivos`, formData, {
+    const response = await api.post(`/obras-arquivos/${dados.obra_id}/arquivos`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -109,7 +109,7 @@ export const obrasArquivosApi = {
     })
     if (categoria) formData.append('categoria', categoria)
 
-    const response = await api.post(`/obras/${obraId}/arquivos/upload-multiple`, formData, {
+    const response = await api.post(`/obras-arquivos/${obraId}/arquivos/upload-multiple`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -119,19 +119,19 @@ export const obrasArquivosApi = {
 
   // Atualizar metadados do arquivo
   async atualizar(obraId: number, arquivoId: number, dados: ArquivoUpdate): Promise<ArquivoResponse> {
-    const response = await api.put(`/obras/${obraId}/arquivos/${arquivoId}`, dados)
+    const response = await api.put(`/obras-arquivos/${obraId}/arquivos/${arquivoId}`, dados)
     return response.data
   },
 
   // Excluir arquivo
   async excluir(arquivoId: number): Promise<ArquivoResponse> {
-    const response = await api.delete(`/obras/arquivos/${arquivoId}`)
+    const response = await api.delete(`/obras-arquivos/arquivos/${arquivoId}`)
     return response.data
   },
 
   // Baixar arquivo
   async baixar(obraId: number, arquivoId: number): Promise<void> {
-    const response = await api.get(`/obras/${obraId}/arquivos/${arquivoId}/download`)
+    const response = await api.get(`/obras-arquivos/${obraId}/arquivos/${arquivoId}/download`)
     
     if (response.data.success) {
       // Redirecionar para a URL de download
@@ -143,7 +143,7 @@ export const obrasArquivosApi = {
 
   // Download do arquivo
   async download(obraId: number, arquivoId: number): Promise<{ download_url: string; nome_arquivo: string }> {
-    const response = await api.get(`/obras/${obraId}/arquivos/${arquivoId}/download`)
+    const response = await api.get(`/obras-arquivos/${obraId}/arquivos/${arquivoId}/download`)
     return response.data.data
   },
 

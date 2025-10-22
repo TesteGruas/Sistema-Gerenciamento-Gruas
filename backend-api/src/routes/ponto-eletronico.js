@@ -3537,12 +3537,6 @@ router.get('/relatorios/horas-extras', async (req, res) => {
  *                         type: string
  *                         format: date-time
  *                         description: Data e hora da alteração
- *                       alterado_por:
- *                         type: object
- *                         properties:
- *                           nome:
- *                             type: string
- *                             description: Nome do usuário que fez a alteração
  *       500:
  *         description: Erro interno do servidor
  */

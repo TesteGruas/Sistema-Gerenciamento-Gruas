@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Edit, Loader2, User } from "lucide-react"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
+import { useCargos } from "@/hooks/use-cargos"
 
 interface FuncionarioRH {
   id: number
@@ -60,6 +61,8 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
   submitting,
   funcionario,
 }: EditFuncionarioDialogProps) {
+  const { cargosAtivos } = useCargos()
+  
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -216,13 +219,11 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Operador">Operador</SelectItem>
-                  <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
-                  <SelectItem value="Técnico Manutenção">Técnico Manutenção</SelectItem>
-                  <SelectItem value="Supervisor">Supervisor</SelectItem>
-                  <SelectItem value="Mecânico">Mecânico</SelectItem>
-                  <SelectItem value="Engenheiro">Engenheiro</SelectItem>
-                  <SelectItem value="Chefe de Obras">Chefe de Obras</SelectItem>
+                  {cargosAtivos.map((cargo) => (
+                    <SelectItem key={cargo.id} value={cargo.nome}>
+                      {cargo.nome}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

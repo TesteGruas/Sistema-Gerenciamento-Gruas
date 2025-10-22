@@ -53,6 +53,7 @@ import LivroGruaList from "@/components/livro-grua-list"
 import { Progress } from "@/components/ui/progress"
 import { useParams } from "next/navigation"
 import { obrasApi, converterObraBackendParaFrontend, ObraBackend, ensureAuthenticated } from "@/lib/api-obras"
+import { createFuncionarioObra, deleteFuncionarioObra } from "@/lib/api-funcionarios-obras"
 import { PageLoader, CardLoader, InlineLoader } from "@/components/ui/loader"
 import { AlertCircle } from "lucide-react"
 import GruaSearch from "@/components/grua-search"
@@ -130,6 +131,17 @@ function ObraDetailsPageContent() {
   // Estados locais que não estão no store
   const [gruasReais, setGruasReais] = useState<any[]>([])
   const [loadingGruas, setLoadingGruas] = useState(false)
+  
+  // Estados para funcionários
+  const [funcionariosVinculados, setFuncionariosVinculados] = useState<any[]>([])
+  const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
+  const [isAdicionarFuncionarioOpen, setIsAdicionarFuncionarioOpen] = useState(false)
+  const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
+  const [novoFuncionarioData, setNovoFuncionarioData] = useState({
+    dataInicio: '',
+    dataFim: '',
+    observacoes: ''
+  })
   
   // Estados para modal de adicionar grua
   const [isAdicionarGruaOpen, setIsAdicionarGruaOpen] = useState(false)
@@ -841,6 +853,9 @@ function ObraDetailsPageContent() {
       // Recarregar gruas vinculadas
       await carregarGruasVinculadas()
       
+      // Recarregar a obra para atualizar os dados
+      await carregarObra(obraId)
+      
     } catch (error) {
       toast({
         title: "Erro",
@@ -874,6 +889,157 @@ function ObraDetailsPageContent() {
 
   const handleRemoverGrua = (gruaId: string) => {
     setGruasSelecionadas(gruasSelecionadas.filter(g => g.id !== gruaId))
+  }
+
+  // Funções para gerenciar funcionários
+  const carregarFuncionariosVinculados = async () => {
+    if (!obra) return
+    
+    try {
+      setLoadingFuncionarios(true)
+      
+      console.log('🔍 Buscando funcionários para obra ID:', obra.id)
+      
+      const response = await obrasApi.buscarFuncionariosVinculados(parseInt(obra.id))
+      console.log('🔍 Resposta da API funcionários:', response)
+      
+      if (response.success && response.data) {
+        setFuncionariosVinculados(response.data)
+        console.log('✅ Funcionários carregados:', response.data)
+      } else {
+        console.log('⚠️ Nenhum funcionário encontrado para esta obra')
+        setFuncionariosVinculados([])
+      }
+    } catch (err) {
+      console.error('❌ Erro ao carregar funcionários:', err)
+      setFuncionariosVinculados([])
+    } finally {
+      setLoadingFuncionarios(false)
+    }
+  }
+
+  const handleAdicionarFuncionario = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (funcionariosSelecionados.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Selecione pelo menos um funcionário para adicionar",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setLoadingFuncionarios(true)
+      
+      // Adicionar cada funcionário selecionado à obra
+      const promises = funcionariosSelecionados.map(async (funcionario) => {
+        const payload = {
+          funcionario_id: funcionario.id,
+          obra_id: parseInt(obraId),
+          data_inicio: novoFuncionarioData.dataInicio || new Date().toISOString().split('T')[0],
+          data_fim: novoFuncionarioData.dataFim || undefined,
+          observacoes: novoFuncionarioData.observacoes || `Funcionário adicionado à obra ${obra?.name || 'obra'}`
+        }
+        
+        return createFuncionarioObra(payload)
+      })
+      
+      const results = await Promise.all(promises)
+      
+      // Verificar se todas as operações foram bem-sucedidas
+      const sucessos = results.filter(result => result.success).length
+      const falhas = results.length - sucessos
+      
+      if (sucessos > 0) {
+        toast({
+          title: "Sucesso",
+          description: `${sucessos} funcionário(s) adicionado(s) à obra com sucesso!${falhas > 0 ? ` (${falhas} falharam)` : ''}`,
+        })
+      }
+      
+      if (falhas > 0) {
+        toast({
+          title: "Atenção",
+          description: `${falhas} funcionário(s) não puderam ser adicionados. Verifique se já estão vinculados à obra.`,
+          variant: "destructive"
+        })
+      }
+      
+      // Fechar modal e limpar dados
+      setIsAdicionarFuncionarioOpen(false)
+      setFuncionariosSelecionados([])
+      setNovoFuncionarioData({
+        dataInicio: '',
+        dataFim: '',
+        observacoes: ''
+      })
+      
+      // Recarregar funcionários vinculados
+      await carregarFuncionariosVinculados()
+      
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar funcionários à obra",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingFuncionarios(false)
+    }
+  }
+
+  const handleCancelarAdicionarFuncionario = () => {
+    setIsAdicionarFuncionarioOpen(false)
+    setFuncionariosSelecionados([])
+    setNovoFuncionarioData({
+      dataInicio: '',
+      dataFim: '',
+      observacoes: ''
+    })
+  }
+
+  const handleFuncionarioSelect = (funcionario: any) => {
+    if (!funcionariosSelecionados.find(f => f.id === funcionario.id)) {
+      setFuncionariosSelecionados([...funcionariosSelecionados, funcionario])
+    }
+  }
+
+  const handleRemoverFuncionario = (funcionarioId: string) => {
+    setFuncionariosSelecionados(funcionariosSelecionados.filter(f => f.id !== funcionarioId))
+  }
+
+  const handleRemoverFuncionarioVinculado = async (funcionarioId: string) => {
+    try {
+      setLoadingFuncionarios(true)
+      
+      const response = await deleteFuncionarioObra(parseInt(funcionarioId))
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Funcionário removido da obra com sucesso!",
+        })
+        
+        // Recarregar funcionários vinculados
+        await carregarFuncionariosVinculados()
+      } else {
+        toast({
+          title: "Erro",
+          description: "Erro ao remover funcionário da obra",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao remover funcionário da obra",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingFuncionarios(false)
+    }
   }
 
   const handleAtualizarGrua = (gruaId: string, campo: string, valor: number) => {
@@ -1176,6 +1342,13 @@ function ObraDetailsPageContent() {
     }
   }, [obra])
 
+  // Carregar funcionários quando a obra for carregada
+  useEffect(() => {
+    if (obra) {
+      carregarFuncionariosVinculados()
+    }
+  }, [obra])
+
 
   // Definir mês padrão após carregar custos
   useEffect(() => {
@@ -1315,8 +1488,8 @@ function ObraDetailsPageContent() {
   }
 
   // Definir variáveis que dependem de obra
-  const gruasVinculadas = gruasReais.length > 0 ? gruasReais : getGruasByObra(obra.id)
-  const custos = getCustosByObra(obra.id)
+  const gruasVinculadas = gruasReais.length > 0 ? gruasReais : (obra?.gruasVinculadas || [])
+  const custos = getCustosByObra(obra?.id || '')
   
 
   return (
@@ -1337,9 +1510,10 @@ function ObraDetailsPageContent() {
       </div>
 
       <Tabs defaultValue="geral" className="w-full">
-      <TabsList className="grid w-full grid-cols-6">
+      <TabsList className="grid w-full grid-cols-7">
         <TabsTrigger value="geral">Geral</TabsTrigger>
         <TabsTrigger value="gruas">Gruas</TabsTrigger>
+        <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
         <TabsTrigger value="custos">Custos</TabsTrigger>
         <TabsTrigger value="documentos">Documentos</TabsTrigger>
         <TabsTrigger value="arquivos">Arquivos</TabsTrigger>
@@ -1474,36 +1648,34 @@ function ObraDetailsPageContent() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="font-semibold text-lg">
-                              {isGruaReal ? grua.name : grua.name}
+                              {grua.grua ? `${grua.grua.fabricante} ${grua.grua.modelo}` : `Grua ${grua.gruaId}`}
                             </h3>
                             <p className="text-sm text-gray-600">
-                              {isGruaReal ? 
-                                `${grua.fabricante} ${grua.modelo}` : 
-                                `${grua.model} - ${grua.capacity}`
+                              {grua.grua ? 
+                                `${grua.grua.tipo} - ID: ${grua.grua.id}` : 
+                                `ID: ${grua.gruaId}`
                               }
                             </p>
-                            {isGruaReal && (
-                              <div className="mt-2 space-y-1">
+                            <div className="mt-2 space-y-1">
+                              <p className="text-xs text-gray-500">
+                                <strong>Início da Locação:</strong> {grua.dataInicioLocacao ? new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR') : 'Não informado'}
+                              </p>
+                              {grua.dataFimLocacao && (
                                 <p className="text-xs text-gray-500">
-                                  <strong>Início da Locação:</strong> {grua.data_instalacao ? new Date(grua.data_instalacao).toLocaleDateString('pt-BR') : 'Não informado'}
+                                  <strong>Fim da Locação:</strong> {new Date(grua.dataFimLocacao).toLocaleDateString('pt-BR')}
                                 </p>
-                                {grua.dataFimLocacao && (
-                                  <p className="text-xs text-gray-500">
-                                    <strong>Fim da Locação:</strong> {new Date(grua.dataFimLocacao).toLocaleDateString('pt-BR')}
-                                  </p>
-                                )}
-                                {grua.valorLocacaoMensal && (
-                                  <p className="text-xs text-gray-500">
-                                    <strong>Valor Mensal:</strong> R$ {grua.valorLocacaoMensal.toLocaleString('pt-BR')}
-                                  </p>
-                                )}
-                                {grua.observacoes && (
-                                  <p className="text-xs text-gray-500">
-                                    <strong>Observações:</strong> {grua.observacoes}
-                                  </p>
-                                )}
-                              </div>
-                            )}
+                              )}
+                              {grua.valorLocacaoMensal && (
+                                <p className="text-xs text-gray-500">
+                                  <strong>Valor Mensal:</strong> R$ {grua.valorLocacaoMensal.toLocaleString('pt-BR')}
+                                </p>
+                              )}
+                              {grua.observacoes && (
+                                <p className="text-xs text-gray-500">
+                                  <strong>Observações:</strong> {grua.observacoes}
+                                </p>
+                              )}
+                            </div>
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <Badge 
@@ -1576,6 +1748,86 @@ function ObraDetailsPageContent() {
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Vincular Primeira Grua
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="funcionarios" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-sm">
+                  Funcionários Vinculados ({funcionariosVinculados.length})
+                  {loadingFuncionarios && <InlineLoader size="sm" />}
+                </CardTitle>
+                <Button 
+                  size="sm"
+                  onClick={() => setIsAdicionarFuncionarioOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Vincular Funcionário
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingFuncionarios ? (
+                <CardLoader text="Carregando funcionários vinculados..." />
+              ) : funcionariosVinculados.length > 0 ? (
+                <div className="space-y-4">
+                  {funcionariosVinculados.map((funcionario) => (
+                    <div key={funcionario.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="font-semibold text-lg">{funcionario.name}</h3>
+                          <p className="text-sm text-gray-600">{funcionario.role}</p>
+                          <div className="mt-2 space-y-1">
+                            <p className="text-xs text-gray-500">
+                              <strong>Data de Início:</strong> {funcionario.dataInicio ? new Date(funcionario.dataInicio).toLocaleDateString('pt-BR') : 'Não informado'}
+                            </p>
+                            {funcionario.dataFim && (
+                              <p className="text-xs text-gray-500">
+                                <strong>Data de Fim:</strong> {new Date(funcionario.dataFim).toLocaleDateString('pt-BR')}
+                              </p>
+                            )}
+                            {funcionario.observacoes && (
+                              <p className="text-xs text-gray-500">
+                                <strong>Observações:</strong> {funcionario.observacoes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <Badge 
+                            variant={funcionario.status === 'ativo' ? 'default' : 'secondary'}
+                            className={funcionario.status === 'ativo' ? 'bg-green-100 text-green-800' : ''}
+                          >
+                            {funcionario.status}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRemoverFuncionarioVinculado(funcionario.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum funcionário vinculado</h3>
+                  <p className="text-gray-600 mb-4">Esta obra ainda não possui funcionários vinculados.</p>
+                  <Button 
+                    onClick={() => setIsAdicionarFuncionarioOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Vincular Primeiro Funcionário
                   </Button>
                 </div>
               )}
@@ -2245,11 +2497,11 @@ function ObraDetailsPageContent() {
                       </CardHeader>
                       <CardContent className="pt-0">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                          <div className="flex items-center gap-2">
+                          {/* <div className="flex items-center gap-2 hidden">
                             <Paperclip className="w-4 h-4 text-gray-500" />
                             <span className="text-gray-600">Arquivo:</span>
                             <span className="font-medium">{arquivo.nome_arquivo}</span>
-                          </div>
+                          </div> */}
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-gray-500" />
                             <span className="text-gray-600">Upload:</span>
@@ -2977,6 +3229,142 @@ function ObraDetailsPageContent() {
                   <>
                     <Plus className="w-4 h-4 mr-2" />
                     Adicionar Gruas ({gruasSelecionadas.length})
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para adicionar funcionário */}
+      <Dialog open={isAdicionarFuncionarioOpen} onOpenChange={setIsAdicionarFuncionarioOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vincular Funcionários à Obra</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAdicionarFuncionario} className="space-y-6">
+            <div className="space-y-4">
+              {/* Busca de Funcionário */}
+              <div>
+                <Label htmlFor="funcionarioSearch">Buscar Funcionário</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    id="funcionarioSearch"
+                    placeholder="Digite o nome do funcionário..."
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Lista de funcionários disponíveis */}
+              <div className="space-y-2">
+                <Label>Funcionários Disponíveis</Label>
+                <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-2">
+                  {mockUsers.filter(user => 
+                    user.role === 'engenheiro' || 
+                    user.role === 'chefe_obras' || 
+                    user.role === 'funcionario'
+                  ).map(funcionario => (
+                    <div 
+                      key={funcionario.id} 
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleFuncionarioSelect(funcionario)}
+                    >
+                      <div>
+                        <p className="font-medium">{funcionario.name}</p>
+                        <p className="text-sm text-gray-600">{funcionario.role}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleFuncionarioSelect(funcionario)
+                        }}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Funcionários selecionados */}
+              {funcionariosSelecionados.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Funcionários Selecionados</Label>
+                  <div className="space-y-2">
+                    {funcionariosSelecionados.map(funcionario => (
+                      <div key={funcionario.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div>
+                          <p className="font-medium">{funcionario.name}</p>
+                          <p className="text-sm text-gray-600">{funcionario.role}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoverFuncionario(funcionario.id)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dados da vinculação */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="dataInicio">Data de Início *</Label>
+                  <Input
+                    id="dataInicio"
+                    type="date"
+                    value={novoFuncionarioData.dataInicio}
+                    onChange={(e) => setNovoFuncionarioData({ ...novoFuncionarioData, dataInicio: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="dataFim">Data de Fim (opcional)</Label>
+                  <Input
+                    id="dataFim"
+                    type="date"
+                    value={novoFuncionarioData.dataFim}
+                    onChange={(e) => setNovoFuncionarioData({ ...novoFuncionarioData, dataFim: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="observacoes">Observações</Label>
+                <Textarea
+                  id="observacoes"
+                  placeholder="Observações sobre a vinculação do funcionário..."
+                  value={novoFuncionarioData.observacoes}
+                  onChange={(e) => setNovoFuncionarioData({ ...novoFuncionarioData, observacoes: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={handleCancelarAdicionarFuncionario}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={funcionariosSelecionados.length === 0 || loadingFuncionarios}>
+                {loadingFuncionarios ? (
+                  <>
+                    <InlineLoader size="sm" />
+                    Adicionando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Funcionários ({funcionariosSelecionados.length})
                   </>
                 )}
               </Button>

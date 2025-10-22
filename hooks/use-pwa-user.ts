@@ -40,8 +40,9 @@ export function usePWAUser(): PWAUserData {
         // Carregar ponto de hoje (silenciosamente, sem quebrar a página)
         try {
           const hoje = new Date().toISOString().split('T')[0]
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const pontoResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${parsedUser.id}`,
+            `${apiUrl}/api/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${parsedUser.id}`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -100,8 +101,9 @@ export function usePWAUser(): PWAUserData {
 
         // Carregar documentos pendentes (silenciosamente, sem quebrar a página)
         try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const docsResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/assinaturas/pendentes`,
+            `${apiUrl}/api/assinaturas/pendentes`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,

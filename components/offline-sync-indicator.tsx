@@ -149,10 +149,11 @@ export function OfflineSyncIndicator() {
   const syncAction = async (action: PendingAction) => {
     // Simular sincronização com API
     const token = localStorage.getItem('access_token')
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
     
     switch (action.type) {
       case 'ponto':
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico`, {
+        await fetch(`${apiUrl}/api/ponto-eletronico`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -163,7 +164,7 @@ export function OfflineSyncIndicator() {
         break
       
       case 'documento':
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/documentos`, {
+        await fetch(`${apiUrl}/api/documentos`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -174,7 +175,7 @@ export function OfflineSyncIndicator() {
         break
       
       case 'assinatura':
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/assinaturas`, {
+        await fetch(`${apiUrl}/api/assinaturas`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
