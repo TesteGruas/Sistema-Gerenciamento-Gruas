@@ -698,11 +698,23 @@ router.post('/:id/lembrete', authenticateToken, async (req, res) => {
  */
 router.post('/:id/upload-assinado', authenticateToken, upload.single('arquivo'), async (req, res) => {
   try {
+    console.log('=== DEBUG UPLOAD ASSINADO ===')
+    console.log('ID da assinatura:', req.params.id)
+    console.log('User ID:', req.user?.id)
+    console.log('File:', req.file ? {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    } : 'Nenhum arquivo')
+    console.log('Body:', req.body)
+    console.log('=== FIM DEBUG ===')
+    
     const { id } = req.params
     const { observacoes } = req.body
     const userId = req.user.id
 
     if (!req.file) {
+      console.log('❌ Erro: Nenhum arquivo enviado')
       return res.status(400).json({
         success: false,
         message: 'Arquivo é obrigatório'

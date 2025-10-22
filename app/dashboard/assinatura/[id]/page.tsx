@@ -325,49 +325,64 @@ export default function AssinaturaDocumentoPage() {
       console.log('Arquivo:', uploadFile.name)
       console.log('Observações:', uploadObservacoes)
 
-      // Simular upload do arquivo assinado
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      // Atualizar status da assinatura
-      const assinatura = documento.assinaturas?.find(a => a.user_id.toString() === assinaturaId)
-      if (assinatura) {
-        assinatura.status = 'assinado'
-        assinatura.data_assinatura = new Date().toISOString()
-        assinatura.arquivo_assinado = uploadFile.name
-        assinatura.observacoes = uploadObservacoes
-      }
-
-      // Ativar próximo assinante se houver
-      const nextAssinatura = documento.assinaturas?.find(a => a.ordem === (assinatura?.ordem || 0) + 1)
-      if (nextAssinatura) {
-        nextAssinatura.status = 'aguardando'
-      }
-
-      // Atualizar status do documento
-      const assinaturasCompletas = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
-      const totalAssinaturas = documento.assinaturas?.length || 0
+      // Importar a função de upload
+      const { uploadArquivoAssinado } = await import('@/lib/api-assinaturas')
       
-      if (assinaturasCompletas + 1 >= totalAssinaturas) {
-        documento.status = 'assinado'
+      // Fazer upload real do arquivo assinado
+      const response = await uploadArquivoAssinado(
+        parseInt(assinaturaId), // ID da assinatura
+        uploadFile,
+        uploadObservacoes
+      )
+
+      if (response.success) {
+        // Atualizar status da assinatura
+        const assinatura = documento.assinaturas?.find(a => a.user_id.toString() === assinaturaId)
+        if (assinatura) {
+          assinatura.status = 'assinado'
+          assinatura.data_assinatura = new Date().toISOString()
+          assinatura.arquivo_assinado = response.data?.arquivo_assinado || uploadFile.name
+          assinatura.observacoes = uploadObservacoes
+        }
+
+        // Ativar próximo assinante se houver
+        const nextAssinatura = documento.assinaturas?.find(a => a.ordem === (assinatura?.ordem || 0) + 1)
+        if (nextAssinatura) {
+          nextAssinatura.status = 'aguardando'
+        }
+
+        // Atualizar status do documento
+        const assinaturasCompletas = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
+        const totalAssinaturas = documento.assinaturas?.length || 0
+        
+        if (assinaturasCompletas + 1 >= totalAssinaturas) {
+          documento.status = 'assinado'
+        } else {
+          documento.status = 'em_assinatura'
+        }
+
+        setDocumento({ ...documento })
+        setUploadDialogOpen(null)
+        setUploadFile(null)
+        setUploadObservacoes('')
+        
+        toast({
+          title: "Sucesso",
+          description: response.message || "Arquivo assinado enviado com sucesso!",
+          variant: "default"
+        })
       } else {
-        documento.status = 'em_assinatura'
+        toast({
+          title: "Erro",
+          description: response.message || "Erro ao enviar arquivo assinado",
+          variant: "destructive"
+        })
       }
-
-      setDocumento({ ...documento })
-      setUploadDialogOpen(null)
-      setUploadFile(null)
-      setUploadObservacoes('')
-      
-      toast({
-        title: "Sucesso",
-        description: "Arquivo assinado enviado com sucesso!",
-        variant: "default"
-      })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao enviar arquivo assinado:', error)
       toast({
         title: "Erro",
-        description: "Erro ao enviar arquivo assinado",
+        description: error.message || "Erro interno do servidor",
         variant: "destructive"
       })
     } finally {

@@ -30,7 +30,11 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
-  Send
+  Send,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react"
 import { mockDocumentos, mockObras, mockUsers } from "@/lib/mock-data"
 import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
@@ -46,6 +50,10 @@ export default function AssinaturaPage() {
   const [selectedObra, setSelectedObra] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
+  
+  // Estados de paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
   
   // Estados para integração com backend
   const [documentos, setDocumentos] = useState<DocumentoObra[]>([])
@@ -183,14 +191,25 @@ export default function AssinaturaPage() {
     return matchesSearch && matchesStatus && matchesObra && canView
   })
 
+  // Lógica de paginação
+  const totalPages = Math.ceil(filteredDocumentos.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedDocumentos = filteredDocumentos.slice(startIndex, endIndex)
+
+  // Resetar página quando filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, selectedStatus, selectedObra])
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'rascunho': return 'bg-gray-100 text-gray-800'
-      case 'aguardando_assinatura': return 'bg-yellow-100 text-yellow-800'
-      case 'em_assinatura': return 'bg-blue-100 text-blue-800'
-      case 'assinado': return 'bg-green-100 text-green-800'
-      case 'rejeitado': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'rascunho': return 'bg-slate-100 text-slate-700 border-slate-200'
+      case 'aguardando_assinatura': return 'bg-amber-100 text-amber-800 border-amber-200'
+      case 'em_assinatura': return 'bg-blue-100 text-blue-800 border-blue-200'
+      case 'assinado': return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+      case 'rejeitado': return 'bg-red-100 text-red-800 border-red-200'
+      default: return 'bg-slate-100 text-slate-700 border-slate-200'
     }
   }
 
@@ -403,7 +422,7 @@ export default function AssinaturaPage() {
                 <SelectContent>
                   <SelectItem value="all">Todos os status</SelectItem>
                   <SelectItem value="rascunho">Rascunho</SelectItem>
-                  <SelectItem value="aguardando_assinatura">Aguardando Assinatura</SelectItem>
+                  <SelectItem value="aguardando_assinatura">Aguardando</SelectItem>
                   <SelectItem value="em_assinatura">Em Assinatura</SelectItem>
                   <SelectItem value="assinado">Assinado</SelectItem>
                   <SelectItem value="rejeitado">Rejeitado</SelectItem>
@@ -501,88 +520,190 @@ export default function AssinaturaPage() {
           </CardContent>
         </Card>
       ) : !loading && !error ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredDocumentos.map((documento) => {
-          const progress = getProgressPercentage(documento)
-          const nextSigner = getNextSigner(documento)
-          const currentSigner = getCurrentSigner(documento)
-          const assinaturas = documento.assinaturas || documento.ordemAssinatura || []
-          
-          return (
-            <Card key={documento.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <FileSignature className="w-5 h-5 text-blue-600" />
-                    <CardTitle className="text-lg">{documento.titulo}</CardTitle>
-                  </div>
-                  <Badge className={getStatusColor(documento.status)}>
-                    {getStatusIcon(documento.status)}
-                    <span className="ml-1 capitalize">{documento.status.replace('_', ' ')}</span>
-                  </Badge>
-                </div>
-                <CardDescription>{documento.descricao}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Calendar className="w-4 h-4" />
-                    <span>Criado em {new Date(documento.created_at).toLocaleDateString('pt-BR')}</span>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Progresso das Assinaturas</span>
-                      <span>{Math.round(progress)}%</span>
-                    </div>
-                    <Progress value={progress} className="h-2" />
-                  </div>
+        <div className="space-y-6">
+          {/* Controles de Paginação Superior */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-600">
+                Mostrando {startIndex + 1} a {Math.min(endIndex, filteredDocumentos.length)} de {filteredDocumentos.length} documentos
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="items-per-page" className="text-sm">Itens por página:</Label>
+                <Select value={itemsPerPage.toString()} onValueChange={(value) => {
+                  setItemsPerPage(parseInt(value))
+                  setCurrentPage(1)
+                }}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
 
-                  {currentSigner && (
-                    <div className="flex items-center gap-2 text-sm text-blue-600">
-                      <Users className="w-4 h-4" />
-                      <span>Próximo: {currentSigner.usuario?.nome || currentSigner.userName}</span>
-                    </div>
-                  )}
+          {/* Lista de Documentos em Formato de Tabela */}
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Documento</TableHead>
+                    <TableHead>Obra</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Progresso</TableHead>
+                    <TableHead>Criado em</TableHead>
+                    <TableHead>Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedDocumentos.map((documento) => {
+                    const progress = getProgressPercentage(documento)
+                    const nextSigner = getNextSigner(documento)
+                    const currentSigner = getCurrentSigner(documento)
+                    const assinaturas = documento.assinaturas || documento.ordemAssinatura || []
+                    
+                    return (
+                      <TableRow key={documento.id} className="hover:bg-gray-50">
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <FileSignature className="w-5 h-5 text-blue-600" />
+                            <div>
+                              <div className="font-medium text-gray-900">{documento.titulo}</div>
+                              <div className="text-sm text-gray-500">{documento.descricao}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-gray-900">{documento.obra_nome}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(documento.status)}>
+                            {getStatusIcon(documento.status)}
+                            <span className="ml-1 capitalize">{documento.status.replace('_', ' ')}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span>{Math.round(progress)}%</span>
+                            </div>
+                            <Progress value={progress} className="h-2 w-20" />
+                            <div className="text-xs text-gray-500">
+                              {assinaturas.filter((a: any) => a.status === 'assinado').length} de {assinaturas.length}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-gray-600">
+                            {new Date(documento.created_at).toLocaleDateString('pt-BR')}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/dashboard/assinatura/${documento.id}`)}
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              {canSignDocument(documento) ? 'Assinar' : 'Ver'}
+                            </Button>
+                            {documento.docu_sign_link && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(documento.docu_sign_link, '_blank')}
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
-                  {documento.docu_sign_link && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-green-600">
-                        <ExternalLink className="w-4 h-4" />
-                        <span>Links DocuSign Ativos</span>
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        {assinaturas.filter((a: any) => a.docu_sign_link).length} de {assinaturas.length} links gerados
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/dashboard/assinatura/${documento.id}`)}
-                      className="flex-1"
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      {canSignDocument(documento) ? 'Assinar' : 'Ver Detalhes'}
-                    </Button>
-                    {canCreateDocument() && documento.status === 'aguardando_assinatura' && (
+          {/* Controles de Paginação Inferior */}
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                Página {currentPage} de {totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                
+                {/* Números das páginas */}
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNumber
+                    if (totalPages <= 5) {
+                      pageNumber = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNumber = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNumber = totalPages - 4 + i
+                    } else {
+                      pageNumber = currentPage - 2 + i
+                    }
+                    
+                    return (
                       <Button
+                        key={pageNumber}
+                        variant={currentPage === pageNumber ? "default" : "outline"}
                         size="sm"
-                        onClick={() => handleSendToDocuSign(documento)}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        onClick={() => setCurrentPage(pageNumber)}
+                        className="w-8 h-8 p-0"
                       >
-                        <Send className="w-4 h-4 mr-1" />
-                        Enviar para DocuSign
+                        {pageNumber}
                       </Button>
-                    )}
-                  </div>
+                    )
+                  })}
                 </div>
-              </CardContent>
-            </Card>
-          )
-        })}
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -607,6 +728,7 @@ export default function AssinaturaPage() {
 }
 
 function DocumentoDetails({ documento, onClose }: { documento: any; onClose: () => void }) {
+  const { toast } = useToast()
   const obra = mockObras.find(o => o.id === documento.obraId)
   const progress = getProgressPercentage(documento)
   const currentSigner = documento.ordemAssinatura.find((a: any) => a.status === 'aguardando')
@@ -1113,12 +1235,12 @@ function SignDialog({ documento, onClose }: { documento: any; onClose: () => voi
 
 function getStatusColor(status: string) {
   switch (status) {
-    case 'rascunho': return 'bg-gray-100 text-gray-800'
-    case 'aguardando_assinatura': return 'bg-yellow-100 text-yellow-800'
-    case 'em_assinatura': return 'bg-blue-100 text-blue-800'
-    case 'assinado': return 'bg-green-100 text-green-800'
-    case 'rejeitado': return 'bg-red-100 text-red-800'
-    default: return 'bg-gray-100 text-gray-800'
+    case 'rascunho': return 'bg-slate-100 text-slate-700 border-slate-200'
+    case 'aguardando_assinatura': return 'bg-amber-100 text-amber-800 border-amber-200'
+    case 'em_assinatura': return 'bg-blue-100 text-blue-800 border-blue-200'
+    case 'assinado': return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+    case 'rejeitado': return 'bg-red-100 text-red-800 border-red-200'
+    default: return 'bg-slate-100 text-slate-700 border-slate-200'
   }
 }
 
@@ -1138,7 +1260,6 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
   const [assinantes, setAssinantes] = useState<Array<{
     userId: string, 
     ordem: number, 
-    docuSignLink: string, 
     status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado',
     tipo: 'interno' | 'cliente',
     userInfo?: {
@@ -1311,7 +1432,6 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
         user_id: ass.userId,
         ordem: ass.ordem,
         tipo: ass.tipo,
-        docu_sign_link: ass.docuSignLink,
         status: ass.status
       }))))
       
@@ -1329,7 +1449,11 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
         console.log(`${key}:`, value)
       }
       
-      const response = await obrasDocumentosApi.criar(parseInt(formData.obraId), formDataUpload)
+      const response = await api.post(`/obras-documentos/${formData.obraId}/documentos`, formDataUpload, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
       
       console.log('=== RESPOSTA DA API ===')
       console.log('Status:', response.status)
@@ -1370,7 +1494,6 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
     setAssinantes([...assinantes, { 
       userId: '', 
       ordem: assinantes.length + 1, 
-      docuSignLink: '', 
       status: 'pendente',
       tipo: 'interno' as 'interno' | 'cliente'
     }])
@@ -1637,7 +1760,6 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                            const novoAssinante = {
                              userId: item.id.toString(),
                              ordem: assinantes.length + 1,
-                             docuSignLink: '',
                              status: 'pendente' as const,
                              tipo: tipoAssinante as 'interno' | 'cliente',
                              userInfo: {
@@ -1737,26 +1859,6 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                        {assinante.userInfo?.email || 'Email não disponível'}
                      </div>
 
-                     {/* Campo DocuSign Link */}
-                     <div className="mb-3">
-                       <Label htmlFor={`link-${index}`} className="text-sm font-medium">
-                         Link DocuSign *
-                       </Label>
-                       <Input
-                         id={`link-${index}`}
-                         value={assinante.docuSignLink}
-                         onChange={(e) => {
-                           const novosAssinantes = [...assinantes]
-                           novosAssinantes[index].docuSignLink = e.target.value
-                           setAssinantes(novosAssinantes)
-                         }}
-                         placeholder="https://demo.docusign.net/signing/documents/..."
-                         className="font-mono text-sm mt-1"
-                       />
-                       <p className="text-xs text-gray-500 mt-1">
-                         Cole aqui o link completo do envelope no DocuSign
-                       </p>
-                     </div>
 
                      {/* Status */}
                      <div>
@@ -1805,7 +1907,7 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                 </Button>
                 <Button 
                   type="submit" 
-                  disabled={isSubmitting || assinantes.length === 0 || assinantes.some(a => !a.userId || !a.docuSignLink.trim())}
+                  disabled={isSubmitting || assinantes.length === 0 || assinantes.some(a => !a.userId)}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   {isSubmitting ? (
