@@ -20,27 +20,8 @@ import {
 
 const router = express.Router();
 
-// Função para verificar se o usuário é administrador
-const verificarSeAdministrador = async (usuarioId) => {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('usuario_perfis')
-      .select(`
-        perfil_id,
-        perfis!inner(nome, nivel_acesso)
-      `)
-      .eq('usuario_id', usuarioId)
-      .eq('status', 'Ativa')
-      .single();
-
-    if (error || !data) return false;
-    
-    return data.perfis.nome === 'Administrador' && data.perfis.nivel_acesso >= 10;
-  } catch (error) {
-    console.error('Erro ao verificar perfil de administrador:', error);
-    return false;
-  }
-};
+// REMOVIDO: Função verificarSeAdministrador - agora usamos req.user.level do middleware authenticateToken
+// A informação de nível já vem normalizada no req.user após autenticação
 
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authenticateToken);
@@ -106,8 +87,8 @@ router.get('/funcionarios', async (req, res) => {
       return res.status(400).json({ error: 'ID do usuário é obrigatório' });
     }
 
-    // Verificar se o usuário é administrador
-    const isAdmin = await verificarSeAdministrador(parseInt(usuario_id));
+    // Verificar se o usuário é administrador (usando nível do middleware)
+    const isAdmin = req.user.level >= 10;
 
     let query = supabaseAdmin
       .from('funcionarios')

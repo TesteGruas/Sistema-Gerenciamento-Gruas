@@ -2,6 +2,7 @@ import express from 'express'
 import multer from 'multer'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { normalizeRoleName, getRoleLevel } from '../config/roles.js'
 
 const router = express.Router()
 
@@ -971,9 +972,10 @@ router.get('/:id/arquivo-assinado', authenticateToken, async (req, res) => {
       .eq('id', assinatura.documento_id)
       .single()
 
+    // Verificar permissão: próprio usuário, criador do documento, ou admin (nível 10+)
     const podeAcessar = assinatura.user_id === userId || 
                        documento?.created_by === userId ||
-                       req.user.role === 'admin'
+                       req.user.level >= 10
 
     if (!podeAcessar) {
       return res.status(403).json({
@@ -1055,7 +1057,8 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       })
     }
 
-    const podeAtualizar = req.user.role === 'admin' || 
+    // Verificar permissão: admin (nível 10+) ou criador do documento
+    const podeAtualizar = req.user.level >= 10 || 
                          assinatura.obras_documentos.created_by === userId
 
     if (!podeAtualizar) {

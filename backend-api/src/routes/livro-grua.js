@@ -15,6 +15,7 @@ import express from 'express'
 import Joi from 'joi'
 import { supabase, supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { normalizeRoleName, getRoleLevel } from '../config/roles.js'
 
 const router = express.Router()
 
@@ -47,12 +48,11 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       funcionario_id: user.funcionario_id
     })
 
-    // Verificar se o usuário é Administrador ou Gerente
-    const isAdminOrManager = user.role === 'administrador' || 
-                            user.role === 'admin' || 
-                            user.role === 'gerente'
+    // Verificar se o usuário é Administrador ou Gerente (usando nível de acesso)
+    const userLevel = getRoleLevel(user.role)
+    const isAdminOrManager = userLevel >= 8 // Admin (10) ou Gestores (8)
 
-    console.log('🔍 DEBUG: É Admin/Gerente?', isAdminOrManager)
+    console.log('🔍 DEBUG: É Admin/Gerente?', isAdminOrManager, '(nível:', userLevel, ')')
 
     let query = supabaseAdmin
       .from('grua_obra')
@@ -405,16 +405,15 @@ router.get('/', async (req, res) => {
 
     const offset = (page - 1) * limit
 
-    // Verificar se o usuário pode ver todas as entradas
-    const isAdminManagerSupervisor = user.role === 'administrador' || 
-                                     user.role === 'admin' || 
-                                     user.role === 'gerente' ||
-                                     user.role === 'supervisor'
+    // Verificar se o usuário pode ver todas as entradas (usando nível de acesso)
+    const userLevel = getRoleLevel(user.role)
+    const isAdminManagerSupervisor = userLevel >= 5 // Admin (10), Gestores (8), Supervisores (5)
 
     console.log('🔍 DEBUG Livro Grua: Listando entradas', {
       userId: user.id,
       email: user.email,
       role: user.role,
+      userLevel,
       funcionarioId: user.funcionario_id,
       isAdminManagerSupervisor,
       filtroFuncionarioId: funcionario_id
@@ -553,11 +552,9 @@ router.get('/:id', async (req, res) => {
       })
     }
 
-    // Verificar se o usuário pode ver esta entrada
-    const isAdminManagerSupervisor = user.role === 'administrador' || 
-                                     user.role === 'admin' || 
-                                     user.role === 'gerente' ||
-                                     user.role === 'supervisor'
+    // Verificar se o usuário pode ver esta entrada (usando nível de acesso)
+    const userLevel = getRoleLevel(user.role)
+    const isAdminManagerSupervisor = userLevel >= 5 // Admin (10), Gestores (8), Supervisores (5)
 
     if (!isAdminManagerSupervisor) {
       // Usuário normal só pode ver suas próprias entradas
@@ -677,11 +674,9 @@ router.post('/', async (req, res) => {
       })
     }
 
-    // Verificar se o usuário pode criar entradas para outros funcionários
-    const isAdminManagerSupervisor = user.role === 'administrador' || 
-                                     user.role === 'admin' || 
-                                     user.role === 'gerente' ||
-                                     user.role === 'supervisor'
+    // Verificar se o usuário pode criar entradas para outros funcionários (usando nível de acesso)
+    const userLevel = getRoleLevel(user.role)
+    const isAdminManagerSupervisor = userLevel >= 5 // Admin (10), Gestores (8), Supervisores (5)
 
     // REGRA: Usuários normais só podem criar entradas para si mesmos
     let funcionarioId = value.funcionario_id
@@ -872,11 +867,9 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Verificar se o usuário pode editar esta entrada
-    const isAdminManagerSupervisor = user.role === 'administrador' || 
-                                     user.role === 'admin' || 
-                                     user.role === 'gerente' ||
-                                     user.role === 'supervisor'
+    // Verificar se o usuário pode editar esta entrada (usando nível de acesso)
+    const userLevel = getRoleLevel(user.role)
+    const isAdminManagerSupervisor = userLevel >= 5 // Admin (10), Gestores (8), Supervisores (5)
 
     if (!isAdminManagerSupervisor) {
       // Usuário normal só pode editar suas próprias entradas
@@ -983,11 +976,9 @@ router.delete('/:id', async (req, res) => {
       })
     }
 
-    // Verificar se o usuário pode excluir esta entrada
-    const isAdminManagerSupervisor = user.role === 'administrador' || 
-                                     user.role === 'admin' || 
-                                     user.role === 'gerente' ||
-                                     user.role === 'supervisor'
+    // Verificar se o usuário pode excluir esta entrada (usando nível de acesso)
+    const userLevel = getRoleLevel(user.role)
+    const isAdminManagerSupervisor = userLevel >= 5 // Admin (10), Gestores (8), Supervisores (5)
 
     if (!isAdminManagerSupervisor) {
       // Usuário normal só pode excluir suas próprias entradas
@@ -1090,11 +1081,9 @@ router.get('/export/:grua_id', async (req, res) => {
       })
     }
 
-    // Verificar se o usuário pode exportar todas as entradas
-    const isAdminManagerSupervisor = user.role === 'administrador' || 
-                                     user.role === 'admin' || 
-                                     user.role === 'gerente' ||
-                                     user.role === 'supervisor'
+    // Verificar se o usuário pode exportar todas as entradas (usando nível de acesso)
+    const userLevel = getRoleLevel(user.role)
+    const isAdminManagerSupervisor = userLevel >= 5 // Admin (10), Gestores (8), Supervisores (5)
 
     // Buscar entradas usando supabaseAdmin
     let query = supabaseAdmin
