@@ -69,6 +69,7 @@ export default function ObrasPage() {
   const { loading: creating, startLoading: startCreating, stopLoading: stopCreating } = useLoading()
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [loadingEdit, setLoadingEdit] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 9,
@@ -193,11 +194,34 @@ export default function ObrasPage() {
     setCustosMensais(custosMensais.filter(custo => custo.id !== id))
   }
 
-  const duplicarCustosParaMes = (mes: string) => {
-    const custosDuplicados = custosMensais.map(custo => ({
+  const duplicarCustosParaMes = (novoMes: string) => {
+    // Pegar o mês mais recente dos custos existentes
+    const mesesDosCustos = [...new Set(custosMensais.map(c => c.mes))].sort()
+    const mesBase = mesesDosCustos[mesesDosCustos.length - 1] || custoForm.mes
+    
+    // Filtrar apenas custos do mês base
+    const custosDoMesAtual = custosMensais.filter(custo => custo.mes === mesBase)
+    
+    console.log('📅 Duplicando custos:', {
+      mesOrigem: mesBase,
+      mesDestino: novoMes,
+      quantidadeCustos: custosDoMesAtual.length,
+      custosOriginais: custosDoMesAtual
+    })
+    
+    if (custosDoMesAtual.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Não há custos para duplicar",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    const custosDuplicados = custosDoMesAtual.map(custo => ({
       ...custo,
       id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      mes: mes,
+      mes: novoMes,
       quantidadeRealizada: 0,
       valorRealizado: 0,
       quantidadeAcumulada: custo.quantidadeAcumulada,
@@ -209,6 +233,11 @@ export default function ObrasPage() {
     }))
     
     setCustosMensais([...custosMensais, ...custosDuplicados])
+    
+    toast({
+      title: "Sucesso",
+      description: `${custosDuplicados.length} custo(s) duplicado(s) para ${novoMes}`
+    })
   }
 
   // Função para lidar com seleção de cliente
@@ -815,7 +844,23 @@ export default function ObrasPage() {
   }
 
   const handleEditObra = async (obra: any) => {
+    // Prevenir múltiplas chamadas simultâneas
+    if (loadingEdit) {
+      console.log('⚠️ Já está carregando, ignorando chamada duplicada')
+      return
+    }
+    
     setEditingObra(obra)
+    setLoadingEdit(true)
+    
+    // LIMPAR TODOS OS ESTADOS ANTES de carregar novos dados
+    console.log('🧹 Limpando estados antes de carregar...')
+    setCustosMensais([])
+    setGruasSelecionadas([])
+    setFuncionariosSelecionados([])
+    setGruaSelecionada(null)
+    setResponsavelSelecionado(null)
+    setClienteSelecionado(null)
     
     // Carregar relacionamentos da obra
     try {
@@ -832,7 +877,8 @@ export default function ObrasPage() {
         model: gruaVinculada.grua?.modelo || 'Modelo não disponível',
         manufacturer: gruaVinculada.grua?.fabricante || 'Fabricante não disponível',
         capacity: gruaVinculada.grua?.tipo || 'Tipo não disponível',
-        valor_locacao: 0, // Não disponível nos dados de relacionamento
+        // Usar valor real ou undefined (não 0)
+        valor_locacao: parseFloat(gruaVinculada.valorLocacao) || undefined,
         taxa_mensal: parseFloat(gruaVinculada.valorLocacaoMensal) || 0
       })) || []
       
@@ -911,10 +957,12 @@ export default function ObrasPage() {
       // Aguardar um tick para garantir que os estados foram atualizados
       setTimeout(() => {
         setIsEditDialogOpen(true)
+        setLoadingEdit(false)
         console.log('✅ Dialog aberto com custos:', custosFormatados.length)
       }, 100)
       
     } catch (error) {
+      setLoadingEdit(false)
       console.error('❌ Erro ao carregar relacionamentos da obra:', error)
       
       // Preencher formulário básico em caso de erro
@@ -941,6 +989,11 @@ export default function ObrasPage() {
         setIsEditDialogOpen(true)
         console.log('⚠️ Dialog aberto com erro - sem relacionamentos')
       }, 100)
+    } finally {
+      // Garantir que loading seja resetado mesmo em caso de erro
+      if (!isEditDialogOpen) {
+        setTimeout(() => setLoadingEdit(false), 150)
+      }
     }
   }
 
@@ -968,11 +1021,17 @@ export default function ObrasPage() {
         responsavelId: obraFormData.responsavelId,
         responsavelName: obraFormData.responsavelName,
         // MÚLTIPLAS GRUAS - enviar todas as gruas selecionadas
-        gruasSelecionadas: gruasSelecionadas.map(grua => ({
-          id: grua.id,
-          valor_locacao: grua.valor_locacao || 0,
-          taxa_mensal: grua.taxa_mensal || 0
-        })),
+        gruasSelecionadas: gruasSelecionadas.map(grua => {
+          const gruaData: any = {
+            id: grua.id,
+            taxa_mensal: grua.taxa_mensal || 0
+          }
+          // Só incluir valor_locacao se for maior que 0
+          if (grua.valor_locacao && grua.valor_locacao > 0) {
+            gruaData.valor_locacao = grua.valor_locacao
+          }
+          return gruaData
+        }),
         // Mantém campos para compatibilidade (caso seja adicionada nova grua via formulário)
         gruaId: obraFormData.gruaId || null,
         gruaValue: obraFormData.gruaValue ? parseFloat(obraFormData.gruaValue) : null,
@@ -1829,9 +1888,19 @@ export default function ObrasPage() {
                       type="button" 
                       variant="outline" 
                       onClick={() => {
-                        const proximoMes = new Date(custoForm.mes + '-01')
-                        proximoMes.setMonth(proximoMes.getMonth() + 1)
-                        const proximoMesStr = proximoMes.toISOString().slice(0, 7)
+                        // Usar o mês dos custos existentes (não o custoForm.mes)
+                        const mesesDosCustos = [...new Set(custosMensais.map(c => c.mes))].sort()
+                        const mesBase = mesesDosCustos[mesesDosCustos.length - 1] || custoForm.mes
+                        
+                        console.log('📅 Meses existentes:', mesesDosCustos)
+                        console.log('📅 Mês base para duplicar:', mesBase)
+                        
+                        const dataAtual = new Date(mesBase + '-01')
+                        console.log('📅 Data atual criada:', dataAtual)
+                        dataAtual.setMonth(dataAtual.getMonth() + 1)
+                        console.log('📅 Data após +1 mês:', dataAtual)
+                        const proximoMesStr = dataAtual.toISOString().slice(0, 7)
+                        console.log('📅 String do próximo mês:', proximoMesStr)
                         duplicarCustosParaMes(proximoMesStr)
                       }}
                     >
@@ -2337,9 +2406,19 @@ export default function ObrasPage() {
                       type="button" 
                       variant="outline" 
                       onClick={() => {
-                        const proximoMes = new Date(custoForm.mes + '-01')
-                        proximoMes.setMonth(proximoMes.getMonth() + 1)
-                        const proximoMesStr = proximoMes.toISOString().slice(0, 7)
+                        // Usar o mês dos custos existentes (não o custoForm.mes)
+                        const mesesDosCustos = [...new Set(custosMensais.map(c => c.mes))].sort()
+                        const mesBase = mesesDosCustos[mesesDosCustos.length - 1] || custoForm.mes
+                        
+                        console.log('📅 Meses existentes:', mesesDosCustos)
+                        console.log('📅 Mês base para duplicar:', mesBase)
+                        
+                        const dataAtual = new Date(mesBase + '-01')
+                        console.log('📅 Data atual criada:', dataAtual)
+                        dataAtual.setMonth(dataAtual.getMonth() + 1)
+                        console.log('📅 Data após +1 mês:', dataAtual)
+                        const proximoMesStr = dataAtual.toISOString().slice(0, 7)
+                        console.log('📅 String do próximo mês:', proximoMesStr)
                         duplicarCustosParaMes(proximoMesStr)
                       }}
                     >
