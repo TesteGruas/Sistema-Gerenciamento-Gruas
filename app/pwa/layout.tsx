@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { usePermissions } from "@/hooks/use-permissions"
+// import { usePermissions } from "@/hooks/use-permissions" // Removido temporariamente
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -43,8 +43,35 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const [isClient, setIsClient] = useState(false)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
   
-  // Hook de permissões só após verificação de cliente
-  const permissions = isClient ? usePermissions() : { hasPermission: () => false, canAccessModule: () => false }
+  // Função de permissão simplificada para evitar problemas de hidratação
+  const hasPermission = (permission: string) => {
+    if (!isClient) return false
+    
+    // Verificação simples baseada no usuário logado
+    if (typeof window === 'undefined') return false
+    
+    try {
+      const userData = localStorage.getItem('user_data')
+      if (!userData) return false
+      
+      const user = JSON.parse(userData)
+      const role = user.role || user.cargo
+      
+      // Permissões básicas baseadas no role
+      if (role === 'admin' || role === 'diretor') return true
+      if (role === 'encarregador' || role === 'supervisor') {
+        return permission.includes('encarregador') || permission.includes('notificacoes')
+      }
+      if (role === 'funcionario' || role === 'operario') {
+        return permission.includes('ponto') || permission.includes('perfil')
+      }
+      
+      return false
+    } catch (error) {
+      console.warn('Erro ao verificar permissão:', error)
+      return false
+    }
+  }
   
   // Verificar se estamos no cliente para evitar erros de SSR
   useEffect(() => {
@@ -67,20 +94,6 @@ export default function PWALayout({ children }: PWALayoutProps) {
     }
   }, [])
   
-  // Renderizar apenas no cliente para evitar erros de SSR
-  if (!isClient) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Smartphone className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">Carregando...</h1>
-        </div>
-      </div>
-    )
-  }
-
   // Carregar dados do usuário
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -135,6 +148,20 @@ export default function PWALayout({ children }: PWALayoutProps) {
     router.push('/pwa/login')
   }
 
+  // Renderizar apenas no cliente para evitar erros de SSR
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Smartphone className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Carregando...</h1>
+        </div>
+      </div>
+    )
+  }
+
   const navigationItems = [
     {
       name: "Ponto",
@@ -174,7 +201,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   ]
 
   // Adicionar item de encarregador se o usuário tiver permissão
-  if (permissions.hasPermission("encarregador:visualizar")) {
+  if (hasPermission("encarregador:visualizar")) {
     navigationItems.push({
       name: "Encarregador",
       href: "/pwa/encarregador",
@@ -185,7 +212,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   }
 
   // Adicionar notificações se o usuário tiver permissão e houver notificações pendentes
-  if (permissions.hasPermission("notificacoes:visualizar") && documentosPendentes > 0) {
+  if (hasPermission("notificacoes:visualizar") && documentosPendentes > 0) {
     navigationItems.push({
       name: "Notif",
       href: "/pwa/notificacoes",
@@ -198,7 +225,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   // Filtrar itens de navegação baseado em permissões
   const filteredNavigationItems = navigationItems.filter(item => {
     if (!item.permission) return true
-    return permissions.hasPermission(item.permission)
+    return hasPermission(item.permission)
   })
 
   // Rotas que não precisam do layout (login e redirect)

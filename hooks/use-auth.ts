@@ -47,13 +47,23 @@ export function useAuth() {
   })
 
   useEffect(() => {
-    checkAuthentication()
+    // Só executar no cliente
+    if (typeof window !== 'undefined') {
+      checkAuthentication()
+    } else {
+      setAuthState(prev => ({ ...prev, loading: false }))
+    }
   }, [])
 
   const checkAuthentication = () => {
     try {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('access_token')
+      // Verificação dupla para garantir que estamos no cliente
+      if (typeof window === 'undefined') {
+        setAuthState(prev => ({ ...prev, loading: false }))
+        return
+      }
+      
+      const token = localStorage.getItem('access_token')
         
         if (token) {
           // Buscar dados salvos no localStorage
@@ -101,7 +111,6 @@ export function useAuth() {
             error: null
           })
         }
-      }
     } catch (error) {
       setAuthState({
         isAuthenticated: false,

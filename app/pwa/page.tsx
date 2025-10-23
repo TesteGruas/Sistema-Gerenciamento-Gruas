@@ -33,14 +33,8 @@ export default function PWAMainPage() {
   const [isClient, setIsClient] = useState(false)
   const router = useRouter()
   
-  // Hook de usuário só após verificação de cliente
-  const pwaUserData = isClient ? usePWAUser() : { 
-    user: null, 
-    pontoHoje: null, 
-    documentosPendentes: 0, 
-    horasTrabalhadas: '0h 0min', 
-    loading: true 
-  }
+  // Hook de usuário sempre chamado (mas com fallback interno)
+  const pwaUserData = usePWAUser()
 
   // Verificar se estamos no cliente
   useEffect(() => {
