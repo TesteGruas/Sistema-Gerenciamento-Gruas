@@ -27,21 +27,28 @@ interface DiagnosticResult {
 export function PWADiagnostic() {
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult[]>([])
   const [isRunning, setIsRunning] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   const runDiagnostics = async () => {
     setIsRunning(true)
     const results: DiagnosticResult[] = []
 
     // 1. Verificar se está online
-    results.push({
-      name: 'Conexão de Internet',
-      status: navigator.onLine ? 'success' : 'error',
-      message: navigator.onLine ? 'Conectado à internet' : 'Sem conexão à internet',
-      details: navigator.onLine ? 'Conexão ativa' : 'Verifique sua conexão de internet'
-    })
+    if (typeof window !== 'undefined') {
+      results.push({
+        name: 'Conexão de Internet',
+        status: navigator.onLine ? 'success' : 'error',
+        message: navigator.onLine ? 'Conectado à internet' : 'Sem conexão à internet',
+        details: navigator.onLine ? 'Conexão ativa' : 'Verifique sua conexão de internet'
+      })
+    }
 
     // 2. Verificar Service Worker
-    if ('serviceWorker' in navigator) {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.getRegistration()
         if (registration) {
@@ -77,64 +84,68 @@ export function PWADiagnostic() {
     }
 
     // 3. Verificar localStorage
-    try {
-      const testKey = 'pwa_diagnostic_test'
-      localStorage.setItem(testKey, 'test')
-      const retrieved = localStorage.getItem(testKey)
-      localStorage.removeItem(testKey)
-      
-      if (retrieved === 'test') {
-        results.push({
-          name: 'Local Storage',
-          status: 'success',
-          message: 'Local Storage funcionando',
-          details: 'Armazenamento local disponível'
-        })
-      } else {
+    if (typeof window !== 'undefined') {
+      try {
+        const testKey = 'pwa_diagnostic_test'
+        localStorage.setItem(testKey, 'test')
+        const retrieved = localStorage.getItem(testKey)
+        localStorage.removeItem(testKey)
+        
+        if (retrieved === 'test') {
+          results.push({
+            name: 'Local Storage',
+            status: 'success',
+            message: 'Local Storage funcionando',
+            details: 'Armazenamento local disponível'
+          })
+        } else {
+          results.push({
+            name: 'Local Storage',
+            status: 'error',
+            message: 'Local Storage com problemas',
+            details: 'Não foi possível ler/escrever dados'
+          })
+        }
+      } catch (error) {
         results.push({
           name: 'Local Storage',
           status: 'error',
-          message: 'Local Storage com problemas',
-          details: 'Não foi possível ler/escrever dados'
+          message: 'Local Storage indisponível',
+          details: error instanceof Error ? error.message : 'Erro desconhecido'
         })
       }
-    } catch (error) {
-      results.push({
-        name: 'Local Storage',
-        status: 'error',
-        message: 'Local Storage indisponível',
-        details: error instanceof Error ? error.message : 'Erro desconhecido'
-      })
     }
 
     // 4. Verificar dados do usuário
-    try {
-      const userData = localStorage.getItem('user_data')
-      const token = localStorage.getItem('access_token')
-      
-      if (userData && token) {
-        const user = JSON.parse(userData)
+    if (typeof window !== 'undefined') {
+      try {
+        const userData = localStorage.getItem('user_data')
+        const token = localStorage.getItem('access_token')
+        
+        if (userData && token) {
+          const user = JSON.parse(userData)
+          results.push({
+            name: 'Dados do Usuário',
+            status: 'success',
+            message: 'Usuário autenticado',
+            details: `Usuário: ${user.nome || 'N/A'}`
+          })
+        } else {
+          results.push({
+            name: 'Dados do Usuário',
+            status: 'warning',
+            message: 'Usuário não autenticado',
+            details: 'Faça login para acessar o PWA'
+          })
+        }
+      } catch (error) {
         results.push({
           name: 'Dados do Usuário',
-          status: 'success',
-          message: 'Usuário autenticado',
-          details: `Usuário: ${user.nome || 'N/A'}`
-        })
-      } else {
-        results.push({
-          name: 'Dados do Usuário',
-          status: 'warning',
-          message: 'Usuário não autenticado',
-          details: 'Faça login para acessar o PWA'
+          status: 'error',
+          message: 'Erro ao verificar dados do usuário',
+          details: error instanceof Error ? error.message : 'Erro desconhecido'
         })
       }
-    } catch (error) {
-      results.push({
-        name: 'Dados do Usuário',
-        status: 'error',
-        message: 'Erro ao verificar dados do usuário',
-        details: error instanceof Error ? error.message : 'Erro desconhecido'
-      })
     }
 
     // 5. Verificar API
@@ -189,17 +200,26 @@ export function PWADiagnostic() {
     }
 
     // 7. Verificar erros salvos
-    try {
-      const savedErrors = localStorage.getItem('pwa_errors')
-      if (savedErrors) {
-        const errors = JSON.parse(savedErrors)
-        if (errors.length > 0) {
-          results.push({
-            name: 'Erros Salvos',
-            status: 'warning',
-            message: `${errors.length} erro(s) encontrado(s)`,
-            details: `Último erro: ${errors[errors.length - 1]?.message || 'N/A'}`
-          })
+    if (typeof window !== 'undefined') {
+      try {
+        const savedErrors = localStorage.getItem('pwa_errors')
+        if (savedErrors) {
+          const errors = JSON.parse(savedErrors)
+          if (errors.length > 0) {
+            results.push({
+              name: 'Erros Salvos',
+              status: 'warning',
+              message: `${errors.length} erro(s) encontrado(s)`,
+              details: `Último erro: ${errors[errors.length - 1]?.message || 'N/A'}`
+            })
+          } else {
+            results.push({
+              name: 'Erros Salvos',
+              status: 'success',
+              message: 'Nenhum erro salvo',
+              details: 'Sistema funcionando normalmente'
+            })
+          }
         } else {
           results.push({
             name: 'Erros Salvos',
@@ -208,21 +228,14 @@ export function PWADiagnostic() {
             details: 'Sistema funcionando normalmente'
           })
         }
-      } else {
+      } catch (error) {
         results.push({
           name: 'Erros Salvos',
-          status: 'success',
-          message: 'Nenhum erro salvo',
-          details: 'Sistema funcionando normalmente'
+          status: 'error',
+          message: 'Erro ao verificar erros salvos',
+          details: error instanceof Error ? error.message : 'Erro desconhecido'
         })
       }
-    } catch (error) {
-      results.push({
-        name: 'Erros Salvos',
-        status: 'error',
-        message: 'Erro ao verificar erros salvos',
-        details: error instanceof Error ? error.message : 'Erro desconhecido'
-      })
     }
 
     setDiagnostics(results)
@@ -230,8 +243,10 @@ export function PWADiagnostic() {
   }
 
   useEffect(() => {
-    runDiagnostics()
-  }, [])
+    if (isClient) {
+      runDiagnostics()
+    }
+  }, [isClient])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
