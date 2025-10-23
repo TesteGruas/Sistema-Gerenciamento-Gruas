@@ -68,6 +68,7 @@ export interface UsuarioResponse {
 export interface UsuarioCreateData {
   nome: string;
   email: string;
+  senha?: string;
   cpf?: string;
   telefone?: string;
   data_nascimento?: string;
@@ -82,11 +83,13 @@ export interface UsuarioCreateData {
   data_admissao?: string;
   salario?: number;
   funcionario_id?: number;
+  perfil_id?: number;
 }
 
 export interface UsuarioUpdateData {
   nome?: string;
   email?: string;
+  senha?: string;
   cpf?: string;
   telefone?: string;
   data_nascimento?: string;
@@ -101,6 +104,7 @@ export interface UsuarioUpdateData {
   data_admissao?: string;
   salario?: number;
   funcionario_id?: number;
+  perfil_id?: number;
 }
 
 // Helper function to get auth token

@@ -662,8 +662,18 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:c
     console.log('ordem_assinatura raw:', ordem_assinatura)
     console.log('typeof ordem_assinatura:', typeof ordem_assinatura)
     
-    const ordemAssinaturaArray = JSON.parse(ordem_assinatura)
-    console.log('ordemAssinaturaArray parsed:', JSON.stringify(ordemAssinaturaArray, null, 2))
+    let ordemAssinaturaArray
+    try {
+      ordemAssinaturaArray = JSON.parse(ordem_assinatura)
+      console.log('ordemAssinaturaArray parsed:', JSON.stringify(ordemAssinaturaArray, null, 2))
+    } catch (parseError) {
+      console.error('❌ Erro ao fazer parse de ordem_assinatura:', parseError)
+      return res.status(400).json({
+        success: false,
+        message: 'Formato inválido de ordem_assinatura',
+        error: 'ordem_assinatura deve ser um JSON válido'
+      })
+    }
     
     const { error: validationError } = documentoSchema.validate({
       titulo,

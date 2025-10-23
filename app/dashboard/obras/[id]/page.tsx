@@ -594,16 +594,25 @@ function ObraDetailsPageContent() {
       })
       setIsNovoCustoOpen(false)
       toast({
-        title: "Informação",
+        title: "Sucesso",
         description: "Custo criado com sucesso!",
         variant: "default"
       })
     } catch (error: any) {
-      toast({
-        title: "Informação",
-        description: "Erro ao criar custo",
-        variant: "default"
-      })
+      // Tratamento específico para item duplicado
+      if (error.response?.status === 409 || error.message?.includes('já existe')) {
+        toast({
+          title: "Item duplicado",
+          description: `O item ${dadosCusto.item} já existe para esta obra no mês ${mesSelecionado ? formatarMes(mesSelecionado) : 'selecionado'}. Use outro código ou edite o item existente.`,
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Erro",
+          description: error.message || "Erro ao criar custo",
+          variant: "destructive"
+        })
+      }
     }
   }
 
@@ -3464,14 +3473,20 @@ function ObraDetailsPageContent() {
           <form onSubmit={handleNovoItem} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="item">Item *</Label>
+                <Label htmlFor="item">Item * (máx. 20 caracteres)</Label>
                 <Input
                   id="item"
                   value={novoItemData.item}
                   onChange={(e) => setNovoItemData({ ...novoItemData, item: e.target.value })}
                   placeholder="Ex: 01.16"
+                  maxLength={20}
                   required
                 />
+                {novoItemData.item.length >= 18 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    {novoItemData.item.length}/20 caracteres
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="unidade">Unidade *</Label>
@@ -3610,14 +3625,20 @@ function ObraDetailsPageContent() {
           <form onSubmit={handleNovoAditivo} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="item">Item *</Label>
+                <Label htmlFor="item">Item * (máx. 20 caracteres)</Label>
                 <Input
                   id="item"
                   value={novoItemData.item}
                   onChange={(e) => setNovoItemData({ ...novoItemData, item: e.target.value })}
                   placeholder="Ex: 01.20"
+                  maxLength={20}
                   required
                 />
+                {novoItemData.item.length >= 18 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    {novoItemData.item.length}/20 caracteres
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="unidade">Unidade *</Label>
@@ -3762,14 +3783,20 @@ function ObraDetailsPageContent() {
           <form onSubmit={isEditandoCusto ? handleAtualizarCusto : handleNovoCusto} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="item">Item *</Label>
+                <Label htmlFor="item">Item * (máx. 20 caracteres)</Label>
                 <Input
                   id="item"
                   value={novoCustoData.item}
                   onChange={(e) => setNovoCustoData({ ...novoCustoData, item: e.target.value })}
                   placeholder="Ex: 01.01"
+                  maxLength={20}
                   required
                 />
+                {novoCustoData.item.length >= 18 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    {novoCustoData.item.length}/20 caracteres
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="unidade">Unidade *</Label>

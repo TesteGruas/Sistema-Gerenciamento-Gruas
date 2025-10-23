@@ -132,7 +132,9 @@ export default function UsuariosPage() {
     email: '',
     phone: '',
     role: '',
-    permissions: [] as string[]
+    permissions: [] as string[],
+    senha: '',
+    confirmarSenha: ''
   })
 
   const availablePermissions = {
@@ -409,6 +411,25 @@ export default function UsuariosPage() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Validar senha
+    if (!userFormData.senha || userFormData.senha.length < 6) {
+      toast({
+        title: "Erro",
+        description: "A senha deve ter no mínimo 6 caracteres",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (userFormData.senha !== userFormData.confirmarSenha) {
+      toast({
+        title: "Erro",
+        description: "As senhas não coincidem",
+        variant: "destructive"
+      })
+      return
+    }
+    
     try {
       setCreating(true)
       
@@ -418,6 +439,7 @@ export default function UsuariosPage() {
         nome: userFormData.name,
         email: userFormData.email,
         telefone: userFormData.phone,
+        senha: userFormData.senha,
         status: 'Ativo' as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
         ...(perfilId && { perfil_id: perfilId })
       }
@@ -454,7 +476,9 @@ export default function UsuariosPage() {
       email: usuario.email,
       phone: usuario.phone,
       role: usuario.role,
-      permissions: usuario.permissions
+      permissions: usuario.permissions,
+      senha: '',
+      confirmarSenha: ''
     })
     setIsEditDialogOpen(true)
   }
@@ -463,6 +487,27 @@ export default function UsuariosPage() {
     e.preventDefault()
     
     if (!editingUser) return
+
+    // Validar senha se foi preenchida
+    if (userFormData.senha) {
+      if (userFormData.senha.length < 6) {
+        toast({
+          title: "Erro",
+          description: "A senha deve ter no mínimo 6 caracteres",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (userFormData.senha !== userFormData.confirmarSenha) {
+        toast({
+          title: "Erro",
+          description: "As senhas não coincidem",
+          variant: "destructive"
+        })
+        return
+      }
+    }
     
     try {
       setUpdating(true)
@@ -472,12 +517,17 @@ export default function UsuariosPage() {
       console.log('🔍 DEBUG: Role selecionado:', userFormData.role)
       console.log('🔍 DEBUG: Perfil ID mapeado:', perfilId)
       
-      const dadosBackend = {
+      const dadosBackend: any = {
         nome: userFormData.name,
         email: userFormData.email,
         telefone: userFormData.phone,
         status: 'Ativo' as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
         ...(perfilId && { perfil_id: perfilId })
+      }
+
+      // Adicionar senha apenas se foi preenchida
+      if (userFormData.senha) {
+        dadosBackend.senha = userFormData.senha
       }
       
       console.log('🔍 DEBUG: Payload enviado:', dadosBackend)
@@ -493,7 +543,7 @@ export default function UsuariosPage() {
       
       toast({
         title: "Sucesso",
-        description: "Usuário atualizado com sucesso!"
+        description: userFormData.senha ? "Usuário e senha atualizados com sucesso!" : "Usuário atualizado com sucesso!"
       })
       
     } catch (error: any) {
@@ -550,7 +600,9 @@ export default function UsuariosPage() {
       email: '',
       phone: '',
       role: '',
-      permissions: []
+      permissions: [],
+      senha: '',
+      confirmarSenha: ''
     })
   }
 
@@ -824,6 +876,34 @@ export default function UsuariosPage() {
                     />
                   </div>
                 </div>
+
+                <Separator className="my-4" />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="senha">Senha *</Label>
+                    <Input
+                      id="senha"
+                      type="password"
+                      value={userFormData.senha}
+                      onChange={(e) => setUserFormData({ ...userFormData, senha: e.target.value })}
+                      placeholder="Mínimo 6 caracteres"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">A senha deve ter no mínimo 6 caracteres</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="confirmarSenha">Confirmar Senha *</Label>
+                    <Input
+                      id="confirmarSenha"
+                      type="password"
+                      value={userFormData.confirmarSenha}
+                      onChange={(e) => setUserFormData({ ...userFormData, confirmarSenha: e.target.value })}
+                      placeholder="Repita a senha"
+                      required
+                    />
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="acesso" className="space-y-4">
@@ -934,6 +1014,38 @@ export default function UsuariosPage() {
                       value={userFormData.phone}
                       onChange={(e) => setUserFormData({ ...userFormData, phone: e.target.value })}
                       placeholder="Ex: (11) 99999-9999"
+                    />
+                  </div>
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+                  <p className="text-sm text-amber-800">
+                    <strong>Alterar Senha:</strong> Deixe em branco se não quiser alterar a senha do usuário.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit-senha">Nova Senha</Label>
+                    <Input
+                      id="edit-senha"
+                      type="password"
+                      value={userFormData.senha}
+                      onChange={(e) => setUserFormData({ ...userFormData, senha: e.target.value })}
+                      placeholder="Deixe em branco para manter a atual"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Mínimo 6 caracteres</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-confirmarSenha">Confirmar Nova Senha</Label>
+                    <Input
+                      id="edit-confirmarSenha"
+                      type="password"
+                      value={userFormData.confirmarSenha}
+                      onChange={(e) => setUserFormData({ ...userFormData, confirmarSenha: e.target.value })}
+                      placeholder="Repita a nova senha"
                     />
                   </div>
                 </div>

@@ -146,6 +146,9 @@ export default function NovaObraPage() {
     endDate: '',
     budget: '',
     location: '',
+    cidade: '',
+    estado: 'SP',
+    tipo: 'Residencial',
     clienteId: '',
     observations: '',
     // Dados do responsável
@@ -323,10 +326,10 @@ export default function NovaObraPage() {
   const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!obraFormData.name || !obraFormData.clienteId) {
+    if (!obraFormData.name || !obraFormData.clienteId || !obraFormData.location || !obraFormData.cidade || !obraFormData.estado || !obraFormData.tipo) {
       toast({
         title: "Erro",
-        description: "Nome da obra e cliente são obrigatórios",
+        description: "Preencha todos os campos obrigatórios (Nome, Cliente, Endereço, Cidade, Estado, Tipo)",
         variant: "destructive"
       })
       return
@@ -352,6 +355,9 @@ export default function NovaObraPage() {
         endDate: obraFormData.endDate,
         budget: parseCurrency(obraFormData.budget),
         location: obraFormData.location,
+        cidade: obraFormData.cidade,
+        estado: obraFormData.estado,
+        tipo: obraFormData.tipo,
         clienteId: obraFormData.clienteId,
         observations: obraFormData.observations,
         // Dados das gruas - usar a primeira grua selecionada (compatibilidade)
@@ -422,6 +428,9 @@ export default function NovaObraPage() {
       endDate: '',
       budget: '',
       location: '',
+      cidade: '',
+      estado: 'SP',
+      tipo: 'Residencial',
       clienteId: '',
       observations: '',
       responsavelId: '',
@@ -536,13 +545,78 @@ export default function NovaObraPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="location">Localização</Label>
+                    <Label htmlFor="location">Endereço *</Label>
                     <Input
                       id="location"
                       value={obraFormData.location}
                       onChange={(e) => setObraFormData({ ...obraFormData, location: e.target.value })}
                       placeholder="Ex: Rua das Flores, 123 - Centro"
+                      required
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="cidade">Cidade *</Label>
+                    <Input
+                      id="cidade"
+                      value={obraFormData.cidade}
+                      onChange={(e) => setObraFormData({ ...obraFormData, cidade: e.target.value })}
+                      placeholder="Ex: São Paulo"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="estado">Estado *</Label>
+                    <Select value={obraFormData.estado} onValueChange={(value) => setObraFormData({ ...obraFormData, estado: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AC">AC</SelectItem>
+                        <SelectItem value="AL">AL</SelectItem>
+                        <SelectItem value="AP">AP</SelectItem>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="BA">BA</SelectItem>
+                        <SelectItem value="CE">CE</SelectItem>
+                        <SelectItem value="DF">DF</SelectItem>
+                        <SelectItem value="ES">ES</SelectItem>
+                        <SelectItem value="GO">GO</SelectItem>
+                        <SelectItem value="MA">MA</SelectItem>
+                        <SelectItem value="MT">MT</SelectItem>
+                        <SelectItem value="MS">MS</SelectItem>
+                        <SelectItem value="MG">MG</SelectItem>
+                        <SelectItem value="PA">PA</SelectItem>
+                        <SelectItem value="PB">PB</SelectItem>
+                        <SelectItem value="PR">PR</SelectItem>
+                        <SelectItem value="PE">PE</SelectItem>
+                        <SelectItem value="PI">PI</SelectItem>
+                        <SelectItem value="RJ">RJ</SelectItem>
+                        <SelectItem value="RN">RN</SelectItem>
+                        <SelectItem value="RS">RS</SelectItem>
+                        <SelectItem value="RO">RO</SelectItem>
+                        <SelectItem value="RR">RR</SelectItem>
+                        <SelectItem value="SC">SC</SelectItem>
+                        <SelectItem value="SP">SP</SelectItem>
+                        <SelectItem value="SE">SE</SelectItem>
+                        <SelectItem value="TO">TO</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="tipo">Tipo de Obra *</Label>
+                    <Select value={obraFormData.tipo} onValueChange={(value) => setObraFormData({ ...obraFormData, tipo: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Residencial">Residencial</SelectItem>
+                        <SelectItem value="Comercial">Comercial</SelectItem>
+                        <SelectItem value="Industrial">Industrial</SelectItem>
+                        <SelectItem value="Infraestrutura">Infraestrutura</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 

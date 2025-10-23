@@ -37,7 +37,7 @@ export const ROLES = {
     id: 3,
     nome: 'Supervisores',
     nivel: 6,
-    descricao: 'Supervisão operacional - Gruas, Obras, Ponto, Documentos, Livro Grua, Estoque',
+    descricao: 'Supervisão operacional - Gruas, Obras, Clientes, Contratos, Funcionários, Ponto, Documentos, Livro Grua, Estoque',
     permissoes: [
       // Gruas
       'gruas:visualizar',
@@ -54,6 +54,27 @@ export const ROLES = {
       'obras:excluir',
       'obras:gerenciar',
       'obras:relatorios',
+      
+      // Clientes
+      'clientes:visualizar',
+      'clientes:criar',
+      'clientes:editar',
+      'clientes:excluir',
+      'clientes:gerenciar',
+      
+      // Contratos
+      'contratos:visualizar',
+      'contratos:criar',
+      'contratos:editar',
+      'contratos:excluir',
+      'contratos:gerenciar',
+      
+      // Funcionários
+      'funcionarios:visualizar',
+      'funcionarios:criar',
+      'funcionarios:editar',
+      'funcionarios:excluir',
+      'funcionarios:gerenciar',
       
       // Ponto Eletrônico
       'ponto:visualizar',
@@ -109,13 +130,20 @@ export const ROLES = {
     id: 4,
     nome: 'Operários',
     nivel: 4,
-    descricao: 'Operação diária via APP - Ponto e Documentos',
+    descricao: 'Operação diária via APP - Ponto, Documentos e Livro de Grua. Acesso contextual a obras onde está alocado.',
     permissoes: [
+      // Obras (apenas obras onde está alocado - validação contextual nas rotas)
+      'obras:visualizar',
+      
       // Ponto (apenas próprio ponto)
       'ponto:visualizar',
       'ponto:registrar',
       'ponto_eletronico:visualizar',
       'ponto_eletronico:registrar',
+      
+      // Livro de Gruas (registrar atividades)
+      'livros_gruas:visualizar',
+      'livros_gruas:criar',
       
       // Documentos (visualização e assinatura)
       'documentos:visualizar',

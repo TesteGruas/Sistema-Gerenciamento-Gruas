@@ -20,10 +20,11 @@ function generateSecurePassword(length = 12) {
   return password
 }
 
-// Schema de validação para usuários
+// Schema de validação para criação de usuários
 const userSchema = Joi.object({
   nome: Joi.string().min(2).required(),
   email: Joi.string().email().required(),
+  senha: Joi.string().min(6).required(),
   cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/).optional(),
   telefone: Joi.string().optional(),
   data_nascimento: Joi.date().optional(),
@@ -33,6 +34,23 @@ const userSchema = Joi.object({
   cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).optional(),
   foto_perfil: Joi.string().uri().optional(),
   status: Joi.string().valid('Ativo', 'Inativo', 'Bloqueado', 'Pendente').default('Ativo'),
+  perfil_id: Joi.number().integer().positive().optional()
+})
+
+// Schema de validação para atualização de usuários
+const userUpdateSchema = Joi.object({
+  nome: Joi.string().min(2).optional(),
+  email: Joi.string().email().optional(),
+  senha: Joi.string().min(6).optional(),
+  cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/).optional(),
+  telefone: Joi.string().optional(),
+  data_nascimento: Joi.date().optional(),
+  endereco: Joi.string().optional(),
+  cidade: Joi.string().optional(),
+  estado: Joi.string().length(2).optional(),
+  cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).optional(),
+  foto_perfil: Joi.string().uri().optional(),
+  status: Joi.string().valid('Ativo', 'Inativo', 'Bloqueado', 'Pendente').optional(),
   perfil_id: Joi.number().integer().positive().optional()
 })
 
@@ -301,16 +319,16 @@ router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (
       })
     }
 
-    // Separar perfil_id dos dados do usuário
-    const { perfil_id, ...userData } = value
+    // Separar perfil_id e senha dos dados do usuário
+    const { perfil_id, senha, ...userData } = value
     
-    // Gerar senha temporária
-    const senhaTemporaria = generateSecurePassword()
+    // Usar senha fornecida ou gerar senha temporária
+    const senhaUsuario = senha || generateSecurePassword()
 
     // 1. Criar usuário no Supabase Auth primeiro
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: userData.email,
-      password: senhaTemporaria,
+      password: senhaUsuario,
       email_confirm: true, // Confirmar email automaticamente
       user_metadata: {
         nome: userData.nome,
@@ -367,22 +385,24 @@ router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (
       }
     }
 
-    // 4. Enviar email de boas-vindas com senha temporária
-    console.log('📧 Tentando enviar email de boas-vindas...')
-    console.log('📧 Dados:', { nome: data.nome, email: data.email, senha: '***' })
-    
-    try {
-      const emailResult = await sendWelcomeEmail({
-        nome: data.nome,
-        email: data.email,
-        senha_temporaria: senhaTemporaria
-      })
-      console.log(`✅ Email de boas-vindas enviado com sucesso para ${data.email}`, emailResult)
-    } catch (emailError) {
-      console.error('❌ Erro ao enviar email de boas-vindas:', emailError)
-      console.error('❌ Stack trace:', emailError.stack)
-      // Não falha a criação do usuário se o email falhar
-      // O usuário foi criado com sucesso, apenas o email que falhou
+    // 4. Enviar email de boas-vindas (somente se senha foi gerada automaticamente)
+    if (!senha) {
+      console.log('📧 Tentando enviar email de boas-vindas...')
+      console.log('📧 Dados:', { nome: data.nome, email: data.email, senha: '***' })
+      
+      try {
+        const emailResult = await sendWelcomeEmail({
+          nome: data.nome,
+          email: data.email,
+          senha_temporaria: senhaUsuario
+        })
+        console.log(`✅ Email de boas-vindas enviado com sucesso para ${data.email}`, emailResult)
+      } catch (emailError) {
+        console.error('❌ Erro ao enviar email de boas-vindas:', emailError)
+        console.error('❌ Stack trace:', emailError.stack)
+        // Não falha a criação do usuário se o email falhar
+        // O usuário foi criado com sucesso, apenas o email que falhou
+      }
     }
 
     res.status(201).json({
@@ -443,7 +463,7 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
   try {
     const { id } = req.params
 
-    const { error, value } = userSchema.validate(req.body)
+    const { error, value } = userUpdateSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -451,8 +471,40 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
       })
     }
 
-    // Separar perfil_id dos dados do usuário
-    const { perfil_id, ...userData } = value
+    // Separar perfil_id e senha dos dados do usuário
+    const { perfil_id, senha, ...userData } = value
+    
+    // Se a senha foi fornecida, atualizar no Supabase Auth
+    if (senha) {
+      // Buscar o email do usuário
+      const { data: usuarioData, error: usuarioError } = await supabaseAdmin
+        .from('usuarios')
+        .select('email')
+        .eq('id', id)
+        .single()
+
+      if (!usuarioError && usuarioData) {
+        // Buscar usuário no Auth pelo email
+        const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
+        const authUser = users.find(u => u.email === usuarioData.email)
+
+        if (authUser) {
+          // Atualizar senha no Supabase Auth
+          const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+            authUser.id,
+            { password: senha }
+          )
+
+          if (authUpdateError) {
+            console.error('Erro ao atualizar senha no Auth:', authUpdateError)
+            return res.status(500).json({
+              error: 'Erro ao atualizar senha',
+              message: authUpdateError.message
+            })
+          }
+        }
+      }
+    }
     
     const updateData = {
       ...userData,

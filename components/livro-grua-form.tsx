@@ -79,9 +79,13 @@ export default function LivroGruaForm({
         return newData
       })
     } else {
-      console.log('LivroGruaForm - funcionarioLogado é null/undefined')
+      console.log('LivroGruaForm - funcionarioLogado é null/undefined ou sem funcionario_id')
+      // Mostrar mensagem de erro se não houver funcionário logado
+      if (!modoEdicao && !funcionarioLogado?.funcionario_id) {
+        setError('Você não está associado a um funcionário. Contate o administrador do sistema para vincular sua conta.')
+      }
     }
-  }, [funcionarioLogado])
+  }, [funcionarioLogado, modoEdicao])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,12 +93,12 @@ export default function LivroGruaForm({
     console.log('LivroGruaForm - handleSubmit - formData:', formData)
     console.log('LivroGruaForm - handleSubmit - funcionario_id:', formData.funcionario_id)
     
-    if (!formData.funcionario_id) {
-      setError('Selecione um funcionário')
+    if (!formData.funcionario_id || formData.funcionario_id === 0) {
+      setError('Selecione um funcionário válido. Se você não está associado a um funcionário, contate o administrador do sistema.')
       return
     }
 
-    if (!formData.descricao.trim()) {
+    if (!formData.descricao || !formData.descricao.trim()) {
       setError('Descrição é obrigatória')
       return
     }

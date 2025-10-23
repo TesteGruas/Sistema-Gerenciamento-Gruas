@@ -689,7 +689,7 @@ router.post('/', async (req, res) => {
         console.log('⚠️ AVISO: Usuário não tem funcionario_id associado')
         return res.status(403).json({
           error: 'Acesso negado',
-          message: 'Usuário não tem funcionário associado'
+          message: 'Sua conta não está vinculada a um funcionário. Contate o administrador do sistema para realizar o vínculo antes de registrar entradas no livro de grua.'
         })
       }
 
@@ -699,6 +699,14 @@ router.post('/', async (req, res) => {
         funcionarioIdUsado: funcionarioId
       })
     } else {
+      // Admin/Gerente/Supervisor pode criar para qualquer funcionário
+      // Validar se o funcionario_id fornecido é válido
+      if (!funcionarioId || funcionarioId === 0) {
+        return res.status(400).json({
+          error: 'Dados inválidos',
+          message: 'funcionario_id é obrigatório'
+        })
+      }
       console.log('👑 Admin/Gerente/Supervisor criando entrada para funcionário', funcionarioId)
     }
 

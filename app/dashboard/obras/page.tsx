@@ -819,9 +819,10 @@ export default function ObrasPage() {
     
     // Carregar relacionamentos da obra
     try {
-      const [gruasResponse, funcionariosResponse] = await Promise.all([
+      const [gruasResponse, funcionariosResponse, custosResponse] = await Promise.all([
         obrasApi.buscarGruasVinculadas(parseInt(obra.id)),
-        obrasApi.buscarFuncionariosVinculados(parseInt(obra.id))
+        obrasApi.buscarFuncionariosVinculados(parseInt(obra.id)),
+        obrasApi.obterObra(parseInt(obra.id)) // Buscar detalhes completos incluindo custos
       ])
       
       // Carregar TODAS as gruas vinculadas
@@ -850,6 +851,32 @@ export default function ObrasPage() {
       })) || []
       
       console.log('✅ Funcionários carregados:', funcionarios)
+
+      // Carregar custos mensais da obra
+      console.log('📦 Resposta completa da obra:', custosResponse.data)
+      const custosBackend = custosResponse.data?.custos_mensais || []
+      console.log('📦 Custos do backend:', custosBackend)
+      
+      const custosFormatados = custosBackend.map((custo: any) => ({
+        id: custo.id.toString(),
+        item: custo.item,
+        descricao: custo.descricao,
+        unidade: custo.unidade,
+        quantidadeOrcamento: parseFloat(custo.quantidade_orcamento) || 0,
+        valorUnitario: parseFloat(custo.valor_unitario) || 0,
+        totalOrcamento: parseFloat(custo.total_orcamento) || 0,
+        mes: custo.mes
+      }))
+
+      console.log('✅ Custos mensais formatados:', custosFormatados)
+      console.log('📊 Quantidade de custos:', custosFormatados.length)
+      
+      // Atualizar estados ANTES de abrir o dialog
+      console.log('🔄 Atualizando estado de custos...')
+      setCustosMensais(custosFormatados)
+      console.log('✔️ Estado de custos atualizado')
+      setFuncionariosSelecionados(funcionarios)
+      setGruaSelecionada(null)
       
       // Preencher formulário com dados da obra
       setObraFormData({
@@ -872,11 +899,6 @@ export default function ObrasPage() {
         funcionarios: funcionarios
       })
       
-      // Limpar grua selecionada (vamos usar a lista de múltiplas gruas)
-      setGruaSelecionada(null)
-      
-      setFuncionariosSelecionados(funcionarios)
-      
       // Carregar responsável se existir
       if (obra.responsavelId && obra.responsavelName) {
         setResponsavelSelecionado({
@@ -886,8 +908,14 @@ export default function ObrasPage() {
         })
       }
       
+      // Aguardar um tick para garantir que os estados foram atualizados
+      setTimeout(() => {
+        setIsEditDialogOpen(true)
+        console.log('✅ Dialog aberto com custos:', custosFormatados.length)
+      }, 100)
+      
     } catch (error) {
-      console.error('Erro ao carregar relacionamentos da obra:', error)
+      console.error('❌ Erro ao carregar relacionamentos da obra:', error)
       
       // Preencher formulário básico em caso de erro
       setObraFormData({
@@ -908,11 +936,12 @@ export default function ObrasPage() {
         funcionarios: []
       })
       
-      // Limpar estados
-      setGruasSelecionadas([])
+      // Em caso de erro, abrir o dialog sem os relacionamentos
+      setTimeout(() => {
+        setIsEditDialogOpen(true)
+        console.log('⚠️ Dialog aberto com erro - sem relacionamentos')
+      }, 100)
     }
-    
-    setIsEditDialogOpen(true)
   }
 
   const handleUpdateObra = async (e: React.FormEvent) => {
@@ -989,6 +1018,15 @@ export default function ObrasPage() {
       // Fechar dialog e resetar
       setIsEditDialogOpen(false)
       setEditingObra(null)
+      
+      // Limpar todos os estados relacionados
+      setCustosMensais([])
+      setGruasSelecionadas([])
+      setFuncionariosSelecionados([])
+      setGruaSelecionada(null)
+      setResponsavelSelecionado(null)
+      setClienteSelecionado(null)
+      
       setObraFormData({
         name: '',
         description: '',
@@ -1750,6 +1788,7 @@ export default function ObrasPage() {
                 </div>
 
                 {/* Lista de custos mensais */}
+                {console.log('🔍 Renderizando custos no dialog:', custosMensais)}
                 {custosMensais.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Custos Mensais Configurados ({custosMensais.length})</h4>
@@ -1835,7 +1874,22 @@ export default function ObrasPage() {
       </Dialog>
 
       {/* Dialog de Edição de Obra */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog 
+        open={isEditDialogOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            // Limpar estados apenas quando fechar
+            setCustosMensais([])
+            setGruasSelecionadas([])
+            setFuncionariosSelecionados([])
+            setGruaSelecionada(null)
+            setResponsavelSelecionado(null)
+            setClienteSelecionado(null)
+            setEditingObra(null)
+          }
+          setIsEditDialogOpen(open)
+        }}
+      >
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2242,6 +2296,7 @@ export default function ObrasPage() {
                 </div>
 
                 {/* Lista de custos mensais */}
+                {console.log('🔍 Renderizando custos no dialog:', custosMensais)}
                 {custosMensais.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Custos Mensais Configurados ({custosMensais.length})</h4>

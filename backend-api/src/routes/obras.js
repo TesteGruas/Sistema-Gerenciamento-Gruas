@@ -32,12 +32,12 @@ const obraSchema = Joi.object({
   grua_id: Joi.string().allow(null, '').optional(),
   grua_valor: Joi.number().positive().allow(null).optional(),
   grua_mensalidade: Joi.number().positive().allow(null).optional(),
-  // Múltiplas gruas
+  // Múltiplas gruas - aceitar ambos os campos para compatibilidade
   gruas: Joi.array().items(
     Joi.object({
       grua_id: Joi.string().required(),
-      valor_locacao: Joi.number().positive().required(),
-      taxa_mensal: Joi.number().positive().required()
+      valor_locacao: Joi.number().positive().optional(),
+      taxa_mensal: Joi.number().positive().optional()
     })
   ).allow(null).optional(),
   // Dados dos funcionários
@@ -239,12 +239,20 @@ const obraSchema = Joi.object({
  *                     pages:
  *                       type: integer
  */
-router.get('/', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
+    const user = req.user
+    const userRole = user.role || user.perfil?.nome
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
     const { status, cliente_id } = req.query
+
+    // Verificar se usuário tem permissão total ou apenas para suas obras
+    const hasFullAccess = ['Admin', 'Gestores', 'Supervisores'].includes(userRole)
+    const isOperador = userRole === 'Operários'
+
+    console.log(`🔍 [OBRAS] Listagem - Usuário: ${user.id}, Role: ${userRole}, Full Access: ${hasFullAccess}`)
 
     let query = supabaseAdmin
       .from('obras')
@@ -313,20 +321,45 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       })
     }
 
-    const totalPages = Math.ceil(count / limit)
+    // Se for operador, filtrar apenas obras onde está alocado
+    let filteredData = data || []
+    let filteredCount = count
+
+    if (isOperador && user.funcionario_id) {
+      console.log(`🔍 [OBRAS] Filtrando obras para funcionário ID: ${user.funcionario_id}`)
+      
+      // Buscar obras onde o funcionário está alocado
+      const { data: obrasFuncionario, error: obrasError } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .select('obra_id')
+        .eq('funcionario_id', user.funcionario_id)
+        .eq('status', 'ativo')
+
+      if (!obrasError && obrasFuncionario) {
+        const obrasIds = obrasFuncionario.map(fo => fo.obra_id)
+        console.log(`🔍 [OBRAS] IDs das obras do funcionário:`, obrasIds)
+        
+        filteredData = filteredData.filter(obra => obrasIds.includes(obra.id))
+        filteredCount = filteredData.length
+      }
+    }
+
+    const totalPages = Math.ceil(filteredCount / limit)
+
+    console.log(`✅ [OBRAS] Retornando ${filteredData.length} obras (Total: ${filteredCount})`)
 
     res.json({
       success: true,
-      data: data || [],
+      data: filteredData,
       pagination: {
         page,
         limit,
-        total: count,
+        total: filteredCount,
         pages: totalPages
       }
     })
   } catch (error) {
-    console.error('Erro ao listar obras:', error)
+    console.error('❌ Erro ao listar obras:', error)
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message
@@ -471,9 +504,14 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
  *       404:
  *         description: Obra não encontrada
  */
-router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
+    const user = req.user
+    const userRole = user.role || user.perfil?.nome
+    const isOperador = userRole === 'Operários'
+
+    console.log(`🔍 [OBRAS] Detalhes - ID: ${id}, Usuário: ${user.id}, Role: ${userRole}`)
 
     const { data, error } = await supabaseAdmin
       .from('obras')
@@ -554,6 +592,29 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
         error: 'Erro ao buscar obra',
         message: error.message
       })
+    }
+
+    // Se for operador, verificar se tem acesso a esta obra
+    if (isOperador && user.funcionario_id) {
+      console.log(`🔍 [OBRAS] Verificando acesso do funcionário ${user.funcionario_id} à obra ${id}`)
+      
+      const { data: alocacao, error: alocacaoError } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .select('*')
+        .eq('funcionario_id', user.funcionario_id)
+        .eq('obra_id', id)
+        .eq('status', 'ativo')
+        .single()
+
+      if (alocacaoError || !alocacao) {
+        console.log(`❌ [OBRAS] Operador não tem acesso à obra ${id}`)
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para visualizar esta obra'
+        })
+      }
+      
+      console.log(`✅ [OBRAS] Operador tem acesso à obra ${id}`)
     }
 
     // Calcular totais dos custos
@@ -866,7 +927,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
           const gruaObraData = {
             obra_id: data.id,
             grua_id: grua.grua_id,
-            valor_locacao_mensal: grua.taxa_mensal,
+            valor_locacao_mensal: grua.valor_locacao || grua.taxa_mensal,
             data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
             status: 'Ativa',
             created_at: new Date().toISOString(),
