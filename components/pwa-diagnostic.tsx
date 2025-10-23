@@ -105,7 +105,7 @@ export function PWADiagnostic() {
         message: 'Local Storage indisponível',
         details: error instanceof Error ? error.message : 'Erro desconhecido'
       })
-    })
+    }
 
     // 4. Verificar dados do usuário
     try {
@@ -135,7 +135,7 @@ export function PWADiagnostic() {
         message: 'Erro ao verificar dados do usuário',
         details: error instanceof Error ? error.message : 'Erro desconhecido'
       })
-    })
+    }
 
     // 5. Verificar API
     try {
@@ -169,7 +169,7 @@ export function PWADiagnostic() {
         message: 'API não acessível',
         details: `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'} - ${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}`
       })
-    })
+    }
 
     // 6. Verificar PWA Installability
     if ('serviceWorker' in navigator && 'PushManager' in window) {
