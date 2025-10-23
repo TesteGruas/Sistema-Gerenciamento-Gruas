@@ -30,8 +30,22 @@ import { usePWAUser } from "@/hooks/use-pwa-user"
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
+  const [isClient, setIsClient] = useState(false)
   const router = useRouter()
-  const { user, pontoHoje, documentosPendentes, horasTrabalhadas, loading: userLoading } = usePWAUser()
+  
+  // Hook de usuário só após verificação de cliente
+  const pwaUserData = isClient ? usePWAUser() : { 
+    user: null, 
+    pontoHoje: null, 
+    documentosPendentes: 0, 
+    horasTrabalhadas: '0h 0min', 
+    loading: true 
+  }
+
+  // Verificar se estamos no cliente
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   // Autenticação é gerenciada pelo PWAAuthGuard no layout
 
@@ -149,7 +163,7 @@ export default function PWAMainPage() {
   }
 
   // Mostrar loading enquanto carrega dados do usuário
-  if (userLoading) {
+  if (pwaUserData.loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -174,7 +188,7 @@ export default function PWAMainPage() {
           <div className="flex items-start justify-between mb-6">
             <div>
               <p className="text-sm font-medium text-blue-100 mb-1">Bem-vindo(a),</p>
-              <h2 className="text-2xl font-bold">{user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
+              <h2 className="text-2xl font-bold">{pwaUserData.user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
             </div>
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center ring-2 ring-white/30">
               <Zap className="w-6 h-6" />
@@ -202,8 +216,8 @@ export default function PWAMainPage() {
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
               <p className="text-[10px] text-blue-100 font-medium mb-1">Ponto</p>
               <p className="text-sm font-bold">
-                {pontoHoje?.entrada 
-                  ? new Date(pontoHoje.entrada).toLocaleTimeString('pt-BR', { 
+                {pwaUserData.pontoHoje?.entrada 
+                  ? new Date(pwaUserData.pontoHoje.entrada).toLocaleTimeString('pt-BR', { 
                       hour: '2-digit', 
                       minute: '2-digit' 
                     })
@@ -212,11 +226,11 @@ export default function PWAMainPage() {
             </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
               <p className="text-[10px] text-blue-100 font-medium mb-1">Horas</p>
-              <p className="text-sm font-bold">{horasTrabalhadas.split(' ')[0]}</p>
+              <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
               <p className="text-[10px] text-blue-100 font-medium mb-1">Docs</p>
-              <p className="text-sm font-bold">{documentosPendentes}</p>
+              <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
             </div>
           </div>
         </div>
@@ -227,14 +241,14 @@ export default function PWAMainPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
           <div className="flex flex-col items-center text-center">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 ${
-              pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
+              pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
             }`}>
               <CheckCircle className={`w-6 h-6 ${
-                pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
+                pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
               }`} />
             </div>
             <p className="text-base font-bold text-gray-900">
-              {pontoHoje?.entrada ? '✓' : '−'}
+              {pwaUserData.pontoHoje?.entrada ? '✓' : '−'}
             </p>
             <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
           </div>
@@ -243,13 +257,13 @@ export default function PWAMainPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
           <div className="flex flex-col items-center text-center">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 ${
-              documentosPendentes > 0 ? 'bg-orange-100 animate-pulse' : 'bg-gray-100'
+              pwaUserData.documentosPendentes > 0 ? 'bg-orange-100 animate-pulse' : 'bg-gray-100'
             }`}>
               <FileSignature className={`w-6 h-6 ${
-                documentosPendentes > 0 ? 'text-orange-600' : 'text-gray-400'
+                pwaUserData.documentosPendentes > 0 ? 'text-orange-600' : 'text-gray-400'
               }`} />
             </div>
-            <p className="text-base font-bold text-gray-900">{documentosPendentes}</p>
+            <p className="text-base font-bold text-gray-900">{pwaUserData.documentosPendentes}</p>
             <p className="text-[10px] text-gray-500 font-medium">Pendentes</p>
           </div>
         </div>
@@ -259,7 +273,7 @@ export default function PWAMainPage() {
             <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center mb-2">
               <Clock className="w-6 h-6 text-blue-600" />
             </div>
-            <p className="text-base font-bold text-gray-900">{horasTrabalhadas.split('h')[0]}</p>
+            <p className="text-base font-bold text-gray-900">{pwaUserData.horasTrabalhadas.split('h')[0]}</p>
             <p className="text-[10px] text-gray-500 font-medium">Horas</p>
           </div>
         </div>
@@ -338,14 +352,14 @@ export default function PWAMainPage() {
       </div>
 
       {/* Dica ou Alerta */}
-      {documentosPendentes > 0 && (
+      {pwaUserData.documentosPendentes > 0 && (
         <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200 rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-500">
           <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
             <AlertCircle className="w-5 h-5 text-orange-600" />
           </div>
           <div className="flex-1">
             <h3 className="font-semibold text-sm text-orange-900 mb-1">
-              {documentosPendentes} documento{documentosPendentes > 1 ? 's' : ''} pendente{documentosPendentes > 1 ? 's' : ''}
+              {pwaUserData.documentosPendentes} documento{pwaUserData.documentosPendentes > 1 ? 's' : ''} pendente{pwaUserData.documentosPendentes > 1 ? 's' : ''}
             </h3>
             <p className="text-xs text-orange-700 mb-2">
               Você tem documentos aguardando sua assinatura digital

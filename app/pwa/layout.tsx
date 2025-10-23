@@ -37,12 +37,14 @@ export default function PWALayout({ children }: PWALayoutProps) {
   // Todos os hooks devem ser chamados no topo, antes de qualquer lógica condicional
   const pathname = usePathname()
   const router = useRouter()
-  const { hasPermission, canAccessModule } = usePermissions()
   const [isOnline, setIsOnline] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string } | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
+  
+  // Hook de permissões só após verificação de cliente
+  const permissions = isClient ? usePermissions() : { hasPermission: () => false, canAccessModule: () => false }
   
   // Verificar se estamos no cliente para evitar erros de SSR
   useEffect(() => {
@@ -172,7 +174,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   ]
 
   // Adicionar item de encarregador se o usuário tiver permissão
-  if (hasPermission("encarregador:visualizar")) {
+  if (permissions.hasPermission("encarregador:visualizar")) {
     navigationItems.push({
       name: "Encarregador",
       href: "/pwa/encarregador",
@@ -183,7 +185,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   }
 
   // Adicionar notificações se o usuário tiver permissão e houver notificações pendentes
-  if (hasPermission("notificacoes:visualizar") && documentosPendentes > 0) {
+  if (permissions.hasPermission("notificacoes:visualizar") && documentosPendentes > 0) {
     navigationItems.push({
       name: "Notif",
       href: "/pwa/notificacoes",
@@ -196,7 +198,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   // Filtrar itens de navegação baseado em permissões
   const filteredNavigationItems = navigationItems.filter(item => {
     if (!item.permission) return true
-    return hasPermission(item.permission)
+    return permissions.hasPermission(item.permission)
   })
 
   // Rotas que não precisam do layout (login e redirect)
