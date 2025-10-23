@@ -142,26 +142,25 @@ Testar criação de obra com cliente, grua(s), gestor, funcionários e registros
 
 ## ✅ Checklist Final
 
-- [ ] Obra criada com cidade, estado e tipo
-- [ ] Grua(s) vinculada(s)
-- [ ] Funcionários alocados
-- [ ] Custos mensais adicionados
-- [ ] Item duplicado bloqueado
-- [ ] Documento PDF criado
-- [ ] Livro de grua registrado por funcionário
-- [ ] Arquivos enviados
+- [✅] Obra criada com cidade, estado e tipo
+- [✅] Grua(s) vinculada(s)
+- [✅] Funcionários alocados
+- [✅] Custos mensais adicionados
+- [✅] Item duplicado bloqueado
+- [✅] Documento PDF criado
+- [✅] Livro de grua registrado por funcionário
+- [✅] Arquivos enviados
 
 ---
 
 ## 📋 Resultado
 
-**Data:** ___/___/______
-
-**Testador:** _____________________
-
-**Status:** [ ] ✅ APROVADO  [ ] ❌ REPROVADO
+**Data:** __23/10/2025___
+**Status:** [ ✅ ] ✅ APROVADO  [ ] ❌ REPROVADO
 
 **Bugs encontrados:**
+Listagem dos custos + duplicaçoes ✅  
+Permissoes dos usuarios para visualizar os documentos ✅ 
 _______________________________________
 _______________________________________
 
