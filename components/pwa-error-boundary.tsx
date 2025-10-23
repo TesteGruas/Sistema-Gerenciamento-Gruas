@@ -43,7 +43,8 @@ export class PWAErrorBoundary extends Component<Props, State> {
         componentStack: errorInfo.componentStack,
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
-        url: window.location.href
+        url: window.location.href,
+        apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
       }
       
       // Salvar no localStorage para debugging
@@ -188,3 +189,4 @@ export function usePWAErrorHandler() {
 
   return { handleError }
 }
+

@@ -231,3 +231,4 @@ console.log('   3. Acesse: http://72.60.60.118:3000/pwa');
 console.log('   4. Verifique o console do navegador para erros');
 
 console.log('\n✅ Diagnóstico concluído!');
+

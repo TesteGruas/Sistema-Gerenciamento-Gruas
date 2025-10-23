@@ -175,6 +175,12 @@ export const obrasDocumentosApi = {
   async obterUrlDownload(obraId: number, documentoId: number): Promise<string> {
     const dados = await this.download(obraId, documentoId)
     return dados.download_url
+  },
+
+  // Atualizar documento
+  async atualizar(obraId: number, documentoId: number, dados: DocumentoUpdate): Promise<DocumentoResponse> {
+    const response = await api.put(`/obras-documentos/${obraId}/documentos/${documentoId}`, dados)
+    return response.data
   }
 }
 

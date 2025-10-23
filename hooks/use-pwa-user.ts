@@ -23,6 +23,12 @@ export function usePWAUser(): PWAUserData {
         setLoading(true)
         setError(null)
 
+        // Verificar se estamos no cliente
+        if (typeof window === 'undefined') {
+          setLoading(false)
+          return
+        }
+
         // Carregar dados do usuário do localStorage
         const userData = localStorage.getItem('user_data')
         if (!userData) {
@@ -40,7 +46,7 @@ export function usePWAUser(): PWAUserData {
         // Carregar ponto de hoje (silenciosamente, sem quebrar a página)
         try {
           const hoje = new Date().toISOString().split('T')[0]
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
           const pontoResponse = await fetch(
             `${apiUrl}/api/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${parsedUser.id}`,
             {
@@ -101,7 +107,7 @@ export function usePWAUser(): PWAUserData {
 
         // Carregar documentos pendentes (silenciosamente, sem quebrar a página)
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
           const docsResponse = await fetch(
             `${apiUrl}/api/assinaturas/pendentes`,
             {
