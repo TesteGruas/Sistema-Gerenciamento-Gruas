@@ -30,6 +30,7 @@ import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import { PWAAuthGuard } from "@/components/pwa-auth-guard"
 import { OfflineSyncIndicator } from "@/components/offline-sync-indicator"
 import { PWAErrorBoundary } from "@/components/pwa-error-boundary"
+import { usePersistentSession } from "@/hooks/use-persistent-session"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -45,6 +46,14 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string; profile?: any } | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
+  
+  // Hook de sessão persistente
+  const {
+    isAuthenticated,
+    isLoading: sessionLoading,
+    user: persistentUser,
+    logout: persistentLogout
+  } = usePersistentSession()
   
   // Função de permissão simplificada para evitar problemas de hidratação
   const hasPermission = (permission: string) => {
@@ -168,17 +177,15 @@ export default function PWALayout({ children }: PWALayoutProps) {
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (typeof window === 'undefined') return
     
-    // Limpar dados do usuário e localStorage
+    // Usar logout da sessão persistente
+    await persistentLogout()
+    
+    // Limpar dados locais
     setUser(null)
     setDocumentosPendentes(0)
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('user_data')
-    localStorage.removeItem('refresh_token')
-    // Redirecionar para login
-    router.push('/pwa/login')
   }
 
   // Renderizar apenas no cliente para evitar erros de SSR
