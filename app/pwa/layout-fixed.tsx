@@ -174,13 +174,6 @@ export default function PWALayout({ children }: PWALayoutProps) {
 
   const navigationItems = [
     {
-      name: "Home",
-      href: "/pwa",
-      icon: Home,
-      description: "Página inicial",
-      permission: "ponto:visualizar"
-    },
-    {
       name: "Ponto",
       href: "/pwa/ponto",
       icon: Clock,
@@ -207,6 +200,13 @@ export default function PWALayout({ children }: PWALayoutProps) {
       icon: FileSignature,
       description: "Documentos",
       permission: "assinatura_digital:visualizar"
+    },
+    {
+      name: "Perfil",
+      href: "/pwa/perfil",
+      icon: UserCircle,
+      description: "Meu perfil",
+      permission: "perfil:visualizar"
     }
   ]
 
@@ -282,8 +282,17 @@ export default function PWALayout({ children }: PWALayoutProps) {
                     </div>
                   </div>
 
-                   <div className="flex items-center gap-2">
-                     {user && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push('/pwa')}
+                      className="text-white hover:bg-white/20 p-2 rounded-xl"
+                    >
+                      <Home className="w-5 h-5" />
+                    </Button>
+
+                    {user && (
                       <div className="relative" data-user-menu>
                         <button
                           onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}

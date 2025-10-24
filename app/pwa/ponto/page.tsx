@@ -21,10 +21,12 @@ import {
   RefreshCw,
   MapPinOff,
   Shield,
-  FileSignature
+  FileSignature,
+  Camera
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
+import { PhotoCapture } from "@/components/photo-capture"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { 
   obterLocalizacaoAtual, 
@@ -57,6 +59,8 @@ export default function PWAPontoPage() {
   const [assinaturaDataUrl, setAssinaturaDataUrl] = useState<string | null>(null)
   const [tipoRegistroPendente, setTipoRegistroPendente] = useState<string | null>(null)
   const [horasExtras, setHorasExtras] = useState<number>(0)
+  const [showPhotoCapture, setShowPhotoCapture] = useState(false)
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -303,6 +307,17 @@ export default function PWAPontoPage() {
   }
 
   const registrarPonto = async (tipo: string) => {
+    // Verificar se há foto capturada
+    if (!capturedPhoto) {
+      toast({
+        title: "📷 Foto obrigatória",
+        description: "Você deve capturar uma foto antes de registrar o ponto",
+        variant: "destructive"
+      })
+      setShowPhotoCapture(true)
+      return
+    }
+
     // Geolocalização agora é opcional - não bloqueia o registro
     if (validacaoLocalizacao && !validacaoLocalizacao.valido) {
       toast({
@@ -315,6 +330,17 @@ export default function PWAPontoPage() {
     setIsLoading(true)
     
     try {
+      // Obter funcionarioId
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        throw new Error('Token não encontrado')
+      }
+      
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user, 
+        token, 
+        'ID do funcionário não encontrado'
+      )
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
       const hoje = agora.toISOString().split('T')[0]
@@ -465,6 +491,17 @@ export default function PWAPontoPage() {
     await completarRegistroComAssinatura(tipoRegistroPendente, signatureDataUrl)
   }
 
+  // Lidar com foto capturada
+  const handlePhotoTaken = (photoData: string) => {
+    setCapturedPhoto(photoData)
+    setShowPhotoCapture(false)
+    toast({
+      title: "Foto capturada!",
+      description: "Foto salva com sucesso. Agora você pode registrar o ponto.",
+      variant: "default"
+    })
+  }
+
   // Completar registro com assinatura de hora extra
   const completarRegistroComAssinatura = async (tipo: string, assinatura: string) => {
     setIsLoading(true)
@@ -573,10 +610,57 @@ export default function PWAPontoPage() {
 
   const status = getStatusRegistro()
 
-  const podeEntrada = !registrosHoje.entrada
-  const podeSaida = registrosHoje.entrada && !registrosHoje.saida
-  const podeSaidaAlmoco = registrosHoje.entrada && !registrosHoje.saida_almoco && !registrosHoje.saida
-  const podeVoltaAlmoco = registrosHoje.saida_almoco && !registrosHoje.volta_almoco && !registrosHoje.saida
+  // Determinar automaticamente qual é o próximo registro necessário
+  const getProximoRegistro = () => {
+    if (!registrosHoje.entrada) {
+      return {
+        tipo: 'entrada',
+        label: 'Entrada',
+        descricao: 'Iniciar jornada de trabalho',
+        icone: Play,
+        cor: 'from-green-500 to-green-600 hover:from-green-600 hover:to-green-700',
+        corTexto: 'text-green-700'
+      }
+    }
+    
+    if (registrosHoje.entrada && !registrosHoje.saida_almoco && !registrosHoje.saida) {
+      return {
+        tipo: 'saida_almoco',
+        label: 'Saída Almoço',
+        descricao: 'Iniciar intervalo de almoço',
+        icone: Coffee,
+        cor: 'from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700',
+        corTexto: 'text-yellow-700'
+      }
+    }
+    
+    if (registrosHoje.saida_almoco && !registrosHoje.volta_almoco && !registrosHoje.saida) {
+      return {
+        tipo: 'volta_almoco',
+        label: 'Volta Almoço',
+        descricao: 'Retornar do intervalo de almoço',
+        icone: Coffee,
+        cor: 'from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700',
+        corTexto: 'text-yellow-700'
+      }
+    }
+    
+    if (registrosHoje.entrada && !registrosHoje.saida) {
+      return {
+        tipo: 'saida',
+        label: 'Saída',
+        descricao: 'Finalizar jornada de trabalho',
+        icone: Square,
+        cor: 'from-red-500 to-red-600 hover:from-red-600 hover:to-red-700',
+        corTexto: 'text-red-700'
+      }
+    }
+    
+    return null // Jornada completa
+  }
+
+  const proximoRegistro = getProximoRegistro()
+  const podeRegistrar = proximoRegistro !== null
 
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar">
@@ -703,76 +787,72 @@ export default function PWAPontoPage() {
             Registrar Ponto
           </CardTitle>
           <CardDescription>
-            Clique no botão correspondente ao seu registro. A localização é opcional.
+            {proximoRegistro 
+              ? `Próximo: ${proximoRegistro.label} - ${proximoRegistro.descricao}`
+              : "Jornada completa - Todos os registros foram feitos hoje"
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {/* Botões principais */}
-            <div className="grid grid-cols-2 gap-4">
-              <Button
-                onClick={() => registrarPonto("entrada")}
-                disabled={!podeEntrada || isLoading}
-                className={`h-20 flex flex-col gap-2 text-white font-semibold transition-all duration-200 ${
-                  podeEntrada 
-                    ? "bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl active:scale-95" 
-                    : "bg-gray-400 cursor-not-allowed"
-                }`}
-              >
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center shadow-md">
-                  <Play className="w-5 h-5" />
+            {/* Aviso sobre foto obrigatória */}
+            {!capturedPhoto && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 text-red-700">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    📷 Foto obrigatória: Você deve capturar uma foto antes de registrar o ponto
+                  </span>
                 </div>
-                <span className="text-base">Entrada</span>
-                <span className="text-xs opacity-90">Iniciar jornada</span>
-              </Button>
+              </div>
+            )}
 
+            {/* Botão de foto */}
+            <div className="flex justify-center">
               <Button
-                onClick={() => registrarPonto("saida")}
-                disabled={!podeSaida || isLoading}
-                className={`h-20 flex flex-col gap-2 text-white font-semibold transition-all duration-200 ${
-                  podeSaida 
-                    ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl active:scale-95" 
-                    : "bg-gray-400 cursor-not-allowed"
+                onClick={() => setShowPhotoCapture(true)}
+                variant="outline"
+                className={`flex items-center gap-2 border-2 shadow-md hover:shadow-lg transition-all duration-200 ${
+                  capturedPhoto 
+                    ? "border-green-300 bg-green-50 hover:bg-green-100 text-green-700" 
+                    : "border-red-300 bg-red-50 hover:bg-red-100 text-red-700"
                 }`}
               >
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center shadow-md">
-                  <Square className="w-5 h-5" />
-                </div>
-                <span className="text-base">Saída</span>
-                <span className="text-xs opacity-90">Finalizar jornada</span>
+                <Camera className="w-5 h-5" />
+                {capturedPhoto ? "Foto Capturada ✓" : "📷 Foto Obrigatória - Capturar"}
               </Button>
             </div>
 
-            {/* Botões secundários */}
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                onClick={() => registrarPonto("saida_almoco")}
-                disabled={!podeSaidaAlmoco || isLoading}
-                variant="outline"
-                className={`h-16 flex flex-col gap-1 border-2 transition-all duration-200 ${
-                  podeSaidaAlmoco 
-                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 shadow-md hover:shadow-lg active:scale-95" 
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <Coffee className="w-4 h-4" />
-                <span className="text-sm font-medium">Saída Almoço</span>
-              </Button>
-
-              <Button
-                onClick={() => registrarPonto("volta_almoco")}
-                disabled={!podeVoltaAlmoco || isLoading}
-                variant="outline"
-                className={`h-16 flex flex-col gap-1 border-2 transition-all duration-200 ${
-                  podeVoltaAlmoco 
-                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 shadow-md hover:shadow-lg active:scale-95" 
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <Coffee className="w-4 h-4" />
-                <span className="text-sm font-medium">Volta Almoço</span>
-              </Button>
-            </div>
+            {/* Botão único baseado no próximo registro */}
+            {proximoRegistro ? (
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => registrarPonto(proximoRegistro.tipo)}
+                  disabled={isLoading || !capturedPhoto}
+                  className={`h-24 w-full max-w-sm flex flex-col gap-3 text-white font-semibold transition-all duration-200 ${
+                    capturedPhoto
+                      ? `bg-gradient-to-br ${proximoRegistro.cor} shadow-lg hover:shadow-xl active:scale-95` 
+                      : "bg-gray-400 cursor-not-allowed"
+                  }`}
+                >
+                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shadow-md">
+                    <proximoRegistro.icone className="w-6 h-6" />
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold">{proximoRegistro.label}</div>
+                    <div className="text-sm opacity-90">{proximoRegistro.descricao}</div>
+                  </div>
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Jornada Completa</h3>
+                <p className="text-gray-600">Você já registrou todos os pontos do dia</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -955,6 +1035,15 @@ export default function PWAPontoPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Componente de Captura de Foto */}
+      <PhotoCapture
+        isOpen={showPhotoCapture}
+        onClose={() => setShowPhotoCapture(false)}
+        onPhotoTaken={handlePhotoTaken}
+        title="Capturar Foto para Ponto"
+        description="Tire uma foto para confirmar sua presença no local de trabalho"
+      />
     </div>
     </ProtectedRoute>
   )
