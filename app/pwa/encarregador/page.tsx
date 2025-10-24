@@ -20,6 +20,7 @@ import {
   Search
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import * as encarregadorApi from "@/lib/api-encarregador"
 
 type Funcionario = encarregadorApi.FuncionarioEncarregador
@@ -160,12 +161,19 @@ export default function PWAEncarregadorPage() {
       localStorage.setItem('cached_funcionarios', JSON.stringify(dataFuncionarios))
 
       // Carregar registros pendentes de aprovação
-      const funcionarioId = user.profile?.funcionario_id || user.funcionario_id || user.id
-      const dataRegistros = await encarregadorApi.getRegistrosPendentes(funcionarioId)
-      setRegistrosPendentes(dataRegistros)
-      
-      // Salvar no cache
-      localStorage.setItem('cached_registros_pendentes', JSON.stringify(dataRegistros))
+      const token = localStorage.getItem('access_token')
+      if (token) {
+        const funcionarioId = await getFuncionarioIdWithFallback(
+          user, 
+          token, 
+          'ID do funcionário não encontrado'
+        )
+        const dataRegistros = await encarregadorApi.getRegistrosPendentes(funcionarioId)
+        setRegistrosPendentes(dataRegistros)
+        
+        // Salvar no cache
+        localStorage.setItem('cached_registros_pendentes', JSON.stringify(dataRegistros))
+      }
 
     } catch (error: any) {
       console.error('Erro ao carregar dados:', error)

@@ -24,6 +24,7 @@ import {
   FileSignature
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { 
   obterLocalizacaoAtual, 
@@ -245,7 +246,14 @@ export default function PWAPontoPage() {
       }
 
       const hoje = new Date().toISOString().split('T')[0]
-      const funcionarioId = user.profile?.funcionario_id || user.id
+      const token = localStorage.getItem('access_token')
+      if (!token) return
+      
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user, 
+        token, 
+        'ID do funcionário não encontrado'
+      )
       console.log('🔍 [PWA Ponto] Fazendo chamada API com funcionario_id:', funcionarioId)
       
       const data = await pontoApi.getRegistros({
@@ -339,7 +347,7 @@ export default function PWAPontoPage() {
       // Preparar dados para envio
       const campoTipo = tipo.toLowerCase().replace(' ', '_')
       const dadosRegistro: any = {
-        funcionario_id: user.profile?.funcionario_id || user.id,
+        funcionario_id: funcionarioId,
         data: hoje,
         [campoTipo]: horaAtual,
         localizacao: location ? `${location.lat}, ${location.lng}` : undefined
@@ -399,7 +407,7 @@ export default function PWAPontoPage() {
 
       // Verificar se já existe registro para hoje
       const registrosExistentes = await pontoApi.getRegistros({
-        funcionario_id: user.profile?.funcionario_id || user.id,
+        funcionario_id: funcionarioId,
         data_inicio: hoje,
         data_fim: hoje
       })
@@ -469,9 +477,16 @@ export default function PWAPontoPage() {
       const horaAtual = agora.toTimeString().slice(0, 5)
       const hoje = agora.toISOString().split('T')[0]
       
+      // Buscar ID numérico do funcionário usando função utilitária
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user, 
+        token, 
+        'ID do funcionário não encontrado'
+      )
+
       // Preparar dados para envio
       const dadosRegistro = {
-        funcionario_id: user.profile?.funcionario_id || user.id,
+        funcionario_id: funcionarioId,
         data: hoje,
         [tipo.toLowerCase().replace(' ', '_')]: horaAtual,
         localizacao: location ? `${location.lat}, ${location.lng}` : null,
@@ -482,7 +497,7 @@ export default function PWAPontoPage() {
 
       // Verificar se já existe registro para hoje
       const responseExistente = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.profile?.funcionario_id || user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${funcionarioId}&data_inicio=${hoje}&data_fim=${hoje}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

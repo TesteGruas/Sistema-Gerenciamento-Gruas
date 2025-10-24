@@ -22,6 +22,7 @@ import {
   RefreshCw
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import * as documentosApi from "@/lib/api-documentos"
 
 type Documento = documentosApi.DocumentoFuncionario
@@ -150,8 +151,13 @@ export default function PWADocumentosPage() {
       // Buscar documentos pendentes de assinatura
       try {
         // Tentar primeiro com funcionario_id se disponível
-        const funcionarioId = user.profile?.funcionario_id || user.funcionario_id
-        if (funcionarioId) {
+        const token = localStorage.getItem('access_token')
+        if (token) {
+          const funcionarioId = await getFuncionarioIdWithFallback(
+            user, 
+            token, 
+            'ID do funcionário não encontrado'
+          )
           console.log('🔍 [PWA Documentos] Usando funcionarioId:', funcionarioId, 'tipo:', typeof funcionarioId)
           const data = await documentosApi.getDocumentosFuncionario(funcionarioId)
           const documentosDoUsuario = data.filter((doc: any) => 
@@ -286,6 +292,17 @@ export default function PWADocumentosPage() {
 
     setIsAssinando(true)
     try {
+      // Obter funcionarioId
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        throw new Error('Token não encontrado')
+      }
+      
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user, 
+        token, 
+        'ID do funcionário não encontrado'
+      )
       // Capturar geolocalização se disponível
       let geoloc: string | undefined
       if (navigator.geolocation) {
@@ -307,7 +324,7 @@ export default function PWADocumentosPage() {
           filaAssinaturas.push({
             documentoId: documentoSelecionado.id,
             assinatura: signature,
-            funcionario_id: user.profile?.funcionario_id || user.id,
+            funcionario_id: funcionarioId,
             geoloc,
             timestamp: new Date().toISOString()
           })
@@ -343,7 +360,7 @@ export default function PWADocumentosPage() {
 
         await documentosApi.assinarDocumento(documentoSelecionado.id, {
           assinatura: signature!,
-          funcionario_id: user.funcionario_id || user.id,
+          funcionario_id: funcionarioId,
           geoloc,
           timestamp: new Date().toISOString()
         })

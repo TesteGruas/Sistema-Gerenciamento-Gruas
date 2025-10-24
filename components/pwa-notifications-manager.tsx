@@ -67,7 +67,8 @@ export function PWANotificationsManager() {
       toast({
         title: "Não suportado",
         description: "Seu navegador não suporta notificações",
-        variant: "destructive"
+        variant: "destructive",
+        duration: 4000 // 4 segundos
       })
       return
     }
@@ -85,7 +86,8 @@ export function PWANotificationsManager() {
         toast({
           title: "Permissão concedida!",
           description: "Você receberá notificações do sistema",
-          variant: "default"
+          variant: "default",
+          duration: 3000 // 3 segundos
         })
         
         // Enviar notificação de teste
@@ -104,7 +106,8 @@ export function PWANotificationsManager() {
         toast({
           title: "Permissão negada",
           description: "Você pode ativar as notificações nas configurações do navegador",
-          variant: "destructive"
+          variant: "destructive",
+          duration: 4000 // 4 segundos
         })
       }
     } catch (error) {
@@ -112,7 +115,8 @@ export function PWANotificationsManager() {
       toast({
         title: "Erro",
         description: "Não foi possível solicitar permissão para notificações",
-        variant: "destructive"
+        variant: "destructive",
+        duration: 4000 // 4 segundos
       })
     }
   }

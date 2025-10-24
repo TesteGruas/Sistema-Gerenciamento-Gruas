@@ -47,8 +47,12 @@ class SessionPersistenceManager {
       // 2. SessionStorage (backup)
       sessionStorage.setItem(this.STORAGE_KEYS.SESSION, JSON.stringify(sessionData))
       
-      // 3. IndexedDB (persistente)
-      await this.saveToIndexedDB(sessionData)
+      // 3. IndexedDB (persistente) - apenas se disponível
+      if (typeof window !== 'undefined' && window.indexedDB) {
+        await this.saveToIndexedDB(sessionData)
+      } else {
+        console.warn('[SessionPersistence] IndexedDB não disponível, pulando salvamento')
+      }
       
       // 4. Salvar email para "lembrar usuário"
       if (sessionData.email) {
@@ -87,10 +91,12 @@ class SessionPersistenceManager {
         }
       }
       
-      // 3. Tentar IndexedDB
-      const indexedData = await this.getFromIndexedDB()
-      if (indexedData && this.isSessionValid(indexedData)) {
-        return indexedData
+      // 3. Tentar IndexedDB - apenas se disponível
+      if (typeof window !== 'undefined' && window.indexedDB) {
+        const indexedData = await this.getFromIndexedDB()
+        if (indexedData && this.isSessionValid(indexedData)) {
+          return indexedData
+        }
       }
       
       return null
@@ -109,7 +115,10 @@ class SessionPersistenceManager {
       sessionStorage.removeItem(this.STORAGE_KEYS.SESSION)
       localStorage.removeItem(this.STORAGE_KEYS.LAST_ACTIVITY)
       
-      await this.clearIndexedDB()
+      // Limpar IndexedDB - apenas se disponível
+      if (typeof window !== 'undefined' && window.indexedDB) {
+        await this.clearIndexedDB()
+      }
       
       console.log('[SessionPersistence] Sessão limpa com sucesso')
     } catch (error) {
@@ -134,25 +143,59 @@ class SessionPersistenceManager {
    * Salvar no IndexedDB
    */
   private async saveToIndexedDB(sessionData: SessionData): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
+      // Verificar se IndexedDB está disponível
+      if (typeof window === 'undefined' || !window.indexedDB) {
+        console.warn('[SessionPersistence] IndexedDB não disponível')
+        resolve()
+        return
+      }
+
       const request = indexedDB.open('PWASessionDB', 1)
       
-      request.onerror = () => reject(request.error)
+      request.onerror = () => {
+        console.warn('[SessionPersistence] Erro ao abrir IndexedDB para salvar:', request.error)
+        resolve() // Não falhar se IndexedDB não funcionar
+      }
       
       request.onsuccess = () => {
-        const db = request.result
-        const transaction = db.transaction(['sessions'], 'readwrite')
-        const store = transaction.objectStore('sessions')
-        
-        store.put(sessionData, 'current_session')
-        transaction.oncomplete = () => resolve()
-        transaction.onerror = () => reject(transaction.error)
+        try {
+          const db = request.result
+          
+          // Verificar se o object store existe
+          if (!db.objectStoreNames.contains('sessions')) {
+            console.warn('[SessionPersistence] Object store "sessions" não existe, pulando salvamento')
+            resolve()
+            return
+          }
+          
+          const transaction = db.transaction(['sessions'], 'readwrite')
+          const store = transaction.objectStore('sessions')
+          
+          store.put(sessionData, 'current_session')
+          transaction.oncomplete = () => {
+            console.log('[SessionPersistence] Dados salvos no IndexedDB')
+            resolve()
+          }
+          transaction.onerror = () => {
+            console.warn('[SessionPersistence] Erro na transação:', transaction.error)
+            resolve() // Não falhar se não conseguir salvar
+          }
+        } catch (error) {
+          console.warn('[SessionPersistence] Erro ao salvar no IndexedDB:', error)
+          resolve() // Não falhar se IndexedDB não funcionar
+        }
       }
       
       request.onupgradeneeded = () => {
-        const db = request.result
-        if (!db.objectStoreNames.contains('sessions')) {
-          db.createObjectStore('sessions')
+        try {
+          const db = request.result
+          if (!db.objectStoreNames.contains('sessions')) {
+            db.createObjectStore('sessions')
+            console.log('[SessionPersistence] Object store "sessions" criado')
+          }
+        } catch (error) {
+          console.warn('[SessionPersistence] Erro ao criar object store:', error)
         }
       }
     })
@@ -165,16 +208,35 @@ class SessionPersistenceManager {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('PWASessionDB', 1)
       
-      request.onerror = () => resolve(null)
+      request.onerror = () => {
+        console.warn('[SessionPersistence] Erro ao abrir IndexedDB:', request.error)
+        resolve(null)
+      }
       
       request.onsuccess = () => {
-        const db = request.result
-        const transaction = db.transaction(['sessions'], 'readonly')
-        const store = transaction.objectStore('sessions')
-        const getRequest = store.get('current_session')
-        
-        getRequest.onsuccess = () => resolve(getRequest.result || null)
-        getRequest.onerror = () => resolve(null)
+        try {
+          const db = request.result
+          
+          // Verificar se o object store existe
+          if (!db.objectStoreNames.contains('sessions')) {
+            console.warn('[SessionPersistence] Object store "sessions" não existe')
+            resolve(null)
+            return
+          }
+          
+          const transaction = db.transaction(['sessions'], 'readonly')
+          const store = transaction.objectStore('sessions')
+          const getRequest = store.get('current_session')
+          
+          getRequest.onsuccess = () => resolve(getRequest.result || null)
+          getRequest.onerror = () => {
+            console.warn('[SessionPersistence] Erro ao recuperar dados do IndexedDB:', getRequest.error)
+            resolve(null)
+          }
+        } catch (error) {
+          console.warn('[SessionPersistence] Erro ao acessar IndexedDB:', error)
+          resolve(null)
+        }
       }
     })
   }
@@ -186,14 +248,35 @@ class SessionPersistenceManager {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('PWASessionDB', 1)
       
+      request.onerror = () => {
+        console.warn('[SessionPersistence] Erro ao abrir IndexedDB para limpar:', request.error)
+        resolve() // Não falhar se IndexedDB não funcionar
+      }
+      
       request.onsuccess = () => {
-        const db = request.result
-        const transaction = db.transaction(['sessions'], 'readwrite')
-        const store = transaction.objectStore('sessions')
-        
-        store.clear()
-        transaction.oncomplete = () => resolve()
-        transaction.onerror = () => reject(transaction.error)
+        try {
+          const db = request.result
+          
+          // Verificar se o object store existe
+          if (!db.objectStoreNames.contains('sessions')) {
+            console.warn('[SessionPersistence] Object store "sessions" não existe para limpar')
+            resolve()
+            return
+          }
+          
+          const transaction = db.transaction(['sessions'], 'readwrite')
+          const store = transaction.objectStore('sessions')
+          
+          store.clear()
+          transaction.oncomplete = () => resolve()
+          transaction.onerror = () => {
+            console.warn('[SessionPersistence] Erro ao limpar IndexedDB:', transaction.error)
+            resolve() // Não falhar se não conseguir limpar
+          }
+        } catch (error) {
+          console.warn('[SessionPersistence] Erro ao limpar IndexedDB:', error)
+          resolve() // Não falhar se IndexedDB não funcionar
+        }
       }
     })
   }

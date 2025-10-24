@@ -18,6 +18,7 @@ import {
   Building2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { gruasApi, Grua } from "@/lib/api-gruas"
 
 export default function PWAGruasPage() {
@@ -88,9 +89,16 @@ export default function PWAGruasPage() {
       // Tentar buscar gruas do funcionário
       if (user?.id) {
         try {
-          const funcionarioId = user.profile?.funcionario_id || user.funcionario_id || user.id
-          const response = await gruasApi.listarGruasFuncionario(funcionarioId)
-          data = response.data
+          const token = localStorage.getItem('access_token')
+          if (token) {
+            const funcionarioId = await getFuncionarioIdWithFallback(
+              user, 
+              token, 
+              'ID do funcionário não encontrado'
+            )
+            const response = await gruasApi.listarGruasFuncionario(funcionarioId)
+            data = response.data
+          }
         } catch (error) {
           console.log('Endpoint de funcionário não disponível, buscando gruas em obra')
         }
@@ -183,22 +191,6 @@ export default function PWAGruasPage() {
         </div>
       </div>
 
-      {/* Informações do funcionário */}
-      {user && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <Truck className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-medium">{user.nome}</p>
-                <p className="text-sm text-gray-500">{user.cargo || user.role}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Lista de gruas */}
       {isLoading ? (

@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -98,8 +99,19 @@ export default function PWAEspelhoPontoPage() {
     try {
       setLoading(true)
       
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        throw new Error('Token não encontrado')
+      }
+      
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user, 
+        token, 
+        'ID do funcionário não encontrado'
+      )
+      
       const response = await pontoApi.getRegistros({
-        funcionario_id: user.profile?.funcionario_id || user.id,
+        funcionario_id: funcionarioId,
         data_inicio: dataInicio,
         data_fim: dataFim,
         // 🆕 NOVOS FILTROS DISPONÍVEIS:

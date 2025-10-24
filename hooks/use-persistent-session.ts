@@ -49,6 +49,11 @@ export function usePersistentSession() {
       const biometricAvailable = checkBiometricAvailability()
       const biometricConfigured = sessionPersistence.isBiometricConfigured()
       
+      // Verificar se IndexedDB está disponível
+      if (typeof window === 'undefined' || !window.indexedDB) {
+        console.warn('[PersistentSession] IndexedDB não disponível, usando apenas localStorage')
+      }
+      
       // Tentar recuperar sessão salva
       const session = await sessionPersistence.getSession()
       

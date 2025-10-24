@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getFuncionarioId } from '@/lib/get-funcionario-id'
 
 interface PWAUserData {
   user: any | null
@@ -47,7 +48,15 @@ export function usePWAUser(): PWAUserData {
         try {
           const hoje = new Date().toISOString().split('T')[0]
           const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
-          const funcionarioId = parsedUser.profile?.funcionario_id || parsedUser.funcionario_id || parsedUser.id
+          
+          // Buscar ID numérico do funcionário usando função utilitária
+          const funcionarioId = await getFuncionarioId(parsedUser, token)
+          
+          // Se não encontrar ID numérico, pular carregamento do ponto
+          if (!funcionarioId) {
+            console.warn('🔍 [usePWAUser] ID do funcionário não disponível, pulando carregamento do ponto')
+            return
+          }
           
           console.log('🔍 [usePWAUser] Carregando ponto para funcionarioId:', funcionarioId)
           

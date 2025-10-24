@@ -31,6 +31,7 @@ import { PWAAuthGuard } from "@/components/pwa-auth-guard"
 import { OfflineSyncIndicator } from "@/components/offline-sync-indicator"
 import { PWAErrorBoundary } from "@/components/pwa-error-boundary"
 import { usePersistentSession } from "@/hooks/use-persistent-session"
+import { useAuthInterceptor } from "@/hooks/use-auth-interceptor"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -54,6 +55,9 @@ export default function PWALayout({ children }: PWALayoutProps) {
     user: persistentUser,
     logout: persistentLogout
   } = usePersistentSession()
+  
+  // Hook de interceptor de autenticação
+  const { isAuthenticated: authInterceptorAuthenticated, checkAuth } = useAuthInterceptor()
   
   // Função de permissão simplificada para evitar problemas de hidratação
   const hasPermission = (permission: string) => {

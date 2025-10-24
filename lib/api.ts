@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { authInterceptor } from './auth-interceptor'
 
 // Configuração da API
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
@@ -105,37 +106,50 @@ export const fetchWithAuth = async (url: string, options: RequestInit = {}): Pro
     ...options.headers,
   }
 
-  const response = await fetch(requestUrl, {
-    ...options,
-    headers,
-  })
+  try {
+    const response = await fetch(requestUrl, {
+      ...options,
+      headers,
+    })
 
-  // Verificar se é endpoint de login - não aplicar refresh token
-  const isLoginEndpoint = url.includes('/auth/login') || url.includes('/auth/refresh')
+    // Interceptar resposta com auth interceptor
+    await authInterceptor.interceptFetchResponse(response, url)
 
-  // Se for 403 e não for login, tentar refresh token
-  if (response.status === 403 && !isLoginEndpoint) {
-    try {
-      const newToken = await refreshAuthToken()
-      if (newToken) {
-        // Refazer a requisição com o novo token
-        const newHeaders = {
-          ...headers,
-          'Authorization': `Bearer ${newToken}`,
+    // Verificar se é endpoint de login - não aplicar refresh token
+    const isLoginEndpoint = url.includes('/auth/login') || url.includes('/auth/refresh')
+
+    // Se for 403 e não for login, tentar refresh token
+    if (response.status === 403 && !isLoginEndpoint) {
+      try {
+        const newToken = await refreshAuthToken()
+        if (newToken) {
+          // Refazer a requisição com o novo token
+          const newHeaders = {
+            ...headers,
+            'Authorization': `Bearer ${newToken}`,
+          }
+          
+          const newResponse = await fetch(requestUrl, {
+            ...options,
+            headers: newHeaders,
+          })
+          
+          // Interceptar nova resposta
+          await authInterceptor.interceptFetchResponse(newResponse, url)
+          return newResponse
         }
-        
-        return await fetch(requestUrl, {
-          ...options,
-          headers: newHeaders,
-        })
+      } catch (refreshError) {
+        console.error('Erro ao renovar token:', refreshError)
+        // Se falhar o refresh, retornar a resposta original
       }
-    } catch (refreshError) {
-      console.error('Erro ao renovar token:', refreshError)
-      // Se falhar o refresh, retornar a resposta original
     }
-  }
 
-  return response
+    return response
+  } catch (error) {
+    // Interceptar erro com auth interceptor
+    await authInterceptor.interceptFetchError(error, url)
+    throw error
+  }
 }
 
 // Interceptor para tratar respostas
@@ -145,6 +159,14 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config
+
+    // Usar o auth interceptor para verificar erros de autenticação
+    try {
+      await authInterceptor.interceptAxiosError(error)
+    } catch (authError) {
+      // Se o auth interceptor redirecionou, não continuar
+      return Promise.reject(authError)
+    }
 
     // Verificar se é endpoint de login - não aplicar refresh token
     const isLoginEndpoint = originalRequest.url?.includes('/auth/login') || 
