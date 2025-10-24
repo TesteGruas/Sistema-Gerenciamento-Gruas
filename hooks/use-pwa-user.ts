@@ -47,8 +47,12 @@ export function usePWAUser(): PWAUserData {
         try {
           const hoje = new Date().toISOString().split('T')[0]
           const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+          const funcionarioId = parsedUser.profile?.funcionario_id || parsedUser.funcionario_id || parsedUser.id
+          
+          console.log('🔍 [usePWAUser] Carregando ponto para funcionarioId:', funcionarioId)
+          
           const pontoResponse = await fetch(
-            `${apiUrl}/api/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${parsedUser.id}`,
+            `${apiUrl}/api/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${funcionarioId}`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -103,6 +107,9 @@ export function usePWAUser(): PWAUserData {
         } catch (pontoError) {
           console.warn('[PWA User Hook] Erro ao carregar ponto (continuando sem dados):', pontoError)
           // Não lançar erro, apenas continuar sem dados de ponto
+          // Definir valores padrão para evitar quebras
+          setPontoHoje(null)
+          setHorasTrabalhadas('0h 0min')
         }
 
         // Carregar documentos pendentes (silenciosamente, sem quebrar a página)

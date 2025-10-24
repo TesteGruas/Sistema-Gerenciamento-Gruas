@@ -12,6 +12,7 @@ import {
   FileText,
   Settings,
   User, 
+  Users,
   LogOut, 
   Menu, 
   X,
@@ -22,7 +23,8 @@ import {
   UserCircle,
   Briefcase,
   Home,
-  Building2
+  Building2,
+  ChevronDown
 } from "lucide-react"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import { PWAAuthGuard } from "@/components/pwa-auth-guard"
@@ -39,20 +41,23 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const router = useRouter()
   const [isOnline, setIsOnline] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [user, setUser] = useState<{ id: number; nome: string; cargo?: string } | null>(null)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const [user, setUser] = useState<{ id: number; nome: string; cargo?: string; profile?: any } | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
   
   // Função de permissão simplificada para evitar problemas de hidratação
   const hasPermission = (permission: string) => {
-    if (!isClient) return false
+    if (!isClient) return true // Permitir durante SSR
     
     // Verificação simples baseada no usuário logado
-    if (typeof window === 'undefined') return false
+    if (typeof window === 'undefined') return true
     
     try {
       const userData = localStorage.getItem('user_data')
-      if (!userData) return false
+      if (!userData) {
+        return true // Permitir se não há dados do usuário ainda
+      }
       
       const user = JSON.parse(userData)
       const role = user.role || user.cargo
@@ -60,16 +65,17 @@ export default function PWALayout({ children }: PWALayoutProps) {
       // Permissões básicas baseadas no role
       if (role === 'admin' || role === 'diretor') return true
       if (role === 'encarregador' || role === 'supervisor') {
-        return permission.includes('encarregador') || permission.includes('notificacoes')
+        return permission.includes('encarregador') || permission.includes('supervisor') || permission.includes('notificacoes') || permission.includes('ponto') || permission.includes('perfil')
       }
       if (role === 'funcionario' || role === 'operario') {
-        return permission.includes('ponto') || permission.includes('perfil')
+        return permission.includes('ponto') || permission.includes('perfil') || permission.includes('assinatura') || permission.includes('gruas')
       }
       
-      return false
+      // Fallback: permitir permissões básicas
+      return permission.includes('ponto') || permission.includes('perfil') || permission.includes('assinatura') || permission.includes('gruas')
     } catch (error) {
       console.warn('Erro ao verificar permissão:', error)
-      return false
+      return true // Permitir em caso de erro
     }
   }
   
@@ -77,6 +83,23 @@ export default function PWALayout({ children }: PWALayoutProps) {
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  // Fechar menus quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isUserMenuOpen) {
+        const target = event.target as Element
+        if (!target.closest('[data-user-menu]')) {
+          setIsUserMenuOpen(false)
+        }
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isUserMenuOpen])
   
   // Verificar status de conexão e carregar dados do usuário
   useEffect(() => {
@@ -100,13 +123,23 @@ export default function PWALayout({ children }: PWALayoutProps) {
     
     // Carregar dados do usuário do localStorage
     const userData = localStorage.getItem('user_data')
+    const userProfile = localStorage.getItem('user_profile')
+    
     if (userData) {
       try {
         const parsedUser = JSON.parse(userData)
+        
+        // Adicionar dados do profile se existir
+        if (userProfile) {
+          const parsedProfile = JSON.parse(userProfile)
+          parsedUser.profile = parsedProfile
+        }
+        
         setUser({
           id: parsedUser.id,
           nome: parsedUser.nome,
-          cargo: parsedUser.cargo || parsedUser.role
+          cargo: parsedUser.cargo || parsedUser.role,
+          ...(parsedUser.profile && { profile: parsedUser.profile })
         })
         
         // Carregar documentos pendentes
@@ -211,6 +244,17 @@ export default function PWALayout({ children }: PWALayoutProps) {
     })
   }
 
+  // Adicionar item de gerenciar funcionários para supervisores e admins
+  if (hasPermission("supervisor:visualizar") || hasPermission("admin:visualizar")) {
+    navigationItems.push({
+      name: "Gerenciar",
+      href: "/pwa/gerenciar-funcionarios",
+      icon: Users,
+      description: "Gerenciar funcionários",
+      permission: "supervisor:visualizar"
+    })
+  }
+
   // Adicionar notificações se o usuário tiver permissão e houver notificações pendentes
   if (hasPermission("notificacoes:visualizar") && documentosPendentes > 0) {
     navigationItems.push({
@@ -231,6 +275,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   // Rotas que não precisam do layout (login e redirect)
   const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
   const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
+  
 
   return (
     <PWAErrorBoundary>
@@ -238,12 +283,12 @@ export default function PWALayout({ children }: PWALayoutProps) {
         {shouldShowLayout ? (
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 pb-20">
           {/* Header Minimalista */}
-          <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white sticky top-0 z-40 shadow-lg">
+          <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white sticky top-0 z-40 shadow-lg safe-area-pt">
             <div className="px-4 py-4">
               <div className="flex items-center justify-between">
                 {/* Logo e título */}
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg">
                     <Smartphone className="w-6 h-6 text-white" />
                   </div>
                   <div>
@@ -264,12 +309,61 @@ export default function PWALayout({ children }: PWALayoutProps) {
                   </div>
                 </div>
 
-                {/* User info */}
+                {/* User info com menu dropdown */}
                 {user && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                      <User className="w-5 h-5 text-white" />
-                    </div>
+                  <div className="relative" data-user-menu>
+                    <button
+                      onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                      className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
+                    >
+                      <div className="w-8 h-8 bg-white/30 rounded-full flex items-center justify-center">
+                        <User className="w-4 h-4 text-white" />
+                      </div>
+                    </button>
+
+                    {/* Dropdown menu */}
+                    {isUserMenuOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 z-50">
+                        <div className="p-2">
+                          <div className="px-3 py-2 border-b border-gray-100">
+                            <p className="text-sm font-medium text-gray-900">{user.nome}</p>
+                            <p className="text-xs text-gray-500">{user.cargo}</p>
+                          </div>
+                          
+                          <button
+                            onClick={() => {
+                              setIsUserMenuOpen(false)
+                              router.push('/pwa/perfil')
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                          >
+                            <UserCircle className="w-4 h-4" />
+                            Meu Perfil
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              setIsUserMenuOpen(false)
+                              router.push('/pwa/configuracoes')
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                          >
+                            <Settings className="w-4 h-4" />
+                            Configurações
+                          </button>
+                          
+                          <div className="border-t border-gray-100 my-1"></div>
+                          
+                          <button
+                            onClick={handleLogout}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            Sair do App
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -278,42 +372,50 @@ export default function PWALayout({ children }: PWALayoutProps) {
 
           {/* Conteúdo principal */}
           <main className="px-4 pt-4 pb-24">
-            {/* Indicador de sincronização offline */}
-            <div className="mb-4">
-              <OfflineSyncIndicator />
-            </div>
-            
             {children}
           </main>
 
+          {/* Indicador de sincronização discreto */}
+          <div className="fixed bottom-16 left-0 right-0 z-40 px-4">
+            <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200/50">
+              <OfflineSyncIndicator />
+            </div>
+          </div>
+
           {/* Bottom Navigation - Típico de Apps */}
-          <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50">
+          <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb">
             <div className="grid grid-cols-5 h-16">
-              {filteredNavigationItems.slice(0, 5).map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href
-                return (
-                  <button
-                    key={item.name}
-                    onClick={() => router.push(item.href)}
-                    className={`flex flex-col items-center justify-center gap-1 transition-all ${
-                      isActive 
-                        ? "text-blue-600" 
-                        : "text-gray-500 active:bg-gray-100"
-                    }`}
-                  >
-                    <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform`}>
-                      <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
-                      {isActive && (
-                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full" />
-                      )}
-                    </div>
-                    <span className={`text-[10px] font-medium ${isActive ? 'font-semibold' : ''}`}>
-                      {item.name}
-                    </span>
-                  </button>
-                )
-              })}
+              {filteredNavigationItems.length > 0 ? (
+                filteredNavigationItems.slice(0, 5).map((item) => {
+                  const Icon = item.icon
+                  const isActive = pathname === item.href
+                  return (
+                    <button
+                      key={item.name}
+                      onClick={() => router.push(item.href)}
+                      className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+                        isActive 
+                          ? "text-blue-600" 
+                          : "text-gray-500 active:bg-gray-100"
+                      }`}
+                    >
+                      <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
+                        <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
+                        {isActive && (
+                          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full animate-pulse" />
+                        )}
+                      </div>
+                      <span className={`text-[10px] font-medium transition-all duration-200 ${isActive ? 'font-semibold' : ''}`}>
+                        {item.name}
+                      </span>
+                    </button>
+                  )
+                })
+              ) : (
+                <div className="col-span-5 flex items-center justify-center text-gray-500 text-sm">
+                  Carregando navegação...
+                </div>
+              )}
             </div>
           </nav>
 
@@ -362,11 +464,11 @@ export default function PWALayout({ children }: PWALayoutProps) {
               <div className="mt-6 pt-4 border-t">
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-3 text-red-600 hover:text-red-700"
+                  className="w-full justify-start gap-3 text-red-600 hover:text-red-700 hover:bg-red-50"
                   onClick={handleLogout}
                 >
                   <LogOut className="w-5 h-5" />
-                  Sair do Sistema
+                  Sair do App
                 </Button>
               </div>
             </div>
@@ -390,11 +492,12 @@ export default function PWALayout({ children }: PWALayoutProps) {
         </div>
       )}
         </div>
-      ) : (
+        ) : (
         <div className="min-h-screen">
           {children}
         </div>
       )}
+      
       </PWAAuthGuard>
     </PWAErrorBoundary>
   )

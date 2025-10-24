@@ -42,7 +42,7 @@ export interface UploadDocumentoPayload {
 /**
  * Buscar documentos de um funcionário específico
  */
-export const getDocumentosFuncionario = async (funcionarioId: number): Promise<DocumentoFuncionario[]> => {
+export const getDocumentosFuncionario = async (funcionarioId: number | string): Promise<DocumentoFuncionario[]> => {
   const response = await api.get(`/funcionarios/${funcionarioId}/documentos`);
   return response.data.data || response.data;
 };
@@ -115,7 +115,7 @@ export const deletarDocumento = async (documentoId: string | number): Promise<vo
  * Buscar todos os documentos pendentes de assinatura do usuário logado
  */
 export const getDocumentosPendentes = async (): Promise<DocumentoFuncionario[]> => {
-  const response = await api.get('/funcionarios/documentos/pendentes');
+  const response = await api.get('/assinaturas/pendentes');
   return response.data.data || response.data;
 };
 

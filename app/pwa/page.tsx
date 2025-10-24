@@ -184,7 +184,7 @@ export default function PWAMainPage() {
               <p className="text-sm font-medium text-blue-100 mb-1">Bem-vindo(a),</p>
               <h2 className="text-2xl font-bold">{pwaUserData.user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
             </div>
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center ring-2 ring-white/30">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center ring-2 ring-white/30 shadow-lg">
               <Zap className="w-6 h-6" />
             </div>
           </div>
@@ -207,7 +207,7 @@ export default function PWAMainPage() {
 
           {/* Mini stats */}
           <div className="grid grid-cols-3 gap-2 mt-6">
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-blue-100 font-medium mb-1">Ponto</p>
               <p className="text-sm font-bold">
                 {pwaUserData.pontoHoje?.entrada 
@@ -218,11 +218,11 @@ export default function PWAMainPage() {
                   : '--:--'}
               </p>
             </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-blue-100 font-medium mb-1">Horas</p>
               <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20">
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-blue-100 font-medium mb-1">Docs</p>
               <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
             </div>
@@ -232,9 +232,9 @@ export default function PWAMainPage() {
 
       {/* Status Rápido */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
           <div className="flex flex-col items-center text-center">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 ${
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
               pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
             }`}>
               <CheckCircle className={`w-6 h-6 ${
@@ -248,9 +248,9 @@ export default function PWAMainPage() {
           </div>
         </div>
         
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
           <div className="flex flex-col items-center text-center">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 ${
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
               pwaUserData.documentosPendentes > 0 ? 'bg-orange-100 animate-pulse' : 'bg-gray-100'
             }`}>
               <FileSignature className={`w-6 h-6 ${
@@ -262,9 +262,9 @@ export default function PWAMainPage() {
           </div>
         </div>
         
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
           <div className="flex flex-col items-center text-center">
-            <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center mb-2">
+            <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
               <Clock className="w-6 h-6 text-blue-600" />
             </div>
             <p className="text-base font-bold text-gray-900">{pwaUserData.horasTrabalhadas.split('h')[0]}</p>
@@ -293,7 +293,7 @@ export default function PWAMainPage() {
                 <div
                   key={action.title}
                   onClick={() => router.push(action.href)}
-                  className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-lg transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
+                  className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
                   style={{
                     animationDelay: `${index * 50}ms`
                   }}
@@ -302,7 +302,7 @@ export default function PWAMainPage() {
                   <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   
                   <div className="relative z-10">
-                    <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform`}>
+                    <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
                       <Icon className={`w-6 h-6 ${action.color}`} />
                     </div>
                     <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
@@ -324,13 +324,13 @@ export default function PWAMainPage() {
                 <div
                   key={action.title}
                   onClick={() => router.push(action.href)}
-                  className="bg-white rounded-xl p-3 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer border border-transparent hover:border-gray-200 relative overflow-hidden group"
+                  className="bg-white rounded-xl p-3 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border border-transparent hover:border-gray-200 relative overflow-hidden group"
                   style={{
                     animationDelay: `${(index + 2) * 50}ms`
                   }}
                 >
                   <div className="relative z-10">
-                    <div className={`${action.bgColor} w-8 h-8 rounded-lg flex items-center justify-center mb-2 border ${action.borderColor} group-hover:scale-110 transition-transform`}>
+                    <div className={`${action.bgColor} w-8 h-8 rounded-lg flex items-center justify-center mb-2 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
                       <Icon className={`w-4 h-4 ${action.color}`} />
                     </div>
                     <h3 className="font-medium text-xs text-gray-900 mb-0.5">{action.title}</h3>

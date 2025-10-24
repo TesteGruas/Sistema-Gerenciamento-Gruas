@@ -87,9 +87,24 @@ export default function PWAPontoPage() {
     if (typeof window === 'undefined') return
     
     const userData = localStorage.getItem('user_data')
+    const userProfile = localStorage.getItem('user_profile')
+    
     if (userData) {
       try {
         const parsedUser = JSON.parse(userData)
+        
+        // Adicionar dados do profile se existir
+        if (userProfile) {
+          const parsedProfile = JSON.parse(userProfile)
+          parsedUser.profile = parsedProfile
+        }
+        
+        console.log('🔍 [PWA Ponto] Dados do usuário carregados:', {
+          user_id: parsedUser.id,
+          funcionario_id: parsedUser.profile?.funcionario_id,
+          profile: parsedUser.profile
+        })
+        
         setUser(parsedUser)
         
         // Carregar obra do usuário (mock por enquanto - substituir por API)
@@ -230,8 +245,11 @@ export default function PWAPontoPage() {
       }
 
       const hoje = new Date().toISOString().split('T')[0]
+      const funcionarioId = user.profile?.funcionario_id || user.id
+      console.log('🔍 [PWA Ponto] Fazendo chamada API com funcionario_id:', funcionarioId)
+      
       const data = await pontoApi.getRegistros({
-        funcionario_id: user.id,
+        funcionario_id: funcionarioId,
         data_inicio: hoje,
         data_fim: hoje
       })
@@ -321,7 +339,7 @@ export default function PWAPontoPage() {
       // Preparar dados para envio
       const campoTipo = tipo.toLowerCase().replace(' ', '_')
       const dadosRegistro: any = {
-        funcionario_id: user.id,
+        funcionario_id: user.profile?.funcionario_id || user.id,
         data: hoje,
         [campoTipo]: horaAtual,
         localizacao: location ? `${location.lat}, ${location.lng}` : undefined
@@ -340,7 +358,7 @@ export default function PWAPontoPage() {
           // Se tem algum registro, provavelmente temos um ID
           if (cachedData.entrada || cachedData.saida_almoco || cachedData.volta_almoco || cachedData.saida) {
             const registrosCache = JSON.parse(localStorage.getItem('registros_ponto_completo') || '[]')
-            const registroHoje = registrosCache.find((r: any) => r.data === hoje && r.funcionario_id === user.id)
+            const registroHoje = registrosCache.find((r: any) => r.data === hoje && r.funcionario_id === (user.profile?.funcionario_id || user.id))
             if (registroHoje) {
               registroExistenteId = registroHoje.id
             }
@@ -381,7 +399,7 @@ export default function PWAPontoPage() {
 
       // Verificar se já existe registro para hoje
       const registrosExistentes = await pontoApi.getRegistros({
-        funcionario_id: user.id,
+        funcionario_id: user.profile?.funcionario_id || user.id,
         data_inicio: hoje,
         data_fim: hoje
       })
@@ -453,7 +471,7 @@ export default function PWAPontoPage() {
       
       // Preparar dados para envio
       const dadosRegistro = {
-        funcionario_id: user.id,
+        funcionario_id: user.profile?.funcionario_id || user.id,
         data: hoje,
         [tipo.toLowerCase().replace(' ', '_')]: horaAtual,
         localizacao: location ? `${location.lat}, ${location.lng}` : null,
@@ -464,7 +482,7 @@ export default function PWAPontoPage() {
 
       // Verificar se já existe registro para hoje
       const responseExistente = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${user.profile?.funcionario_id || user.id}&data_inicio=${hoje}&data_fim=${hoje}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -574,7 +592,7 @@ export default function PWAPontoPage() {
       <Card>
         <CardContent className="p-6">
           <div className="text-center">
-            <div className="text-5xl font-mono font-bold text-blue-600 mb-2">
+            <div className="text-5xl font-bold text-blue-600 mb-2">
               {currentTime ? currentTime.toTimeString().slice(0, 8) : '--:--:--'}
             </div>
             <div className="text-lg text-gray-600 mb-4">
@@ -601,7 +619,7 @@ export default function PWAPontoPage() {
       </Card>
 
       {/* Status dos registros */}
-      <Card>
+      <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="w-5 h-5" />
@@ -612,7 +630,7 @@ export default function PWAPontoPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-3 h-3 rounded-full shadow-sm ${
                   registrosHoje.entrada ? 'bg-green-500' : 'bg-gray-300'
                 }`} />
                 <div>
@@ -623,7 +641,7 @@ export default function PWAPontoPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-3 h-3 rounded-full shadow-sm ${
                   registrosHoje.saida_almoco ? 'bg-yellow-500' : 'bg-gray-300'
                 }`} />
                 <div>
@@ -636,7 +654,7 @@ export default function PWAPontoPage() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-3 h-3 rounded-full shadow-sm ${
                   registrosHoje.volta_almoco ? 'bg-yellow-500' : 'bg-gray-300'
                 }`} />
                 <div>
@@ -647,7 +665,7 @@ export default function PWAPontoPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${
+                <div className={`w-3 h-3 rounded-full shadow-sm ${
                   registrosHoje.saida ? 'bg-red-500' : 'bg-gray-300'
                 }`} />
                 <div>
@@ -663,7 +681,7 @@ export default function PWAPontoPage() {
       </Card>
 
       {/* Botões de registro */}
-      <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+      <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-blue-600" />
@@ -680,13 +698,13 @@ export default function PWAPontoPage() {
               <Button
                 onClick={() => registrarPonto("entrada")}
                 disabled={!podeEntrada || isLoading}
-                className={`h-20 flex flex-col gap-2 text-white font-semibold ${
+                className={`h-20 flex flex-col gap-2 text-white font-semibold transition-all duration-200 ${
                   podeEntrada 
-                    ? "bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg" 
+                    ? "bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl active:scale-95" 
                     : "bg-gray-400 cursor-not-allowed"
                 }`}
               >
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center shadow-md">
                   <Play className="w-5 h-5" />
                 </div>
                 <span className="text-base">Entrada</span>
@@ -696,13 +714,13 @@ export default function PWAPontoPage() {
               <Button
                 onClick={() => registrarPonto("saida")}
                 disabled={!podeSaida || isLoading}
-                className={`h-20 flex flex-col gap-2 text-white font-semibold ${
+                className={`h-20 flex flex-col gap-2 text-white font-semibold transition-all duration-200 ${
                   podeSaida 
-                    ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg" 
+                    ? "bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl active:scale-95" 
                     : "bg-gray-400 cursor-not-allowed"
                 }`}
               >
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center shadow-md">
                   <Square className="w-5 h-5" />
                 </div>
                 <span className="text-base">Saída</span>
@@ -716,9 +734,9 @@ export default function PWAPontoPage() {
                 onClick={() => registrarPonto("saida_almoco")}
                 disabled={!podeSaidaAlmoco || isLoading}
                 variant="outline"
-                className={`h-16 flex flex-col gap-1 border-2 ${
+                className={`h-16 flex flex-col gap-1 border-2 transition-all duration-200 ${
                   podeSaidaAlmoco 
-                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700" 
+                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 shadow-md hover:shadow-lg active:scale-95" 
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >
@@ -730,9 +748,9 @@ export default function PWAPontoPage() {
                 onClick={() => registrarPonto("volta_almoco")}
                 disabled={!podeVoltaAlmoco || isLoading}
                 variant="outline"
-                className={`h-16 flex flex-col gap-1 border-2 ${
+                className={`h-16 flex flex-col gap-1 border-2 transition-all duration-200 ${
                   podeVoltaAlmoco 
-                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700" 
+                    ? "border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 shadow-md hover:shadow-lg active:scale-95" 
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >
@@ -847,32 +865,6 @@ export default function PWAPontoPage() {
         </CardContent>
       </Card>
 
-      {/* Informações do funcionário */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="w-5 h-5" />
-            Informações
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-medium">{user?.nome || 'Carregando...'}</p>
-                <p className="text-sm text-gray-500">{user?.cargo || user?.role || 'Carregando...'}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <MapPin className="w-4 h-4" />
-              <span>Localização: {location ? 'Capturada (opcional)' : 'Não capturada (opcional)'}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Status de conexão */}
       {!isOnline && (

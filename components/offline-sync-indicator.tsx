@@ -220,101 +220,32 @@ export function OfflineSyncIndicator() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Indicador de Status */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {getStatusIcon()}
-              <div>
-                <p className="font-medium">{getStatusText()}</p>
-                <p className="text-sm text-gray-500">
-                  {status.lastRefreshCw 
-                    ? `Última sincronização: ${status.lastRefreshCw.toLocaleString('pt-BR')}`
-                    : 'Nunca sincronizado'
-                  }
-                </p>
-              </div>
-            </div>
-            <Badge className={getStatusColor()}>
-              {getStatusText()}
-            </Badge>
+    <div className="px-3 py-2">
+      {/* Indicador de Status Discreto */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {getStatusIcon()}
+          <div>
+            <p className="text-sm font-medium">{getStatusText()}</p>
+            {pendingActions.length > 0 && (
+              <p className="text-xs text-gray-500">
+                {pendingActions.length} ação(ões) pendente(s)
+              </p>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="flex items-center gap-2">
+          {pendingActions.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {pendingActions.length}
+            </Badge>
+          )}
+          <Badge className={`text-xs ${getStatusColor()}`}>
+            {getStatusText()}
+          </Badge>
+        </div>
+      </div>
 
-      {/* Ações Pendentes */}
-      {pendingActions.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-orange-500" />
-                <h3 className="font-medium">Ações Pendentes</h3>
-                <Badge variant="outline">{pendingActions.length}</Badge>
-              </div>
-              <div className="flex gap-2">
-                {status.isOnline && (
-                  <Button size="sm" onClick={retryFailedActions}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Sincronizar
-                  </Button>
-                )}
-                <Button size="sm" variant="outline" onClick={clearAllPendingActions}>
-                  Limpar
-                </Button>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              {pendingActions.slice(0, 5).map(action => (
-                <div key={action.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">
-                      {action.type === 'ponto' && 'Registro de Ponto'}
-                      {action.type === 'documento' && 'Assinatura de Documento'}
-                      {action.type === 'assinatura' && 'Assinatura Digital'}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {action.timestamp.toLocaleString('pt-BR')}
-                    </p>
-                  </div>
-                  {action.retryCount > 0 && (
-                    <Badge variant="destructive" className="text-xs">
-                      {action.retryCount} tentativas
-                    </Badge>
-                  )}
-                </div>
-              ))}
-              
-              {pendingActions.length > 5 && (
-                <p className="text-sm text-gray-500 text-center">
-                  +{pendingActions.length - 5} mais ações pendentes
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Instruções Offline */}
-      {!status.isOnline && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-orange-500 mt-0.5" />
-              <div>
-                <h3 className="font-medium text-orange-800">Modo Offline</h3>
-                <p className="text-sm text-orange-700 mt-1">
-                  Você está offline. Suas ações serão salvas localmente e sincronizadas 
-                  automaticamente quando a conexão for restaurada.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

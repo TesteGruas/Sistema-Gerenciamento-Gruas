@@ -160,7 +160,8 @@ export default function PWAEncarregadorPage() {
       localStorage.setItem('cached_funcionarios', JSON.stringify(dataFuncionarios))
 
       // Carregar registros pendentes de aprovação
-      const dataRegistros = await encarregadorApi.getRegistrosPendentes(user.id)
+      const funcionarioId = user.profile?.funcionario_id || user.funcionario_id || user.id
+      const dataRegistros = await encarregadorApi.getRegistrosPendentes(funcionarioId)
       setRegistrosPendentes(dataRegistros)
       
       // Salvar no cache

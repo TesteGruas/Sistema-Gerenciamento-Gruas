@@ -160,7 +160,7 @@ export const gruasApi = {
   /**
    * Buscar gruas de um funcionário específico
    */
-  listarGruasFuncionario: async (funcionarioId: number): Promise<{ success: boolean; data: Grua[] }> => {
+  listarGruasFuncionario: async (funcionarioId: number | string): Promise<{ success: boolean; data: Grua[] }> => {
     const response = await api.get(`/gruas/funcionario/${funcionarioId}`);
     const gruasBackend = response.data.data || response.data;
     const gruasFrontend = Array.isArray(gruasBackend)

@@ -148,15 +148,28 @@ export default function PWADocumentosPage() {
       }
 
       // Buscar documentos pendentes de assinatura
-      const data = await documentosApi.getDocumentosFuncionario(user.id)
-      // Filtrar apenas documentos do usuário atual
-      const documentosDoUsuario = data.filter((doc: any) => 
-        doc.user_id === user.id.toString() && doc.status === 'aguardando'
-      )
-      setDocumentos(documentosDoUsuario)
-      
-      // Salvar no cache
-      localStorage.setItem('cached_documentos_funcionario', JSON.stringify(data))
+      try {
+        // Tentar primeiro com funcionario_id se disponível
+        const funcionarioId = user.profile?.funcionario_id || user.funcionario_id
+        if (funcionarioId) {
+          console.log('🔍 [PWA Documentos] Usando funcionarioId:', funcionarioId, 'tipo:', typeof funcionarioId)
+          const data = await documentosApi.getDocumentosFuncionario(funcionarioId)
+          const documentosDoUsuario = data.filter((doc: any) => 
+            doc.user_id === user.id.toString() && doc.status === 'aguardando'
+          )
+          setDocumentos(documentosDoUsuario)
+        } else {
+          // Fallback: usar API de documentos pendentes
+          console.log('🔍 [PWA Documentos] Usando API de documentos pendentes')
+          const data = await documentosApi.getDocumentosPendentes()
+          setDocumentos(data)
+        }
+      } catch (error) {
+        console.warn('Erro ao buscar documentos com funcionarioId, tentando API pendentes:', error)
+        // Fallback: usar API de documentos pendentes
+        const data = await documentosApi.getDocumentosPendentes()
+        setDocumentos(data)
+      }
 
     } catch (error: any) {
       console.error('Erro ao carregar documentos:', error)
@@ -294,7 +307,7 @@ export default function PWADocumentosPage() {
           filaAssinaturas.push({
             documentoId: documentoSelecionado.id,
             assinatura: signature,
-            funcionario_id: user.funcionario_id || user.id,
+            funcionario_id: user.profile?.funcionario_id || user.id,
             geoloc,
             timestamp: new Date().toISOString()
           })

@@ -88,7 +88,8 @@ export default function PWAGruasPage() {
       // Tentar buscar gruas do funcionário
       if (user?.id) {
         try {
-          const response = await gruasApi.listarGruasFuncionario(user.id)
+          const funcionarioId = user.profile?.funcionario_id || user.funcionario_id || user.id
+          const response = await gruasApi.listarGruasFuncionario(funcionarioId)
           data = response.data
         } catch (error) {
           console.log('Endpoint de funcionário não disponível, buscando gruas em obra')

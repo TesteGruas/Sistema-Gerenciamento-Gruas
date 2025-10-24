@@ -26,6 +26,7 @@ import {
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface RegistroPonto {
   id: string | number
@@ -49,15 +50,26 @@ export default function PWAEspelhoPontoPage() {
   const [dataFim, setDataFim] = useState("")
   const [assinaturaFuncionario, setAssinaturaFuncionario] = useState("")
   const [assinaturaGestor, setAssinaturaGestor] = useState("")
+  const [registroDetalhes, setRegistroDetalhes] = useState<RegistroPonto | null>(null)
+  const [showDetalhesModal, setShowDetalhesModal] = useState(false)
 
   // Carregar dados do usuário
   useEffect(() => {
     if (typeof window === 'undefined') return
     
     const userData = localStorage.getItem('user_data')
+    const userProfile = localStorage.getItem('user_profile')
+    
     if (userData) {
       try {
         const parsedUser = JSON.parse(userData)
+        
+        // Adicionar dados do profile se existir
+        if (userProfile) {
+          const parsedProfile = JSON.parse(userProfile)
+          parsedUser.profile = parsedProfile
+        }
+        
         setUser(parsedUser)
         
         // Definir período padrão (mês atual)
@@ -87,7 +99,7 @@ export default function PWAEspelhoPontoPage() {
       setLoading(true)
       
       const response = await pontoApi.getRegistros({
-        funcionario_id: user.id,
+        funcionario_id: user.profile?.funcionario_id || user.id,
         data_inicio: dataInicio,
         data_fim: dataFim,
         // 🆕 NOVOS FILTROS DISPONÍVEIS:
@@ -385,66 +397,114 @@ export default function PWAEspelhoPontoPage() {
         </Button>
       </div>
 
-      {/* Registros */}
+      {/* Registros - Layout Mobile */}
       {registros.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Registros de Ponto ({registros.length})
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={compartilhar}>
-                  <Share2 className="w-4 h-4 mr-2" />
-                  Compartilhar
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportarCSV}>
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  CSV
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportarPDF}>
-                  <FileDown className="w-4 h-4 mr-2" />
-                  PDF
-                </Button>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Entrada</TableHead>
-                    <TableHead>Saída Almoço</TableHead>
-                    <TableHead>Volta Almoço</TableHead>
-                    <TableHead>Saída</TableHead>
-                    <TableHead>Horas</TableHead>
-                    <TableHead>Extras</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {registros.map((registro) => (
-                    <TableRow key={registro.id}>
-                      <TableCell>{new Date(registro.data).toLocaleDateString('pt-BR')}</TableCell>
-                      <TableCell>{registro.entrada || '-'}</TableCell>
-                      <TableCell>{registro.saida_almoco || '-'}</TableCell>
-                      <TableCell>{registro.volta_almoco || '-'}</TableCell>
-                      <TableCell>{registro.saida || '-'}</TableCell>
-                      <TableCell>{registro.horas_trabalhadas?.toFixed(2) || '0.00'}h</TableCell>
-                      <TableCell className="text-green-600 font-medium">
-                        {registro.horas_extras?.toFixed(2) || '0.00'}h
-                      </TableCell>
-                      <TableCell>{getStatusBadge(registro.status)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        <div className="space-y-4">
+          {/* Header com ações */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Registros ({registros.length})
+            </h2>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={compartilhar}>
+                <Share2 className="w-4 h-4 mr-1" />
+                <span className="hidden sm:inline">Compartilhar</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportarCSV}>
+                <FileSpreadsheet className="w-4 h-4 mr-1" />
+                <span className="hidden sm:inline">CSV</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportarPDF}>
+                <FileDown className="w-4 h-4 mr-1" />
+                <span className="hidden sm:inline">PDF</span>
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          {/* Cards de registros */}
+          <div className="space-y-3">
+            {registros.map((registro) => (
+              <Card key={registro.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Calendar className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {new Date(registro.data).toLocaleDateString('pt-BR', {
+                            weekday: 'long',
+                            day: '2-digit',
+                            month: 'long'
+                          })}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {new Date(registro.data).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
+                    </div>
+                    {getStatusBadge(registro.status)}
+                  </div>
+
+                  {/* Horários principais */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="bg-green-50 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-sm font-medium text-green-700">Entrada</span>
+                      </div>
+                      <p className="text-lg font-bold text-green-800">
+                        {registro.entrada || '--:--'}
+                      </p>
+                    </div>
+                    
+                    <div className="bg-red-50 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span className="text-sm font-medium text-red-700">Saída</span>
+                      </div>
+                      <p className="text-lg font-bold text-red-800">
+                        {registro.saida || '--:--'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Resumo de horas */}
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 mb-1">Horas Trabalhadas</p>
+                      <p className="text-lg font-bold text-blue-600">
+                        {registro.horas_trabalhadas?.toFixed(1) || '0.0'}h
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-500 mb-1">Horas Extras</p>
+                      <p className="text-lg font-bold text-green-600">
+                        {registro.horas_extras?.toFixed(1) || '0.0'}h
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Botão ver detalhes */}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => {
+                      setRegistroDetalhes(registro)
+                      setShowDetalhesModal(true)
+                    }}
+                  >
+                    <Clock className="w-4 h-4 mr-2" />
+                    Ver Detalhes Completos
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Totalizadores */}
@@ -498,6 +558,110 @@ export default function PWAEspelhoPontoPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de Detalhes do Registro */}
+      <Dialog open={showDetalhesModal} onOpenChange={setShowDetalhesModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Detalhes do Registro
+            </DialogTitle>
+            <DialogDescription>
+              {registroDetalhes && new Date(registroDetalhes.data).toLocaleDateString('pt-BR', {
+                weekday: 'long',
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric'
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {registroDetalhes && (
+            <div className="space-y-4">
+              {/* Status */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Status:</span>
+                {getStatusBadge(registroDetalhes.status)}
+              </div>
+
+              {/* Horários detalhados */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-gray-900">Horários</h4>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-green-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm font-medium text-green-700">Entrada</span>
+                    </div>
+                    <p className="text-lg font-bold text-green-800">
+                      {registroDetalhes.entrada || '--:--'}
+                    </p>
+                  </div>
+                  
+                  <div className="bg-yellow-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <span className="text-sm font-medium text-yellow-700">Saída Almoço</span>
+                    </div>
+                    <p className="text-lg font-bold text-yellow-800">
+                      {registroDetalhes.saida_almoco || '--:--'}
+                    </p>
+                  </div>
+                  
+                  <div className="bg-yellow-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <span className="text-sm font-medium text-yellow-700">Volta Almoço</span>
+                    </div>
+                    <p className="text-lg font-bold text-yellow-800">
+                      {registroDetalhes.volta_almoco || '--:--'}
+                    </p>
+                  </div>
+                  
+                  <div className="bg-red-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                      <span className="text-sm font-medium text-red-700">Saída</span>
+                    </div>
+                    <p className="text-lg font-bold text-red-800">
+                      {registroDetalhes.saida || '--:--'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resumo de horas */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3">Resumo de Horas</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-500 mb-1">Horas Trabalhadas</p>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {registroDetalhes.horas_trabalhadas?.toFixed(1) || '0.0'}h
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-500 mb-1">Horas Extras</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {registroDetalhes.horas_extras?.toFixed(1) || '0.0'}h
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Observações se houver */}
+              {registroDetalhes.observacoes && (
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <h4 className="font-medium text-blue-900 mb-2">Observações</h4>
+                  <p className="text-sm text-blue-800">{registroDetalhes.observacoes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
     </ProtectedRoute>
   )

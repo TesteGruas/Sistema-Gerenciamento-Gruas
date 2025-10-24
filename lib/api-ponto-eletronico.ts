@@ -97,7 +97,7 @@ export interface Funcionario {
 
 export interface RegistroPonto {
   id?: string | number;
-  funcionario_id: number;
+  funcionario_id: number | string;
   funcionario?: Funcionario;
   aprovador?: { nome: string };
   data: string;
@@ -116,7 +116,7 @@ export interface RegistroPonto {
 }
 
 export interface RegistroPontoPayload {
-  funcionario_id: number;
+  funcionario_id: number | string;
   data: string;
   entrada?: string;
   saida_almoco?: string;
@@ -130,7 +130,7 @@ export interface RegistroPontoPayload {
 
 export interface Justificativa {
   id: string | number;
-  funcionario_id: number;
+  funcionario_id: number | string;
   funcionario?: Funcionario;
   aprovador?: { nome: string };
   data: string;
@@ -143,7 +143,7 @@ export interface Justificativa {
 }
 
 export interface JustificativaPayload {
-  funcionario_id: number;
+  funcionario_id: number | string;
   data: string;
   tipo: string;
   motivo: string;
@@ -224,11 +224,11 @@ export const apiFuncionarios = {
 
 export const apiRegistrosPonto = {
   async listar(params?: {
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     data_inicio?: string;
     data_fim?: string;
     status?: string;
-    aprovador_id?: number;
+    aprovador_id?: number | string;
     page?: number;
     limit?: number;
     search?: string;
@@ -343,7 +343,7 @@ export const apiRegistrosPonto = {
    * Útil para corrigir dados inconsistentes em lote
    */
   async recalcular(payload?: {
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     data_inicio?: string;
     data_fim?: string;
     recalcular_todos?: boolean;
@@ -363,7 +363,7 @@ export const apiRegistrosPonto = {
    * Retorna estatísticas de problemas encontrados
    */
   async validar(params?: {
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     data_inicio?: string;
     data_fim?: string;
   }): Promise<{
@@ -393,7 +393,7 @@ export const apiRegistrosPonto = {
    * Obter estatísticas dos registros com filtros
    */
   async obterEstatisticas(params?: {
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     data_inicio?: string;
     data_fim?: string;
     status?: string;
@@ -439,7 +439,7 @@ export const apiRegistrosPonto = {
 
 export const apiJustificativas = {
   async listar(params?: {
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     status?: string;
     data_inicio?: string;
     data_fim?: string;
@@ -534,7 +534,7 @@ export const apiJustificativas = {
   async relatorioMensal(params: {
     mes: number;
     ano: number;
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     obra_id?: number;
     status?: string;
     tipo?: string;
@@ -549,7 +549,7 @@ export const apiJustificativas = {
   async relatorioPeriodo(params: {
     data_inicio: string;
     data_fim: string;
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     obra_id?: number;
     status?: string;
     tipo?: string;
@@ -564,7 +564,7 @@ export const apiJustificativas = {
    */
   async relatorioEstatisticas(params?: {
     periodo?: 'ultimo_mes' | 'ultimos_3_meses' | 'ultimo_ano';
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     obra_id?: number;
   }): Promise<any> {
     const response = await api.get('ponto-eletronico/relatorios/justificativas/estatisticas', { params });
@@ -578,7 +578,7 @@ export const apiJustificativas = {
 
 export const apiHorasExtras = {
   async listar(params?: {
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     data_inicio?: string;
     data_fim?: string;
     status?: string;
@@ -595,7 +595,7 @@ export const apiHorasExtras = {
 
   async estatisticas(params?: {
     periodo?: 'mes' | 'trimestre' | 'ano';
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     mes?: number;
     ano?: number;
   }): Promise<any> {
@@ -633,7 +633,7 @@ export const apiHorasExtras = {
 export const apiGraficos = {
   async horasTrabalhadas(params?: {
     periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     agrupamento?: 'dia' | 'semana' | 'mes';
     mes?: number;
     ano?: number;
@@ -644,7 +644,7 @@ export const apiGraficos = {
 
   async frequencia(params?: {
     periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     mes?: number;
     ano?: number;
   }): Promise<any> {
@@ -664,7 +664,7 @@ export const apiGraficos = {
 
   async horasExtras(params?: {
     periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     agrupamento?: 'dia' | 'semana' | 'mes';
     mes?: number;
     ano?: number;
@@ -675,7 +675,7 @@ export const apiGraficos = {
 
   async atrasos(params?: {
     periodo?: 'semana' | 'mes' | 'trimestre' | 'ano';
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     mes?: number;
     ano?: number;
   }): Promise<any> {
@@ -699,7 +699,7 @@ export const apiGraficos = {
 
 export const apiRelatorios = {
   async espelhoPonto(params: {
-    funcionario_id: number;
+    funcionario_id: number | string;
     mes: number;
     ano: number;
   }): Promise<any> {
@@ -722,7 +722,7 @@ export const apiRelatorios = {
   async frequencia(params: {
     mes: number;
     ano: number;
-    funcionario_id?: number;
+    funcionario_id?: number | string;
     departamento?: string;
   }): Promise<any> {
     const response = await api.get('ponto-eletronico/relatorios/frequencia', { params });
@@ -732,7 +732,7 @@ export const apiRelatorios = {
   async atrasos(params: {
     mes: number;
     ano: number;
-    funcionario_id?: number;
+    funcionario_id?: number | string;
   }): Promise<any> {
     const response = await api.get('ponto-eletronico/relatorios/atrasos', { params });
     return response.data.data || response.data;
@@ -886,11 +886,11 @@ export const utilsPonto = {
  * @deprecated Use apiRegistrosPonto.listar() em vez disso
  */
 export const getRegistros = async (params: {
-  funcionario_id?: number;
+  funcionario_id?: number | string;
   data_inicio?: string;
   data_fim?: string;
   status?: string;
-  aprovador_id?: number;
+  aprovador_id?: number | string;
   // Novos parâmetros
   search?: string;
   obra_id?: number;
@@ -978,7 +978,7 @@ export const rejeitarRegistro = async (
  * @deprecated Use apiRelatorios.espelhoPonto() em vez disso
  */
 export const getEspelhoPonto = async (params: {
-  funcionario_id: number;
+  funcionario_id: number | string;
   mes: number;
   ano: number;
 }): Promise<any> => {

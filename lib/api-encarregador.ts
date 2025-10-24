@@ -45,7 +45,7 @@ export const getFuncionariosDaObra = async (obraId: number): Promise<Funcionario
 /**
  * Buscar registros pendentes de aprovação
  */
-export const getRegistrosPendentes = async (aprovadorId: number): Promise<RegistroPontoEncarregador[]> => {
+export const getRegistrosPendentes = async (aprovadorId: number | string): Promise<RegistroPontoEncarregador[]> => {
   const response = await api.get('/ponto-eletronico/registros', {
     params: {
       status: 'Pendente Aprovação',

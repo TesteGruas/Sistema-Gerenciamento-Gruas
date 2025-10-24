@@ -232,3 +232,6 @@ console.log('   4. Verifique o console do navegador para erros');
 
 console.log('\n✅ Diagnóstico concluído!');
 
+
+
+
