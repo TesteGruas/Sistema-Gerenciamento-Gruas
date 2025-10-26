@@ -127,6 +127,16 @@ export default function PWAMainPage() {
       color: "text-gray-600",
       bgColor: "bg-gray-50",
       borderColor: "border-gray-100"
+    },
+    {
+      title: "Aprovações",
+      description: "Minhas horas extras",
+      icon: CheckCircle,
+      href: "/pwa/aprovacoes",
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      borderColor: "border-orange-100",
+      priority: true
     }
   ]
 

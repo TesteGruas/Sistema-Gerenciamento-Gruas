@@ -24,7 +24,11 @@ import {
   FileText,
   CheckCircle,
   ShieldCheck,
-  Users
+  Users,
+  Monitor,
+  Smartphone,
+  Eye,
+  ExternalLink
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -263,6 +267,107 @@ export default function PWAPerfilPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Links de Teste - Apenas para Desenvolvimento */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-blue-800">
+            <Eye className="w-5 h-5" />
+            Links de Teste
+            <Badge variant="outline" className="text-xs">Desenvolvimento</Badge>
+          </CardTitle>
+          <CardDescription className="text-blue-700">
+            Acesso rápido às páginas de teste do sistema de aprovação de horas extras
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 gap-3">
+            {/* Dashboard de Aprovações */}
+            <Button
+              variant="outline"
+              className="w-full justify-start bg-white hover:bg-blue-50 border-blue-200"
+              onClick={() => router.push('/pwa/aprovacao-detalhes')}
+            >
+              <Monitor className="w-4 h-4 mr-3 text-blue-600" />
+              <div className="text-left">
+                <p className="font-medium text-blue-800">Analisar Aprovação</p>
+                <p className="text-xs text-blue-600">Interface para gestores/supervisores</p>
+              </div>
+              <ExternalLink className="w-4 h-4 ml-auto text-blue-500" />
+            </Button>
+
+            {/* PWA de Aprovações */}
+            <Button
+              variant="outline"
+              className="w-full justify-start bg-white hover:bg-blue-50 border-blue-200"
+              onClick={() => router.push('/pwa/aprovacoes')}
+            >
+              <Smartphone className="w-4 h-4 mr-3 text-green-600" />
+              <div className="text-left">
+                <p className="font-medium text-green-800">Minhas Aprovações</p>
+                <p className="text-xs text-green-600">Interface mobile para funcionários</p>
+              </div>
+              <ExternalLink className="w-4 h-4 ml-auto text-green-500" />
+            </Button>
+
+            {/* Página de Demonstração */}
+            <Button
+              variant="outline"
+              className="w-full justify-start bg-white hover:bg-blue-50 border-blue-200"
+              onClick={() => window.open('/teste-aprovacoes', '_blank')}
+            >
+              <Eye className="w-4 h-4 mr-3 text-purple-600" />
+              <div className="text-left">
+                <p className="font-medium text-purple-800">Demonstração Completa</p>
+                <p className="text-xs text-purple-600">Todas as funcionalidades em uma página</p>
+              </div>
+              <ExternalLink className="w-4 h-4 ml-auto text-purple-500" />
+            </Button>
+
+            {/* Fluxo de Demonstração */}
+            <Button
+              variant="outline"
+              className="w-full justify-start bg-white hover:bg-blue-50 border-blue-200"
+              onClick={() => router.push('/pwa/fluxo-aprovacao-demo')}
+            >
+              <Calendar className="w-4 h-4 mr-3 text-indigo-600" />
+              <div className="text-left">
+                <p className="font-medium text-indigo-800">Fluxo de Aprovação</p>
+                <p className="text-xs text-indigo-600">Demonstração completa do processo</p>
+              </div>
+              <ExternalLink className="w-4 h-4 ml-auto text-indigo-500" />
+            </Button>
+
+            {/* Navegação de Teste */}
+            <Button
+              variant="outline"
+              className="w-full justify-start bg-white hover:bg-blue-50 border-blue-200"
+              onClick={() => window.open('/navegacao-teste', '_blank')}
+            >
+              <ExternalLink className="w-4 h-4 mr-3 text-gray-600" />
+              <div className="text-left">
+                <p className="font-medium text-gray-800">Navegação de Teste</p>
+                <p className="text-xs text-gray-600">Acesso rápido a todas as páginas</p>
+              </div>
+              <ExternalLink className="w-4 h-4 ml-auto text-gray-500" />
+            </Button>
+          </div>
+
+          <div className="mt-4 p-3 bg-blue-100 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-800">Informações</span>
+            </div>
+            <ul className="text-xs text-blue-700 space-y-1">
+              <li>• <strong>Analisar:</strong> Para gestores aprovarem horas extras</li>
+              <li>• <strong>PWA:</strong> Para funcionários acompanharem aprovações</li>
+              <li>• <strong>Demonstração:</strong> Visualização completa do sistema</li>
+              <li>• <strong>Fluxo:</strong> Processo completo passo a passo</li>
+              <li>• <strong>Navegação:</strong> Links organizados para testes</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Modo de Teste - Simular Gestor */}
       <Card className={isSimulatingManager ? "border-2 border-orange-500 bg-orange-50" : "border border-gray-200"}>

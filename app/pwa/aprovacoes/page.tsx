@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Clock, 
@@ -14,7 +15,9 @@ import {
   ArrowLeft,
   AlertTriangle,
   Calendar,
-  User
+  User,
+  Eye,
+  ExternalLink
 } from 'lucide-react'
 import { 
   mockAprovacoes, 
@@ -24,11 +27,15 @@ import {
   formatarTempoRelativo,
   getStatusColor
 } from '@/lib/mock-data-aprovacoes'
+import { useRouter } from 'next/navigation'
 
 export default function PWAAprovacoesPage() {
+  const router = useRouter();
   const [aprovacoes, setAprovacoes] = useState<AprovacaoHorasExtras[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('todas');
+  const [showDetalhes, setShowDetalhes] = useState(false);
+  const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<AprovacaoHorasExtras | null>(null);
 
   // Simular carregamento de dados do funcionário logado
   useEffect(() => {
@@ -56,6 +63,11 @@ export default function PWAAprovacoesPage() {
     setLoading(true);
     await new Promise(resolve => setTimeout(resolve, 1000));
     setLoading(false);
+  };
+
+  const handleVerDetalhes = (aprovacao: AprovacaoHorasExtras) => {
+    setAprovacaoSelecionada(aprovacao);
+    setShowDetalhes(true);
   };
 
   const getStatusIcon = (status: string) => {
@@ -194,7 +206,11 @@ export default function PWAAprovacoesPage() {
               </Card>
             ) : (
               aprovacoes.map(aprovacao => (
-                <Card key={aprovacao.id} className="p-4">
+                <Card 
+                  key={aprovacao.id} 
+                  className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleVerDetalhes(aprovacao)}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       {getStatusIcon(aprovacao.status)}
@@ -252,7 +268,11 @@ export default function PWAAprovacoesPage() {
               </Card>
             ) : (
               pendentes.map(aprovacao => (
-                <Card key={aprovacao.id} className="p-4">
+                <Card 
+                  key={aprovacao.id} 
+                  className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleVerDetalhes(aprovacao)}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <Clock className="w-5 h-5 text-orange-600" />
@@ -305,7 +325,11 @@ export default function PWAAprovacoesPage() {
               </Card>
             ) : (
               aprovadas.map(aprovacao => (
-                <Card key={aprovacao.id} className="p-4">
+                <Card 
+                  key={aprovacao.id} 
+                  className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleVerDetalhes(aprovacao)}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
@@ -366,7 +390,11 @@ export default function PWAAprovacoesPage() {
               </Card>
             ) : (
               [...rejeitadas, ...canceladas].map(aprovacao => (
-                <Card key={aprovacao.id} className="p-4">
+                <Card 
+                  key={aprovacao.id} 
+                  className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleVerDetalhes(aprovacao)}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       {aprovacao.status === 'rejeitado' ? (
@@ -452,6 +480,136 @@ export default function PWAAprovacoesPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Dialog de Detalhes */}
+        <Dialog open={showDetalhes} onOpenChange={setShowDetalhes}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="w-5 h-5" />
+                Detalhes da Aprovação
+              </DialogTitle>
+              <DialogDescription>
+                Informações completas sobre suas horas extras
+              </DialogDescription>
+            </DialogHeader>
+            
+            {aprovacaoSelecionada && (
+              <div className="space-y-4">
+                {/* Status */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(aprovacaoSelecionada.status)}
+                    <span className="font-medium">Status</span>
+                  </div>
+                  <Badge className={getStatusColor(aprovacaoSelecionada.status)}>
+                    {getStatusText(aprovacaoSelecionada.status)}
+                  </Badge>
+                </div>
+
+                {/* Informações principais */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Data do Trabalho:</span>
+                    <span className="font-medium">{formatarData(aprovacaoSelecionada.data_trabalho)}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Horário:</span>
+                    <span className="font-medium">
+                      {aprovacaoSelecionada.registro.entrada} - {aprovacaoSelecionada.registro.saida}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Total Trabalhado:</span>
+                    <span className="font-medium">{aprovacaoSelecionada.registro.horas_trabalhadas}h</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Horas Extras:</span>
+                    <span className="font-bold text-orange-600">{aprovacaoSelecionada.horas_extras}h</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Obra:</span>
+                    <span className="font-medium">{aprovacaoSelecionada.funcionario.obra}</span>
+                  </div>
+                </div>
+
+                {/* Informações de prazo */}
+                {aprovacaoSelecionada.status === 'pendente' && (
+                  <div className={`rounded-lg p-3 ${
+                    new Date(aprovacaoSelecionada.data_limite) < new Date() 
+                      ? 'bg-red-50 border border-red-200' 
+                      : 'bg-orange-50 border border-orange-200'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <AlertTriangle className={`w-4 h-4 ${
+                        new Date(aprovacaoSelecionada.data_limite) < new Date() 
+                          ? 'text-red-600' 
+                          : 'text-orange-600'
+                      }`} />
+                      <span className={`text-sm font-medium ${
+                        new Date(aprovacaoSelecionada.data_limite) < new Date() 
+                          ? 'text-red-800' 
+                          : 'text-orange-800'
+                      }`}>
+                        {new Date(aprovacaoSelecionada.data_limite) < new Date() 
+                          ? 'Prazo Expirado' 
+                          : 'Aguardando Aprovação'
+                        }
+                      </span>
+                    </div>
+                    <p className={`text-xs ${
+                      new Date(aprovacaoSelecionada.data_limite) < new Date() 
+                        ? 'text-red-700' 
+                        : 'text-orange-700'
+                    }`}>
+                      Prazo limite: {formatarDataHora(aprovacaoSelecionada.data_limite)}
+                    </p>
+                  </div>
+                )}
+
+                {/* Informações de aprovação */}
+                {aprovacaoSelecionada.status === 'aprovado' && aprovacaoSelecionada.data_aprovacao && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span className="font-medium text-sm text-green-800">Aprovado</span>
+                    </div>
+                    <p className="text-xs text-green-700">
+                      Aprovado em {formatarDataHora(aprovacaoSelecionada.data_aprovacao)} por {aprovacaoSelecionada.supervisor.nome}
+                    </p>
+                  </div>
+                )}
+
+                {/* Observações */}
+                {aprovacaoSelecionada.observacoes && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <h4 className="font-medium text-sm text-blue-800 mb-1">Observações</h4>
+                    <p className="text-sm text-blue-700">{aprovacaoSelecionada.observacoes}</p>
+                  </div>
+                )}
+
+                {/* Botão para Dashboard (se for gestor) */}
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setShowDetalhes(false);
+                      router.push('/pwa/aprovacao-detalhes');
+                    }}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Analisar Aprovação
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
