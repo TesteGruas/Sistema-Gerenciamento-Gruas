@@ -66,8 +66,14 @@ export default function PWAAprovacoesPage() {
   };
 
   const handleVerDetalhes = (aprovacao: AprovacaoHorasExtras) => {
-    setAprovacaoSelecionada(aprovacao);
-    setShowDetalhes(true);
+    // Se for aprovação pendente, vai direto para assinatura
+    if (aprovacao.status === 'pendente') {
+      router.push('/pwa/aprovacao-assinatura');
+    } else {
+      // Se for outro status, mostra detalhes
+      setAprovacaoSelecionada(aprovacao);
+      setShowDetalhes(true);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -592,20 +598,21 @@ export default function PWAAprovacoesPage() {
                   </div>
                 )}
 
-                {/* Botão para Dashboard (se for gestor) */}
-                <div className="pt-2">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      setShowDetalhes(false);
-                      router.push('/pwa/aprovacao-detalhes');
-                    }}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    Analisar Aprovação
-                  </Button>
-                </div>
+                {/* Botão para Assinatura (se for pendente) */}
+                {aprovacaoSelecionada.status === 'pendente' && (
+                  <div className="pt-2">
+                    <Button
+                      className="w-full bg-green-600 hover:bg-green-700"
+                      onClick={() => {
+                        setShowDetalhes(false);
+                        router.push('/pwa/aprovacao-assinatura');
+                      }}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Assinar e Aprovar
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </DialogContent>

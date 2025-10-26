@@ -282,16 +282,16 @@ export default function PWAPerfilPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 gap-3">
-            {/* Dashboard de Aprovações */}
+            {/* Assinatura Digital */}
             <Button
               variant="outline"
               className="w-full justify-start bg-white hover:bg-blue-50 border-blue-200"
-              onClick={() => router.push('/pwa/aprovacao-detalhes')}
+              onClick={() => router.push('/pwa/aprovacao-assinatura')}
             >
               <Monitor className="w-4 h-4 mr-3 text-blue-600" />
               <div className="text-left">
-                <p className="font-medium text-blue-800">Analisar Aprovação</p>
-                <p className="text-xs text-blue-600">Interface para gestores/supervisores</p>
+                <p className="font-medium text-blue-800">Assinatura Digital</p>
+                <p className="text-xs text-blue-600">Aprovar horas extras com assinatura</p>
               </div>
               <ExternalLink className="w-4 h-4 ml-auto text-blue-500" />
             </Button>
@@ -359,7 +359,7 @@ export default function PWAPerfilPage() {
               <span className="text-sm font-medium text-blue-800">Informações</span>
             </div>
             <ul className="text-xs text-blue-700 space-y-1">
-              <li>• <strong>Analisar:</strong> Para gestores aprovarem horas extras</li>
+              <li>• <strong>Assinatura:</strong> Para gestores aprovarem com assinatura digital</li>
               <li>• <strong>PWA:</strong> Para funcionários acompanharem aprovações</li>
               <li>• <strong>Demonstração:</strong> Visualização completa do sistema</li>
               <li>• <strong>Fluxo:</strong> Processo completo passo a passo</li>
