@@ -17,7 +17,8 @@ import {
   Calendar,
   User,
   Eye,
-  ExternalLink
+  ExternalLink,
+  CheckSquare
 } from 'lucide-react'
 import { 
   mockAprovacoes, 
@@ -149,6 +150,18 @@ export default function PWAAprovacoesPage() {
         <p className="text-sm text-gray-600">Acompanhe o status das suas horas extras</p>
       </div>
 
+      {/* Botão de Aprovação em Massa - Posição Fixa */}
+      <div className="bg-white border-b border-gray-200 p-4">
+        <Button
+          onClick={() => router.push('/pwa/aprovacao-massa')}
+          className="w-full bg-blue-600 text-white hover:bg-blue-700"
+          disabled={loading}
+        >
+          <CheckSquare className="w-4 h-4 mr-2" />
+          Aprovação em Massa
+        </Button>
+      </div>
+
       <div className="p-4 space-y-4">
         {/* Resumo */}
         <Card>
@@ -166,7 +179,7 @@ export default function PWAAprovacoesPage() {
           </CardContent>
         </Card>
 
-        {/* Botão de atualizar */}
+        {/* Botão de Atualizar */}
         <div className="flex justify-end">
           <Button
             variant="outline"

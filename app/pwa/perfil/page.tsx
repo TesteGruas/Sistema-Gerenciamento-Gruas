@@ -28,7 +28,8 @@ import {
   Monitor,
   Smartphone,
   Eye,
-  ExternalLink
+  ExternalLink,
+  CheckSquare
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -310,6 +311,20 @@ export default function PWAPerfilPage() {
               <ExternalLink className="w-4 h-4 ml-auto text-green-500" />
             </Button>
 
+            {/* Aprovação em Massa */}
+            <Button
+              variant="outline"
+              className="w-full justify-start bg-white hover:bg-blue-50 border-blue-200"
+              onClick={() => router.push('/pwa/aprovacao-massa')}
+            >
+              <CheckSquare className="w-4 h-4 mr-3 text-purple-600" />
+              <div className="text-left">
+                <p className="font-medium text-purple-800">Aprovação em Massa</p>
+                <p className="text-xs text-purple-600">Selecionar múltiplas aprovações</p>
+              </div>
+              <ExternalLink className="w-4 h-4 ml-auto text-purple-500" />
+            </Button>
+
             {/* Página de Demonstração */}
             <Button
               variant="outline"
@@ -361,6 +376,7 @@ export default function PWAPerfilPage() {
             <ul className="text-xs text-blue-700 space-y-1">
               <li>• <strong>Assinatura:</strong> Para gestores aprovarem com assinatura digital</li>
               <li>• <strong>PWA:</strong> Para funcionários acompanharem aprovações</li>
+              <li>• <strong>Massa:</strong> Selecionar múltiplas aprovações para assinar</li>
               <li>• <strong>Demonstração:</strong> Visualização completa do sistema</li>
               <li>• <strong>Fluxo:</strong> Processo completo passo a passo</li>
               <li>• <strong>Navegação:</strong> Links organizados para testes</li>
