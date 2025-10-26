@@ -213,5 +213,12 @@
   "handle_links": "preferred",
   "scope_extensions": [
     { "origin": "*.irbana.com" }
+  ],
+  "permissions": [
+    "camera",
+    "geolocation"
+  ],
+  "features": [
+    "camera"
   ]
 }

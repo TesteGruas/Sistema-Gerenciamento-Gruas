@@ -21,12 +21,10 @@ import {
   RefreshCw,
   MapPinOff,
   Shield,
-  FileSignature,
-  Camera
+  FileSignature
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
-import { PhotoCapture } from "@/components/photo-capture"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { 
   obterLocalizacaoAtual, 
@@ -59,8 +57,6 @@ export default function PWAPontoPage() {
   const [assinaturaDataUrl, setAssinaturaDataUrl] = useState<string | null>(null)
   const [tipoRegistroPendente, setTipoRegistroPendente] = useState<string | null>(null)
   const [horasExtras, setHorasExtras] = useState<number>(0)
-  const [showPhotoCapture, setShowPhotoCapture] = useState(false)
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -307,16 +303,6 @@ export default function PWAPontoPage() {
   }
 
   const registrarPonto = async (tipo: string) => {
-    // Verificar se há foto capturada
-    if (!capturedPhoto) {
-      toast({
-        title: "📷 Foto obrigatória",
-        description: "Você deve capturar uma foto antes de registrar o ponto",
-        variant: "destructive"
-      })
-      setShowPhotoCapture(true)
-      return
-    }
 
     // Geolocalização agora é opcional - não bloqueia o registro
     if (validacaoLocalizacao && !validacaoLocalizacao.valido) {
@@ -491,16 +477,6 @@ export default function PWAPontoPage() {
     await completarRegistroComAssinatura(tipoRegistroPendente, signatureDataUrl)
   }
 
-  // Lidar com foto capturada
-  const handlePhotoTaken = (photoData: string) => {
-    setCapturedPhoto(photoData)
-    setShowPhotoCapture(false)
-    toast({
-      title: "Foto capturada!",
-      description: "Foto salva com sucesso. Agora você pode registrar o ponto.",
-      variant: "default"
-    })
-  }
 
   // Completar registro com assinatura de hora extra
   const completarRegistroComAssinatura = async (tipo: string, assinatura: string) => {
@@ -795,45 +771,14 @@ export default function PWAPontoPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {/* Aviso sobre foto obrigatória */}
-            {!capturedPhoto && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                <div className="flex items-center gap-2 text-red-700">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    📷 Foto obrigatória: Você deve capturar uma foto antes de registrar o ponto
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Botão de foto */}
-            <div className="flex justify-center">
-              <Button
-                onClick={() => setShowPhotoCapture(true)}
-                variant="outline"
-                className={`flex items-center gap-2 border-2 shadow-md hover:shadow-lg transition-all duration-200 ${
-                  capturedPhoto 
-                    ? "border-green-300 bg-green-50 hover:bg-green-100 text-green-700" 
-                    : "border-red-300 bg-red-50 hover:bg-red-100 text-red-700"
-                }`}
-              >
-                <Camera className="w-5 h-5" />
-                {capturedPhoto ? "Foto Capturada ✓" : "📷 Foto Obrigatória - Capturar"}
-              </Button>
-            </div>
 
             {/* Botão único baseado no próximo registro */}
             {proximoRegistro ? (
               <div className="flex justify-center">
                 <Button
                   onClick={() => registrarPonto(proximoRegistro.tipo)}
-                  disabled={isLoading || !capturedPhoto}
-                  className={`h-24 w-full max-w-sm flex flex-col gap-3 text-white font-semibold transition-all duration-200 ${
-                    capturedPhoto
-                      ? `bg-gradient-to-br ${proximoRegistro.cor} shadow-lg hover:shadow-xl active:scale-95` 
-                      : "bg-gray-400 cursor-not-allowed"
-                  }`}
+                  disabled={isLoading}
+                  className={`h-24 w-full max-w-sm flex flex-col gap-3 text-white font-semibold transition-all duration-200 bg-gradient-to-br ${proximoRegistro.cor} shadow-lg hover:shadow-xl active:scale-95`}
                 >
                   <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shadow-md">
                     <proximoRegistro.icone className="w-6 h-6" />
@@ -1036,14 +981,6 @@ export default function PWAPontoPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Componente de Captura de Foto */}
-      <PhotoCapture
-        isOpen={showPhotoCapture}
-        onClose={() => setShowPhotoCapture(false)}
-        onPhotoTaken={handlePhotoTaken}
-        title="Capturar Foto para Ponto"
-        description="Tire uma foto para confirmar sua presença no local de trabalho"
-      />
     </div>
     </ProtectedRoute>
   )

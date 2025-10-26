@@ -4,7 +4,7 @@
 // Implementa estratégias avançadas de cache,
 // sincronização em background e push notifications
 
-const VERSION = '3.1.0';
+const VERSION = '3.2.0';
 const CACHE_PREFIX = 'irbana-pwa';
 const CACHE_STATIC = `${CACHE_PREFIX}-static-v${VERSION}`;
 const CACHE_DYNAMIC = `${CACHE_PREFIX}-dynamic-v${VERSION}`;
