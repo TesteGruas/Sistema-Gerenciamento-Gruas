@@ -201,11 +201,51 @@ export default function FinanceiroPage() {
     }
   }
 
-  // Carregar dados quando o componente for montado
+  const [selectedPeriod, setSelectedPeriod] = useState('mes')
+  const [fluxoCaixaDiario, setFluxoCaixaDiario] = useState<any[]>([])
+
+  // Função para carregar fluxo de caixa diário
+  const loadDailyCashFlow = async () => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+      const token = localStorage.getItem('access_token')
+      
+      if (!token) return
+      
+      let url = `${apiUrl}/api/financial-data`
+      
+      // Adicionar parâmetros de período
+      if (selectedPeriod === 'hoje') {
+        url += '?periodo=hoje'
+      } else if (selectedPeriod === 'semana') {
+        url += '?periodo=semana'
+      }
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.data?.fluxoCaixa) {
+          setFluxoCaixaDiario(data.data.fluxoCaixa)
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar fluxo de caixa diário:', error)
+    }
+  }
+
+  // Carregar dados quando o componente for montado ou quando o período mudar
   useEffect(() => {
     loadFinancialData()
-  }, [])
-  const [selectedPeriod, setSelectedPeriod] = useState('hoje')
+    if (selectedPeriod === 'hoje' || selectedPeriod === 'semana') {
+      loadDailyCashFlow()
+    }
+  }, [selectedPeriod])
 
   const stats = [
     { 
@@ -375,22 +415,48 @@ export default function FinanceiroPage() {
             ))}
           </div>
 
+          {/* Seletor de Período */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Filtrar por Período
+                </CardTitle>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Selecione o período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hoje">Hoje</SelectItem>
+                    <SelectItem value="semana">Esta Semana</SelectItem>
+                    <SelectItem value="mes">Últimos 6 Meses</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+          </Card>
+
           {/* Gráficos */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
-                  Fluxo de Caixa Mensal
+                  Fluxo de Caixa {selectedPeriod === 'mes' ? 'Mensal' : selectedPeriod === 'semana' ? 'Semanal' : 'Diário'}
                 </CardTitle>
-                <CardDescription>Entradas e saídas por mês</CardDescription>
+                <CardDescription>
+                  {selectedPeriod === 'mes' && 'Entradas e saídas por mês'}
+                  {selectedPeriod === 'semana' && 'Entradas e saídas por dia da semana'}
+                  {selectedPeriod === 'hoje' && 'Entradas e saídas do dia'}
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                {financialData.fluxoCaixa.length > 0 ? (
+                {((selectedPeriod === 'hoje' || selectedPeriod === 'semana') && fluxoCaixaDiario.length > 0 ? fluxoCaixaDiario : financialData.fluxoCaixa).length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={financialData.fluxoCaixa}>
+                    <BarChart data={(selectedPeriod === 'hoje' || selectedPeriod === 'semana') && fluxoCaixaDiario.length > 0 ? fluxoCaixaDiario : financialData.fluxoCaixa}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="mes" />
+                      <XAxis dataKey={selectedPeriod === 'hoje' ? 'dia' : selectedPeriod === 'semana' ? 'dia' : 'mes'} />
                       <YAxis />
                       <Tooltip 
                         formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}

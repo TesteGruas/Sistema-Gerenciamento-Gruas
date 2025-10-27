@@ -21,14 +21,11 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
         return
       }
 
-      console.log('[PWA Auth Guard] Verificando auth para:', pathname)
-
       // Permitir acesso sem autenticação para rotas públicas
       const publicPaths = ['/pwa/login', '/pwa/redirect', '/pwa/test-api']
       const isPublicPath = publicPaths.some(path => pathname === path || pathname?.startsWith(path))
       
       if (isPublicPath) {
-        console.log('[PWA Auth Guard] Rota pública, permitindo acesso')
         setIsLoading(false)
         setIsAuthenticated(true)
         return
@@ -39,7 +36,6 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       const userData = localStorage.getItem('user_data')
 
       if (!token || !userData) {
-        console.log('[PWA Auth Guard] Sem credenciais, redirecionando para login')
         setIsLoading(false)
         setIsAuthenticated(false)
         router.push('/pwa/login')
@@ -57,7 +53,6 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
               const isExpired = payload.exp * 1000 < Date.now()
               
               if (isExpired) {
-                console.log('[PWA Auth Guard] Token expirado')
                 localStorage.removeItem('access_token')
                 localStorage.removeItem('user_data')
                 localStorage.removeItem('refresh_token')
@@ -68,15 +63,14 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
               }
             }
           } catch (decodeError) {
-            console.warn('[PWA Auth Guard] Não foi possível decodificar token, mas permitindo acesso')
+            // Token existe, permitir acesso mesmo com erro de decodificação
           }
         }
       } catch (error) {
-        console.warn('[PWA Auth Guard] Erro ao validar token, mas permitindo acesso:', error)
+        // Token existe, permitir acesso mesmo com erro
       }
 
       // Token existe, permitir acesso
-      console.log('[PWA Auth Guard] Autenticado, permitindo acesso')
       setIsAuthenticated(true)
       setIsLoading(false)
     }

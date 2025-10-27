@@ -37,7 +37,6 @@ import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { UserDropdown } from "@/components/user-dropdown"
 import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
 import { GlobalSearch } from "@/components/global-search"
-import { PermissionsDebug } from "@/components/permissions-debug"
 
 // Tipos para navegação
 interface NavigationItem {
@@ -527,13 +526,6 @@ export default function DashboardLayout({
         </nav>
 
         <div className="p-4 border-t border-gray-200">
-          {/* Debug info */}
-          <div className="mb-2 p-2 bg-gray-100 rounded text-xs">
-            <div>Perfil: {perfil?.nome || 'Carregando...'}</div>
-            <div>Admin: {isAdminFromPermissions() ? 'Sim' : 'Não'}</div>
-            <div>Permissões: {permissionsLoading ? 'Carregando...' : 'Carregadas'}</div>
-          </div>
-          
           <Button
             variant="ghost"
             className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -583,9 +575,6 @@ export default function DashboardLayout({
       
       {/* Global Loading */}
       <GlobalLoading show={false} />
-      
-      {/* Debug de Permissões */}
-      <PermissionsDebug />
     </div>
   )
 }

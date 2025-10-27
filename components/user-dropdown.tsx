@@ -30,7 +30,6 @@ export function UserDropdown() {
         const userData = await AuthService.getCurrentUser()
         setUser(userData)
       } catch (error) {
-        console.error('Erro ao carregar usuário:', error)
         // Dados mock para desenvolvimento
         setUser({
           nome: 'Usuário Teste',
@@ -61,10 +60,15 @@ export function UserDropdown() {
 
   const handleEditUser = () => {
     setIsDialogOpen(true)
+    // Forçar fechar qualquer dropdown aberto
   }
 
   const handleCloseDialog = () => {
     setIsDialogOpen(false)
+  }
+  
+  const handleUserUpdated = (updatedUser: any) => {
+    setUser(updatedUser)
   }
 
   const handlePasswordReset = () => {
@@ -85,7 +89,7 @@ export function UserDropdown() {
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-8 w-8 rounded-full">
             <Avatar className="h-8 w-8">
@@ -128,7 +132,7 @@ export function UserDropdown() {
         isOpen={isDialogOpen}
         onClose={handleCloseDialog}
         user={user}
-        onUserUpdated={(updatedUser) => setUser(updatedUser)}
+        onUserUpdated={handleUserUpdated}
       />
     </>
   )

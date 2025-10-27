@@ -20,19 +20,16 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
   
   // Verificar se é um ID numérico válido
   if (funcionarioId && !isNaN(Number(funcionarioId))) {
-    console.log('✅ [getFuncionarioId] ID do funcionário encontrado nos dados do usuário:', funcionarioId)
     return Number(funcionarioId)
   }
   
   // Se o user.id for numérico, usar como fallback (pode ser o mesmo ID)
   if (user.id && !isNaN(Number(user.id))) {
-    console.log('⚠️ [getFuncionarioId] Usando ID do usuário como fallback:', user.id)
     return Number(user.id)
   }
   
   // Se não encontrar ID numérico e o user.id for UUID, tentar buscar na API
   if (user.id && typeof user.id === 'string' && user.id.includes('-')) {
-    console.log('⚠️ [getFuncionarioId] ID do usuário é UUID, tentando buscar funcionário...')
     
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
@@ -60,20 +57,16 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
         )
         
         if (funcionario && funcionario.id && !isNaN(Number(funcionario.id))) {
-          console.log('✅ [getFuncionarioId] ID do funcionário encontrado via busca:', funcionario.id)
           return Number(funcionario.id)
         }
       }
       
-      console.warn('⚠️ [getFuncionarioId] ID do funcionário não encontrado na API')
       return null
     } catch (error) {
-      console.error('❌ [getFuncionarioId] Erro ao buscar ID do funcionário:', error)
       return null
     }
   }
   
-  console.warn('⚠️ [getFuncionarioId] ID do funcionário não encontrado')
   return null
 }
 

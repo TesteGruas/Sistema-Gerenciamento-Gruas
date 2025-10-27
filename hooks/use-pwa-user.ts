@@ -19,7 +19,13 @@ export function usePWAUser(): PWAUserData {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let isMounted = true
+    let intervalId: NodeJS.Timeout | null = null
+
     const loadUserData = async () => {
+      // Evitar execuções múltiplas simultâneas
+      if (!isMounted) return
+
       try {
         setLoading(true)
         setError(null)
@@ -37,6 +43,7 @@ export function usePWAUser(): PWAUserData {
         }
 
         const parsedUser = JSON.parse(userData)
+        if (!isMounted) return
         setUser(parsedUser)
 
         const token = localStorage.getItem('access_token')
@@ -54,11 +61,8 @@ export function usePWAUser(): PWAUserData {
           
           // Se não encontrar ID numérico, pular carregamento do ponto
           if (!funcionarioId) {
-            console.warn('🔍 [usePWAUser] ID do funcionário não disponível, pulando carregamento do ponto')
             return
           }
-          
-          console.log('🔍 [usePWAUser] Carregando ponto para funcionarioId:', funcionarioId)
           
           const pontoResponse = await fetch(
             `${apiUrl}/api/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${funcionarioId}`,
@@ -70,7 +74,7 @@ export function usePWAUser(): PWAUserData {
             }
           )
 
-          if (pontoResponse.ok) {
+          if (pontoResponse.ok && isMounted) {
             const pontoData = await pontoResponse.json()
             if (pontoData.data && pontoData.data.length > 0) {
               const ponto = pontoData.data[0]
@@ -111,14 +115,14 @@ export function usePWAUser(): PWAUserData {
               }
             }
           } else {
-            console.warn('[PWA User Hook] Endpoint de ponto não disponível ou retornou erro:', pontoResponse.status)
           }
         } catch (pontoError) {
-          console.warn('[PWA User Hook] Erro ao carregar ponto (continuando sem dados):', pontoError)
           // Não lançar erro, apenas continuar sem dados de ponto
           // Definir valores padrão para evitar quebras
-          setPontoHoje(null)
-          setHorasTrabalhadas('0h 0min')
+          if (isMounted) {
+            setPontoHoje(null)
+            setHorasTrabalhadas('0h 0min')
+          }
         }
 
         // Carregar documentos pendentes (silenciosamente, sem quebrar a página)
@@ -134,33 +138,42 @@ export function usePWAUser(): PWAUserData {
             }
           )
 
-          if (docsResponse.ok) {
+          if (docsResponse.ok && isMounted) {
             const docsData = await docsResponse.json()
             setDocumentosPendentes(docsData.data?.length || 0)
-          } else {
-            console.warn('[PWA User Hook] Endpoint de documentos não disponível ou retornou erro:', docsResponse.status)
           }
         } catch (docsError) {
-          console.warn('[PWA User Hook] Erro ao carregar documentos (continuando sem dados):', docsError)
           // Não lançar erro, apenas continuar sem dados de documentos
         }
 
       } catch (err) {
         console.error('Erro ao carregar dados do usuário:', err)
-        setError(err instanceof Error ? err.message : 'Erro desconhecido')
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Erro desconhecido')
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
+    // Carregar dados inicialmente
     loadUserData()
 
-    // Atualizar dados a cada 1 minuto
-    const interval = setInterval(() => {
-      loadUserData()
+    // Atualizar dados a cada 1 minuto (apenas se o componente ainda estiver montado)
+    intervalId = setInterval(() => {
+      if (isMounted) {
+        loadUserData()
+      }
     }, 60 * 1000)
 
-    return () => clearInterval(interval)
+    return () => {
+      isMounted = false
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
   }, [])
 
   return { 

@@ -137,7 +137,7 @@ const funcionarioUpdateSchema = Joi.object({
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
     const limit = Math.min(parseInt(req.query.limit) || 10, 100)
@@ -396,7 +396,12 @@ router.get('/:id', async (req, res) => {
             nome,
             cidade,
             estado,
-            status
+            status,
+            cliente:clientes(
+              id,
+              nome,
+              cnpj
+            )
           )
         )
       `)
@@ -420,13 +425,17 @@ router.get('/:id', async (req, res) => {
     const alocacoesAtivas = data.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
     const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
 
+    // Adicionar todas as obras (incluindo finalizadas) para histórico completo
+    const todasObras = data.funcionarios_obras || []
+
     // Adicionar informações sobre o usuário vinculado e obra atual
     const responseData = {
       ...data,
       usuario_existe: !!data.usuario,
       usuario_criado: !!data.usuario,
       obra_atual: obraAtual,
-      obras_vinculadas: alocacoesAtivas
+      obras_vinculadas: alocacoesAtivas,
+      historico_obras: todasObras // Todas as obras, incluindo finalizadas
     }
 
     res.json({
@@ -1357,6 +1366,86 @@ router.post('/:id/desassociar-gruas', async (req, res) => {
  *       404:
  *         description: Obra não encontrada
  */
+/**
+ * @swagger
+ * /api/funcionarios/{id}/historico-obras:
+ *   get:
+ *     summary: Obter histórico de obras de um funcionário
+ *     tags: [Funcionários]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário
+ *     responses:
+ *       200:
+ *         description: Histórico de obras do funcionário
+ *       404:
+ *         description: Funcionário não encontrado
+ */
+router.get('/:id/historico-obras', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Buscar todas as alocações do funcionário (incluindo finalizadas)
+    const { data: alocacoes, error } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select(`
+        id,
+        obra_id,
+        data_inicio,
+        data_fim,
+        status,
+        horas_trabalhadas,
+        valor_hora,
+        total_receber,
+        observacoes,
+        obras(
+          id,
+          nome,
+          cidade,
+          estado,
+          status,
+          data_inicio,
+          data_fim,
+          cliente:clientes(
+            id,
+            nome,
+            cnpj
+          )
+        )
+      `)
+      .eq('funcionario_id', id)
+      .order('data_inicio', { ascending: false })
+
+    if (error) {
+      console.error('Erro ao buscar histórico de obras:', error)
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar histórico de obras',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: alocacoes || [],
+      total: alocacoes?.length || 0
+    })
+  } catch (error) {
+    console.error('Erro ao buscar histórico de obras:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 router.get('/obra/:obra_id', async (req, res) => {
   try {
     const { obra_id } = req.params;

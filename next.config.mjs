@@ -148,6 +148,34 @@ const nextConfig = {
         ],
       },
       {
+        // Headers específicos para CSS
+        source: '/:all*.css',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'text/css; charset=utf-8',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        // Headers específicos para JavaScript
+        source: '/:all*.js',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/javascript; charset=utf-8',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
         // Headers de segurança para todas as páginas
         source: '/:path*',
         headers: [

@@ -210,6 +210,7 @@ export default function FuncionarioDetalhesPage() {
   const [pontos, setPontos] = useState<PontoDetalhado[]>([])
   const [historico, setHistorico] = useState<HistoricoEvento[]>([])
   const [tiposBeneficios, setTiposBeneficios] = useState<any[]>([])
+  const [obrasFuncionario, setObrasFuncionario] = useState<any[]>([])
 
   // Documentos
   const [documentos, setDocumentos] = useState<DocumentoFuncionario[]>([])
@@ -263,8 +264,30 @@ export default function FuncionarioDetalhesPage() {
         setDocumentos(docsFormatados)
       }
 
+      // Carregar histórico de obras
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+      const token = localStorage.getItem('access_token')
+      if (token) {
+        try {
+          const obrasResponse = await fetch(
+            `${apiUrl}/api/funcionarios/${funcionarioId}/historico-obras`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          )
+          if (obrasResponse.ok) {
+            const obrasData = await obrasResponse.json()
+            setObrasFuncionario(obrasData.data || [])
+          }
+        } catch (obrasError) {
+          // Silenciar erro, apenas não carregar obras
+        }
+      }
+
     } catch (error) {
-      console.error('Erro ao carregar dados das tabs:', error)
       // Não mostrar erro para não atrapalhar se alguma tab falhar
     }
   }
@@ -689,8 +712,9 @@ export default function FuncionarioDetalhesPage() {
 
       {/* Tabs de Detalhes */}
       <Tabs defaultValue="informacoes" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="informacoes">Informações</TabsTrigger>
+          <TabsTrigger value="obras">Obras</TabsTrigger>
           <TabsTrigger value="salarios">Salários</TabsTrigger>
           <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
@@ -751,6 +775,92 @@ export default function FuncionarioDetalhesPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Tab Obras */}
+        <TabsContent value="obras" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Histórico de Obras</CardTitle>
+                  <CardDescription>Obras onde o funcionário esteve alocado</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {obrasFuncionario.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Obra</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Data Início</TableHead>
+                      <TableHead>Data Fim</TableHead>
+                      <TableHead>Horas Trabalhadas</TableHead>
+                      <TableHead>Valor Hora</TableHead>
+                      <TableHead>Total Receber</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {obrasFuncionario.map((obra: any) => (
+                      <TableRow key={obra.id}>
+                        <TableCell>
+                          <div className="font-medium">{obra.obras?.nome || 'Obra não encontrada'}</div>
+                          {obra.obras?.cidade && (
+                            <div className="text-xs text-gray-500">{obra.obras.cidade}, {obra.obras.estado}</div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div>{obra.obras?.cliente?.nome || '-'}</div>
+                          {obra.obras?.cliente?.cnpj && (
+                            <div className="text-xs text-gray-500">{obra.obras.cliente.cnpj}</div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {obra.data_inicio ? format(new Date(obra.data_inicio), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {obra.data_fim ? format(new Date(obra.data_fim), 'dd/MM/yyyy', { locale: ptBR }) : 'Em andamento'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">
+                            {obra.horas_trabalhadas ? `${obra.horas_trabalhadas}h` : '0h'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {obra.valor_hora ? `R$ ${obra.valor_hora.toFixed(2)}` : '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-semibold text-green-600">
+                            {obra.total_receber ? `R$ ${obra.total_receber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getStatusColor(obra.status)} border`}>
+                            {obra.status === 'ativo' ? 'Ativo' : obra.status === 'finalizado' ? 'Finalizado' : obra.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Nenhuma obra vinculada</p>
+                  <p className="text-sm">Este funcionário ainda não foi alocado em nenhuma obra</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Tab Salários */}

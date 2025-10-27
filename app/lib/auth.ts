@@ -124,4 +124,44 @@ export class AuthService {
       window.location.href = '/'
     }
   }
+
+  // Verificar se usuário é gestor e redirecionar corretamente
+  static async redirectToCorrectPath(router: any): Promise<void> {
+    try {
+      const userData = localStorage.getItem('user_data')
+      
+      if (!userData) {
+        router.push('/pwa/login')
+        return
+      }
+
+      const user = JSON.parse(userData)
+      const cargo = user.user_metadata?.cargo || user.cargo || ''
+      const role = user.role || ''
+
+      // Se cargo contém palavras-chave de gestão, redirecionar para dashboard
+      const cargoStr = cargo?.toLowerCase() || ''
+      const roleStr = role?.toLowerCase() || ''
+      
+      const isGestor = (
+        cargoStr.includes('gestor') ||
+        cargoStr.includes('gerente') ||
+        cargoStr.includes('diretor') ||
+        cargoStr.includes('admin') ||
+        cargoStr.includes('supervisor') ||
+        cargoStr.includes('encarregado') ||
+        roleStr.includes('gestor') ||
+        roleStr.includes('gerente') ||
+        roleStr.includes('admin')
+      )
+
+      if (isGestor) {
+        router.push('/dashboard')
+      } else {
+        router.push('/pwa')
+      }
+    } catch (error) {
+      router.push('/pwa/login')
+    }
+  }
 }

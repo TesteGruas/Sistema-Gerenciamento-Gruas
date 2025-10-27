@@ -2,7 +2,6 @@
 
 import { ProtectedRoute } from "@/components/protected-route"
 import { usePermissions } from "@/hooks/use-permissions"
-import { DebugPermissions } from "@/components/debug-permissions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { 
@@ -78,9 +77,6 @@ export default function Dashboard() {
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">Visão geral do sistema de gestão de gruas</p>
         </div>
-
-        {/* Debug - Sistema de Permissões */}
-        <DebugPermissions />
 
         {/* Estatísticas Principais */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

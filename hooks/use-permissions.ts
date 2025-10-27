@@ -29,17 +29,6 @@ export const usePermissions = () => {
   const rawRole = user?.role
   const userRole = useMemo(() => normalizeRoleName(rawRole), [rawRole])
   
-  // Debug temporário
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🔐 [use-permissions] Debug:', {
-      user: user,
-      rawRole: rawRole,
-      userRole: userRole,
-      perfil: perfil,
-      authLoading: authLoading
-    })
-  }
-  
   const permissions = useMemo(() => {
     if (!userRole) return []
     return getRolePermissions(userRole)
