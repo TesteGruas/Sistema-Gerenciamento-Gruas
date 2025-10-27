@@ -335,7 +335,7 @@ ALTER TABLE funcionarios DROP COLUMN cargo;
 ## 📞 Suporte e Documentação
 
 ### Arquivos de referência:
-- `BACKEND-CARGOS-IMPLEMENTATION.md` - Documentação original
+- `BACKEND-CARGOS-IMPLEMENTATION-27-10-25.md` - Documentação original do backend
 - `backend-api/test-cargos-integration.js` - Script de testes
 - `backend-api/database/migrations/add_cargo_id_to_funcionarios.sql` - Migração SQL
 
