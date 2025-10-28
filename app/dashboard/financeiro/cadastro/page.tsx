@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useToast } from "@/hooks/use-toast"
 import { 
   Users, 
   Plus, 
@@ -34,96 +35,14 @@ import {
   Truck,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  Loader2
 } from "lucide-react"
 
-// Mock data para demonstração
-const mockClientes = [
-  {
-    id: 1,
-    nome: "Construtora ABC Ltda",
-    cnpj: "12.345.678/0001-90",
-    contato: "João Silva",
-    telefone: "(11) 99999-9999",
-    email: "joao@construtoraabc.com",
-    endereco: "Rua das Flores, 123 - São Paulo/SP",
-    totalCompras: 250000,
-    ultimaCompra: "2024-01-15"
-  },
-  {
-    id: 2,
-    nome: "Engenharia XYZ S/A",
-    cnpj: "98.765.432/0001-10",
-    contato: "Maria Santos",
-    telefone: "(11) 88888-8888",
-    email: "maria@engenhariaxyz.com",
-    endereco: "Av. Paulista, 456 - São Paulo/SP",
-    totalCompras: 180000,
-    ultimaCompra: "2024-01-14"
-  }
-]
-
-const mockFornecedores = [
-  {
-    id: 1,
-    nome: "Fornecedor ABC Ltda",
-    cnpj: "11.222.333/0001-44",
-    contato: "Pedro Oliveira",
-    telefone: "(11) 77777-7777",
-    email: "pedro@fornecedorabc.com",
-    endereco: "Rua Industrial, 789 - São Paulo/SP",
-    totalCompras: 125000,
-    ultimaCompra: "2024-01-15"
-  }
-]
-
-const mockProdutos = [
-  {
-    id: 1,
-    nome: "Grua 25t",
-    categoria: "equipamentos",
-    tipo: "locacao",
-    preco: 15000,
-    estoque: 3,
-    fornecedor: "Fornecedor ABC Ltda",
-    ultimaVenda: "2024-01-15"
-  },
-  {
-    id: 2,
-    nome: "Plataforma 20m",
-    categoria: "equipamentos",
-    tipo: "locacao",
-    preco: 8000,
-    estoque: 5,
-    fornecedor: "Fornecedor XYZ S/A",
-    ultimaVenda: "2024-01-14"
-  }
-]
-
-const mockFuncionarios = [
-  {
-    id: 1,
-    nome: "Carlos Silva",
-    cpf: "123.456.789-00",
-    cargo: "Operador de Grua",
-    telefone: "(11) 66666-6666",
-    email: "carlos@empresa.com",
-    salario: 3500,
-    dataAdmissao: "2023-01-15",
-    status: "ativo"
-  },
-  {
-    id: 2,
-    nome: "Ana Costa",
-    cpf: "987.654.321-00",
-    cargo: "Gerente Financeiro",
-    telefone: "(11) 55555-5555",
-    email: "ana@empresa.com",
-    salario: 8000,
-    dataAdmissao: "2022-06-01",
-    status: "ativo"
-  }
-]
+// Helper para obter token de autenticação
+const getAuthToken = () => {
+  return localStorage.getItem('access_token') || localStorage.getItem('token')
+}
 
 export default function CadastroPage() {
   const [activeTab, setActiveTab] = useState('clientes')
@@ -132,35 +51,101 @@ export default function CadastroPage() {
   const [selectedCategoria, setSelectedCategoria] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
+  const { toast } = useToast()
+
+  // Estados para dados reais da API
+  const [clientes, setClientes] = useState<any[]>([])
+  const [fornecedores, setFornecedores] = useState<any[]>([])
+  const [produtos, setProdutos] = useState<any[]>([])
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Carregar dados ao montar o componente e ao trocar de aba
+  useEffect(() => {
+    loadData()
+  }, [activeTab])
+
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = getAuthToken()
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+
+      switch (activeTab) {
+        case 'clientes':
+          const resClientes = await fetch(`${API_URL}/api/clientes`, { headers })
+          if (resClientes.ok) {
+            const data = await resClientes.json()
+            setClientes(data.data || data || [])
+          }
+          break
+        case 'fornecedores':
+          const resFornecedores = await fetch(`${API_URL}/api/fornecedores`, { headers })
+          if (resFornecedores.ok) {
+            const data = await resFornecedores.json()
+            setFornecedores(data.data || data || [])
+          }
+          break
+        case 'produtos':
+          const resProdutos = await fetch(`${API_URL}/api/produtos`, { headers })
+          if (resProdutos.ok) {
+            const data = await resProdutos.json()
+            setProdutos(data.data || data || [])
+          }
+          break
+        case 'funcionarios':
+          const resFuncionarios = await fetch(`${API_URL}/api/funcionarios`, { headers })
+          if (resFuncionarios.ok) {
+            const data = await resFuncionarios.json()
+            setFuncionarios(data.data || data || [])
+          }
+          break
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const stats = [
     { 
       title: "Clientes Ativos", 
-      value: "25", 
+      value: clientes.length.toString() || "0", 
       icon: Building2, 
       color: "bg-blue-500",
-      change: "3 novos este mês"
+      change: `${clientes.length} no total`
     },
     { 
       title: "Fornecedores", 
-      value: "12", 
+      value: fornecedores.length.toString() || "0", 
       icon: Users, 
       color: "bg-green-500",
-      change: "1 novo esta semana"
+      change: `${fornecedores.length} no total`
     },
     { 
       title: "Produtos/Equipamentos", 
-      value: "45", 
+      value: produtos.length.toString() || "0", 
       icon: Package, 
       color: "bg-purple-500",
-      change: "5 novos este mês"
+      change: `${produtos.length} no total`
     },
     { 
       title: "Funcionários", 
-      value: "18", 
+      value: funcionarios.length.toString() || "0", 
       icon: User, 
       color: "bg-orange-500",
-      change: "2 novos este mês"
+      change: `${funcionarios.length} no total`
     }
   ]
 
@@ -309,7 +294,19 @@ export default function CadastroPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockClientes.map((cliente) => (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : clientes.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          Nenhum cliente encontrado
+                        </TableCell>
+                      </TableRow>
+                    ) : clientes.map((cliente) => (
                       <TableRow key={cliente.id}>
                         <TableCell className="font-medium">{cliente.nome}</TableCell>
                         <TableCell>{cliente.cnpj}</TableCell>
@@ -363,7 +360,19 @@ export default function CadastroPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockFornecedores.map((fornecedor) => (
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : fornecedores.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        Nenhum fornecedor encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : fornecedores.map((fornecedor) => (
                     <TableRow key={fornecedor.id}>
                       <TableCell className="font-medium">{fornecedor.nome}</TableCell>
                       <TableCell>{fornecedor.cnpj}</TableCell>
@@ -446,7 +455,19 @@ export default function CadastroPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockProdutos.map((produto) => (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : produtos.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          Nenhum produto encontrado
+                        </TableCell>
+                      </TableRow>
+                    ) : produtos.map((produto) => (
                       <TableRow key={produto.id}>
                         <TableCell className="font-medium">{produto.nome}</TableCell>
                         <TableCell>
@@ -507,7 +528,19 @@ export default function CadastroPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockFuncionarios.map((funcionario) => (
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : funcionarios.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        Nenhum funcionário encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : funcionarios.map((funcionario) => (
                     <TableRow key={funcionario.id}>
                       <TableCell className="font-medium">{funcionario.nome}</TableCell>
                       <TableCell>{funcionario.cpf}</TableCell>

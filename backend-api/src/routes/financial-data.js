@@ -63,6 +63,7 @@ const router = express.Router();
  */
 router.get('/', async (req, res) => {
   try {
+    const { periodo = 'mes' } = req.query; // Padrão: últimos 6 meses
     const hoje = new Date().toISOString().split('T')[0];
     
     // Buscar receitas para hoje
@@ -112,51 +113,126 @@ router.get('/', async (req, res) => {
       console.warn('Erro ao buscar custos em atraso:', custosAtrasoError);
     }
 
-    // Calcular fluxo de caixa dos últimos 6 meses usando receitas e custos
-    const fluxoCaixa = [];
-    for (let i = 5; i >= 0; i--) {
-      const hoje = new Date();
-      const ano = hoje.getFullYear();
-      const mes = hoje.getMonth() - i;
-      
-      // Ajustar ano se o mês for negativo
-      const anoAjustado = mes < 0 ? ano - 1 : ano;
-      const mesAjustado = mes < 0 ? mes + 12 : mes;
-      
-      const mesString = `${anoAjustado}-${String(mesAjustado + 1).padStart(2, '0')}`;
-      
-      // Buscar receitas do mês (entradas)
-      const { data: receitasMes, error: receitasMesError } = await supabaseAdmin
+    // Calcular fluxo de caixa conforme o período solicitado
+    let fluxoCaixa = [];
+    
+    if (periodo === 'hoje') {
+      // Fluxo de caixa do dia atual (agrupado por hora)
+      const { data: receitasHoje, error: receitasHojeError } = await supabaseAdmin
         .from('receitas')
-        .select('valor')
+        .select('valor, created_at')
         .eq('status', 'confirmada')
-        .gte('data_receita', `${mesString}-01`)
-        .lt('data_receita', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
+        .gte('data_receita', hoje)
+        .lte('data_receita', hoje);
 
-      if (receitasMesError) {
-        console.warn(`Erro ao buscar receitas do mês ${mesString}:`, receitasMesError);
-      }
-
-      // Buscar custos do mês (saídas)
-      const { data: custosMes, error: custosMesError } = await supabaseAdmin
+      const { data: custosHoje, error: custosHojeError } = await supabaseAdmin
         .from('custos')
-        .select('valor')
+        .select('valor, created_at')
         .eq('status', 'confirmado')
-        .gte('data_custo', `${mesString}-01`)
-        .lt('data_custo', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
+        .gte('data_custo', hoje)
+        .lte('data_custo', hoje);
 
-      if (custosMesError) {
-        console.warn(`Erro ao buscar custos do mês ${mesString}:`, custosMesError);
+      // Agrupar por hora
+      const horasFluxo = {};
+      const horaAtual = new Date().getHours();
+      
+      for (let h = 0; h <= horaAtual; h++) {
+        horasFluxo[h] = { hora: `${String(h).padStart(2, '0')}:00`, entrada: 0, saida: 0 };
       }
 
-      const totalEntradas = receitasMes?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
-      const totalSaidas = custosMes?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
-
-      fluxoCaixa.push({
-        mes: new Date(anoAjustado, mesAjustado).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
-        entrada: totalEntradas,
-        saida: totalSaidas
+      receitasHoje?.forEach(item => {
+        const hora = new Date(item.created_at).getHours();
+        if (horasFluxo[hora]) {
+          horasFluxo[hora].entrada += parseFloat(item.valor || 0);
+        }
       });
+
+      custosHoje?.forEach(item => {
+        const hora = new Date(item.created_at).getHours();
+        if (horasFluxo[hora]) {
+          horasFluxo[hora].saida += parseFloat(item.valor || 0);
+        }
+      });
+
+      fluxoCaixa = Object.values(horasFluxo);
+      
+    } else if (periodo === 'semana') {
+      // Fluxo de caixa dos últimos 7 dias
+      for (let i = 6; i >= 0; i--) {
+        const data = new Date();
+        data.setDate(data.getDate() - i);
+        const dataString = data.toISOString().split('T')[0];
+        
+        // Buscar receitas do dia
+        const { data: receitasDia } = await supabaseAdmin
+          .from('receitas')
+          .select('valor')
+          .eq('status', 'confirmada')
+          .eq('data_receita', dataString);
+
+        // Buscar custos do dia
+        const { data: custosDia } = await supabaseAdmin
+          .from('custos')
+          .select('valor')
+          .eq('status', 'confirmado')
+          .eq('data_custo', dataString);
+
+        const totalEntradas = receitasDia?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+        const totalSaidas = custosDia?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+
+        fluxoCaixa.push({
+          dia: data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+          entrada: totalEntradas,
+          saida: totalSaidas
+        });
+      }
+      
+    } else {
+      // Fluxo de caixa dos últimos 6 meses (padrão)
+      for (let i = 5; i >= 0; i--) {
+        const hoje = new Date();
+        const ano = hoje.getFullYear();
+        const mes = hoje.getMonth() - i;
+        
+        // Ajustar ano se o mês for negativo
+        const anoAjustado = mes < 0 ? ano - 1 : ano;
+        const mesAjustado = mes < 0 ? mes + 12 : mes;
+        
+        const mesString = `${anoAjustado}-${String(mesAjustado + 1).padStart(2, '0')}`;
+        
+        // Buscar receitas do mês (entradas)
+        const { data: receitasMes, error: receitasMesError } = await supabaseAdmin
+          .from('receitas')
+          .select('valor')
+          .eq('status', 'confirmada')
+          .gte('data_receita', `${mesString}-01`)
+          .lt('data_receita', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
+
+        if (receitasMesError) {
+          console.warn(`Erro ao buscar receitas do mês ${mesString}:`, receitasMesError);
+        }
+
+        // Buscar custos do mês (saídas)
+        const { data: custosMes, error: custosMesError } = await supabaseAdmin
+          .from('custos')
+          .select('valor')
+          .eq('status', 'confirmado')
+          .gte('data_custo', `${mesString}-01`)
+          .lt('data_custo', `${anoAjustado}-${String(mesAjustado + 2).padStart(2, '0')}-01`);
+
+        if (custosMesError) {
+          console.warn(`Erro ao buscar custos do mês ${mesString}:`, custosMesError);
+        }
+
+        const totalEntradas = receitasMes?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+        const totalSaidas = custosMes?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
+
+        fluxoCaixa.push({
+          mes: new Date(anoAjustado, mesAjustado).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+          entrada: totalEntradas,
+          saida: totalSaidas
+        });
+      }
     }
 
     // Calcular totais
@@ -165,8 +241,19 @@ router.get('/', async (req, res) => {
     const recebimentosAtraso = receitasAtraso?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
     const pagamentosAtraso = custosAtraso?.reduce((sum, item) => sum + parseFloat(item.valor || 0), 0) || 0;
     
-    // Saldo atual simulado (pode ser implementado com contas bancárias depois)
-    const saldoAtual = 50000; // Valor simulado
+    // Buscar saldo real das contas bancárias ativas
+    const { data: contasBancarias, error: contasError } = await supabaseAdmin
+      .from('contas_bancarias')
+      .select('saldo_atual')
+      .eq('status', 'ativa');
+
+    if (contasError) {
+      console.warn('Erro ao buscar contas bancárias:', contasError);
+    }
+
+    // Calcular saldo consolidado de todas as contas ativas
+    const saldoAtual = contasBancarias?.reduce((sum, conta) => 
+      sum + parseFloat(conta.saldo_atual || 0), 0) || 0;
 
     const financialData = {
       receberHoje,

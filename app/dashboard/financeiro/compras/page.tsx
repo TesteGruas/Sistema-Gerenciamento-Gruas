@@ -660,14 +660,29 @@ function FornecedorSelector({
     const carregarFornecedores = async () => {
       try {
         setLoading(true)
-        // Simular dados de fornecedores - você pode implementar uma API real aqui
-        const fornecedoresMock = [
-          { id: 1, nome: 'Fornecedor Exemplo 1', cnpj: '12.345.678/0001-90', email: 'fornecedor1@exemplo.com' },
-          { id: 2, nome: 'Fornecedor Exemplo 2', cnpj: '98.765.432/0001-10', email: 'fornecedor2@exemplo.com' }
-        ]
-        setFornecedores(fornecedoresMock)
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+
+        const response = await fetch(`${API_URL}/api/fornecedores`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setFornecedores(data.data || data || [])
+        } else {
+          throw new Error('Erro ao carregar fornecedores')
+        }
       } catch (error) {
         console.error('Erro ao carregar fornecedores:', error)
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar fornecedores. Tente novamente.",
+          variant: "destructive"
+        })
       } finally {
         setLoading(false)
       }

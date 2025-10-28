@@ -48,11 +48,13 @@ import {
   ArrowLeft,
   ArrowRight,
   Filter,
+  Calculator,
   MoreHorizontal,
   Package,
   Truck,
   Receipt,
   FileSpreadsheet,
+  Loader2,
   Printer,
   BarChart3,
   PieChart
@@ -69,85 +71,6 @@ import { estoqueAPI } from "@/lib/api-estoque"
 
 // Cores para gráficos
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
-
-// Mock data para demonstração
-const mockRelatorioFinanceiro = [
-  {
-    mes: "Janeiro 2024",
-    receitas: 250000,
-    despesas: 180000,
-    saldo: 70000,
-    crescimento: 15
-  },
-  {
-    mes: "Fevereiro 2024",
-    receitas: 280000,
-    despesas: 195000,
-    saldo: 85000,
-    crescimento: 12
-  }
-]
-
-const mockRelatorioVendas = [
-  {
-    cliente: "Construtora ABC Ltda",
-    totalVendas: 150000,
-    quantidade: 5,
-    ticketMedio: 30000,
-    ultimaVenda: "2024-01-15"
-  },
-  {
-    cliente: "Engenharia XYZ S/A",
-    totalVendas: 120000,
-    quantidade: 3,
-    ticketMedio: 40000,
-    ultimaVenda: "2024-01-14"
-  }
-]
-
-const mockRelatorioContratos = [
-  {
-    numero: "CT-001",
-    cliente: "Construtora ABC Ltda",
-    valorTotal: 180000,
-    valorMensal: 15000,
-    inicio: "2024-01-01",
-    fim: "2024-12-31",
-    status: "ativo"
-  }
-]
-
-const mockRelatorioFaturamento = [
-  {
-    mes: "Janeiro 2024",
-    vendas: 150000,
-    locacoes: 100000,
-    servicos: 50000,
-    total: 300000
-  }
-]
-
-const mockRelatorioLocacoes = [
-  {
-    equipamento: "Grua 25t",
-    cliente: "Construtora ABC Ltda",
-    diasLocados: 30,
-    valorTotal: 15000,
-    aditivos: 2500,
-    status: "ativa"
-  }
-]
-
-const mockRelatorioEstoque = [
-  {
-    produto: "Grua 25t",
-    categoria: "equipamentos",
-    estoque: 3,
-    valorUnitario: 15000,
-    valorTotal: 45000,
-    ultimaMovimentacao: "2024-01-15"
-  }
-]
 
 export default function RelatoriosPage() {
   const [activeTab, setActiveTab] = useState('financeiro')
@@ -180,11 +103,6 @@ export default function RelatoriosPage() {
   const [isLoadingImpostos, setIsLoadingImpostos] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
-
-  // Carregar dados
-  useEffect(() => {
-    carregarDados()
-  }, [])
 
   // Função para carregar relatório de impostos
   const carregarRelatorioImpostos = async (mes?: number, ano?: number) => {
@@ -219,15 +137,86 @@ export default function RelatoriosPage() {
     }
   }
 
-  const carregarDados = async () => {
+  // Função para carregar relatório de faturamento
+  const carregarRelatorioFaturamento = async () => {
     try {
-      setIsLoading(true)
-      
-      // Definir período (últimos 6 meses)
       const hoje = new Date()
       const seisMesesAtras = new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1)
       const dataInicio = seisMesesAtras.toISOString().split('T')[0]
       const dataFim = hoje.toISOString().split('T')[0]
+
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      const response = await fetch(
+        `${apiUrl}/api/relatorios/faturamento?data_inicio=${dataInicio}&data_fim=${dataFim}&agrupar_por=mes`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          // Transformar dados da API para o formato do componente
+          const faturamentoFormatado = data.data.vendas?.map((item: any, index: number) => ({
+            mes: item.mes || `Mês ${index + 1}`,
+            vendas: item.total || 0,
+            locacoes: data.data.locacoes?.[index]?.total || 0,
+            servicos: 0, // Pode ser extraído se disponível
+            total: (item.total || 0) + (data.data.locacoes?.[index]?.total || 0)
+          })) || []
+
+          setRelatorioFaturamento(faturamentoFormatado)
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar relatório de faturamento:', error)
+    }
+  }
+
+  // Função helper para calcular datas baseado no período selecionado
+  const calcularPeriodo = () => {
+    const hoje = new Date()
+    let dataInicio: Date
+    let dataFim = hoje
+
+    switch (selectedPeriod) {
+      case 'semana':
+        dataInicio = new Date(hoje)
+        dataInicio.setDate(hoje.getDate() - 7)
+        break
+      case 'mes':
+        dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+        break
+      case 'trimestre':
+        dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1)
+        break
+      case 'semestre':
+        dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1)
+        break
+      case 'ano':
+        dataInicio = new Date(hoje.getFullYear(), 0, 1)
+        break
+      default:
+        dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1)
+    }
+
+    return {
+      dataInicio: dataInicio.toISOString().split('T')[0],
+      dataFim: dataFim.toISOString().split('T')[0]
+    }
+  }
+
+  const carregarDados = async () => {
+    try {
+      setIsLoading(true)
+      
+      // Definir período baseado na seleção do usuário
+      const { dataInicio, dataFim } = calcularPeriodo()
       
       // Carregar obras e gruas
       const [obrasData, gruasData] = await Promise.all([
@@ -239,6 +228,9 @@ export default function RelatoriosPage() {
       
       // Carregar relatório de impostos do mês atual
       await carregarRelatorioImpostos()
+      
+      // Carregar relatório de faturamento
+      await carregarRelatorioFaturamento()
       
       // Carregar relatório financeiro
       try {
@@ -257,19 +249,25 @@ export default function RelatoriosPage() {
         const dadosPorMes = new Map()
         
         receitas.forEach((receita: any) => {
-          const mes = new Date(receita.data).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-          if (!dadosPorMes.has(mes)) {
-            dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+          const dataReceita = receita.data_receita || receita.data || receita.created_at
+          if (dataReceita && new Date(dataReceita).toString() !== 'Invalid Date') {
+            const mes = new Date(dataReceita).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+            if (!dadosPorMes.has(mes)) {
+              dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+            }
+            dadosPorMes.get(mes).receitas += receita.valor || 0
           }
-          dadosPorMes.get(mes).receitas += receita.valor || 0
         })
         
         custos.forEach((custo: any) => {
-          const mes = new Date(custo.data).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-          if (!dadosPorMes.has(mes)) {
-            dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+          const dataCusto = custo.data_custo || custo.data || custo.created_at
+          if (dataCusto && new Date(dataCusto).toString() !== 'Invalid Date') {
+            const mes = new Date(dataCusto).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+            if (!dadosPorMes.has(mes)) {
+              dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+            }
+            dadosPorMes.get(mes).despesas += custo.valor || 0
           }
-          dadosPorMes.get(mes).despesas += custo.valor || 0
         })
         
         const dadosFinanceiros = Array.from(dadosPorMes.values()).map(item => ({
@@ -390,8 +388,9 @@ export default function RelatoriosPage() {
         
         // Processar receitas (separar por tipo)
         receitas.forEach((receita: any) => {
-          if (receita.data && new Date(receita.data).toString() !== 'Invalid Date') {
-            const mes = new Date(receita.data).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+          const dataReceita = receita.data_receita || receita.data || receita.created_at
+          if (dataReceita && new Date(dataReceita).toString() !== 'Invalid Date') {
+            const mes = new Date(dataReceita).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
             if (!faturamentoPorMes.has(mes)) {
               faturamentoPorMes.set(mes, { mes, vendas: 0, locacoes: 0, servicos: 0, total: 0 })
             }
@@ -566,6 +565,16 @@ export default function RelatoriosPage() {
       setIsLoading(false)
     }
   }
+
+  // Carregar dados quando o componente montar
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  // Recarregar dados quando o período mudar
+  useEffect(() => {
+    carregarDados()
+  }, [selectedPeriod])
 
   const gerarRelatorio = async () => {
     try {
@@ -883,7 +892,7 @@ export default function RelatoriosPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <ComposedChart data={mockRelatorioFinanceiro}>
+              <ComposedChart data={relatorioFinanceiro}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
@@ -909,7 +918,7 @@ export default function RelatoriosPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <RechartsBarChart data={mockRelatorioFaturamento}>
+              <RechartsBarChart data={relatorioFaturamento}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
@@ -937,9 +946,9 @@ export default function RelatoriosPage() {
             <ResponsiveContainer width="100%" height={250}>
               <RechartsPieChart>
                 <Pie
-                  data={mockRelatorioVendas.map(v => ({ 
-                    name: v.cliente.split(' ')[0], 
-                    value: v.totalVendas 
+                  data={relatorioVendas.map(v => ({ 
+                    name: v.cliente?.split(' ')[0] || 'Cliente', 
+                    value: v.totalVendas || 0
                   }))}
                   cx="50%"
                   cy="50%"
@@ -949,7 +958,7 @@ export default function RelatoriosPage() {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {mockRelatorioVendas.map((_, index) => (
+                  {relatorioVendas.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -1062,19 +1071,19 @@ export default function RelatoriosPage() {
                       </TableRow>
                     ) : relatorioFinanceiro.map((relatorio, index) => (
                       <TableRow key={index}>
-                        <TableCell className="font-medium">{relatorio.mes}</TableCell>
+                        <TableCell className="font-medium">{relatorio?.mes || 'N/A'}</TableCell>
                         <TableCell className="font-semibold text-green-600">
-                          R$ {relatorio.receitas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          R$ {(relatorio?.receitas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="font-semibold text-red-600">
-                          R$ {relatorio.despesas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          R$ {(relatorio?.despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="font-bold text-lg">
-                          R$ {relatorio.saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          R$ {(relatorio?.saldo || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell>
                           <Badge className="bg-green-100 text-green-800">
-                            +{relatorio.crescimento}%
+                            +{relatorio?.crescimento || 0}%
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1124,16 +1133,16 @@ export default function RelatoriosPage() {
                     </TableRow>
                   ) : relatorioVendas.map((venda, index) => (
                     <TableRow key={index}>
-                      <TableCell className="font-medium">{venda.cliente}</TableCell>
+                      <TableCell className="font-medium">{venda?.cliente || 'N/A'}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {venda.totalVendas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(venda?.totalVendas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell>{venda.quantidade}</TableCell>
+                      <TableCell>{venda?.quantidade || 0}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {venda.ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(venda?.ticketMedio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        {venda.ultimaVenda && new Date(venda.ultimaVenda).toString() !== 'Invalid Date' 
+                        {venda?.ultimaVenda && new Date(venda.ultimaVenda).toString() !== 'Invalid Date' 
                           ? new Date(venda.ultimaVenda).toLocaleDateString('pt-BR')
                           : 'N/A'
                         }
@@ -1185,20 +1194,22 @@ export default function RelatoriosPage() {
                     </TableRow>
                   ) : relatorioContratos.map((contrato, index) => (
                     <TableRow key={index}>
-                      <TableCell className="font-medium">{contrato.numero}</TableCell>
-                      <TableCell>{contrato.cliente}</TableCell>
+                      <TableCell className="font-medium">{contrato?.numero || 'N/A'}</TableCell>
+                      <TableCell>{contrato?.cliente || 'N/A'}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {contrato.valorTotal.toLocaleString('pt-BR')}
+                        R$ {(contrato?.valorTotal || 0).toLocaleString('pt-BR')}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        R$ {contrato.valorMensal.toLocaleString('pt-BR')}
+                        R$ {(contrato?.valorMensal || 0).toLocaleString('pt-BR')}
                       </TableCell>
                       <TableCell>
-                        {new Date(contrato.inicio).toLocaleDateString('pt-BR')} - {new Date(contrato.fim).toLocaleDateString('pt-BR')}
+                        {contrato?.inicio && contrato?.fim
+                          ? `${new Date(contrato.inicio).toLocaleDateString('pt-BR')} - ${new Date(contrato.fim).toLocaleDateString('pt-BR')}`
+                          : 'N/A'}
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(contrato.status)}>
-                          {contrato.status}
+                        <Badge className={getStatusColor(contrato?.status || 'ativo')}>
+                          {contrato?.status || 'N/A'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -1247,18 +1258,18 @@ export default function RelatoriosPage() {
                     </TableRow>
                   ) : relatorioFaturamento.map((faturamento, index) => (
                     <TableRow key={index}>
-                      <TableCell className="font-medium">{faturamento.mes}</TableCell>
+                      <TableCell className="font-medium">{faturamento?.mes || 'N/A'}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {faturamento.vendas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(faturamento?.vendas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        R$ {faturamento.locacoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(faturamento?.locacoes || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        R$ {faturamento.servicos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(faturamento?.servicos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-bold text-lg">
-                        R$ {faturamento.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(faturamento?.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
@@ -1307,18 +1318,18 @@ export default function RelatoriosPage() {
                     </TableRow>
                   ) : relatorioLocacoes.map((locacao, index) => (
                     <TableRow key={index}>
-                      <TableCell className="font-medium">{locacao.equipamento}</TableCell>
-                      <TableCell>{locacao.cliente}</TableCell>
-                      <TableCell>{locacao.diasLocados}</TableCell>
+                      <TableCell className="font-medium">{locacao?.equipamento || 'N/A'}</TableCell>
+                      <TableCell>{locacao?.cliente || 'N/A'}</TableCell>
+                      <TableCell>{locacao?.diasLocados || 0}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {locacao.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(locacao?.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        R$ {locacao.aditivos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(locacao?.aditivos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(locacao.status)}>
-                          {locacao.status}
+                        <Badge className={getStatusColor(locacao?.status || 'ativa')}>
+                          {locacao?.status || 'N/A'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -1368,21 +1379,21 @@ export default function RelatoriosPage() {
                     </TableRow>
                   ) : relatorioEstoque.map((estoque, index) => (
                     <TableRow key={index}>
-                      <TableCell className="font-medium">{estoque.produto}</TableCell>
+                      <TableCell className="font-medium">{estoque?.produto || 'N/A'}</TableCell>
                       <TableCell>
-                        <Badge className={getCategoriaColor(estoque.categoria)}>
-                          {estoque.categoria}
+                        <Badge className={getCategoriaColor(estoque?.categoria || 'equipamentos')}>
+                          {estoque?.categoria || 'N/A'}
                         </Badge>
                       </TableCell>
-                      <TableCell>{estoque.estoque}</TableCell>
+                      <TableCell>{estoque?.estoque || 0}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {estoque.valorUnitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(estoque?.valorUnitario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="font-bold">
-                        R$ {estoque.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        R$ {(estoque?.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        {estoque.ultimaMovimentacao && new Date(estoque.ultimaMovimentacao).toString() !== 'Invalid Date'
+                        {estoque?.ultimaMovimentacao && new Date(estoque.ultimaMovimentacao).toString() !== 'Invalid Date'
                           ? new Date(estoque.ultimaMovimentacao).toLocaleDateString('pt-BR')
                           : 'N/A'
                         }
@@ -1466,6 +1477,57 @@ export default function RelatoriosPage() {
 
               {relatorioImpostos ? (
                 <div className="space-y-6">
+                  {/* Botão de Cálculo Automático */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={async () => {
+                        try {
+                          const hoje = new Date()
+                          const mes = hoje.getMonth() + 1
+                          const ano = hoje.getFullYear()
+                          
+                          const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          
+                          const response = await fetch(`${apiUrl}/api/impostos-financeiros/calcular-mes`, {
+                            method: 'POST',
+                            headers: {
+                              'Authorization': `Bearer ${token}`,
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ mes, ano })
+                          })
+                          
+                          if (response.ok) {
+                            const data = await response.json()
+                            if (data.success) {
+                              toast({
+                                title: "Cálculo Automático Concluído",
+                                description: `Receita bruta: R$ ${parseFloat(data.data.receita_bruta).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} - Total impostos: R$ ${parseFloat(data.data.total_impostos).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${data.data.carga_tributaria})`,
+                                variant: "default"
+                              })
+                              
+                              // Recarregar relatório após o cálculo
+                              await carregarRelatorioImpostos()
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Erro ao calcular impostos:', error)
+                          toast({
+                            title: "Erro",
+                            description: "Erro ao calcular impostos automaticamente",
+                            variant: "destructive"
+                          })
+                        }
+                      }}
+                      variant="outline"
+                      className="flex items-center gap-2"
+                    >
+                      <Calculator className="w-4 h-4" />
+                      Calcular Impostos Automaticamente
+                    </Button>
+                  </div>
+                  
                   {/* Resumo Geral */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <Card>
@@ -1474,7 +1536,7 @@ export default function RelatoriosPage() {
                           <div>
                             <p className="text-sm font-medium text-gray-600">Total de Impostos</p>
                             <p className="text-2xl font-bold text-gray-900">
-                              R$ {relatorioImpostos.total_impostos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              R$ {Number(relatorioImpostos?.total_impostos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
                           </div>
                           <DollarSign className="w-8 h-8 text-blue-600" />
@@ -1488,7 +1550,7 @@ export default function RelatoriosPage() {
                           <div>
                             <p className="text-sm font-medium text-gray-600">Total Pago</p>
                             <p className="text-2xl font-bold text-green-600">
-                              R$ {relatorioImpostos.total_pago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              R$ {Number(relatorioImpostos?.total_pago || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
                           </div>
                           <CheckCircle className="w-8 h-8 text-green-600" />
@@ -1502,7 +1564,7 @@ export default function RelatoriosPage() {
                           <div>
                             <p className="text-sm font-medium text-gray-600">Total Pendente</p>
                             <p className="text-2xl font-bold text-orange-600">
-                              R$ {relatorioImpostos.total_pendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              R$ {Number(relatorioImpostos?.total_pendente || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
                           </div>
                           <Clock className="w-8 h-8 text-orange-600" />
@@ -1516,7 +1578,10 @@ export default function RelatoriosPage() {
                           <div>
                             <p className="text-sm font-medium text-gray-600">Taxa de Pagamento</p>
                             <p className="text-2xl font-bold text-blue-600">
-                              {((relatorioImpostos.total_pago / relatorioImpostos.total_impostos) * 100).toFixed(1)}%
+                              {relatorioImpostos?.total_impostos && relatorioImpostos?.total_impostos > 0 
+                                ? ((relatorioImpostos.total_pago / relatorioImpostos.total_impostos) * 100).toFixed(1)
+                                : '0.0'
+                              }%
                             </p>
                           </div>
                           <TrendingUp className="w-8 h-8 text-blue-600" />
@@ -1542,27 +1607,27 @@ export default function RelatoriosPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {relatorioImpostos.impostos_por_tipo.map((imposto, index) => (
+                          {(relatorioImpostos?.impostos_por_tipo || []).map((imposto, index) => (
                             <TableRow key={index}>
-                              <TableCell className="font-medium">{imposto.tipo}</TableCell>
+                              <TableCell className="font-medium">{imposto?.tipo || 'N/A'}</TableCell>
                               <TableCell>
-                                R$ {imposto.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                R$ {(imposto?.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </TableCell>
                               <TableCell className="text-green-600">
-                                R$ {imposto.valor_pago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                R$ {(imposto?.valor_pago || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </TableCell>
                               <TableCell className="text-orange-600">
-                                R$ {imposto.valor_pendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                R$ {(imposto?.valor_pendente || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </TableCell>
                               <TableCell>
                                 <Badge 
                                   className={
-                                    imposto.valor_pendente === 0 
+                                    (imposto?.valor_pendente || 0) === 0 
                                       ? "bg-green-100 text-green-800" 
                                       : "bg-orange-100 text-orange-800"
                                   }
                                 >
-                                  {imposto.valor_pendente === 0 ? "Pago" : "Pendente"}
+                                  {(imposto?.valor_pendente || 0) === 0 ? "Pago" : "Pendente"}
                                 </Badge>
                               </TableCell>
                             </TableRow>
@@ -1593,11 +1658,107 @@ function RelatorioForm({ onClose }: { onClose: () => void }) {
     filtros: '',
     observacoes: ''
   })
+  const [isGenerating, setIsGenerating] = useState(false)
+  const { toast } = useToast()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const calcularDatas = (periodo: string) => {
+    const hoje = new Date()
+    let dataInicio = new Date()
+    let dataFim = new Date()
+
+    switch (periodo) {
+      case 'mes':
+        dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+        dataFim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+        break
+      case 'trimestre':
+        const trimestreAtual = Math.floor(hoje.getMonth() / 3)
+        dataInicio = new Date(hoje.getFullYear(), trimestreAtual * 3, 1)
+        dataFim = new Date(hoje.getFullYear(), (trimestreAtual + 1) * 3, 0)
+        break
+      case 'ano':
+        dataInicio = new Date(hoje.getFullYear(), 0, 1)
+        dataFim = new Date(hoje.getFullYear(), 11, 31)
+        break
+      default:
+        dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+        dataFim = new Date()
+    }
+
+    return {
+      data_inicio: dataInicio.toISOString().split('T')[0],
+      data_fim: dataFim.toISOString().split('T')[0]
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('Gerando relatório:', formData)
-    onClose()
+    
+    if (!formData.tipo || !formData.periodo) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor, preencha o tipo de relatório e período",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsGenerating(true)
+
+    try {
+      const { data_inicio, data_fim } = calcularDatas(formData.periodo)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+
+      const endpoint = formData.formato === 'excel' 
+        ? `${API_URL}/api/exportar-relatorios/excel/financeiro`
+        : `${API_URL}/api/exportar-relatorios/pdf/financeiro`
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          tipo: formData.tipo,
+          data_inicio,
+          data_fim,
+          observacoes: formData.observacoes
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao gerar relatório')
+      }
+
+      // Baixar o arquivo
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `relatorio-${formData.tipo}-${data_inicio}-${data_fim}.${formData.formato === 'excel' ? 'xlsx' : 'pdf'}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Sucesso",
+        description: "Relatório gerado e baixado com sucesso"
+      })
+
+      onClose()
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao gerar relatório. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   return (
@@ -1672,11 +1833,21 @@ function RelatorioForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isGenerating}>
           Cancelar
         </Button>
-        <Button type="submit">
-          Gerar Relatório
+        <Button type="submit" disabled={isGenerating}>
+          {isGenerating ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Gerando...
+            </>
+          ) : (
+            <>
+              <FileBarChart className="w-4 h-4 mr-2" />
+              Gerar Relatório
+            </>
+          )}
         </Button>
       </div>
     </form>

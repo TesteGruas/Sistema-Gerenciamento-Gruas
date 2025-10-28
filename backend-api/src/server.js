@@ -91,6 +91,11 @@ import gruasMensaisRoutes from './routes/gruas-mensais.js'
 import checklistDevolucaoRoutes from './routes/checklist-devolucao.js'
 import notificacoesRoutes from './routes/notificacoes.js'
 import emailConfigRoutes from './routes/email-config.js'
+import contasReceberRoutes from './routes/contas-receber.js'
+import contasPagarRoutes from './routes/contas-pagar.js'
+import rentabilidadeRoutes from './routes/rentabilidade.js'
+import projecoesRoutes from './routes/projecoes.js'
+import exportarRelatoriosRoutes from './routes/exportar-relatorios.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -302,6 +307,11 @@ app.use('/api/gruas-mensais', gruasMensaisRoutes)
 app.use('/api/checklist-devolucao', checklistDevolucaoRoutes)
 app.use('/api/notificacoes', notificacoesRoutes)
 app.use('/api/email-config', emailConfigRoutes)
+app.use('/api/contas-receber', contasReceberRoutes)
+app.use('/api/contas-pagar', contasPagarRoutes)
+app.use('/api/rentabilidade', rentabilidadeRoutes)
+app.use('/api/projecoes', projecoesRoutes)
+app.use('/api/exportar-relatorios', exportarRelatoriosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

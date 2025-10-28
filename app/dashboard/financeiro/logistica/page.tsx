@@ -41,37 +41,6 @@ import { useToast } from "@/hooks/use-toast"
 import { logisticaApi, type Manifesto, type Veiculo } from "@/lib/api-logistica"
 import { useEffect } from "react"
 
-const mockViagens = [
-  {
-    id: 1,
-    numero: "VIAG-001",
-    motorista: "João Silva",
-    veiculo: "Caminhão ABC-1234",
-    origem: "São Paulo - SP",
-    destino: "Rio de Janeiro - RJ",
-    dataInicio: "2024-01-15",
-    dataFim: "2024-01-16",
-    carga: "Grua 25t",
-    status: "concluida",
-    distancia: 430,
-    valor: 2500
-  },
-  {
-    id: 2,
-    numero: "VIAG-002",
-    motorista: "Maria Santos",
-    veiculo: "Caminhão XYZ-5678",
-    origem: "São Paulo - SP",
-    destino: "Belo Horizonte - MG",
-    dataInicio: "2024-01-14",
-    dataFim: "2024-01-15",
-    carga: "Plataforma",
-    status: "em_andamento",
-    distancia: 580,
-    valor: 3200
-  }
-]
-
 export default function LogisticaPage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [searchTerm, setSearchTerm] = useState("")

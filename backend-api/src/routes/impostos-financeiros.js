@@ -94,6 +94,210 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
 
 /**
  * @swagger
+ * /api/impostos-financeiros/calcular:
+ *   post:
+ *     summary: Calcular valor de imposto
+ *     tags: [Impostos]
+ */
+router.post('/calcular', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { receita_bruta, tipo_imposto, competencia } = req.body;
+
+    if (!receita_bruta || !tipo_imposto) {
+      return res.status(400).json({
+        error: 'Parâmetros obrigatórios: receita_bruta e tipo_imposto'
+      });
+    }
+
+    // Tabela de alíquotas (simplificada)
+    const aliquotas = {
+      ISS: 5.0,
+      ICMS: 18.0,
+      PIS: 0.65,
+      COFINS: 3.0,
+      IRPJ: 15.0,
+      CSLL: 9.0,
+      INSS: 11.0
+    };
+
+    const aliquota = aliquotas[tipo_imposto] || 0;
+    const valor_calculado = receita_bruta * (aliquota / 100);
+
+    res.json({
+      success: true,
+      data: {
+        tipo: tipo_imposto,
+        valor_base: receita_bruta,
+        aliquota,
+        valor_calculado
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao calcular imposto:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/impostos-financeiros/calcular-mes:
+ *   post:
+ *     summary: Calcular impostos automaticamente baseado nas receitas do mês
+ *     tags: [Impostos]
+ */
+router.post('/calcular-mes', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { mes, ano } = req.body;
+
+    if (!mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros obrigatórios: mes e ano'
+      });
+    }
+
+    const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
+
+    // Buscar receitas do mês
+    const { data: receitas, error: receitasError } = await supabaseAdmin
+      .from('receitas')
+      .select('valor')
+      .eq('status', 'confirmada')
+      .ilike('data_receita', `${competencia}%`);
+
+    if (receitasError) {
+      console.error('Erro ao buscar receitas:', receitasError);
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar receitas'
+      });
+    }
+
+    const totalReceitas = receitas?.reduce((sum, r) => sum + parseFloat(r.valor || 0), 0) || 0;
+
+    // Tabela de alíquotas baseada no regime tributário
+    const aliquotasSimples = {
+      icms: 0.18,      // 18% ICMS
+      iss: 0.05,       // 5% ISS (serviços)
+      pis: 0.0165,     // 1.65% PIS
+      cofins: 0.076,   // 7.6% COFINS
+      irpj: 0.15,      // 15% IRPJ
+      csll: 0.09,      // 9% CSLL
+      inss: 0.11       // 11% INSS
+    };
+
+    // Calcular impostos
+    const impostos = {
+      icms: totalReceitas * aliquotasSimples.icms,
+      iss: totalReceitas * aliquotasSimples.iss,
+      pis: totalReceitas * aliquotasSimples.pis,
+      cofins: totalReceitas * aliquotasSimples.cofins,
+      irpj: totalReceitas * aliquotasSimples.irpj,
+      csll: totalReceitas * aliquotasSimples.csll,
+      inss: totalReceitas * aliquotasSimples.inss
+    };
+
+    const totalImpostos = Object.values(impostos).reduce((sum, i) => sum + i, 0);
+    const receitaLiquida = totalReceitas - totalImpostos;
+    const cargaTributaria = totalReceitas > 0 ? (totalImpostos / totalReceitas) * 100 : 0;
+
+    res.json({
+      success: true,
+      data: {
+        competencia: `${mes}/${ano}`,
+        periodo: competencia,
+        receita_bruta: totalReceitas.toFixed(2),
+        impostos: {
+          icms: impostos.icms.toFixed(2),
+          iss: impostos.iss.toFixed(2),
+          pis: impostos.pis.toFixed(2),
+          cofins: impostos.cofins.toFixed(2),
+          irpj: impostos.irpj.toFixed(2),
+          csll: impostos.csll.toFixed(2),
+          inss: impostos.inss.toFixed(2)
+        },
+        total_impostos: totalImpostos.toFixed(2),
+        receita_liquida: receitaLiquida.toFixed(2),
+        carga_tributaria: cargaTributaria.toFixed(2) + '%',
+        aliquotas: aliquotasSimples
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao calcular impostos do mês:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/impostos-financeiros/relatorio:
+ *   get:
+ *     summary: Relatório de impostos por período
+ *     tags: [Impostos]
+ */
+router.get('/relatorio', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { mes, ano } = req.query;
+
+    if (!mes || !ano) {
+      return res.status(400).json({
+        error: 'Parâmetros obrigatórios: mes e ano'
+      });
+    }
+
+    const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
+
+    const { data, error } = await supabaseAdmin
+      .from('impostos_financeiros')
+      .select('*')
+      .eq('competencia', competencia)
+      .order('tipo');
+
+    if (error) throw error;
+
+    // Calcular totais
+    const totais = {
+      valor_total: 0,
+      valor_pago: 0,
+      valor_pendente: 0
+    };
+
+    data.forEach(imposto => {
+      totais.valor_total += parseFloat(imposto.valor || 0);
+      if (imposto.status === 'pago') {
+        totais.valor_pago += parseFloat(imposto.valor_pago || 0);
+      } else {
+        totais.valor_pendente += parseFloat(imposto.valor || 0);
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        competencia: `${mes}/${ano}`,
+        impostos: data,
+        totais
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao gerar relatório:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/impostos-financeiros/{id}:
  *   get:
  *     summary: Buscar imposto por ID
@@ -327,120 +531,6 @@ router.post('/:id/pagamento', authenticateToken, requirePermission('obras:editar
     });
   } catch (error) {
     console.error('Erro ao registrar pagamento:', error);
-    res.status(500).json({
-      error: 'Erro interno do servidor',
-      message: error.message
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/impostos-financeiros/calcular:
- *   post:
- *     summary: Calcular valor de imposto
- *     tags: [Impostos]
- */
-router.post('/calcular', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
-  try {
-    const { receita_bruta, tipo_imposto, competencia } = req.body;
-
-    if (!receita_bruta || !tipo_imposto) {
-      return res.status(400).json({
-        error: 'Parâmetros obrigatórios: receita_bruta e tipo_imposto'
-      });
-    }
-
-    // Tabela de alíquotas (simplificada)
-    const aliquotas = {
-      ISS: 5.0,
-      ICMS: 18.0,
-      PIS: 0.65,
-      COFINS: 3.0,
-      IRPJ: 15.0,
-      CSLL: 9.0,
-      INSS: 11.0
-    };
-
-    const aliquota = aliquotas[tipo_imposto] || 0;
-    const valor_calculado = receita_bruta * (aliquota / 100);
-
-    res.json({
-      success: true,
-      data: {
-        tipo: tipo_imposto,
-        valor_base: receita_bruta,
-        aliquota,
-        valor_calculado
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao calcular imposto:', error);
-    res.status(500).json({
-      error: 'Erro interno do servidor',
-      message: error.message
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/impostos-financeiros/relatorio:
- *   get:
- *     summary: Relatório de impostos por período
- *     tags: [Impostos]
- */
-router.get('/relatorio', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
-  try {
-    const { mes, ano } = req.query;
-
-    if (!mes || !ano) {
-      return res.status(400).json({
-        error: 'Parâmetros obrigatórios: mes e ano'
-      });
-    }
-
-    const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
-
-    const { data, error } = await supabaseAdmin
-      .from('impostos_financeiros')
-      .select('*')
-      .eq('competencia', competencia);
-
-    if (error) throw error;
-
-    const relatorio = {
-      competencia,
-      total_impostos: data.reduce((sum, i) => sum + parseFloat(i.valor), 0),
-      total_pago: data.filter(i => i.status === 'pago').reduce((sum, i) => sum + parseFloat(i.valor), 0),
-      total_pendente: data.filter(i => i.status === 'pendente').reduce((sum, i) => sum + parseFloat(i.valor), 0),
-      impostos_por_tipo: Object.entries(
-        data.reduce((acc, imposto) => {
-          if (!acc[imposto.tipo]) {
-            acc[imposto.tipo] = {
-              tipo: imposto.tipo,
-              valor_total: 0,
-              valor_pago: 0,
-              valor_pendente: 0
-            };
-          }
-          acc[imposto.tipo].valor_total += parseFloat(imposto.valor);
-          if (imposto.status === 'pago') {
-            acc[imposto.tipo].valor_pago += parseFloat(imposto.valor);
-          } else if (imposto.status === 'pendente') {
-            acc[imposto.tipo].valor_pendente += parseFloat(imposto.valor);
-          }
-          return acc;
-        }, {})
-      ).map(([_, value]) => value)
-    };
-
-    res.json({
-      success: true,
-      data: relatorio
-    });
-  } catch (error) {
-    console.error('Erro ao gerar relatório:', error);
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message

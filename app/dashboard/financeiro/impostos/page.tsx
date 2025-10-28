@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useToast } from "@/hooks/use-toast"
 import { 
   Calculator, 
   Plus, 
@@ -30,61 +31,14 @@ import {
   Filter,
   MoreHorizontal,
   Receipt,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Loader2
 } from "lucide-react"
 
-// Mock data para demonstração
-const mockPagamentosImpostos = [
-  {
-    id: 1,
-    tipo: "ICMS",
-    descricao: "ICMS sobre vendas - Janeiro 2024",
-    valor: 2500,
-    vencimento: "2024-02-15",
-    status: "pago",
-    dataPagamento: "2024-02-10",
-    numeroNota: "NF-001"
-  },
-  {
-    id: 2,
-    tipo: "PIS",
-    descricao: "PIS sobre faturamento - Janeiro 2024",
-    valor: 850,
-    vencimento: "2024-02-15",
-    status: "pendente",
-    dataPagamento: null,
-    numeroNota: "NF-002"
-  },
-  {
-    id: 3,
-    tipo: "COFINS",
-    descricao: "COFINS sobre faturamento - Janeiro 2024",
-    valor: 1200,
-    vencimento: "2024-02-15",
-    status: "pendente",
-    dataPagamento: null,
-    numeroNota: "NF-003"
-  }
-]
-
-const mockRelatorioImpostos = [
-  {
-    mes: "Janeiro 2024",
-    icms: 2500,
-    pis: 850,
-    cofins: 1200,
-    total: 4550,
-    status: "pendente"
-  },
-  {
-    mes: "Dezembro 2023",
-    icms: 2300,
-    pis: 780,
-    cofins: 1100,
-    total: 4180,
-    status: "pago"
-  }
-]
+// Helper para obter token de autenticação
+const getAuthToken = () => {
+  return localStorage.getItem('access_token') || localStorage.getItem('token')
+}
 
 export default function ImpostosPage() {
   const [activeTab, setActiveTab] = useState('pagamentos')
@@ -93,35 +47,114 @@ export default function ImpostosPage() {
   const [selectedTipo, setSelectedTipo] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<any>(null)
+  const { toast } = useToast()
+
+  // Estados para dados reais da API
+  const [impostos, setImpostos] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Carregar dados ao montar o componente
+  useEffect(() => {
+    loadImpostos()
+  }, [])
+
+  const loadImpostos = async () => {
+    setIsLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = getAuthToken()
+
+      const response = await fetch(`${API_URL}/api/impostos-financeiros`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setImpostos(data.data || data || [])
+      } else {
+        throw new Error('Erro ao carregar impostos')
+      }
+    } catch (error) {
+      console.error('Erro ao carregar impostos:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar impostos. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Agrupar impostos por mês
+  const groupImpostosByMonth = (impostos: any[]) => {
+    const grouped: any = {}
+    
+    impostos.forEach(imposto => {
+      const mes = imposto.mes_competencia || 'Sem mês'
+      if (!grouped[mes]) {
+        grouped[mes] = {
+          mes,
+          icms: 0,
+          pis: 0,
+          cofins: 0,
+          total: 0,
+          status: 'pendente'
+        }
+      }
+      
+      const tipo = imposto.tipo_imposto?.toUpperCase()
+      const valor = imposto.valor || 0
+      
+      if (tipo === 'ICMS') grouped[mes].icms += valor
+      else if (tipo === 'PIS') grouped[mes].pis += valor
+      else if (tipo === 'COFINS') grouped[mes].cofins += valor
+      
+      grouped[mes].total += valor
+      
+      if (imposto.status === 'pago') {
+        grouped[mes].status = 'pago'
+      }
+    })
+    
+    return Object.values(grouped)
+  }
+
+  const totalImpostos = impostos.reduce((sum, i) => sum + (i.valor || 0), 0)
+  const totalPago = impostos.filter(i => i.status === 'pago').reduce((sum, i) => sum + (i.valor || 0), 0)
+  const totalPendente = totalImpostos - totalPago
 
   const stats = [
     { 
-      title: "Impostos do Mês", 
-      value: "R$ 4.550", 
+      title: "Total de Impostos", 
+      value: `R$ ${totalImpostos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
       icon: TrendingDown, 
       color: "bg-red-500",
-      change: "+5% vs mês anterior"
+      change: `${impostos.length} registro(s)`
     },
     { 
       title: "Pagamentos Pendentes", 
-      value: "2", 
+      value: impostos.filter(i => i.status === 'pendente' || i.status === 'atrasado').length.toString(), 
       icon: Clock, 
       color: "bg-orange-500",
-      change: "Vencem em 5 dias"
+      change: `A pagar`
     },
     { 
       title: "Total Pago", 
-      value: "R$ 4.180", 
+      value: `R$ ${totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
       icon: CheckCircle, 
       color: "bg-green-500",
-      change: "Mês anterior"
+      change: `${impostos.filter(i => i.status === 'pago').length} quitado(s)`
     },
     { 
-      title: "Próximo Vencimento", 
-      value: "15/02", 
-      icon: Calendar, 
+      title: "Tipos de Impostos", 
+      value: new Set(impostos.map(i => i.tipo_imposto)).size.toString(), 
+      icon: Calculator, 
       color: "bg-blue-500",
-      change: "PIS e COFINS"
+      change: "Tipos diferentes"
     }
   ]
 
@@ -285,7 +318,19 @@ export default function ImpostosPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockPagamentosImpostos.map((pagamento) => (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : impostos.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          Nenhum imposto encontrado
+                        </TableCell>
+                      </TableRow>
+                    ) : impostos.map((pagamento) => (
                       <TableRow key={pagamento.id}>
                         <TableCell>
                           <Badge className={getTipoColor(pagamento.tipo)}>
@@ -411,7 +456,19 @@ export default function ImpostosPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockRelatorioImpostos.map((relatorio, index) => (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ) : impostos.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          Nenhum relatório disponível
+                        </TableCell>
+                      </TableRow>
+                    ) : groupImpostosByMonth(impostos).map((relatorio, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{relatorio.mes}</TableCell>
                         <TableCell className="font-semibold">

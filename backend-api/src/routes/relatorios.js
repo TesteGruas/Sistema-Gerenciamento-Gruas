@@ -639,6 +639,245 @@ router.get('/financeiro', async (req, res) => {
 })
 
 // =====================================================
+// RELATÓRIO DE FATURAMENTO
+// =====================================================
+
+/**
+ * @swagger
+ * /api/relatorios/faturamento:
+ *   get:
+ *     summary: Relatório de faturamento consolidado
+ *     tags: [Relatórios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: data_inicio
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: data_fim
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: agrupar_por
+ *         schema:
+ *           type: string
+ *           enum: [mes, tipo, cliente]
+ *           default: mes
+ *     responses:
+ *       200:
+ *         description: Relatório de faturamento
+ */
+router.get('/faturamento', async (req, res) => {
+  try {
+    const { data_inicio, data_fim, agrupar_por = 'mes' } = req.query;
+
+    if (!data_inicio || !data_fim) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros obrigatórios: data_inicio e data_fim'
+      });
+    }
+
+    // Função auxiliar para agrupar por mês
+    const agruparPorMes = (items, campoData) => {
+      const agrupado = {};
+      
+      items?.forEach(item => {
+        const data = new Date(item[campoData]);
+        const mesAno = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
+        const mesNome = data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        
+        if (!agrupado[mesAno]) {
+          agrupado[mesAno] = {
+            mes: mesNome,
+            mes_ano: mesAno,
+            total: 0,
+            quantidade: 0,
+            itens: []
+          };
+        }
+        
+        agrupado[mesAno].total += parseFloat(item.valor_total || 0);
+        agrupado[mesAno].quantidade += 1;
+        agrupado[mesAno].itens.push(item);
+      });
+      
+      return Object.values(agrupado).sort((a, b) => a.mes_ano.localeCompare(b.mes_ano));
+    };
+
+    // Buscar vendas confirmadas
+    const { data: vendas, error: vendasError } = await supabaseAdmin
+      .from('vendas')
+      .select(`
+        *,
+        cliente:clientes(id, nome, cnpj)
+      `)
+      .gte('data_venda', data_inicio)
+      .lte('data_venda', data_fim)
+      .eq('status', 'confirmada');
+
+    if (vendasError) {
+      console.error('Erro ao buscar vendas:', vendasError);
+    }
+
+    // Buscar locações ativas
+    const { data: locacoes, error: locacoesError } = await supabaseAdmin
+      .from('locacoes')
+      .select(`
+        *,
+        cliente:clientes(id, nome, cnpj)
+      `)
+      .gte('data_inicio', data_inicio)
+      .lte('data_inicio', data_fim);
+
+    if (locacoesError) {
+      console.error('Erro ao buscar locações:', locacoesError);
+    }
+
+    // Buscar medições do período (faturamento de locações)
+    const { data: medicoes, error: medicoesError } = await supabaseAdmin
+      .from('medicoes')
+      .select(`
+        *,
+        locacao:locacoes(
+          id,
+          numero,
+          cliente:clientes(id, nome, cnpj)
+        )
+      `)
+      .eq('status', 'finalizada')
+      .ilike('periodo', `%${data_inicio.substring(0, 7)}%`);
+
+    if (medicoesError) {
+      console.error('Erro ao buscar medições:', medicoesError);
+    }
+
+    // Calcular totais
+    const totalVendas = vendas?.reduce((sum, v) => sum + parseFloat(v.valor_total || 0), 0) || 0;
+    const totalLocacoes = locacoes?.reduce((sum, l) => sum + parseFloat(l.valor_mensal || 0), 0) || 0;
+    const totalMedicoes = medicoes?.reduce((sum, m) => sum + parseFloat(m.valor_total || 0), 0) || 0;
+
+    // Separar vendas por tipo
+    const vendasEquipamentos = vendas?.filter(v => v.tipo_venda === 'equipamento') || [];
+    const vendasServicos = vendas?.filter(v => v.tipo_venda === 'servico') || [];
+
+    const totalEquipamentos = vendasEquipamentos.reduce((sum, v) => sum + parseFloat(v.valor_total || 0), 0);
+    const totalServicos = vendasServicos.reduce((sum, v) => sum + parseFloat(v.valor_total || 0), 0);
+
+    let relatorio = {};
+
+    if (agrupar_por === 'mes') {
+      // Agrupar por mês
+      relatorio = {
+        vendas: agruparPorMes(vendas, 'data_venda'),
+        locacoes: agruparPorMes(medicoes, 'created_at'),
+        total_periodo: {
+          vendas: totalVendas,
+          locacoes: totalMedicoes,
+          total: totalVendas + totalMedicoes
+        }
+      };
+    } else if (agrupar_por === 'tipo') {
+      // Agrupar por tipo de receita
+      relatorio = {
+        tipos: [
+          {
+            tipo: 'Vendas de Equipamentos',
+            total: totalEquipamentos,
+            quantidade: vendasEquipamentos.length,
+            percentual: totalVendas > 0 ? (totalEquipamentos / totalVendas * 100).toFixed(2) : 0
+          },
+          {
+            tipo: 'Vendas de Serviços',
+            total: totalServicos,
+            quantidade: vendasServicos.length,
+            percentual: totalVendas > 0 ? (totalServicos / totalVendas * 100).toFixed(2) : 0
+          },
+          {
+            tipo: 'Locações de Gruas',
+            total: totalMedicoes,
+            quantidade: medicoes?.length || 0,
+            percentual: (totalVendas + totalMedicoes) > 0 ? (totalMedicoes / (totalVendas + totalMedicoes) * 100).toFixed(2) : 0
+          }
+        ],
+        total_geral: totalVendas + totalMedicoes
+      };
+    } else if (agrupar_por === 'cliente') {
+      // Agrupar por cliente
+      const clientesMap = {};
+      
+      vendas?.forEach(v => {
+        const clienteId = v.cliente_id;
+        const clienteNome = v.cliente?.nome || 'Cliente não identificado';
+        
+        if (!clientesMap[clienteId]) {
+          clientesMap[clienteId] = {
+            cliente_id: clienteId,
+            cliente_nome: clienteNome,
+            total: 0,
+            vendas: 0,
+            locacoes: 0
+          };
+        }
+        
+        clientesMap[clienteId].total += parseFloat(v.valor_total || 0);
+        clientesMap[clienteId].vendas += parseFloat(v.valor_total || 0);
+      });
+
+      medicoes?.forEach(m => {
+        const clienteId = m.locacao?.cliente?.id;
+        const clienteNome = m.locacao?.cliente?.nome || 'Cliente não identificado';
+        
+        if (!clientesMap[clienteId]) {
+          clientesMap[clienteId] = {
+            cliente_id: clienteId,
+            cliente_nome: clienteNome,
+            total: 0,
+            vendas: 0,
+            locacoes: 0
+          };
+        }
+        
+        clientesMap[clienteId].total += parseFloat(m.valor_total || 0);
+        clientesMap[clienteId].locacoes += parseFloat(m.valor_total || 0);
+      });
+
+      relatorio = {
+        clientes: Object.values(clientesMap).sort((a, b) => b.total - a.total),
+        total_geral: totalVendas + totalMedicoes
+      };
+    }
+
+    res.json({
+      success: true,
+      data: relatorio,
+      resumo: {
+        periodo: `${data_inicio} a ${data_fim}`,
+        total_vendas: totalVendas,
+        total_locacoes: totalMedicoes,
+        total_faturamento: totalVendas + totalMedicoes,
+        quantidade_vendas: vendas?.length || 0,
+        quantidade_locacoes: medicoes?.length || 0
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao gerar relatório de faturamento:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+// =====================================================
 // RELATÓRIO DE MANUTENÇÃO
 // =====================================================
 
