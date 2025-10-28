@@ -11,33 +11,37 @@ import {
   TrendingUp,
   Users
 } from 'lucide-react'
-import { AprovacaoHorasExtras } from '@/lib/mock-data-aprovacoes'
+import { RegistroPontoAprovacao } from '@/lib/api-aprovacoes-horas-extras'
 
 interface EstatisticasAprovacoesProps {
-  aprovacoes: AprovacaoHorasExtras[];
+  aprovacoes: RegistroPontoAprovacao[];
 }
 
 export function EstatisticasAprovacoes({ aprovacoes }: EstatisticasAprovacoesProps) {
-  // Calcular estatísticas
+  // Calcular estatísticas (normalizar status para comparação)
   const total = aprovacoes.length;
-  const pendentes = aprovacoes.filter(a => a.status === 'pendente').length;
-  const aprovadas = aprovacoes.filter(a => a.status === 'aprovado').length;
-  const rejeitadas = aprovacoes.filter(a => a.status === 'rejeitado').length;
-  const canceladas = aprovacoes.filter(a => a.status === 'cancelado').length;
+  const pendentes = aprovacoes.filter(a => a.status === 'Pendente Aprovação' || a.status === 'Pendente').length;
+  const aprovadas = aprovacoes.filter(a => a.status === 'Aprovado').length;
+  const rejeitadas = aprovacoes.filter(a => a.status === 'Rejeitado').length;
+  const canceladas = aprovacoes.filter(a => a.status === 'Cancelado').length;
   
   // Calcular horas extras totais
-  const totalHorasExtras = aprovacoes.reduce((acc, aprovacao) => acc + aprovacao.horas_extras, 0);
+  const totalHorasExtras = aprovacoes.reduce((acc, aprovacao) => acc + (aprovacao.horas_extras || 0), 0);
   const horasExtrasAprovadas = aprovacoes
-    .filter(a => a.status === 'aprovado')
-    .reduce((acc, aprovacao) => acc + aprovacao.horas_extras, 0);
+    .filter(a => a.status === 'Aprovado')
+    .reduce((acc, aprovacao) => acc + (aprovacao.horas_extras || 0), 0);
   
   // Calcular taxa de aprovação
   const taxaAprovacao = total > 0 ? ((aprovadas / total) * 100).toFixed(1) : '0';
   
-  // Calcular aprovações vencidas
-  const vencidas = aprovacoes.filter(a => 
-    a.status === 'pendente' && new Date(a.data_limite) < new Date()
-  ).length;
+  // Calcular aprovações vencidas (assumir 7 dias para aprovar)
+  const vencidas = aprovacoes.filter(a => {
+    if (a.status !== 'Pendente Aprovação' && a.status !== 'Pendente') return false;
+    const dataRegistro = new Date(a.created_at);
+    const seteDiasAtras = new Date();
+    seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+    return dataRegistro < seteDiasAtras;
+  }).length;
   
   // Calcular funcionários únicos
   const funcionariosUnicos = new Set(aprovacoes.map(a => a.funcionario_id)).size;

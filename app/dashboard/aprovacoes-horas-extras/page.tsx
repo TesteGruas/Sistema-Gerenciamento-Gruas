@@ -13,21 +13,19 @@ import {
   RefreshCw,
   Download,
   Filter,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from 'lucide-react'
 import { CardAprovacao } from '@/components/card-aprovacao-horas-extras'
 import { FiltrosAprovacoes } from '@/components/filtros-aprovacoes'
 import { EstatisticasAprovacoes } from '@/components/estatisticas-aprovacoes'
-import { 
-  mockAprovacoes, 
-  AprovacaoHorasExtras,
-  formatarData,
-  formatarTempoRelativo
-} from '@/lib/mock-data-aprovacoes'
+import { useAprovacoesHorasExtras } from '@/hooks/useAprovacoesHorasExtras'
+import { formatarTempoRelativo } from '@/lib/mock-data-aprovacoes'
 
 export default function AprovacoesHorasExtrasPage() {
-  const [aprovacoes, setAprovacoes] = useState<AprovacaoHorasExtras[]>(mockAprovacoes);
-  const [loading, setLoading] = useState(false);
+  // Listar TODAS as aprovações pendentes (sem filtro de gestor)
+  const { aprovacoes, loading, error, fetchAprovacoes, aprovar, rejeitar, refetch } = useAprovacoesHorasExtras();
+  
   const [filtros, setFiltros] = useState({
     status: '',
     dataInicio: '',
@@ -36,42 +34,75 @@ export default function AprovacoesHorasExtrasPage() {
     obra: ''
   });
 
+  // Carregar aprovações ao montar o componente
+  useEffect(() => {
+    fetchAprovacoes(); // Sem gestor_id = lista todas
+  }, [fetchAprovacoes]);
+
   // Filtrar aprovações baseado nos filtros
   const aprovacoesFiltradas = aprovacoes.filter(aprovacao => {
-    if (filtros.status && aprovacao.status !== filtros.status) return false;
-    if (filtros.funcionario && !aprovacao.funcionario.nome.toLowerCase().includes(filtros.funcionario.toLowerCase())) return false;
-    if (filtros.obra && aprovacao.funcionario.obra !== filtros.obra) return false;
-    if (filtros.dataInicio && aprovacao.data_trabalho < filtros.dataInicio) return false;
-    if (filtros.dataFim && aprovacao.data_trabalho > filtros.dataFim) return false;
+    const normalizedStatus = aprovacao.status.toLowerCase().replace(' ', '-');
+    
+    if (filtros.status && normalizedStatus !== filtros.status.toLowerCase()) return false;
+    if (filtros.funcionario && !aprovacao.funcionario?.nome.toLowerCase().includes(filtros.funcionario.toLowerCase())) return false;
+    if (filtros.dataInicio && aprovacao.data < filtros.dataInicio) return false;
+    if (filtros.dataFim && aprovacao.data > filtros.dataFim) return false;
     return true;
   });
 
-  // Separar por status
-  const pendentes = aprovacoesFiltradas.filter(a => a.status === 'pendente');
-  const aprovadas = aprovacoesFiltradas.filter(a => a.status === 'aprovado');
-  const rejeitadas = aprovacoesFiltradas.filter(a => a.status === 'rejeitado');
-  const canceladas = aprovacoesFiltradas.filter(a => a.status === 'cancelado');
+  // Separar por status (normalizar para comparação)
+  const pendentes = aprovacoesFiltradas.filter(a => a.status === 'Pendente Aprovação');
+  const aprovadas = aprovacoesFiltradas.filter(a => a.status === 'Aprovado');
+  const rejeitadas = aprovacoesFiltradas.filter(a => a.status === 'Rejeitado');
+  const canceladas = aprovacoesFiltradas.filter(a => a.status === 'Cancelado');
 
   const handleRefresh = async () => {
-    setLoading(true);
-    // Simular carregamento
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoading(false);
-  };
-
-  const handleAprovacaoChange = () => {
-    // Simular atualização dos dados
-    console.log('Aprovação alterada, atualizando lista...');
+    await refetch();
   };
 
   const handleExport = () => {
-    // Simular exportação
+    // TODO: Implementar exportação
     console.log('Exportando dados...');
   };
 
   const getStatusCount = (status: string) => {
-    return aprovacoesFiltradas.filter(a => a.status === status).length;
+    if (status === 'pendente') return pendentes.length;
+    if (status === 'aprovado') return aprovadas.length;
+    if (status === 'rejeitado') return rejeitadas.length;
+    if (status === 'cancelado') return canceladas.length;
+    return 0;
   };
+
+  // Loading inicial
+  if (loading && aprovacoes.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
+        <p className="text-gray-600">Carregando aprovações...</p>
+      </div>
+    );
+  }
+
+  // Erro
+  if (error && aprovacoes.length === 0) {
+    return (
+      <Card className="p-8">
+        <CardContent className="text-center space-y-4">
+          <AlertTriangle className="w-12 h-12 text-red-600 mx-auto" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Erro ao carregar aprovações
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => fetchAprovacoes()}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Tentar Novamente
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -167,29 +198,13 @@ export default function AprovacoesHorasExtrasPage() {
             </Card>
           ) : (
             <div className="space-y-4">
-              {/* Alertas para pendentes */}
-              {pendentes.some(p => new Date(p.data_limite) < new Date()) && (
-                <Card className="bg-red-50 border-red-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="w-5 h-5 text-red-600" />
-                      <div>
-                        <h4 className="font-semibold text-red-800">Aprovações Vencidas</h4>
-                        <p className="text-red-700 text-sm">
-                          Algumas aprovações estão com prazo expirado e serão canceladas automaticamente.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
               {/* Lista de pendentes */}
               {pendentes.map(aprovacao => (
                 <CardAprovacao
                   key={aprovacao.id}
                   aprovacao={aprovacao}
-                  onAprovacaoChange={handleAprovacaoChange}
+                  onAprovar={aprovar}
+                  onRejeitar={rejeitar}
                   showActions={true}
                 />
               ))}
@@ -217,7 +232,8 @@ export default function AprovacoesHorasExtrasPage() {
                 <CardAprovacao
                   key={aprovacao.id}
                   aprovacao={aprovacao}
-                  onAprovacaoChange={handleAprovacaoChange}
+                  onAprovar={aprovar}
+                  onRejeitar={rejeitar}
                   showActions={false}
                 />
               ))}
@@ -245,7 +261,8 @@ export default function AprovacoesHorasExtrasPage() {
                 <CardAprovacao
                   key={aprovacao.id}
                   aprovacao={aprovacao}
-                  onAprovacaoChange={handleAprovacaoChange}
+                  onAprovar={aprovar}
+                  onRejeitar={rejeitar}
                   showActions={false}
                 />
               ))}
@@ -273,7 +290,8 @@ export default function AprovacoesHorasExtrasPage() {
                 <CardAprovacao
                   key={aprovacao.id}
                   aprovacao={aprovacao}
-                  onAprovacaoChange={handleAprovacaoChange}
+                  onAprovar={aprovar}
+                  onRejeitar={rejeitar}
                   showActions={false}
                 />
               ))}

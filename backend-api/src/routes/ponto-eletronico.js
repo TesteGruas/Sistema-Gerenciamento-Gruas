@@ -4032,19 +4032,19 @@ router.post('/registros/:id/aprovar-assinatura', async (req, res) => {
 
 /**
  * @swagger
- * /api/ponto-eletronico/registros/pendentes-aprovacao:
+ * /api/ponto-eletronico/horas-extras:
  *   get:
- *     summary: Lista registros pendentes de aprovação para um gestor
+ *     summary: Lista registros pendentes de aprovação (todas ou filtradas por gestor)
  *     tags: [Ponto Eletrônico]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: gestor_id
- *         required: true
+ *         required: false
  *         schema:
  *           type: integer
- *         description: ID do gestor
+ *         description: ID do gestor (opcional - se não informado, retorna todas as aprovações pendentes)
  *       - in: query
  *         name: page
  *         schema:
@@ -4109,47 +4109,39 @@ router.post('/registros/:id/aprovar-assinatura', async (req, res) => {
  *                     pages:
  *                       type: integer
  *       400:
- *         description: ID do gestor é obrigatório
+ *         description: Gestor não possui obra atribuída
  *       500:
  *         description: Erro interno do servidor
  */
-router.get('/registros/pendentes-aprovacao', async (req, res) => {
+router.get('/horas-extras', async (req, res) => {
   try {
-    const { gestor_id, page = 1, limit = 20 } = req.query;
+    const { funcionario_id, data_inicio, data_fim, status, page = 1, limit = 20 } = req.query;
 
-    if (!gestor_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID do gestor é obrigatório'
-      });
-    }
-
-    // Buscar a obra do gestor
-    const { data: gestor, error: gestorError } = await supabaseAdmin
-      .from('funcionarios')
-      .select('obra_atual_id')
-      .eq('id', gestor_id)
-      .eq('status', 'Ativo')
-      .single();
-
-    if (gestorError || !gestor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Gestor não encontrado'
-      });
-    }
-
-    // Buscar registros pendentes de aprovação da mesma obra
     let query = supabaseAdmin
       .from('registros_ponto')
       .select(`
         *,
-        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno, obra_atual_id)
-      `)
-      .eq('status', 'Pendente Aprovação')
-      .eq('funcionario.obra_atual_id', gestor.obra_atual_id)
-      .order('data', { ascending: false })
-      .order('created_at', { ascending: false });
+        funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, obra_atual_id),
+        aprovador:usuarios!registros_ponto_aprovado_por_fkey(id, nome)
+      `, { count: 'exact' })
+      .gt('horas_extras', 0)
+      .order('data', { ascending: false });
+
+    if (funcionario_id) {
+      query = query.eq('funcionario_id', funcionario_id);
+    }
+
+    if (data_inicio) {
+      query = query.gte('data', data_inicio);
+    }
+
+    if (data_fim) {
+      query = query.lte('data', data_fim);
+    }
+
+    if (status) {
+      query = query.eq('status', status);
+    }
 
     // Paginação
     const offset = (page - 1) * limit;
@@ -4158,7 +4150,7 @@ router.get('/registros/pendentes-aprovacao', async (req, res) => {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('Erro ao buscar registros pendentes:', error);
+      console.error('Erro ao buscar registros com horas extras:', error);
       return res.status(500).json({
         success: false,
         message: 'Erro interno do servidor'
@@ -4177,7 +4169,7 @@ router.get('/registros/pendentes-aprovacao', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erro na rota de registros pendentes:', error);
+    console.error('Erro na rota de horas extras:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor'
