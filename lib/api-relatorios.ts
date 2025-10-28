@@ -267,12 +267,67 @@ export const apiRelatorios = {
     mes: number;
     ano: number;
   }): Promise<{ success: boolean; data: RelatorioImpostos }> {
-    const queryParams = new URLSearchParams();
-    queryParams.append('mes', params.mes.toString());
-    queryParams.append('ano', params.ano.toString());
+    const mes = params.mes.toString().padStart(2, '0');
+    const ano = params.ano.toString();
     
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_BASE_URL}/api/impostos-financeiros/relatorio?${queryParams}`, {
+    const response = await fetch(`${API_BASE_URL}/api/relatorios-impostos/${mes}/${ano}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de faturamento por tipo
+  async faturamento(params: {
+    data_inicio: string;
+    data_fim: string;
+    agrupar_por?: 'mes' | 'dia';
+  }): Promise<{ success: boolean; data: any; resumo: any }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('data_inicio', params.data_inicio);
+    queryParams.append('data_fim', params.data_fim);
+    if (params.agrupar_por) queryParams.append('agrupar_por', params.agrupar_por);
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/relatorios-faturamento?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Dashboard financeiro consolidado
+  async dashboardConsolidado(params?: {
+    data_inicio?: string;
+    data_fim?: string;
+  }): Promise<{ success: boolean; periodo: any; resumo: any }> {
+    const queryParams = new URLSearchParams();
+    if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+    if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+    
+    const token = localStorage.getItem('access_token');
+    const url = queryParams.toString() 
+      ? `${API_BASE_URL}/api/financial-data/resumo?${queryParams}`
+      : `${API_BASE_URL}/api/financial-data/resumo`;
+      
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

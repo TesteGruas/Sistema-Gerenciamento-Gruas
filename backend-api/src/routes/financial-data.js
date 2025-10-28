@@ -279,4 +279,259 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/financial-data/resumo:
+ *   get:
+ *     summary: Dashboard financeiro consolidado
+ *     tags: [Financial Data]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data inicial (opcional, padrão início do mês atual)
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data final (opcional, padrão hoje)
+ *     responses:
+ *       200:
+ *         description: Resumo financeiro consolidado
+ */
+router.get('/resumo', async (req, res) => {
+  try {
+    let { data_inicio, data_fim } = req.query;
+
+    // Se não informados, usar mês atual
+    if (!data_inicio || !data_fim) {
+      const hoje = new Date();
+      data_fim = hoje.toISOString().split('T')[0];
+      
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      data_inicio = inicioMes.toISOString().split('T')[0];
+    }
+
+    // ========== RECEITAS ==========
+    
+    // Vendas
+    const { data: vendas } = await supabaseAdmin
+      .from('vendas')
+      .select('valor_total, status')
+      .gte('data_venda', data_inicio)
+      .lte('data_venda', data_fim)
+      .in('status', ['confirmada', 'finalizada']);
+
+    const totalVendas = vendas?.reduce((sum, v) => sum + parseFloat(v.valor_total || 0), 0) || 0;
+
+    // Locações (usar medições se disponíveis)
+    const { data: medicoes } = await supabaseAdmin
+      .from('medicoes')
+      .select('valor_total, status')
+      .gte('data_medicao', data_inicio)
+      .lte('data_medicao', data_fim)
+      .eq('status', 'finalizada');
+
+    const totalMedicoes = medicoes?.reduce((sum, m) => sum + parseFloat(m.valor_total || 0), 0) || 0;
+
+    // Locações sem medições
+    const { data: locacoes } = await supabaseAdmin
+      .from('locacoes')
+      .select('valor_mensal, status, data_inicio')
+      .gte('data_inicio', data_inicio)
+      .lte('data_inicio', data_fim)
+      .in('status', ['ativa', 'finalizada']);
+
+    const totalLocacoes = totalMedicoes > 0 ? totalMedicoes : (locacoes?.reduce((sum, l) => sum + parseFloat(l.valor_mensal || 0), 0) || 0);
+
+    // Receitas (outros)
+    const { data: receitas } = await supabaseAdmin
+      .from('receitas')
+      .select('valor, tipo, status')
+      .gte('data_receita', data_inicio)
+      .lte('data_receita', data_fim)
+      .eq('status', 'confirmada');
+
+    const totalReceitas = receitas?.reduce((sum, r) => sum + parseFloat(r.valor || 0), 0) || 0;
+
+    // Contas recebidas (pagas no período)
+    const { data: contasRecebidasPagas } = await supabaseAdmin
+      .from('contas_receber')
+      .select('valor, status')
+      .gte('data_pagamento', data_inicio)
+      .lte('data_pagamento', data_fim)
+      .eq('status', 'pago');
+
+    const totalContasRecebidas = contasRecebidasPagas?.reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+
+    const totalReceitasGeral = totalVendas + totalLocacoes + totalReceitas + totalContasRecebidas;
+
+    // ========== DESPESAS ==========
+
+    // Custos operacionais
+    const { data: custos } = await supabaseAdmin
+      .from('custos')
+      .select('valor, tipo, status')
+      .gte('data_custo', data_inicio)
+      .lte('data_custo', data_fim)
+      .eq('status', 'confirmado');
+
+    const custosSalarios = custos?.filter(c => c.tipo === 'salario').reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+    const custosMateriais = custos?.filter(c => c.tipo === 'material').reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+    const custosServicos = custos?.filter(c => c.tipo === 'servico').reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+    const custosManutencao = custos?.filter(c => c.tipo === 'manutencao').reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+    const totalCustos = custosSalarios + custosMateriais + custosServicos + custosManutencao;
+
+    // Contas pagas
+    const { data: contasPagas } = await supabaseAdmin
+      .from('contas_pagar')
+      .select('valor, status')
+      .gte('data_pagamento', data_inicio)
+      .lte('data_pagamento', data_fim)
+      .eq('status', 'pago');
+
+    const totalContasPagas = contasPagas?.reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+
+    // Impostos pagos
+    const { data: impostosPagos } = await supabaseAdmin
+      .from('impostos_financeiros')
+      .select('valor, status')
+      .gte('data_pagamento', data_inicio)
+      .lte('data_pagamento', data_fim)
+      .eq('status', 'pago');
+
+    const totalImpostosPagos = impostosPagos?.reduce((sum, i) => sum + parseFloat(i.valor || 0), 0) || 0;
+
+    // Compras
+    const { data: compras } = await supabaseAdmin
+      .from('compras')
+      .select('valor_total, status')
+      .gte('data_pedido', data_inicio)
+      .lte('data_pedido', data_fim)
+      .neq('status', 'cancelado');
+
+    const totalCompras = compras?.reduce((sum, c) => sum + parseFloat(c.valor_total || 0), 0) || 0;
+
+    const totalDespesasGeral = totalCustos + totalContasPagas + totalImpostosPagos + totalCompras;
+
+    // ========== CONTAS A PAGAR/RECEBER ==========
+
+    const hoje = new Date().toISOString().split('T')[0];
+
+    // Contas a receber pendentes
+    const { data: contasReceberPendentes } = await supabaseAdmin
+      .from('contas_receber')
+      .select('valor, status')
+      .in('status', ['pendente', 'vencido']);
+
+    const totalContasReceber = contasReceberPendentes?.reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+
+    // Contas a pagar pendentes
+    const { data: contasPagarPendentes } = await supabaseAdmin
+      .from('contas_pagar')
+      .select('valor, status')
+      .in('status', ['pendente', 'vencido']);
+
+    const totalContasPagar = contasPagarPendentes?.reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
+
+    // Impostos pendentes
+    const { data: impostosPendentes } = await supabaseAdmin
+      .from('impostos_financeiros')
+      .select('valor, status')
+      .in('status', ['pendente', 'atrasado']);
+
+    const totalImpostosPendentes = impostosPendentes?.reduce((sum, i) => sum + parseFloat(i.valor || 0), 0) || 0;
+
+    // ========== SALDO BANCÁRIO ==========
+
+    const { data: contasBancarias } = await supabaseAdmin
+      .from('contas_bancarias')
+      .select('saldo_atual, status')
+      .eq('status', 'ativa');
+
+    const saldoBancarioAtual = contasBancarias?.reduce((sum, c) => sum + parseFloat(c.saldo_atual || 0), 0) || 0;
+
+    // ========== CÁLCULOS ==========
+
+    const lucroOperacional = totalReceitasGeral - totalDespesasGeral;
+    const margemLucro = totalReceitasGeral > 0 ? ((lucroOperacional / totalReceitasGeral) * 100).toFixed(2) : 0;
+    const roi = totalDespesasGeral > 0 ? ((lucroOperacional / totalDespesasGeral) * 100).toFixed(2) : 0;
+    
+    // Liquidez = Ativo Circulante / Passivo Circulante
+    // Ativo = Saldo + Contas a Receber
+    // Passivo = Contas a Pagar + Impostos
+    const ativoCirculante = saldoBancarioAtual + totalContasReceber;
+    const passivoCirculante = totalContasPagar + totalImpostosPendentes;
+    const liquidez = passivoCirculante > 0 ? (ativoCirculante / passivoCirculante).toFixed(2) : 0;
+
+    // Capital de giro = Ativo Circulante - Passivo Circulante
+    const capitalGiro = ativoCirculante - passivoCirculante;
+
+    res.json({
+      success: true,
+      periodo: {
+        data_inicio,
+        data_fim
+      },
+      resumo: {
+        // Receitas
+        receitas: {
+          vendas: totalVendas,
+          locacoes: totalLocacoes,
+          servicos: totalReceitas,
+          contas_recebidas: totalContasRecebidas,
+          total: totalReceitasGeral
+        },
+        // Despesas
+        despesas: {
+          custos_operacionais: {
+            salarios: custosSalarios,
+            materiais: custosMateriais,
+            servicos: custosServicos,
+            manutencao: custosManutencao,
+            total: totalCustos
+          },
+          contas_pagas: totalContasPagas,
+          impostos_pagos: totalImpostosPagos,
+          compras: totalCompras,
+          total: totalDespesasGeral
+        },
+        // Resultado
+        resultado: {
+          lucro_operacional: lucroOperacional,
+          margem_lucro_percentual: margemLucro,
+          roi_percentual: roi
+        },
+        // Contas
+        contas: {
+          a_receber: totalContasReceber,
+          a_pagar: totalContasPagar,
+          impostos_pendentes: totalImpostosPendentes
+        },
+        // Indicadores
+        indicadores: {
+          saldo_bancario: saldoBancarioAtual,
+          liquidez_corrente: liquidez,
+          capital_giro: capitalGiro,
+          ativo_circulante: ativoCirculante,
+          passivo_circulante: passivoCirculante
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao gerar resumo financeiro:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
 export default router;
