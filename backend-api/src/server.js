@@ -98,9 +98,11 @@ import projecoesRoutes from './routes/projecoes.js'
 import exportarRelatoriosRoutes from './routes/exportar-relatorios.js'
 import relatoriosFaturamentoRoutes from './routes/relatorios-faturamento.js'
 import relatoriosImpostosRoutes from './routes/relatorios-impostos.js'
+import aprovacoesHorasExtrasRoutes from './routes/aprovacoes-horas-extras.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
+import { inicializarScheduler } from './jobs/scheduler.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -316,6 +318,7 @@ app.use('/api/projecoes', projecoesRoutes)
 app.use('/api/exportar-relatorios', exportarRelatoriosRoutes)
 app.use('/api/relatorios-faturamento', relatoriosFaturamentoRoutes)
 app.use('/api/relatorios-impostos', relatoriosImpostosRoutes)
+app.use('/api/aprovacoes-horas-extras', aprovacoesHorasExtrasRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {
@@ -376,6 +379,7 @@ app.use('*', (req, res) => {
 
 // Iniciar jobs
 iniciarJobVerificacaoAprovacoes()
+inicializarScheduler()
 
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {

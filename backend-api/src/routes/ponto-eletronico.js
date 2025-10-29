@@ -17,6 +17,8 @@ import {
   agruparJustificativasPor,
   calcularEstatisticasAvancadas
 } from '../utils/ponto-eletronico.js';
+import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes-helpers.js';
+import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
 
 const router = express.Router();
 
@@ -1518,6 +1520,41 @@ router.post('/registros', async (req, res) => {
         });
       }
 
+      // Criar aprovação automática de horas extras se houver
+      if (horasExtras > 0 && registro.obra_id) {
+        try {
+          console.log(`[ponto-eletronico] Detectadas ${horasExtras}h extras, criando aprovação...`);
+          const supervisor = await buscarSupervisorPorObra(registro.obra_id);
+          if (supervisor) {
+            const dataLimite = calcularDataLimite();
+            const { data: aprovacaoCriada } = await supabaseAdmin
+              .from('aprovacoes_horas_extras')
+              .insert({
+                registro_ponto_id: registro.id,
+                funcionario_id: registro.funcionario_id,
+                supervisor_id: supervisor.id,
+                horas_extras: horasExtras,
+                data_trabalho: registro.data,
+                data_limite: dataLimite.toISOString(),
+                status: 'pendente',
+                observacoes: `Criado automaticamente ao registrar saída com ${horasExtras}h extras`
+              })
+              .select()
+              .single();
+            if (aprovacaoCriada) {
+              await supabaseAdmin.from('registros_ponto').update({ aprovacao_horas_extras_id: aprovacaoCriada.id }).eq('id', registro.id);
+              try {
+                await criarNotificacaoNovaAprovacao(aprovacaoCriada, { id: registro.funcionario_id, nome: registro.funcionario?.nome || 'Funcionário' });
+              } catch (notifError) {
+                console.error('[ponto-eletronico] Erro ao criar notificação:', notifError);
+              }
+            }
+          }
+        } catch (errorHorasExtras) {
+          console.error('[ponto-eletronico] Erro ao processar horas extras:', errorHorasExtras);
+        }
+      }
+
       return res.status(200).json({
         success: true,
         data: registro,
@@ -1564,6 +1601,41 @@ router.post('/registros', async (req, res) => {
         success: false,
         message: 'Erro ao criar registro de ponto'
       });
+    }
+
+    // Criar aprovação automática de horas extras se houver
+    if (horasExtras > 0 && registro.obra_id) {
+      try {
+        console.log(`[ponto-eletronico] Detectadas ${horasExtras}h extras, criando aprovação...`);
+        const supervisor = await buscarSupervisorPorObra(registro.obra_id);
+        if (supervisor) {
+          const dataLimite = calcularDataLimite();
+          const { data: aprovacaoCriada } = await supabaseAdmin
+            .from('aprovacoes_horas_extras')
+            .insert({
+              registro_ponto_id: registro.id,
+              funcionario_id: registro.funcionario_id,
+              supervisor_id: supervisor.id,
+              horas_extras: horasExtras,
+              data_trabalho: registro.data,
+              data_limite: dataLimite.toISOString(),
+              status: 'pendente',
+              observacoes: `Criado automaticamente ao registrar saída com ${horasExtras}h extras`
+            })
+            .select()
+            .single();
+          if (aprovacaoCriada) {
+            await supabaseAdmin.from('registros_ponto').update({ aprovacao_horas_extras_id: aprovacaoCriada.id }).eq('id', registro.id);
+            try {
+              await criarNotificacaoNovaAprovacao(aprovacaoCriada, { id: registro.funcionario_id, nome: registro.funcionario?.nome || 'Funcionário' });
+            } catch (notifError) {
+              console.error('[ponto-eletronico] Erro ao criar notificação:', notifError);
+            }
+          }
+        }
+      } catch (errorHorasExtras) {
+        console.error('[ponto-eletronico] Erro ao processar horas extras:', errorHorasExtras);
+      }
     }
 
     res.status(201).json({
@@ -1775,6 +1847,65 @@ router.put('/registros/:id', async (req, res) => {
         success: false,
         message: 'Erro ao atualizar registro de ponto'
       });
+    }
+
+    // Criar aprovação automática de horas extras se houver
+    if (horasExtras > 0 && registroAtualizado.obra_id) {
+      try {
+        console.log(`[ponto-eletronico] Detectadas ${horasExtras}h extras, criando aprovação...`);
+        
+        // Buscar supervisor da obra
+        const supervisor = await buscarSupervisorPorObra(registroAtualizado.obra_id);
+        
+        if (supervisor) {
+          const dataLimite = calcularDataLimite();
+          
+          // Criar aprovação
+          const { data: aprovacaoCriada, error: errorAprovacao } = await supabaseAdmin
+            .from('aprovacoes_horas_extras')
+            .insert({
+              registro_ponto_id: registroAtualizado.id,
+              funcionario_id: registroAtualizado.funcionario_id,
+              supervisor_id: supervisor.id,
+              horas_extras: horasExtras,
+              data_trabalho: registroAtualizado.data,
+              data_limite: dataLimite.toISOString(),
+              status: 'pendente',
+              observacoes: `Criado automaticamente ao registrar saída com ${horasExtras}h extras`
+            })
+            .select()
+            .single();
+
+          if (errorAprovacao) {
+            console.error('[ponto-eletronico] Erro ao criar aprovação de horas extras:', errorAprovacao);
+          } else {
+            console.log('[ponto-eletronico] Aprovação de horas extras criada:', aprovacaoCriada.id);
+            
+            // Atualizar registro de ponto com ID da aprovação
+            await supabaseAdmin
+              .from('registros_ponto')
+              .update({ aprovacao_horas_extras_id: aprovacaoCriada.id })
+              .eq('id', registroAtualizado.id);
+            
+            // Criar notificação para supervisor
+            try {
+              const funcionario = { 
+                id: registroAtualizado.funcionario_id, 
+                nome: registroAtualizado.funcionario?.nome || 'Funcionário' 
+              };
+              await criarNotificacaoNovaAprovacao(aprovacaoCriada, funcionario);
+              console.log('[ponto-eletronico] Notificação criada para supervisor');
+            } catch (notifError) {
+              console.error('[ponto-eletronico] Erro ao criar notificação:', notifError);
+            }
+          }
+        } else {
+          console.warn(`[ponto-eletronico] Supervisor não encontrado para obra ${registroAtualizado.obra_id}`);
+        }
+      } catch (errorHorasExtras) {
+        console.error('[ponto-eletronico] Erro ao processar horas extras:', errorHorasExtras);
+        // Não bloquear o registro por erro na aprovação de horas extras
+      }
     }
 
     // Registrar alteração no histórico
