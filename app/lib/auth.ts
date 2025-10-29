@@ -107,13 +107,85 @@ export class AuthService {
 
   // Obter dados do usuário atual
   static async getCurrentUser(): Promise<any> {
-    // Sempre retornar dados mockados para desenvolvimento
-    return {
-      id: 1,
-      name: 'Usuário Demo',
-      email: 'demo@sistema.com',
-      role: 'admin',
-      avatar: '/placeholder-user.jpg'
+    try {
+      console.log('[AuthService] Chamando /api/auth/me...')
+      const response = await this.authenticatedRequest(`${this.API_BASE_URL}/api/auth/me`, {
+        method: 'GET'
+      })
+      
+      console.log('[AuthService] Response completo:', response)
+      console.log('[AuthService] response.data:', response.data)
+      console.log('[AuthService] response.data.perfil:', response.data.perfil)
+      console.log('[AuthService] response.data.perfil?.nome:', response.data.perfil?.nome)
+      
+      // Retornar dados do usuário
+      // Normalizar o nome do perfil para lowercase e mapear alguns perfis específicos
+      let roleNormalizado = 'usuario'
+      
+      // Primeiro, tentar pegar do perfil
+      if (response.data.perfil?.nome) {
+        const perfilNome = response.data.perfil.nome.toLowerCase()
+        console.log('[AuthService] perfilNome (lowercase):', perfilNome)
+        
+        // Mapeamento de perfis para nomes mais amigáveis
+        const roleMapping: Record<string, string> = {
+          'administrador': 'admin',
+          'mestre de obra': 'mestre de obra',
+          'gerente': 'gerente',
+          'supervisor': 'supervisor',
+          'operador': 'operador',
+          'cliente': 'cliente'
+        }
+        
+        roleNormalizado = roleMapping[perfilNome] || perfilNome
+      }
+      // Fallback: verificar pelo nivel_acesso
+      else if (response.data.perfil?.nivel_acesso) {
+        const nivelAcesso = response.data.perfil.nivel_acesso
+        console.log('[AuthService] Perfil sem nome, usando nivel_acesso:', nivelAcesso)
+        
+        if (nivelAcesso >= 10) {
+          roleNormalizado = 'admin'
+        } else if (nivelAcesso >= 9) {
+          roleNormalizado = 'gerente'
+        } else if (nivelAcesso >= 6) {
+          roleNormalizado = 'supervisor'
+        } else if (nivelAcesso >= 4) {
+          roleNormalizado = 'operador'
+        } else {
+          roleNormalizado = 'cliente'
+        }
+      }
+      // Último fallback: verificar o user.role da resposta
+      else if (response.data.user?.role) {
+        const userRole = response.data.user.role.toLowerCase()
+        console.log('[AuthService] Usando user.role como fallback:', userRole)
+        
+        if (userRole.includes('admin')) {
+          roleNormalizado = 'admin'
+        } else {
+          roleNormalizado = userRole
+        }
+      }
+      
+      console.log('[AuthService] roleNormalizado FINAL:', roleNormalizado)
+      
+      const userObject = {
+        id: response.data.user.id,
+        name: response.data.profile?.nome || response.data.user.email,
+        email: response.data.user.email,
+        role: roleNormalizado,
+        perfil: response.data.perfil,
+        permissoes: response.data.permissoes || [],
+        profile: response.data.profile,
+        avatar: '/placeholder-user.jpg'
+      }
+      
+      console.log('[AuthService] Objeto do usuário criado:', userObject)
+      return userObject
+    } catch (error) {
+      console.error('[AuthService] Erro ao buscar usuário atual:', error)
+      throw new Error('Não foi possível carregar dados do usuário')
     }
   }
 

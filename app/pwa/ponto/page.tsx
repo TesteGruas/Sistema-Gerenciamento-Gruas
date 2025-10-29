@@ -30,7 +30,7 @@ import {
   obterLocalizacaoAtual, 
   validarProximidadeObra, 
   formatarDistancia,
-  obrasMock,
+  buscarObrasFuncionario,
   type Coordenadas,
   type Obra
 } from "@/lib/geolocation-validator"
@@ -108,9 +108,11 @@ export default function PWAPontoPage() {
         
         setUser(parsedUser)
         
-        // Carregar obra do usuário (mock por enquanto - substituir por API)
-        const obraUsuario = obrasMock[0] // Simular obra 1
-        setObra(obraUsuario)
+        // Carregar obras do funcionário
+        const obras = await buscarObrasFuncionario(parsedUser.id)
+        if (obras.length > 0) {
+          setObra(obras[0]) // Usar primeira obra por padrão
+        }
       } catch (error) {
         console.error('Erro ao carregar dados do usuário:', error)
       }

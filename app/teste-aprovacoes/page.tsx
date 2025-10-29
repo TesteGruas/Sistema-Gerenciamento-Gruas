@@ -26,13 +26,12 @@ import {
   Check,
   X
 } from 'lucide-react'
-import { 
-  mockAprovacoes, 
-  mockNotificacoes,
-  formatarData,
-  formatarTempoRelativo,
-  AprovacaoHorasExtras
-} from '@/lib/mock-data-aprovacoes'
+import { formatarData, formatarTempoRelativo } from '@/lib/utils-aprovacoes'
+
+// TODO: Este arquivo é para testes. Considere removê-lo ou usar dados reais da API.
+const mockAprovacoes: any[] = []
+const mockNotificacoes: any[] = []
+type AprovacaoHorasExtras = any
 
 export default function TesteAprovacoesPage() {
   const [activeView, setActiveView] = useState<'dashboard' | 'pwa'>('dashboard');

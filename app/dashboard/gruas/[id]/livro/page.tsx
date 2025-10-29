@@ -21,7 +21,6 @@ import LivroGruaForm from "@/components/livro-grua-form"
 import LivroGruaList from "@/components/livro-grua-list"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi, EntradaLivroGruaCompleta } from "@/lib/api-livro-grua"
-import { mockGruas } from "@/lib/mock-data"
 
 export default function LivroGruaPage() {
   const { toast } = useToast()

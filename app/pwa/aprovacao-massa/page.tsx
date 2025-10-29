@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { SignaturePad } from '@/components/signature-pad'
 import { 
   ArrowLeft,
@@ -16,28 +15,48 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  CheckSquare,
-  Square
+  Loader2
 } from 'lucide-react'
-import { 
-  mockAprovacoes, 
-  AprovacaoHorasExtras,
-  formatarData,
-  formatarDataHora,
-  getStatusColor
-} from '@/lib/mock-data-aprovacoes'
 import { useRouter } from 'next/navigation'
+import { apiAprovacoesHorasExtras, type RegistroPontoAprovacao } from '@/lib/api-aprovacoes-horas-extras'
+import { useUser } from '@/lib/user-context'
+import { useToast } from '@/components/ui/use-toast'
 
 export default function PWAAprovacaoMassaPage() {
   const router = useRouter();
-  const [aprovacoesSelecionadas, setAprovacoesSelecionadas] = useState<string[]>([]);
+  const { currentUser } = useUser();
+  const { toast } = useToast();
+  const [aprovacoesSelecionadas, setAprovacoesSelecionadas] = useState<(string | number)[]>([]);
   const [assinatura, setAssinatura] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [showDetalhes, setShowDetalhes] = useState<{ [key: string]: boolean }>({});
   const [animacaoSelecao, setAnimacaoSelecao] = useState<string>('');
+  const [aprovacoesPendentes, setAprovacoesPendentes] = useState<RegistroPontoAprovacao[]>([]);
+  const [loadingAprovacoes, setLoadingAprovacoes] = useState(true);
 
-  // Filtrar apenas aprovações pendentes
-  const aprovacoesPendentes = mockAprovacoes.filter(a => a.status === 'pendente');
+  // Carregar aprovações pendentes
+  useEffect(() => {
+    loadAprovacoesPendentes();
+  }, []);
+
+  const loadAprovacoesPendentes = async () => {
+    setLoadingAprovacoes(true);
+    try {
+      const { data } = await apiAprovacoesHorasExtras.listarPendentes({
+        status: 'Pendente Aprovação'
+      });
+      setAprovacoesPendentes(data.filter(a => a.status === 'Pendente Aprovação'));
+    } catch (error: any) {
+      console.error('Erro ao carregar aprovações:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar as aprovações pendentes',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoadingAprovacoes(false);
+    }
+  };
 
   const handleSelecionarTodas = () => {
     if (aprovacoesSelecionadas.length === aprovacoesPendentes.length) {
@@ -61,25 +80,45 @@ export default function PWAAprovacaoMassaPage() {
 
   const handleAprovarMassa = async () => {
     if (!assinatura.trim()) {
-      alert('Por favor, assine digitalmente antes de aprovar.');
+      toast({
+        title: 'Assinatura Obrigatória',
+        description: 'Por favor, assine digitalmente antes de aprovar.',
+        variant: 'destructive'
+      });
       return;
     }
 
     if (aprovacoesSelecionadas.length === 0) {
-      alert('Por favor, selecione pelo menos uma aprovação.');
+      toast({
+        title: 'Seleção Vazia',
+        description: 'Por favor, selecione pelo menos uma aprovação.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!currentUser) {
+      toast({
+        title: 'Erro',
+        description: 'Usuário não autenticado',
+        variant: 'destructive'
+      });
       return;
     }
 
     setIsLoading(true);
     
     try {
-      console.log('Aprovando em massa:', aprovacoesSelecionadas, 'Assinatura:', assinatura);
+      await apiAprovacoesHorasExtras.aprovarLote({
+        registro_ids: aprovacoesSelecionadas,
+        observacoes: `Aprovado em massa com assinatura digital`
+      });
       
-      // Simular delay de processamento
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Mostrar notificação de sucesso
-      showSuccessNotification();
+      toast({
+        title: 'Sucesso!',
+        description: `${aprovacoesSelecionadas.length} aprovações realizadas com sucesso`,
+        variant: 'default'
+      });
       
       // Limpar seleções e voltar
       setAprovacoesSelecionadas([]);
@@ -87,48 +126,18 @@ export default function PWAAprovacaoMassaPage() {
       
       setTimeout(() => {
         router.back();
-      }, 2000);
+      }, 1500);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao aprovar horas extras:', error);
-      alert('Erro ao aprovar horas extras. Tente novamente.');
+      toast({
+        title: 'Erro',
+        description: error.response?.data?.message || 'Erro ao aprovar horas extras. Tente novamente.',
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const showSuccessNotification = () => {
-    const notification = document.createElement('div');
-    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center gap-3 animate-slide-in';
-    notification.innerHTML = `
-      <div class="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-      </div>
-      <div>
-        <p class="font-semibold">✅ ${aprovacoesSelecionadas.length} Aprovações Realizadas!</p>
-        <p class="text-sm opacity-90">Todas as horas extras foram aprovadas com sucesso</p>
-      </div>
-    `;
-    
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slide-in {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      .animate-slide-in {
-        animation: slide-in 0.3s ease-out;
-      }
-    `;
-    document.head.appendChild(style);
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-      notification.remove();
-      style.remove();
-    }, 3000);
   };
 
   const toggleDetalhes = (id: string) => {
@@ -138,7 +147,9 @@ export default function PWAAprovacaoMassaPage() {
     }));
   };
 
-  const isVencida = (dataLimite: string) => new Date(dataLimite) < new Date();
+  const formatarData = (data: string) => {
+    return new Date(data).toLocaleDateString('pt-BR');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -164,39 +175,49 @@ export default function PWAAprovacaoMassaPage() {
       </div>
 
       <div className="px-2 py-1 space-y-2">
+        {/* Loading State */}
+        {loadingAprovacoes && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+            <span className="ml-2 text-sm text-gray-600">Carregando aprovações...</span>
+          </div>
+        )}
+
         {/* Controles de Seleção */}
-        <Card className="border-0 shadow-none">
-          <CardContent className="px-3 py-3">
-            <div className="flex items-center justify-between">
-              <div 
-                className="flex items-center gap-2 cursor-pointer"
-                onClick={handleSelecionarTodas}
-              >
-                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-200 ${
-                  aprovacoesSelecionadas.length === aprovacoesPendentes.length
-                    ? 'bg-blue-600 border-blue-600'
-                    : 'border-gray-300 hover:border-blue-400'
-                }`}>
-                  {aprovacoesSelecionadas.length === aprovacoesPendentes.length && (
-                    <Check className="w-3 h-3 text-white" />
-                  )}
+        {!loadingAprovacoes && (
+          <Card className="border-0 shadow-none">
+            <CardContent className="px-3 py-3">
+              <div className="flex items-center justify-between">
+                <div 
+                  className="flex items-center gap-2 cursor-pointer"
+                  onClick={handleSelecionarTodas}
+                >
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+                    aprovacoesSelecionadas.length === aprovacoesPendentes.length && aprovacoesPendentes.length > 0
+                      ? 'bg-blue-600 border-blue-600'
+                      : 'border-gray-300 hover:border-blue-400'
+                  }`}>
+                    {aprovacoesSelecionadas.length === aprovacoesPendentes.length && aprovacoesPendentes.length > 0 && (
+                      <Check className="w-3 h-3 text-white" />
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">
+                    {aprovacoesSelecionadas.length === aprovacoesPendentes.length && aprovacoesPendentes.length > 0
+                      ? 'Desmarcar Todas' 
+                      : 'Selecionar Todas'
+                    }
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-gray-700">
-                  {aprovacoesSelecionadas.length === aprovacoesPendentes.length 
-                    ? 'Desmarcar Todas' 
-                    : 'Selecionar Todas'
-                  }
-                </span>
+                <Badge variant="outline" className="text-xs">
+                  {aprovacoesSelecionadas.length} de {aprovacoesPendentes.length} selecionadas
+                </Badge>
               </div>
-              <Badge variant="outline" className="text-xs">
-                {aprovacoesSelecionadas.length} de {aprovacoesPendentes.length} selecionadas
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Lista de Aprovações */}
-        {aprovacoesPendentes.map(aprovacao => (
+        {!loadingAprovacoes && aprovacoesPendentes.map(aprovacao => (
           <Card 
             key={aprovacao.id} 
             className={`border-0 shadow-none cursor-pointer transition-all duration-200 ${
@@ -243,14 +264,14 @@ export default function PWAAprovacaoMassaPage() {
                             ? 'text-blue-900' 
                             : 'text-gray-900'
                         }`}>
-                          {aprovacao.funcionario.nome}
+                          {aprovacao.funcionario?.nome || 'Nome não disponível'}
                         </h3>
                         <p className={`text-xs transition-colors ${
                           aprovacoesSelecionadas.includes(aprovacao.id) 
                             ? 'text-blue-700' 
                             : 'text-gray-600'
                         }`}>
-                          {aprovacao.funcionario.cargo}
+                          {aprovacao.funcionario?.cargo || 'Cargo não disponível'}
                         </p>
                       </div>
                     </div>
@@ -271,39 +292,34 @@ export default function PWAAprovacaoMassaPage() {
                     <div className="flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-gray-500" />
                       <span className="text-gray-600">Data:</span>
-                      <span className="font-medium">{formatarData(aprovacao.data_trabalho)}</span>
+                      <span className="font-medium">{formatarData(aprovacao.data)}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3 text-gray-500" />
                       <span className="text-gray-600">Período:</span>
-                      <span className="font-medium">{aprovacao.registro.entrada} - {aprovacao.registro.saida}</span>
+                      <span className="font-medium">{aprovacao.entrada} - {aprovacao.saida}</span>
                     </div>
                   </div>
 
                   {/* Status */}
-                  <div className={`rounded-lg p-2 mb-2 ${
-                    isVencida(aprovacao.data_limite)
-                      ? 'bg-red-50 border border-red-200' 
-                      : 'bg-orange-50 border border-orange-200'
-                  }`}>
+                  <div className="rounded-lg p-2 mb-2 bg-orange-50 border border-orange-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1">
-                        <AlertTriangle className={`w-3 h-3 ${
-                          isVencida(aprovacao.data_limite) ? 'text-red-600' : 'text-orange-600'
-                        }`} />
-                        <span className={`text-xs font-medium ${
-                          isVencida(aprovacao.data_limite) ? 'text-red-800' : 'text-orange-800'
-                        }`}>
-                          {isVencida(aprovacao.data_limite) ? 'Prazo Expirado' : 'Aguardando Aprovação'}
+                        <AlertTriangle className="w-3 h-3 text-orange-600" />
+                        <span className="text-xs font-medium text-orange-800">
+                          Aguardando Aprovação
                         </span>
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => toggleDetalhes(aprovacao.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleDetalhes(aprovacao.id.toString());
+                        }}
                         className="p-1"
                       >
-                        {showDetalhes[aprovacao.id] ? (
+                        {showDetalhes[aprovacao.id.toString()] ? (
                           <ChevronUp className="w-3 h-3 text-gray-500" />
                         ) : (
                           <ChevronDown className="w-3 h-3 text-gray-500" />
@@ -313,18 +329,18 @@ export default function PWAAprovacaoMassaPage() {
                   </div>
 
                   {/* Detalhes Expandíveis */}
-                  {showDetalhes[aprovacao.id] && (
+                  {showDetalhes[aprovacao.id.toString()] && (
                     <div className="space-y-2 pt-2 border-t border-gray-200">
                       <div className="bg-gray-50 rounded-lg p-2">
                         <h4 className="font-medium text-gray-700 mb-1 text-xs">Informações Detalhadas</h4>
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div>
-                            <span className="text-gray-600">Obra:</span>
-                            <p className="font-medium">{aprovacao.funcionario.obra}</p>
+                            <span className="text-gray-600">Total Trabalhado:</span>
+                            <p className="font-medium">{aprovacao.horas_trabalhadas}h</p>
                           </div>
                           <div>
-                            <span className="text-gray-600">Total:</span>
-                            <p className="font-medium">{aprovacao.registro.horas_trabalhadas}h</p>
+                            <span className="text-gray-600">Status:</span>
+                            <p className="font-medium">{aprovacao.status}</p>
                           </div>
                         </div>
                       </div>
@@ -335,6 +351,21 @@ export default function PWAAprovacaoMassaPage() {
             </CardContent>
           </Card>
         ))}
+
+        {/* Empty State */}
+        {!loadingAprovacoes && aprovacoesPendentes.length === 0 && (
+          <Card className="border-0 shadow-none">
+            <CardContent className="p-8 text-center">
+              <CheckCircle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Nenhuma aprovação pendente
+              </h3>
+              <p className="text-gray-500">
+                Todas as horas extras já foram aprovadas.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Componente de Assinatura - Layout Mobile */}
         {aprovacoesSelecionadas.length > 0 && (

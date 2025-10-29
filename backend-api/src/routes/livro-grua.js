@@ -760,6 +760,42 @@ router.post('/', async (req, res) => {
       })
     }
 
+    // Criar custo automático se for manutenção
+    if (value.tipo_entrada === 'manutencao') {
+      try {
+        // Buscar obra_id da grua
+        const { data: obraGrua } = await supabaseAdmin
+          .from('obra_gruas_configuracao')
+          .select('obra_id')
+          .eq('grua_id', value.grua_id)
+          .eq('status', 'ativa')
+          .single();
+        
+        if (obraGrua?.obra_id) {
+          // Valor estimado de manutenção (pode ser ajustado posteriormente)
+          const valorEstimado = 500.00; // Valor padrão, pode vir do frontend futuramente
+          
+          await supabaseAdmin
+            .from('custos')
+            .insert({
+              obra_id: obraGrua.obra_id,
+              grua_id: value.grua_id,
+              tipo: 'manutencao',
+              descricao: `Custo automático - Manutenção registrada no livro da grua ${value.grua_id}`,
+              valor: valorEstimado,
+              data_custo: value.data_entrada,
+              status: 'pendente',
+              observacoes: `Gerado automaticamente pelo registro de manutenção ID ${data.id}`
+            });
+          
+          console.log(`Custo automático criado para manutenção da grua ${value.grua_id}`);
+        }
+      } catch (custoError) {
+        // Não bloquear a criação da entrada se houver erro no custo
+        console.error('Erro ao criar custo automático:', custoError);
+      }
+    }
+
     // Buscar dados completos da entrada criada
     const { data: entradaCompleta, error: buscaError } = await supabaseAdmin
       .from('livro_grua_completo')

@@ -305,6 +305,43 @@ router.patch('/:id/finalizar', authenticateToken, requirePermission('obras:edita
       });
     }
 
+    // Criar receita automática ao finalizar medição
+    try {
+      const medicao = data;
+      const locacao = medicao.locacoes;
+      
+      if (locacao && medicao.valor_total > 0) {
+        // Buscar obra_id da locação através dos contratos ou diretamente
+        const { data: obraData } = await supabaseAdmin
+          .from('obra_gruas_configuracao')
+          .select('obra_id')
+          .eq('grua_id', locacao.equipamento_id)
+          .single();
+        
+        const obra_id = obraData?.obra_id;
+        
+        if (obra_id) {
+          await supabaseAdmin
+            .from('receitas')
+            .insert({
+              obra_id: obra_id,
+              grua_id: locacao.tipo_equipamento === 'grua' ? locacao.equipamento_id : null,
+              tipo: 'locacao',
+              descricao: `Receita automática - Medição ${medicao.numero} finalizada`,
+              valor: medicao.valor_total,
+              data_receita: new Date().toISOString().split('T')[0],
+              status: 'confirmada',
+              observacoes: `Gerada automaticamente pela medição ID ${medicao.id}`
+            });
+          
+          console.log(`Receita automática criada para medição ${medicao.id}`);
+        }
+      }
+    } catch (receitaError) {
+      // Não bloquear a finalização se houver erro na criação da receita
+      console.error('Erro ao criar receita automática:', receitaError);
+    }
+
     res.json({
       success: true,
       data,

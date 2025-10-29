@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
+import { AuthService } from "@/app/lib/auth"
 import { 
   apiFuncionarios, 
   apiRegistrosPonto, 
@@ -162,8 +163,9 @@ export default function PontoPage() {
     setData(prev => ({ ...prev, loading: true, error: null }))
     
     try {
-      // ID do usuário atual (em um sistema real, isso viria do contexto de autenticação)
-      const usuarioId = 2 // Hardcoded para exemplo - usuário admin
+      // Obter ID do usuário atual via AuthService
+      const currentUser = await AuthService.getCurrentUser()
+      const usuarioId = currentUser.id
       
       // Carregar funcionários com verificação de admin e outros dados em paralelo
       const [funcionariosResponse, registrosResponse, justificativasResponse] = await Promise.all([

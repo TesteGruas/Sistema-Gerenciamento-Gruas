@@ -34,7 +34,6 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from "lucide-react"
-import { mockObras, mockUsers } from "@/lib/mock-data"
 import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
@@ -864,7 +863,8 @@ export default function GruasPage() {
       {!loading && !error && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredGruas.map((grua) => {
-          const obra = mockObras.find(o => o.id === grua.currentObraId)
+          // Nome da obra deve vir da API de gruas
+          const obraNome = grua.obraNome || 'Sem obra'
           
           return (
             <Card key={grua.id} className="hover:shadow-lg transition-shadow">
@@ -922,10 +922,10 @@ export default function GruasPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {obra && (
+                  {grua.currentObraId && (
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Building2 className="w-4 h-4" />
-                      <span>Obra: {obra.name}</span>
+                      <span>Obra: {obraNome}</span>
                     </div>
                   )}
                   

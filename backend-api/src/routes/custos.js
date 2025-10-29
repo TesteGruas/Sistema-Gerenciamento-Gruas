@@ -8,6 +8,7 @@ const router = express.Router()
 // Schema de validação para custos
 const custoSchema = Joi.object({
   obra_id: Joi.number().integer().positive().required(),
+  grua_id: Joi.string().optional(),
   tipo: Joi.string().valid('salario', 'material', 'servico', 'manutencao').required(),
   descricao: Joi.string().min(1).max(500).required(),
   valor: Joi.number().min(0).precision(2).required(),

@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { SignaturePad } from '@/components/signature-pad'
@@ -17,71 +16,166 @@ import {
   User,
   Calendar,
   Check,
-  X
+  X,
+  Loader2
 } from 'lucide-react'
-import { 
-  mockAprovacoes, 
-  AprovacaoHorasExtras,
-  formatarData,
-  formatarDataHora,
-  getStatusColor
-} from '@/lib/mock-data-aprovacoes'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { apiAprovacoesHorasExtras, type RegistroPontoAprovacao } from '@/lib/api-aprovacoes-horas-extras'
+import { useUser } from '@/lib/user-context'
+import { useToast } from '@/components/ui/use-toast'
 
 export default function PWAAprovacaoDetalhesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { currentUser } = useUser();
+  const { toast } = useToast();
   const [showAssinatura, setShowAssinatura] = useState(false);
   const [showRejeitar, setShowRejeitar] = useState(false);
   const [observacoesRejeicao, setObservacoesRejeicao] = useState('');
+  const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<RegistroPontoAprovacao | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Simular aprovação selecionada (em um app real, viria dos parâmetros da URL)
-  const aprovacaoSelecionada = mockAprovacoes.find(a => a.data_trabalho === '2025-10-25');
+  const registroId = searchParams.get('id');
+
+  useEffect(() => {
+    if (registroId) {
+      loadAprovacao();
+    } else {
+      setLoading(false);
+    }
+  }, [registroId]);
+
+  const loadAprovacao = async () => {
+    if (!registroId) return;
+
+    setLoading(true);
+    try {
+      const { data } = await apiAprovacoesHorasExtras.listarPendentes();
+      const aprovacao = data.find(a => a.id.toString() === registroId);
+      
+      if (aprovacao) {
+        setAprovacaoSelecionada(aprovacao);
+      } else {
+        toast({
+          title: 'Erro',
+          description: 'Aprovação não encontrada',
+          variant: 'destructive'
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar aprovação:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar a aprovação',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAprovar = async (assinatura: string) => {
+    if (!aprovacaoSelecionada || !currentUser) return;
+
+    setIsProcessing(true);
     try {
-      console.log('Aprovando horas extras:', aprovacaoSelecionada?.id, 'Assinatura:', assinatura);
+      await apiAprovacoesHorasExtras.aprovarComAssinatura(
+        aprovacaoSelecionada.id,
+        {
+          gestor_id: parseInt(currentUser.id),
+          assinatura_digital: assinatura,
+          observacoes_aprovacao: 'Aprovado via PWA'
+        }
+      );
       
-      // Simular aprovação
-      alert(`✅ Horas extras aprovadas com sucesso!\n\nFuncionário: ${aprovacaoSelecionada?.funcionario.nome}\nHoras: ${aprovacaoSelecionada?.horas_extras}h\nAssinatura: ${assinatura.substring(0, 50)}...`);
+      toast({
+        title: 'Sucesso!',
+        description: `Horas extras de ${aprovacaoSelecionada.funcionario?.nome} aprovadas com sucesso`,
+        variant: 'default'
+      });
       
       setShowAssinatura(false);
-      router.back();
-    } catch (error) {
+      setTimeout(() => router.back(), 1500);
+    } catch (error: any) {
       console.error('Erro ao aprovar horas extras:', error);
+      toast({
+        title: 'Erro',
+        description: error.response?.data?.message || 'Erro ao aprovar horas extras',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleRejeitar = async () => {
+    if (!aprovacaoSelecionada) return;
+
+    setIsProcessing(true);
     try {
-      console.log('Rejeitando horas extras:', aprovacaoSelecionada?.id, 'Observações:', observacoesRejeicao);
+      await apiAprovacoesHorasExtras.rejeitar(
+        aprovacaoSelecionada.id,
+        {
+          motivo_rejeicao: observacoesRejeicao
+        }
+      );
       
-      // Simular rejeição
-      alert(`❌ Horas extras rejeitadas!\n\nFuncionário: ${aprovacaoSelecionada?.funcionario.nome}\nMotivo: ${observacoesRejeicao}`);
+      toast({
+        title: 'Horas Extras Rejeitadas',
+        description: `Horas extras de ${aprovacaoSelecionada.funcionario?.nome} foram rejeitadas`,
+        variant: 'default'
+      });
       
       setShowRejeitar(false);
       setObservacoesRejeicao('');
-      router.back();
-    } catch (error) {
+      setTimeout(() => router.back(), 1500);
+    } catch (error: any) {
       console.error('Erro ao rejeitar horas extras:', error);
+      toast({
+        title: 'Erro',
+        description: error.response?.data?.message || 'Erro ao rejeitar horas extras',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'aprovado':
+      case 'Aprovado':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case 'Pendente Aprovação':
       case 'pendente':
         return <Clock className="w-5 h-5 text-orange-600" />;
-      case 'rejeitado':
+      case 'Rejeitado':
         return <XCircle className="w-5 h-5 text-red-600" />;
-      case 'cancelado':
-        return <Timer className="w-5 h-5 text-gray-600" />;
       default:
         return <AlertTriangle className="w-5 h-5 text-gray-600" />;
     }
   };
 
-  if (!aprovacaoSelecionada) {
+  const formatarData = (data: string) => {
+    return new Date(data).toLocaleDateString('pt-BR');
+  };
+
+  const formatarDataHora = (data: string) => {
+    return new Date(data).toLocaleString('pt-BR');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Carregando aprovação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!registroId || !aprovacaoSelecionada) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-md mx-auto">
@@ -144,8 +238,8 @@ export default function PWAAprovacaoDetalhesPage() {
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-gray-600">Obra:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.funcionario.obra}</p>
+                  <span className="text-gray-600">Turno:</span>
+                  <p className="font-medium">{aprovacaoSelecionada.funcionario?.turno || 'N/A'}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">ID:</span>
@@ -159,7 +253,7 @@ export default function PWAAprovacaoDetalhesPage() {
               <div className="text-center p-3 bg-blue-50 rounded-lg">
                 <Calendar className="w-5 h-5 text-blue-600 mx-auto mb-2" />
                 <p className="text-sm text-gray-600">Data</p>
-                <p className="font-bold text-blue-800">{formatarData(aprovacaoSelecionada.data_trabalho)}</p>
+                <p className="font-bold text-blue-800">{formatarData(aprovacaoSelecionada.data)}</p>
               </div>
               <div className="text-center p-3 bg-orange-50 rounded-lg">
                 <Clock className="w-5 h-5 text-orange-600 mx-auto mb-2" />
@@ -174,15 +268,15 @@ export default function PWAAprovacaoDetalhesPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600">Entrada:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.registro.entrada}</p>
+                  <p className="font-medium">{aprovacaoSelecionada.entrada}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Saída:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.registro.saida}</p>
+                  <p className="font-medium">{aprovacaoSelecionada.saida}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Total Trabalhado:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.registro.horas_trabalhadas}h</p>
+                  <p className="font-medium">{aprovacaoSelecionada.horas_trabalhadas}h</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Horas Extras:</span>
@@ -191,44 +285,40 @@ export default function PWAAprovacaoDetalhesPage() {
               </div>
             </div>
 
-            {/* Status e prazo */}
-            <div className={`rounded-lg p-4 ${
-              isVencida 
-                ? 'bg-red-50 border border-red-200' 
-                : 'bg-orange-50 border border-orange-200'
-            }`}>
+            {/* Status */}
+            <div className="rounded-lg p-4 bg-orange-50 border border-orange-200">
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className={`w-5 h-5 ${
-                  isVencida ? 'text-red-600' : 'text-orange-600'
-                }`} />
-                <span className={`font-medium ${
-                  isVencida ? 'text-red-800' : 'text-orange-800'
-                }`}>
-                  {isVencida ? 'Prazo Expirado' : 'Aguardando Aprovação'}
+                <AlertTriangle className="w-5 h-5 text-orange-600" />
+                <span className="font-medium text-orange-800">
+                  {aprovacaoSelecionada.status}
                 </span>
               </div>
-              <p className={`text-sm ${
-                isVencida ? 'text-red-700' : 'text-orange-700'
-              }`}>
-                Prazo limite: {formatarDataHora(aprovacaoSelecionada.data_limite)}
+              <p className="text-sm text-orange-700">
+                Data de criação: {formatarDataHora(aprovacaoSelecionada.created_at)}
               </p>
             </div>
           </CardContent>
         </Card>
 
         {/* Ações */}
-        {aprovacaoSelecionada.status === 'pendente' && !isVencida && (
+        {aprovacaoSelecionada.status === 'Pendente Aprovação' && (
           <div className="grid grid-cols-2 gap-3">
             <Button
               onClick={() => setShowAssinatura(true)}
+              disabled={isProcessing}
               className="bg-green-600 hover:bg-green-700 h-12"
             >
-              <Check className="w-5 h-5 mr-2" />
+              {isProcessing ? (
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              ) : (
+                <Check className="w-5 h-5 mr-2" />
+              )}
               Aprovar
             </Button>
             <Button
               variant="outline"
               onClick={() => setShowRejeitar(true)}
+              disabled={isProcessing}
               className="h-12"
             >
               <X className="w-5 h-5 mr-2" />
@@ -270,11 +360,11 @@ export default function PWAAprovacaoDetalhesPage() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-gray-600">Funcionário:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.funcionario.nome}</p>
+                  <p className="font-medium">{aprovacaoSelecionada.funcionario?.nome}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Data:</span>
-                  <p className="font-medium">{formatarData(aprovacaoSelecionada.data_trabalho)}</p>
+                  <p className="font-medium">{formatarData(aprovacaoSelecionada.data)}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Horas Extras:</span>
@@ -282,7 +372,7 @@ export default function PWAAprovacaoDetalhesPage() {
                 </div>
                 <div>
                   <span className="text-gray-600">Período:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.registro.entrada} - {aprovacaoSelecionada.registro.saida}</p>
+                  <p className="font-medium">{aprovacaoSelecionada.entrada} - {aprovacaoSelecionada.saida}</p>
                 </div>
               </div>
             </div>
@@ -304,7 +394,7 @@ export default function PWAAprovacaoDetalhesPage() {
           <DialogHeader>
             <DialogTitle>Rejeitar Horas Extras</DialogTitle>
             <DialogDescription>
-              Informe o motivo da rejeição das horas extras de <strong>{aprovacaoSelecionada.funcionario.nome}</strong>
+              Informe o motivo da rejeição das horas extras de <strong>{aprovacaoSelecionada.funcionario?.nome}</strong>
             </DialogDescription>
           </DialogHeader>
           
@@ -315,11 +405,11 @@ export default function PWAAprovacaoDetalhesPage() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-gray-600">Funcionário:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.funcionario.nome}</p>
+                  <p className="font-medium">{aprovacaoSelecionada.funcionario?.nome}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Data:</span>
-                  <p className="font-medium">{formatarData(aprovacaoSelecionada.data_trabalho)}</p>
+                  <p className="font-medium">{formatarData(aprovacaoSelecionada.data)}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Horas Extras:</span>
@@ -327,7 +417,7 @@ export default function PWAAprovacaoDetalhesPage() {
                 </div>
                 <div>
                   <span className="text-gray-600">Período:</span>
-                  <p className="font-medium">{aprovacaoSelecionada.registro.entrada} - {aprovacaoSelecionada.registro.saida}</p>
+                  <p className="font-medium">{aprovacaoSelecionada.entrada} - {aprovacaoSelecionada.saida}</p>
                 </div>
               </div>
             </div>

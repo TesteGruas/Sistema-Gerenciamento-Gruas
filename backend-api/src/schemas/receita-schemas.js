@@ -46,6 +46,11 @@ const receitaSchema = Joi.object({
       'number.positive': 'ID do funcionário deve ser um número positivo'
     }),
   
+  grua_id: Joi.string().optional()
+    .messages({
+      'string.base': 'ID da grua deve ser uma string'
+    }),
+  
   status: Joi.string().valid('pendente', 'confirmada', 'cancelada').default('pendente')
     .messages({
       'string.base': 'Status deve ser uma string',

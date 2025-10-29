@@ -27,7 +27,12 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { mockGruas, mockObras, mockUsers, getHistoricoByGrua } from "@/lib/mock-data"
+
+// TODO: Este arquivo parece ser uma versão antiga. Considere usar app/dashboard/gruas/page.tsx
+const mockGruas: any[] = []
+const mockObras: any[] = []
+const mockUsers: any[] = []
+const getHistoricoByGrua = (id: string) => []
 
 export default function GruasPage() {
   const [searchTerm, setSearchTerm] = useState("")

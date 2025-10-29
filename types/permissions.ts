@@ -359,11 +359,18 @@ export const ROLE_NAME_MAPPING: Record<string, RoleName> = {
   'Visualizador': 'Operários', // Visualizador foi removido, vira Operário
   // Lowercase variants
   'admin': 'Admin',
+  'administrador': 'Admin',
   'gestores': 'Gestores',
+  'gerente': 'Gestores',
   'supervisores': 'Supervisores',
+  'supervisor': 'Supervisores',
   'operarios': 'Operários',
   'operários': 'Operários',
-  'clientes': 'Clientes'
+  'operador': 'Operários',
+  'operario': 'Operários',
+  'clientes': 'Clientes',
+  'cliente': 'Clientes',
+  'visualizador': 'Operários'
 }
 
 /**

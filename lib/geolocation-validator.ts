@@ -129,28 +129,38 @@ export function formatarDistancia(metros: number): string {
 }
 
 /**
- * Obras mock para testes (substituir por chamada à API)
+ * Busca obras do funcionário via API
+ * @param funcionarioId ID do funcionário
+ * @returns Promise com lista de obras
  */
-export const obrasMock: Obra[] = [
-  {
-    id: 1,
-    nome: "Obra Centro",
-    endereco: "Av. Principal, 1000",
-    coordenadas: {
-      lat: -23.550520,
-      lng: -46.633308, // São Paulo, Brasil (exemplo)
-    },
-    raio_permitido: 100, // 100 metros
-  },
-  {
-    id: 2,
-    nome: "Obra Zona Sul",
-    endereco: "Rua Sul, 500",
-    coordenadas: {
-      lat: -23.560000,
-      lng: -46.640000,
-    },
-    raio_permitido: 150,
-  },
-]
+export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Obra[]> {
+  try {
+    // Importação dinâmica para evitar problemas de ciclo
+    const { obrasApi } = await import('./api-obras')
+    
+    const response = await obrasApi.listarObras({ 
+      limit: 1000,
+      status: 'Em Andamento'
+    })
+    
+    const obras = response.data || []
+    
+    // Mapear obras para o formato esperado
+    // Nota: Assumindo coordenadas padrão caso não existam no backend
+    // Em produção, adicionar campos de coordenadas no backend
+    return obras.map(obra => ({
+      id: obra.id,
+      nome: obra.nome,
+      endereco: obra.endereco || '',
+      coordenadas: {
+        lat: -23.550520, // Coordenadas padrão - deve vir do backend
+        lng: -46.633308
+      },
+      raio_permitido: 500 // Raio padrão em metros - deve vir do backend
+    }))
+  } catch (error) {
+    console.error('Erro ao buscar obras:', error)
+    throw new Error('Não foi possível carregar as obras')
+  }
+}
 

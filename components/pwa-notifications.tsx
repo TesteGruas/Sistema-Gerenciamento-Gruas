@@ -11,22 +11,19 @@ import {
   FileSignature, 
   CheckCircle,
   AlertCircle,
-  X
+  X,
+  Loader2
 } from "lucide-react"
-
-interface NotificationData {
-  id: string
-  title: string
-  message: string
-  type: 'ponto' | 'assinatura' | 'geral'
-  timestamp: Date
-  read: boolean
-}
+import { NotificacoesAPI, type Notificacao } from "@/lib/api-notificacoes"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function PWANotifications() {
-  const [notifications, setNotifications] = useState<NotificationData[]>([])
+  const [notifications, setNotifications] = useState<Notificacao[]>([])
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [isSupported, setIsSupported] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
     // Verificar se notificações são suportadas
@@ -35,35 +32,30 @@ export default function PWANotifications() {
       setPermission(Notification.permission)
     }
 
-    // Simular notificações (em produção, viria de uma API)
-    const mockNotifications: NotificationData[] = [
-      {
-        id: '1',
-        title: 'Lembrete de Ponto',
-        message: 'Não esqueça de registrar sua saída às 18:00',
-        type: 'ponto',
-        timestamp: new Date(),
-        read: false
-      },
-      {
-        id: '2',
-        title: 'Documento Pendente',
-        message: 'Você tem 3 documentos aguardando assinatura',
-        type: 'assinatura',
-        timestamp: new Date(Date.now() - 3600000), // 1 hora atrás
-        read: false
-      },
-      {
-        id: '3',
-        title: 'Sistema Atualizado',
-        message: 'Nova versão do PWA disponível',
-        type: 'geral',
-        timestamp: new Date(Date.now() - 7200000), // 2 horas atrás
-        read: true
-      }
-    ]
-    setNotifications(mockNotifications)
+    // Carregar notificações da API
+    loadNotifications()
   }, [])
+
+  const loadNotifications = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await NotificacoesAPI.listar({ limit: 20, page: 1 })
+      setNotifications(response.data)
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Erro ao carregar notificações'
+      setError(errorMessage)
+      console.error('Erro ao carregar notificações:', err)
+      toast({
+        title: 'Erro',
+        description: errorMessage,
+        variant: 'destructive'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const requestNotificationPermission = async () => {
     if (!isSupported) return
@@ -81,24 +73,60 @@ export default function PWANotifications() {
     }
   }
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
+  const markAsRead = async (id: string) => {
+    try {
+      await NotificacoesAPI.marcarComoLida(id)
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === id ? { ...notif, lida: true } : notif
+        )
       )
-    )
+    } catch (err: any) {
+      console.error('Erro ao marcar notificação como lida:', err)
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível marcar a notificação como lida',
+        variant: 'destructive'
+      })
+    }
   }
 
-  const removeNotification = (id: string) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== id))
+  const removeNotification = async (id: string) => {
+    try {
+      await NotificacoesAPI.deletar(id)
+      setNotifications(prev => prev.filter(notif => notif.id !== id))
+      toast({
+        title: 'Sucesso',
+        description: 'Notificação removida com sucesso'
+      })
+    } catch (err: any) {
+      console.error('Erro ao remover notificação:', err)
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível remover a notificação',
+        variant: 'destructive'
+      })
+    }
   }
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'ponto':
+      case 'rh':
         return <Clock className="w-5 h-5 text-blue-600" />
-      case 'assinatura':
+      case 'grua':
+        return <FileSignature className="w-5 h-5 text-purple-600" />
+      case 'obra':
+        return <FileSignature className="w-5 h-5 text-indigo-600" />
+      case 'financeiro':
         return <FileSignature className="w-5 h-5 text-green-600" />
+      case 'estoque':
+        return <FileSignature className="w-5 h-5 text-orange-600" />
+      case 'warning':
+        return <AlertCircle className="w-5 h-5 text-yellow-600" />
+      case 'error':
+        return <AlertCircle className="w-5 h-5 text-red-600" />
+      case 'success':
+        return <CheckCircle className="w-5 h-5 text-green-600" />
       default:
         return <Bell className="w-5 h-5 text-gray-600" />
     }
@@ -106,16 +134,28 @@ export default function PWANotifications() {
 
   const getNotificationBadge = (type: string) => {
     switch (type) {
-      case 'ponto':
-        return <Badge className="bg-blue-100 text-blue-800">Ponto</Badge>
-      case 'assinatura':
-        return <Badge className="bg-green-100 text-green-800">Assinatura</Badge>
+      case 'rh':
+        return <Badge className="bg-blue-100 text-blue-800">RH</Badge>
+      case 'grua':
+        return <Badge className="bg-purple-100 text-purple-800">Grua</Badge>
+      case 'obra':
+        return <Badge className="bg-indigo-100 text-indigo-800">Obra</Badge>
+      case 'financeiro':
+        return <Badge className="bg-green-100 text-green-800">Financeiro</Badge>
+      case 'estoque':
+        return <Badge className="bg-orange-100 text-orange-800">Estoque</Badge>
+      case 'warning':
+        return <Badge className="bg-yellow-100 text-yellow-800">Aviso</Badge>
+      case 'error':
+        return <Badge className="bg-red-100 text-red-800">Erro</Badge>
+      case 'success':
+        return <Badge className="bg-green-100 text-green-800">Sucesso</Badge>
       default:
         return <Badge className="bg-gray-100 text-gray-800">Geral</Badge>
     }
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length
+  const unreadCount = notifications.filter(n => !n.lida).length
 
   if (!isSupported) {
     return null
@@ -176,33 +216,40 @@ export default function PWANotifications() {
 
       {/* Lista de notificações */}
       <div className="space-y-3">
-        {notifications.map((notification) => (
-          <Card key={notification.id} className={!notification.read ? "bg-blue-50 border-blue-200" : ""}>
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+            <span className="ml-2 text-sm text-gray-600">Carregando notificações...</span>
+          </div>
+        )}
+        
+        {!loading && notifications.map((notification) => (
+          <Card key={notification.id} className={!notification.lida ? "bg-blue-50 border-blue-200" : ""}>
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  {getNotificationIcon(notification.type)}
+                  {getNotificationIcon(notification.tipo)}
                 </div>
                 
                 <div className="flex-1">
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="font-medium text-sm text-gray-900">
-                        {notification.title}
+                        {notification.titulo}
                       </h3>
                       <p className="text-sm text-gray-600 mt-1">
-                        {notification.message}
+                        {notification.mensagem}
                       </p>
                       <div className="flex items-center gap-2 mt-2">
-                        {getNotificationBadge(notification.type)}
+                        {getNotificationBadge(notification.tipo)}
                         <span className="text-xs text-gray-500">
-                          {notification.timestamp.toLocaleString("pt-BR")}
+                          {new Date(notification.data).toLocaleString("pt-BR")}
                         </span>
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-1">
-                      {!notification.read && (
+                      {!notification.lida && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -228,7 +275,7 @@ export default function PWANotifications() {
           </Card>
         ))}
         
-        {notifications.length === 0 && (
+        {!loading && notifications.length === 0 && (
           <Card>
             <CardContent className="p-8 text-center">
               <BellOff className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -238,6 +285,23 @@ export default function PWANotifications() {
               <p className="text-gray-500">
                 Você está em dia! Novas notificações aparecerão aqui.
               </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {error && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="p-4 text-center">
+              <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
+              <p className="text-sm text-red-600">{error}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={loadNotifications}
+                className="mt-2"
+              >
+                Tentar novamente
+              </Button>
             </CardContent>
           </Card>
         )}

@@ -1,88 +1,6 @@
 import api from './api';
 
 // ========================================
-// DADOS MOCKADOS
-// ========================================
-
-const mockFuncionarios: Funcionario[] = [
-  { id: 1, nome: 'João Silva', cargo: 'Operador de Grua', status: 'ativo', email: 'joao@empresa.com', telefone: '(11) 99999-0001' },
-  { id: 2, nome: 'Maria Santos', cargo: 'Supervisora', status: 'ativo', email: 'maria@empresa.com', telefone: '(11) 99999-0002' },
-  { id: 3, nome: 'Pedro Costa', cargo: 'Operador de Grua', status: 'ativo', email: 'pedro@empresa.com', telefone: '(11) 99999-0003' },
-  { id: 4, nome: 'Ana Oliveira', cargo: 'Operador de Grua', status: 'ativo', email: 'ana@empresa.com', telefone: '(11) 99999-0004' },
-  { id: 5, nome: 'Carlos Lima', cargo: 'Operador de Grua', status: 'ativo', email: 'carlos@empresa.com', telefone: '(11) 99999-0005' }
-];
-
-const mockRegistrosPonto: RegistroPonto[] = [
-  {
-    id: 1,
-    funcionario_id: 1,
-    funcionario: mockFuncionarios[0],
-    data: new Date().toISOString().split('T')[0],
-    entrada: '08:00',
-    saida_almoco: '12:00',
-    volta_almoco: '13:00',
-    saida: '17:00',
-    horas_trabalhadas: 8.0,
-    horas_extras: 0,
-    status: 'completo',
-    localizacao: 'Obra ABC'
-  },
-  {
-    id: 2,
-    funcionario_id: 2,
-    funcionario: mockFuncionarios[1],
-    data: new Date().toISOString().split('T')[0],
-    entrada: '08:30',
-    saida_almoco: '12:00',
-    volta_almoco: '13:00',
-    saida: '17:30',
-    horas_trabalhadas: 8.0,
-    horas_extras: 0.5,
-    status: 'completo',
-    localizacao: 'Obra XYZ'
-  },
-  {
-    id: 3,
-    funcionario_id: 3,
-    funcionario: mockFuncionarios[2],
-    data: new Date(Date.now() - 86400000).toISOString().split('T')[0], // Ontem
-    entrada: '08:00',
-    saida_almoco: '12:00',
-    volta_almoco: '13:00',
-    saida: '17:00',
-    horas_trabalhadas: 8.0,
-    horas_extras: 0,
-    status: 'completo',
-    localizacao: 'Obra DEF'
-  }
-];
-
-const mockJustificativas: Justificativa[] = [
-  {
-    id: 1,
-    funcionario_id: 1,
-    funcionario: mockFuncionarios[0],
-    data: new Date().toISOString().split('T')[0],
-    tipo: 'atraso',
-    motivo: 'Problemas no trânsito',
-    status: 'pendente',
-    anexos: [],
-    observacoes: 'Atraso de 30 minutos devido ao trânsito pesado'
-  },
-  {
-    id: 2,
-    funcionario_id: 2,
-    funcionario: mockFuncionarios[1],
-    data: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-    tipo: 'falta',
-    motivo: 'Problemas de saúde',
-    status: 'aprovado',
-    anexos: ['atestado.pdf'],
-    observacoes: 'Atestado médico apresentado'
-  }
-];
-
-// ========================================
 // INTERFACES
 // ========================================
 
@@ -163,9 +81,8 @@ export const apiFuncionarios = {
       const response = await api.get('/funcionarios', { params });
       const funcionarios = response.data.data || response.data || [];
       
-      // Verificar se o usuário é admin (pode ver todos)
-      // Em um sistema real, isso viria do backend
-      const isAdmin = true; // Temporariamente true para todos
+      // Verificar permissões do usuário via getCurrentUser
+      const isAdmin = response.data.isAdmin !== undefined ? response.data.isAdmin : false;
       
       return {
         isAdmin,
@@ -180,40 +97,8 @@ export const apiFuncionarios = {
         pagination: response.data.pagination
       };
     } catch (error) {
-      console.warn('API indisponível, usando dados mockados:', error);
-      
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Aplicar filtros nos dados mockados
-      let filteredFuncionarios = [...mockFuncionarios];
-      
-      if (params?.search) {
-        const search = params.search.toLowerCase();
-        filteredFuncionarios = filteredFuncionarios.filter(f => 
-          f.nome.toLowerCase().includes(search) ||
-          f.cargo?.toLowerCase().includes(search) ||
-          f.email?.toLowerCase().includes(search)
-        );
-      }
-      
-      // Aplicar paginação
-      const page = params?.page || 1;
-      const limit = params?.limit || 10;
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedFuncionarios = filteredFuncionarios.slice(startIndex, endIndex);
-      
-      return {
-        isAdmin: true,
-        funcionarios: paginatedFuncionarios,
-        pagination: {
-          page,
-          limit,
-          total: filteredFuncionarios.length,
-          pages: Math.ceil(filteredFuncionarios.length / limit)
-        }
-      };
+      console.error('Erro ao listar funcionários:', error);
+      throw error;
     }
   }
 };
@@ -250,55 +135,8 @@ export const apiRegistrosPonto = {
         recalculated: response.data.recalculated
       };
     } catch (error) {
-      console.warn('API indisponível, usando dados mockados:', error);
-      
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Aplicar filtros nos dados mockados
-      let filteredData = [...mockRegistrosPonto];
-      
-      if (params?.funcionario_id) {
-        filteredData = filteredData.filter(r => r.funcionario_id === params.funcionario_id);
-      }
-      
-      if (params?.status) {
-        filteredData = filteredData.filter(r => r.status === params.status);
-      }
-      
-      if (params?.data_inicio) {
-        filteredData = filteredData.filter(r => r.data >= params.data_inicio!);
-      }
-      
-      if (params?.data_fim) {
-        filteredData = filteredData.filter(r => r.data <= params.data_fim!);
-      }
-      
-      if (params?.search) {
-        const search = params.search.toLowerCase();
-        filteredData = filteredData.filter(r => 
-          r.funcionario?.nome.toLowerCase().includes(search) ||
-          r.localizacao?.toLowerCase().includes(search) ||
-          r.status?.toLowerCase().includes(search)
-        );
-      }
-      
-      // Aplicar paginação
-      const page = params?.page || 1;
-      const limit = params?.limit || 10;
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedData = filteredData.slice(startIndex, endIndex);
-      
-      return { 
-        data: paginatedData,
-        pagination: {
-          page,
-          limit,
-          total: filteredData.length,
-          pages: Math.ceil(filteredData.length / limit)
-        }
-      };
+      console.error('Erro ao listar registros de ponto:', error);
+      throw error;
     }
   },
 
@@ -454,56 +292,8 @@ export const apiJustificativas = {
         pagination: response.data.pagination
       };
     } catch (error) {
-      console.warn('API indisponível, usando dados mockados:', error);
-      
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Aplicar filtros nos dados mockados
-      let filteredData = [...mockJustificativas];
-      
-      if (params?.funcionario_id) {
-        filteredData = filteredData.filter(j => j.funcionario_id === params.funcionario_id);
-      }
-      
-      if (params?.status) {
-        filteredData = filteredData.filter(j => j.status === params.status);
-      }
-      
-      if (params?.data_inicio) {
-        filteredData = filteredData.filter(j => j.data >= params.data_inicio!);
-      }
-      
-      if (params?.data_fim) {
-        filteredData = filteredData.filter(j => j.data <= params.data_fim!);
-      }
-      
-      if (params?.search) {
-        const search = params.search.toLowerCase();
-        filteredData = filteredData.filter(j => 
-          j.funcionario?.nome.toLowerCase().includes(search) ||
-          j.motivo.toLowerCase().includes(search) ||
-          j.tipo.toLowerCase().includes(search) ||
-          j.status.toLowerCase().includes(search)
-        );
-      }
-      
-      // Aplicar paginação
-      const page = params?.page || 1;
-      const limit = params?.limit || 10;
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedData = filteredData.slice(startIndex, endIndex);
-      
-      return { 
-        data: paginatedData,
-        pagination: {
-          page,
-          limit,
-          total: filteredData.length,
-          pages: Math.ceil(filteredData.length / limit)
-        }
-      };
+      console.error('Erro ao listar justificativas:', error);
+      throw error;
     }
   },
 

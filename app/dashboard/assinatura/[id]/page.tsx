@@ -34,10 +34,10 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { mockDocumentos, mockUsers, Documento, AssinaturaOrdem } from '@/lib/mock-data'
 import { useUser } from '@/lib/user-context'
 import { obrasDocumentosApi, DocumentoObra, AssinaturaDocumento } from '@/lib/api-obras-documentos'
 import { obrasApi } from '@/lib/api-obras'
+import { isAdmin as checkIsAdmin } from '@/lib/user-utils'
 
 export default function AssinaturaDocumentoPage() {
   const { toast } = useToast()
@@ -91,81 +91,11 @@ export default function AssinaturaDocumentoPage() {
       } catch (error: any) {
         console.error('Erro ao carregar documento:', error)
         setError(error.message || 'Erro ao carregar documento')
-        
-        // Fallback para mock data
-        const mockDoc = mockDocumentos.find(doc => doc.id === documentoId)
-        if (mockDoc) {
-          setDocumento({
-            id: parseInt(mockDoc.id),
-            obra_id: parseInt(mockDoc.obraId),
-            titulo: mockDoc.titulo,
-            descricao: mockDoc.descricao,
-            arquivo_original: mockDoc.arquivoOriginal,
-            arquivo_assinado: mockDoc.arquivo,
-            caminho_arquivo: mockDoc.arquivo,
-            docu_sign_link: mockDoc.docuSignLink,
-            docu_sign_envelope_id: undefined,
-            status: mockDoc.status as any,
-            proximo_assinante_id: undefined,
-            created_by: 1,
-            created_at: mockDoc.createdAt,
-            updated_at: mockDoc.updatedAt,
-            obra_nome: mockDoc.obraName,
-            created_by_nome: 'Sistema',
-            total_assinantes: mockDoc.ordemAssinatura.length,
-            assinaturas_concluidas: mockDoc.ordemAssinatura.filter(a => a.status === 'assinado').length,
-            progresso_percentual: Math.round((mockDoc.ordemAssinatura.filter(a => a.status === 'assinado').length / mockDoc.ordemAssinatura.length) * 100),
-            assinaturas: mockDoc.ordemAssinatura.map(ass => ({
-              id: parseInt(ass.userId),
-              documento_id: parseInt(mockDoc.id),
-              user_id: parseInt(ass.userId),
-              ordem: ass.ordem,
-              status: ass.status as any,
-              tipo: 'interno' as 'interno' | 'cliente',
-              docu_sign_link: ass.docuSignLink,
-              docu_sign_envelope_id: undefined,
-              data_envio: ass.dataEnvio ? new Date(ass.dataEnvio).toISOString() : undefined,
-              data_assinatura: ass.dataAssinatura ? new Date(ass.dataAssinatura).toISOString() : undefined,
-              arquivo_assinado: ass.arquivoAssinado,
-              observacoes: ass.observacoes,
-              email_enviado: ass.emailEnviado || false,
-              data_email_enviado: ass.dataEmailEnviado ? new Date(ass.dataEmailEnviado).toISOString() : undefined,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              user_nome: mockUsers.find(u => u.id === ass.userId)?.name || 'Usuário',
-              user_email: mockUsers.find(u => u.id === ass.userId)?.email || '',
-              user_cargo: mockUsers.find(u => u.id === ass.userId)?.role || ''
-            })),
-            historico: []
-          })
-          
-          const assinaturaUsuario = mockDoc.ordemAssinatura.find(
-            ass => ass.userId === currentUser?.id
-          )
-          if (assinaturaUsuario) {
-            setAssinaturaAtual({
-              id: parseInt(assinaturaUsuario.userId),
-              documento_id: parseInt(mockDoc.id),
-              user_id: parseInt(assinaturaUsuario.userId),
-              ordem: assinaturaUsuario.ordem,
-              status: assinaturaUsuario.status as any,
-              tipo: 'interno' as 'interno' | 'cliente',
-              docu_sign_link: assinaturaUsuario.docuSignLink,
-              docu_sign_envelope_id: undefined,
-              data_envio: assinaturaUsuario.dataEnvio ? new Date(assinaturaUsuario.dataEnvio).toISOString() : undefined,
-              data_assinatura: assinaturaUsuario.dataAssinatura ? new Date(assinaturaUsuario.dataAssinatura).toISOString() : undefined,
-              arquivo_assinado: assinaturaUsuario.arquivoAssinado,
-              observacoes: assinaturaUsuario.observacoes,
-              email_enviado: assinaturaUsuario.emailEnviado || false,
-              data_email_enviado: assinaturaUsuario.dataEmailEnviado ? new Date(assinaturaUsuario.dataEmailEnviado).toISOString() : undefined,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              user_nome: mockUsers.find(u => u.id === assinaturaUsuario.userId)?.name || 'Usuário',
-              user_email: mockUsers.find(u => u.id === assinaturaUsuario.userId)?.email || '',
-              user_cargo: mockUsers.find(u => u.id === assinaturaUsuario.userId)?.role || ''
-            })
-          }
-        }
+        toast({
+          title: "Erro ao carregar documento",
+          description: error.message || "Não foi possível carregar o documento. Tente novamente.",
+          variant: "destructive"
+        })
       } finally {
         setIsLoading(false)
       }
@@ -225,7 +155,7 @@ export default function AssinaturaDocumentoPage() {
   }
 
   const canSign = assinaturaAtual?.status === 'aguardando' && assinaturaAtual.user_id === parseInt(currentUser.id?.toString() || '0')
-  const isAdmin = currentUser.role === 'admin'
+  const isAdmin = checkIsAdmin(currentUser)
   const progress = getProgressPercentage(documento)
   const nextSigner = getNextSigner(documento)
   const currentSigner = getCurrentSigner(documento)

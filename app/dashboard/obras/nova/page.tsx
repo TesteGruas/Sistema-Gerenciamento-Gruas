@@ -24,7 +24,7 @@ import {
   Settings
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
-import { CustoMensal } from "@/lib/mock-data"
+import { CustoMensal } from "@/lib/api-custos-mensais"
 import { ButtonLoader } from "@/components/ui/loader"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"

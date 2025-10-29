@@ -20,7 +20,7 @@ import {
   Loader2
 } from 'lucide-react'
 import { RegistroPontoAprovacao } from '@/lib/api-aprovacoes-horas-extras'
-import { getStatusColor, formatarData, formatarDataHora, formatarTempoRelativo } from '@/lib/mock-data-aprovacoes'
+import { getStatusColor, formatarData, formatarDataHora, formatarTempoRelativo } from '@/lib/utils-aprovacoes'
 
 interface CardAprovacaoProps {
   aprovacao: RegistroPontoAprovacao;

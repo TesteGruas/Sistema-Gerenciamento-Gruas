@@ -20,7 +20,7 @@ import { CardAprovacao } from '@/components/card-aprovacao-horas-extras'
 import { FiltrosAprovacoes } from '@/components/filtros-aprovacoes'
 import { EstatisticasAprovacoes } from '@/components/estatisticas-aprovacoes'
 import { useAprovacoesHorasExtras } from '@/hooks/useAprovacoesHorasExtras'
-import { formatarTempoRelativo } from '@/lib/mock-data-aprovacoes'
+import { formatarTempoRelativo } from '@/lib/utils-aprovacoes'
 
 export default function AprovacoesHorasExtrasPage() {
   // Listar TODAS as aprovações pendentes (sem filtro de gestor)

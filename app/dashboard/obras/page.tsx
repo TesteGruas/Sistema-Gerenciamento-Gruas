@@ -38,7 +38,6 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, mockUsers, mockCustosMensais, CustoMensal, mockClientes, getClientesAtivos } from "@/lib/mock-data"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
@@ -145,8 +144,7 @@ export default function ObrasPage() {
     } catch (err) {
       console.error('Erro ao carregar obras:', err)
       setError(err instanceof Error ? err.message : 'Erro ao carregar obras')
-      // Fallback para dados mockados em caso de erro
-      setObras(mockObras)
+      setObras([])
     } finally {
       stopLoading()
     }
@@ -423,7 +421,7 @@ export default function ObrasPage() {
     } catch (err) {
       console.error('Erro ao buscar obras:', err)
       setError(err instanceof Error ? err.message : 'Erro ao buscar obras')
-      setObras(mockObras)
+      setObras([])
     } finally {
       stopLoading()
     }

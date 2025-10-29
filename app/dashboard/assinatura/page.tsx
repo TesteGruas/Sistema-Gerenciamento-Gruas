@@ -36,10 +36,10 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from "lucide-react"
-import { mockDocumentos, mockObras, mockUsers } from "@/lib/mock-data"
 import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
 import { obrasApi } from "@/lib/api-obras"
 import api from "@/lib/api"
+import { isAdmin } from "@/lib/user-utils"
 
 export default function AssinaturaPage() {
   const { toast } = useToast()
@@ -67,80 +67,31 @@ export default function AssinaturaPage() {
       setLoading(true)
       setError(null)
       
+      console.log('[Assinaturas] Carregando documentos...')
+      console.log('[Assinaturas] Usuário atual:', currentUser)
+      
       // Carregar todas as obras primeiro
       const obrasResponse = await obrasApi.listarObras()
+      console.log('[Assinaturas] Obras carregadas:', obrasResponse.data?.length)
       setObras(obrasResponse.data)
       
       // Carregar todos os documentos de uma vez
       const response = await obrasDocumentosApi.listarTodos()
       const todosDocumentos = Array.isArray(response.data) ? response.data : [response.data]
+      console.log('[Assinaturas] Documentos carregados:', todosDocumentos.length)
+      console.log('[Assinaturas] Documentos completos:', todosDocumentos)
       
       setDocumentos(todosDocumentos)
     } catch (error: any) {
-      console.error('Erro ao carregar documentos:', error)
+      console.error('[Assinaturas] Erro ao carregar documentos:', error)
       setError(error.message || 'Erro ao carregar documentos')
-      // Fallback para dados mockados
-      setDocumentos(mockDocumentos.map(doc => ({
-        id: parseInt(doc.id),
-        obra_id: parseInt(doc.obraId),
-        obra_nome: mockObras.find(o => o.id === doc.obraId)?.name || 'Obra',
-        titulo: doc.titulo,
-        descricao: doc.descricao,
-        arquivo_original: doc.arquivoOriginal,
-        arquivo_assinado: doc.arquivo,
-        caminho_arquivo: doc.arquivo,
-        docu_sign_link: doc.docuSignLink,
-        docu_sign_envelope_id: '',
-        status: doc.status as any,
-        proximo_assinante_id: undefined,
-        proximo_assinante_nome: doc.proximoAssinante,
-        created_by: 1,
-        created_by_nome: 'Usuário',
-        created_at: doc.createdAt,
-        updated_at: doc.updatedAt,
-        total_assinantes: doc.ordemAssinatura.length,
-        assinaturas_concluidas: doc.ordemAssinatura.filter(a => a.status === 'assinado').length,
-        progresso_percentual: Math.round((doc.ordemAssinatura.filter(a => a.status === 'assinado').length / doc.ordemAssinatura.length) * 100),
-        assinaturas: doc.ordemAssinatura.map(ass => ({
-          id: 1,
-          documento_id: parseInt(doc.id),
-          user_id: ass.userId, // Manter como string (UUID)
-          ordem: ass.ordem,
-          status: ass.status as any,
-          tipo: 'interno' as 'interno' | 'cliente', // Default para mockados
-          docu_sign_link: ass.docuSignLink,
-          docu_sign_envelope_id: '',
-          data_envio: undefined,
-          data_assinatura: undefined,
-          arquivo_assinado: ass.arquivoAssinado,
-          observacoes: '',
-          email_enviado: false,
-          data_email_enviado: undefined,
-          created_at: doc.createdAt,
-          updated_at: doc.updatedAt,
-          usuario: {
-            id: parseInt(ass.userId),
-            nome: ass.userName,
-            email: '',
-            role: ass.role
-          }
-        })),
-        historico: doc.historicoAssinaturas.map(h => ({
-          id: 1,
-          documento_id: parseInt(doc.id),
-          user_id: 1,
-          acao: 'criado' as any,
-          data_acao: doc.createdAt,
-          arquivo_gerado: '',
-          observacoes: '',
-          ip_address: undefined,
-          user_agent: '',
-          user_nome: h.userName,
-          user_email: '',
-          user_role: h.role
-        }))
-      })))
-      setObras(mockObras)
+      setDocumentos([])
+      setObras([])
+      toast({
+        title: "Erro ao carregar documentos",
+        description: error.message || "Não foi possível carregar os documentos. Tente novamente.",
+        variant: "destructive"
+      })
     } finally {
       setLoading(false)
     }
@@ -148,19 +99,55 @@ export default function AssinaturaPage() {
 
   // Função para verificar se o usuário pode ver o documento
   const canViewDocument = (doc: any) => {
-    if (!currentUser) return false
+    if (!currentUser) {
+      console.log('[Assinaturas] canViewDocument: Sem usuário')
+      return false
+    }
+    
+    console.log('[Assinaturas] canViewDocument - Doc ID:', doc.id)
+    console.log('[Assinaturas] canViewDocument - currentUser.role:', currentUser.role)
+    console.log('[Assinaturas] canViewDocument - currentUser.id:', currentUser.id)
+    
+    // Verificar admin de múltiplas formas (máxima compatibilidade)
+    const userRole = currentUser.role?.toLowerCase() || ''
+    const isAdminUser = userRole === 'admin' || 
+                        userRole === 'administrador' ||
+                        userRole.includes('admin') ||
+                        isAdmin(currentUser)
+    
+    console.log('[Assinaturas] canViewDocument - isAdminUser:', isAdminUser)
     
     // Admin pode ver todos os documentos
-    if (currentUser.role === 'admin') return true
+    if (isAdminUser) {
+      console.log('[Assinaturas] ✅ Usuário é admin, pode ver documento', doc.id)
+      return true
+    }
     
     // Outros usuários só podem ver documentos onde são assinantes
-    return doc.assinaturas?.some((assinatura: any) => assinatura.user_id === currentUser.id) ||
-           doc.ordemAssinatura?.some((assinatura: any) => assinatura.userId === currentUser.id)
+    const hasAssinaturas = doc.assinaturas && Array.isArray(doc.assinaturas)
+    const hasOrdemAssinatura = doc.ordemAssinatura && Array.isArray(doc.ordemAssinatura)
+    
+    console.log('[Assinaturas] canViewDocument - Documento tem assinaturas?', hasAssinaturas)
+    console.log('[Assinaturas] canViewDocument - Documento tem ordemAssinatura?', hasOrdemAssinatura)
+    
+    const isAssinante = (hasAssinaturas && doc.assinaturas.some((assinatura: any) => {
+      const match = assinatura.user_id === parseInt(currentUser.id)
+      console.log(`[Assinaturas] Verificando assinatura: user_id=${assinatura.user_id}, currentUser.id=${currentUser.id}, match=${match}`)
+      return match
+    })) ||
+    (hasOrdemAssinatura && doc.ordemAssinatura.some((assinatura: any) => {
+      const match = assinatura.userId === parseInt(currentUser.id)
+      console.log(`[Assinaturas] Verificando ordemAssinatura: userId=${assinatura.userId}, currentUser.id=${currentUser.id}, match=${match}`)
+      return match
+    }))
+    
+    console.log('[Assinaturas] canViewDocument - Resultado final:', doc.id, isAssinante ? '✅ SIM' : '❌ NÃO')
+    return isAssinante
   }
 
   // Função para verificar se o usuário pode criar documentos
   const canCreateDocument = () => {
-    return currentUser?.role === 'admin'
+    return isAdmin(currentUser)
   }
 
   // Função para verificar se o usuário pode assinar o documento
@@ -176,10 +163,19 @@ export default function AssinaturaPage() {
     return userAssinatura.status === 'aguardando'
   }
 
-  // Carregar dados na inicialização
+  // Carregar dados na inicialização quando o usuário estiver disponível
   useEffect(() => {
-    carregarDocumentos()
-  }, [])
+    if (currentUser) {
+      carregarDocumentos()
+    }
+  }, [currentUser])
+
+  console.log('[Assinaturas] Estado atual:', {
+    totalDocumentos: documentos.length,
+    currentUser,
+    loading,
+    error
+  })
 
   const filteredDocumentos = documentos.filter(doc => {
     const matchesSearch = (doc.titulo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -187,6 +183,14 @@ export default function AssinaturaPage() {
     const matchesStatus = selectedStatus === "all" || doc.status === selectedStatus
     const matchesObra = selectedObra === "all" || doc.obra_id.toString() === selectedObra
     const canView = canViewDocument(doc)
+    
+    console.log(`[Assinaturas] Filtro do documento ${doc.id}:`, {
+      matchesSearch,
+      matchesStatus,
+      matchesObra,
+      canView,
+      resultado: matchesSearch && matchesStatus && matchesObra && canView
+    })
     
     return matchesSearch && matchesStatus && matchesObra && canView
   })
@@ -375,7 +379,7 @@ export default function AssinaturaPage() {
       </div>
 
       {/* Informações do Admin */}
-      {currentUser?.role === 'admin' && (
+      {isAdmin(currentUser) && (
         <Card className="bg-blue-50 border-blue-200">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -463,12 +467,16 @@ export default function AssinaturaPage() {
       </Card>
 
       {/* Loading State */}
-      {loading && (
+      {(loading || !currentUser) && (
         <Card>
           <CardContent className="p-8 text-center">
             <RefreshCw className="w-8 h-8 mx-auto mb-4 text-blue-600 animate-spin" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Carregando documentos...</h3>
-            <p className="text-gray-600">Aguarde enquanto buscamos os documentos do sistema.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {!currentUser ? 'Carregando informações do usuário...' : 'Carregando documentos...'}
+            </h3>
+            <p className="text-gray-600">
+              {!currentUser ? 'Aguarde enquanto verificamos suas credenciais.' : 'Aguarde enquanto buscamos os documentos do sistema.'}
+            </p>
           </CardContent>
         </Card>
       )}

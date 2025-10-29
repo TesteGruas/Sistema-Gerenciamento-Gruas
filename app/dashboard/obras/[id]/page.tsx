@@ -43,7 +43,6 @@ import {
   Paperclip,
   X
 } from "lucide-react"
-import { mockObras, mockGruas, getGruasByObra, getCustosByObra, getHistoricoByGrua, getDocumentosByObra, mockUsers, getCustosMensaisByObra, getCustosMensaisByObraAndMes, getMesesDisponiveis, criarCustosParaNovoMes, CustoMensal, Obra } from "@/lib/mock-data"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalCreate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
 import { obrasDocumentosApi, DocumentoObra, DocumentoCreate } from "@/lib/api-obras-documentos"
@@ -1232,67 +1231,8 @@ function ObraDetailsPageContent() {
       const response = await obrasDocumentosApi.listarPorObra(parseInt(obra.id))
       setDocumentos(Array.isArray(response.data) ? response.data : [response.data])
     } catch (error: any) {
-      // Fallback para dados mockados
-      const documentosMockados = getDocumentosByObra(obra.id)
-      setDocumentos(documentosMockados.map(doc => ({
-        id: parseInt(doc.id),
-        obra_id: parseInt(obra.id),
-        obra_nome: obra.name,
-        titulo: doc.titulo,
-        descricao: doc.descricao,
-        arquivo_original: doc.arquivoOriginal,
-        arquivo_assinado: doc.arquivo,
-        caminho_arquivo: doc.arquivo,
-        docu_sign_link: doc.docuSignLink,
-        docu_sign_envelope_id: '',
-        status: doc.status as any,
-        proximo_assinante_id: undefined,
-        proximo_assinante_nome: doc.proximoAssinante,
-        created_by: 1,
-        created_by_nome: 'Usuário',
-        created_at: doc.createdAt,
-        updated_at: doc.updatedAt,
-        total_assinantes: doc.ordemAssinatura.length,
-        assinaturas_concluidas: doc.ordemAssinatura.filter(a => a.status === 'assinado').length,
-        progresso_percentual: Math.round((doc.ordemAssinatura.filter(a => a.status === 'assinado').length / doc.ordemAssinatura.length) * 100),
-        assinaturas: doc.ordemAssinatura.map(ass => ({
-          id: 1,
-          documento_id: parseInt(doc.id),
-          user_id: parseInt(ass.userId),
-          ordem: ass.ordem,
-          status: ass.status as any,
-          docu_sign_link: ass.docuSignLink,
-          docu_sign_envelope_id: '',
-          data_envio: undefined,
-          data_assinatura: undefined,
-          arquivo_assinado: ass.arquivoAssinado,
-          observacoes: '',
-          email_enviado: false,
-          data_email_enviado: undefined,
-          created_at: doc.createdAt,
-          updated_at: doc.updatedAt,
-          usuario: {
-            id: parseInt(ass.userId),
-            nome: ass.userName,
-            email: '',
-            role: ass.role
-          }
-        })),
-        historico: doc.historicoAssinaturas.map(h => ({
-          id: 1,
-          documento_id: parseInt(doc.id),
-          user_id: 1,
-          acao: 'criado' as any,
-          data_acao: doc.createdAt,
-          arquivo_gerado: '',
-          observacoes: '',
-          ip_address: undefined,
-          user_agent: '',
-          user_nome: h.userName,
-          user_email: '',
-          user_role: h.role
-        }))
-      })))
+      console.error('Erro ao carregar documentos:', error)
+      setDocumentos([])
     } finally {
       setLoadingDocumentos(false)
     }
@@ -2738,11 +2678,8 @@ function ObraDetailsPageContent() {
                     <SelectValue placeholder="Selecione um funcionário" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockUsers.filter(user => 
-                      user.role === 'engenheiro' || 
-                      user.role === 'chefe_obras' || 
-                      user.role === 'funcionario'
-                    ).map(user => (
+                    {/* TODO: Integrar com API de funcionários */}
+                    {[].map((user: any) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.name} ({user.role})
                       </SelectItem>
@@ -2820,11 +2757,8 @@ function ObraDetailsPageContent() {
                     <SelectValue placeholder="Selecione o responsável" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockUsers.filter(user => 
-                      user.role === 'engenheiro' || 
-                      user.role === 'chefe_obras' || 
-                      user.role === 'funcionario'
-                    ).map(user => (
+                    {/* TODO: Integrar com API de funcionários */}
+                    {[].map((user: any) => (
                       <SelectItem key={user.id} value={user.name}>
                         {user.name} ({user.role})
                       </SelectItem>
@@ -3271,11 +3205,8 @@ function ObraDetailsPageContent() {
               <div className="space-y-2">
                 <Label>Funcionários Disponíveis</Label>
                 <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-2">
-                  {mockUsers.filter(user => 
-                    user.role === 'engenheiro' || 
-                    user.role === 'chefe_obras' || 
-                    user.role === 'funcionario'
-                  ).map(funcionario => (
+                  {/* TODO: Integrar com API de funcionários */}
+                  {[].map((funcionario: any) => (
                     <div 
                       key={funcionario.id} 
                       className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"

@@ -41,10 +41,8 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
     setError(null);
 
     try {
-      // TODO: Atualizar quando a rota de notificações estiver implementada no backend
       const response = await api.get(`notificacoes`, {
         params: {
-          usuario_id,
           limit: 50,
           ordenacao: 'recente'
         }
@@ -56,12 +54,6 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
       const errorMessage = err.response?.data?.message || 'Erro ao carregar notificações';
       setError(errorMessage);
       console.error('Erro ao buscar notificações:', err);
-      
-      // Em caso de erro 404 (rota não implementada), usar array vazio
-      if (err.response?.status === 404) {
-        setNotificacoes([]);
-        setError(null); // Não mostrar erro se a rota ainda não existe
-      }
     } finally {
       setLoading(false);
     }
@@ -72,10 +64,7 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
    */
   const marcarComoLida = useCallback(async (notificacao_id: number) => {
     try {
-      // TODO: Atualizar quando a rota de notificações estiver implementada no backend
-      await api.patch(`notificacoes/${notificacao_id}/lida`, {
-        lida: true
-      });
+      await api.patch(`notificacoes/${notificacao_id}/marcar-lida`);
 
       // Atualizar estado local
       setNotificacoes(prev =>
@@ -83,13 +72,7 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
       );
     } catch (err: any) {
       console.error('Erro ao marcar notificação como lida:', err);
-      
-      // Se a rota não existir, apenas atualizar localmente
-      if (err.response?.status === 404) {
-        setNotificacoes(prev =>
-          prev.map(n => (n.id === notificacao_id ? { ...n, lida: true } : n))
-        );
-      }
+      throw err;
     }
   }, []);
 
@@ -98,22 +81,15 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
    */
   const marcarTodasComoLidas = useCallback(async () => {
     try {
-      // TODO: Criar rota no backend para marcar todas como lidas
-      await api.patch(`notificacoes/marcar-todas-lidas`, {
-        usuario_id
-      });
+      await api.patch(`notificacoes/marcar-todas-lidas`);
 
       // Atualizar estado local
       setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })));
     } catch (err: any) {
       console.error('Erro ao marcar todas notificações como lidas:', err);
-      
-      // Se a rota não existir, apenas atualizar localmente
-      if (err.response?.status === 404) {
-        setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })));
-      }
+      throw err;
     }
-  }, [usuario_id]);
+  }, []);
 
   /**
    * Refetch - recarrega a lista
