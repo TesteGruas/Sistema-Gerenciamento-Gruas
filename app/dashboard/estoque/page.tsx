@@ -24,6 +24,7 @@ import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, A
 import { estoqueAPI, type Produto, type Categoria, type Movimentacao } from "@/lib/api-estoque"
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
+import { ProtectedRoute } from "@/components/protected-route"
 
 // Dados simulados de obras e gruas (mantidos por enquanto)
 const obrasData = [
@@ -475,10 +476,11 @@ export default function EstoquePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Controle de Estoque</h1>
+    <ProtectedRoute permission="estoque:visualizar" showAccessDenied={true}>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Controle de Estoque</h1>
           <p className="text-gray-600">Gerenciamento completo do estoque de materiais</p>
         </div>
         <div className="flex gap-3">
@@ -1291,7 +1293,7 @@ export default function EstoquePage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-    </div>
+      </div>
+    </ProtectedRoute>
   )
 }

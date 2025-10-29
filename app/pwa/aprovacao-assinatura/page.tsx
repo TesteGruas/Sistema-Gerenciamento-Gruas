@@ -17,91 +17,130 @@ import {
   ChevronUp
 } from 'lucide-react'
 import { 
-  mockAprovacoes, 
-  AprovacaoHorasExtras,
-  formatarData,
-  formatarDataHora,
-  getStatusColor
-} from '@/lib/mock-data-aprovacoes'
-import { useRouter } from 'next/navigation'
+  apiAprovacoesHorasExtras,
+  RegistroPontoAprovacao
+} from '@/lib/api-aprovacoes-horas-extras'
+import { apiRegistrosPonto } from '@/lib/api-ponto-eletronico'
+import { useCurrentUser } from '@/hooks/use-current-user'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
+import { useEffect } from 'react'
+
+// Funções utilitárias
+function formatarData(data: string): string {
+  return new Date(data).toLocaleDateString('pt-BR');
+}
+
+function formatarDataHora(data: string): string {
+  return new Date(data).toLocaleString('pt-BR');
+}
+
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'Aprovado':
+      return 'text-green-600 bg-green-50 border-green-200';
+    case 'Pendente Aprovação':
+      return 'text-orange-600 bg-orange-50 border-orange-200';
+    case 'Rejeitado':
+      return 'text-red-600 bg-red-50 border-red-200';
+    default:
+      return 'text-gray-600 bg-gray-50 border-gray-200';
+  }
+}
 
 export default function PWAAprovacaoAssinaturaPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const registroId = searchParams.get('id');
+  const { user } = useCurrentUser();
   const [assinatura, setAssinatura] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingAprovacao, setLoadingAprovacao] = useState(true);
+  const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<RegistroPontoAprovacao | null>(null);
   const [showDetalhes, setShowDetalhes] = useState(false);
 
-  // Simular aprovação selecionada (em um app real, viria dos parâmetros da URL)
-  const aprovacaoSelecionada = mockAprovacoes.find(a => a.data_trabalho === '2025-10-25' && a.status === 'pendente');
+  // Carregar aprovação selecionada
+  useEffect(() => {
+    const carregarAprovacao = async () => {
+      if (!registroId || !user?.id) {
+        toast.error('ID da aprovação não encontrado');
+        router.push('/pwa/aprovacoes');
+        return;
+      }
+
+      setLoadingAprovacao(true);
+      try {
+        const { data } = await apiRegistrosPonto.listar({
+          funcionario_id: user.funcionario_id || user.id,
+          limit: 100
+        });
+        
+        const registro = data.find((r: any) => r.id === registroId);
+        if (!registro || !registro.horas_extras || registro.horas_extras <= 0) {
+          toast.error('Aprovação não encontrada ou sem horas extras');
+          router.push('/pwa/aprovacoes');
+          return;
+        }
+
+        if (registro.status !== 'Pendente Aprovação') {
+          toast.error('Esta aprovação já foi processada');
+          router.push('/pwa/aprovacoes');
+          return;
+        }
+
+        setAprovacaoSelecionada(registro);
+      } catch (error: any) {
+        console.error('Erro ao carregar aprovação:', error);
+        toast.error('Erro ao carregar dados da aprovação');
+        router.push('/pwa/aprovacoes');
+      } finally {
+        setLoadingAprovacao(false);
+      }
+    };
+
+    carregarAprovacao();
+  }, [registroId, user, router]);
 
   const handleAprovar = async () => {
     if (!assinatura.trim()) {
-      alert('Por favor, assine digitalmente antes de aprovar.');
+      toast.error('Por favor, assine digitalmente antes de aprovar.');
+      return;
+    }
+
+    if (!aprovacaoSelecionada || !user?.id) {
+      toast.error('Dados inválidos para aprovação');
       return;
     }
 
     setIsLoading(true);
     
     try {
-      console.log('Aprovando horas extras:', aprovacaoSelecionada?.id, 'Assinatura:', assinatura);
+      const { message } = await apiAprovacoesHorasExtras.aprovarComAssinatura(
+        aprovacaoSelecionada.id,
+        {
+          gestor_id: user.id,
+          assinatura_digital: assinatura,
+          observacoes_aprovacao: undefined
+        }
+      );
+
+      toast.success(message || 'Horas extras aprovadas com sucesso!');
       
-      // Simular delay de processamento
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Mostrar notificação de sucesso
-      showSuccessNotification();
-      
-      // Voltar para a página anterior após 2 segundos
+      // Redirecionar após sucesso
       setTimeout(() => {
-        router.back();
-      }, 2000);
+        router.push('/pwa/aprovacoes');
+      }, 1500);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao aprovar horas extras:', error);
-      alert('Erro ao aprovar horas extras. Tente novamente.');
+      const errorMessage = error.response?.data?.message || 'Erro ao aprovar horas extras. Tente novamente.';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const showSuccessNotification = () => {
-    // Criar elemento de notificação
-    const notification = document.createElement('div');
-    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 flex items-center gap-3 animate-slide-in';
-    notification.innerHTML = `
-      <div class="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-      </div>
-      <div>
-        <p class="font-semibold">✅ Horas Extras Aprovadas!</p>
-        <p class="text-sm opacity-90">Funcionário: ${aprovacaoSelecionada?.funcionario.nome}</p>
-        <p class="text-sm opacity-90">Horas: ${aprovacaoSelecionada?.horas_extras}h</p>
-      </div>
-    `;
-    
-    // Adicionar estilos CSS para animação
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slide-in {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      .animate-slide-in {
-        animation: slide-in 0.3s ease-out;
-      }
-    `;
-    document.head.appendChild(style);
-    
-    document.body.appendChild(notification);
-    
-    // Remover notificação após 3 segundos
-    setTimeout(() => {
-      notification.remove();
-      style.remove();
-    }, 3000);
-  };
+  // Função showSuccessNotification removida - usando toast agora
 
   if (!aprovacaoSelecionada) {
     return (

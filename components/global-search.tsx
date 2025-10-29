@@ -1,12 +1,16 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, X, Clock, Users, Building2, Package, DollarSign, FileText, Bell, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { obrasApi } from '@/lib/api-obras'
+import { clientesApi } from '@/lib/api-clientes'
+import { funcionariosApi } from '@/lib/api-funcionarios'
+import { gruasApi } from '@/lib/api-gruas'
 
 // Tipos para os resultados da busca
 interface SearchResult {
@@ -25,9 +29,8 @@ interface SearchResult {
   }
 }
 
-// Dados mockados para busca
-const mockSearchData: SearchResult[] = [
-  // Páginas do sistema
+// Páginas fixas do sistema (pré-definidas)
+const paginasFixas: SearchResult[] = [
   { id: 'dashboard', title: 'Dashboard', description: 'Visão geral do sistema', type: 'page', href: '/dashboard', icon: Clock, category: 'Sistema' },
   { id: 'clientes', title: 'Clientes', description: 'Gerenciar clientes', type: 'page', href: '/dashboard/clientes', icon: Users, category: 'Sistema' },
   { id: 'obras', title: 'Obras', description: 'Gerenciar obras', type: 'page', href: '/dashboard/obras', icon: Building2, category: 'Sistema' },
@@ -36,38 +39,6 @@ const mockSearchData: SearchResult[] = [
   { id: 'financeiro', title: 'Financeiro', description: 'Gestão financeira', type: 'page', href: '/dashboard/financeiro', icon: DollarSign, category: 'Sistema' },
   { id: 'relatorios', title: 'Relatórios', description: 'Relatórios e análises', type: 'page', href: '/dashboard/relatorios', icon: FileText, category: 'Sistema' },
   { id: 'notificacoes', title: 'Notificações', description: 'Central de notificações', type: 'page', href: '/dashboard/notificacoes', icon: Bell, category: 'Sistema' },
-  
-  // Clientes
-  { id: 'cliente-1', title: 'Construtora ABC Ltda', description: 'CNPJ: 12.345.678/0001-90', type: 'client', href: '/dashboard/clientes/1', icon: Users, category: 'Clientes', metadata: { status: 'Ativo' } },
-  { id: 'cliente-2', title: 'Engenharia XYZ S.A.', description: 'CNPJ: 98.765.432/0001-10', type: 'client', href: '/dashboard/clientes/2', icon: Users, category: 'Clientes', metadata: { status: 'Ativo' } },
-  { id: 'cliente-3', title: 'Incorporadora Beta', description: 'CNPJ: 11.222.333/0001-44', type: 'client', href: '/dashboard/clientes/3', icon: Users, category: 'Clientes', metadata: { status: 'Inativo' } },
-  
-  // Obras
-  { id: 'obra-1', title: 'Residencial Alpha', description: 'Construtora ABC - 120 apartamentos', type: 'obra', href: '/dashboard/obras/1', icon: Building2, category: 'Obras', metadata: { status: 'Em Andamento', date: '2024-01-15' } },
-  { id: 'obra-2', title: 'Comercial Beta', description: 'Engenharia XYZ - Shopping center', type: 'obra', href: '/dashboard/obras/2', icon: Building2, category: 'Obras', metadata: { status: 'Planejamento', date: '2024-03-01' } },
-  { id: 'obra-3', title: 'Industrial Gamma', description: 'Incorporadora Beta - Galpão industrial', type: 'obra', href: '/dashboard/obras/3', icon: Building2, category: 'Obras', metadata: { status: 'Concluída', date: '2023-12-10' } },
-  
-  // Gruas
-  { id: 'grua-1', title: 'Grua 50T - GR001', description: 'Modelo: Liebherr 50T', type: 'grua', href: '/dashboard/gruas/1', icon: Package, category: 'Equipamentos', metadata: { status: 'Disponível' } },
-  { id: 'grua-2', title: 'Grua 30T - GR002', description: 'Modelo: Grove 30T', type: 'grua', href: '/dashboard/gruas/2', icon: Package, category: 'Equipamentos', metadata: { status: 'Em Uso' } },
-  { id: 'grua-3', title: 'Grua 25T - GR003', description: 'Modelo: Tadano 25T', type: 'grua', href: '/dashboard/gruas/3', icon: Package, category: 'Equipamentos', metadata: { status: 'Manutenção' } },
-  
-  // Funcionários
-  { id: 'func-1', title: 'João Silva', description: 'Operador de Grua - CRECI: 12345', type: 'funcionario', href: '/dashboard/rh/funcionarios/1', icon: Users, category: 'RH', metadata: { status: 'Ativo' } },
-  { id: 'func-2', title: 'Maria Santos', description: 'Supervisora - CRECI: 67890', type: 'funcionario', href: '/dashboard/rh/funcionarios/2', icon: Users, category: 'RH', metadata: { status: 'Ativo' } },
-  { id: 'func-3', title: 'Pedro Costa', description: 'Operador de Grua - CRECI: 11111', type: 'funcionario', href: '/dashboard/rh/funcionarios/3', icon: Users, category: 'RH', metadata: { status: 'Férias' } },
-  
-  // Registros de Ponto
-  { id: 'ponto-1', title: 'Registro João Silva', description: '08:00 - 17:00 - Obra Alpha', type: 'ponto', href: '/dashboard/ponto/registros/1', icon: Clock, category: 'Ponto Eletrônico', metadata: { date: '2024-01-15', status: 'Completo' } },
-  { id: 'ponto-2', title: 'Registro Maria Santos', description: '08:30 - 17:30 - Obra Beta', type: 'ponto', href: '/dashboard/ponto/registros/2', icon: Clock, category: 'Ponto Eletrônico', metadata: { date: '2024-01-15', status: 'Completo' } },
-  
-  // Transações Financeiras
-  { id: 'fin-1', title: 'Receita Obra Alpha', description: 'Pagamento mensal - R$ 15.000', type: 'financeiro', href: '/dashboard/financeiro/transacoes/1', icon: DollarSign, category: 'Financeiro', metadata: { value: 'R$ 15.000', date: '2024-01-10' } },
-  { id: 'fin-2', title: 'Despesa Manutenção', description: 'Manutenção grua GR001 - R$ 2.500', type: 'financeiro', href: '/dashboard/financeiro/transacoes/2', icon: DollarSign, category: 'Financeiro', metadata: { value: 'R$ 2.500', date: '2024-01-12' } },
-  
-  // Notificações
-  { id: 'notif-1', title: 'Nova obra cadastrada', description: 'Residencial Alpha foi cadastrada', type: 'notificacao', href: '/dashboard/notificacoes/1', icon: Bell, category: 'Notificações', metadata: { priority: 'Normal', date: '2024-01-15' } },
-  { id: 'notif-2', title: 'Manutenção agendada', description: 'Grua GR003 precisa de manutenção', type: 'notificacao', href: '/dashboard/notificacoes/2', icon: Bell, category: 'Notificações', metadata: { priority: 'Alta', date: '2024-01-14' } },
 ]
 
 // Ícones por tipo
@@ -125,6 +96,119 @@ export function GlobalSearch() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Função para buscar dados dinâmicos nas APIs
+  const buscarDadosDinamicos = useCallback(async (searchTerm: string) => {
+    const termoLower = searchTerm.toLowerCase()
+    const resultados: SearchResult[] = []
+
+    try {
+      // Buscar páginas fixas
+      const paginasEncontradas = paginasFixas.filter(item =>
+        item.title.toLowerCase().includes(termoLower) ||
+        item.description.toLowerCase().includes(termoLower)
+      )
+      resultados.push(...paginasEncontradas)
+
+      // Buscar clientes
+      try {
+        const clientesResponse = await clientesApi.buscarClientes(searchTerm, 1, 5)
+        const clientes = clientesResponse.data || []
+        clientes.forEach(cliente => {
+          resultados.push({
+            id: `cliente-${cliente.id}`,
+            title: cliente.nome,
+            description: cliente.cnpj ? `CNPJ: ${cliente.cnpj}` : cliente.email || '',
+            type: 'client' as const,
+            href: `/dashboard/clientes/${cliente.id}`,
+            icon: Users,
+            category: 'Clientes',
+            metadata: { status: cliente.status || 'Ativo' }
+          })
+        })
+      } catch (error) {
+        console.warn('Erro ao buscar clientes:', error)
+      }
+
+      // Buscar obras
+      try {
+        const obrasResponse = await obrasApi.listarObras({ 
+          page: 1, 
+          limit: 5 
+        })
+        const obras = obrasResponse.data || []
+        obras.filter(obra => 
+          obra.nome.toLowerCase().includes(termoLower) ||
+          obra.endereco?.toLowerCase().includes(termoLower)
+        ).forEach(obra => {
+          resultados.push({
+            id: `obra-${obra.id}`,
+            title: obra.nome,
+            description: obra.descricao || `${obra.cidade || ''} ${obra.estado || ''}`.trim(),
+            type: 'obra' as const,
+            href: `/dashboard/obras/${obra.id}`,
+            icon: Building2,
+            category: 'Obras',
+            metadata: { 
+              status: obra.status,
+              date: obra.data_inicio 
+            }
+          })
+        })
+      } catch (error) {
+        console.warn('Erro ao buscar obras:', error)
+      }
+
+      // Buscar funcionários
+      try {
+        const funcionariosResponse = await funcionariosApi.buscarFuncionarios(searchTerm)
+        const funcionarios = funcionariosResponse.data || []
+        funcionarios.forEach(func => {
+          resultados.push({
+            id: `func-${func.id}`,
+            title: func.nome,
+            description: `${func.cargo}${func.email ? ` - ${func.email}` : ''}`,
+            type: 'funcionario' as const,
+            href: `/dashboard/rh/${func.id}`,
+            icon: Users,
+            category: 'RH',
+            metadata: { status: func.status }
+          })
+        })
+      } catch (error) {
+        console.warn('Erro ao buscar funcionários:', error)
+      }
+
+      // Buscar gruas
+      try {
+        const gruasResponse = await gruasApi.listarGruas({ limit: 5 })
+        const gruas = gruasResponse.data || []
+        gruas.filter(grua => 
+          (grua.name || '').toLowerCase().includes(termoLower) ||
+          (grua.modelo || '').toLowerCase().includes(termoLower) ||
+          (grua.fabricante || '').toLowerCase().includes(termoLower)
+        ).forEach(grua => {
+          resultados.push({
+            id: `grua-${grua.id}`,
+            title: grua.name || `Grua ${grua.id}`,
+            description: `${grua.modelo || ''}${grua.fabricante ? ` - ${grua.fabricante}` : ''}`.trim(),
+            type: 'grua' as const,
+            href: `/dashboard/gruas/${grua.id}`,
+            icon: Package,
+            category: 'Equipamentos',
+            metadata: { status: grua.status }
+          })
+        })
+      } catch (error) {
+        console.warn('Erro ao buscar gruas:', error)
+      }
+
+      return resultados.slice(0, 8) // Limitar a 8 resultados
+    } catch (error) {
+      console.error('Erro na busca:', error)
+      return resultados.slice(0, 8)
+    }
+  }, [])
+
   // Buscar resultados
   useEffect(() => {
     if (query.length < 2) {
@@ -134,19 +218,16 @@ export function GlobalSearch() {
 
     setIsLoading(true)
     
-    // Simular delay de busca
-    setTimeout(() => {
-      const filteredResults = mockSearchData.filter(item =>
-        item.title.toLowerCase().includes(query.toLowerCase()) ||
-        item.description.toLowerCase().includes(query.toLowerCase()) ||
-        item.category.toLowerCase().includes(query.toLowerCase())
-      )
-      
-      setResults(filteredResults.slice(0, 8)) // Limitar a 8 resultados
+    // Debounce para evitar muitas chamadas
+    const timeoutId = setTimeout(async () => {
+      const resultados = await buscarDadosDinamicos(query)
+      setResults(resultados)
       setSelectedIndex(0)
       setIsLoading(false)
-    }, 150)
-  }, [query])
+    }, 300) // 300ms de debounce
+
+    return () => clearTimeout(timeoutId)
+  }, [query, buscarDadosDinamicos])
 
   // Navegação por teclado
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -31,6 +31,7 @@ import { OfflineSyncIndicator } from "@/components/offline-sync-indicator"
 import { PWAErrorBoundary } from "@/components/pwa-error-boundary"
 import { usePersistentSession } from "@/hooks/use-persistent-session"
 import { useAuthInterceptor } from "@/hooks/use-auth-interceptor"
+import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -57,32 +58,14 @@ export default function PWALayout({ children }: PWALayoutProps) {
   // Hook de interceptor de autenticação
   const { isAuthenticated: authInterceptorAuthenticated, checkAuth } = useAuthInterceptor()
   
-  // Função de permissão simplificada
-  const hasPermission = (permission: string) => {
-    if (!isClient) return true
-    if (typeof window === 'undefined') return true
-    
-    try {
-      const userData = localStorage.getItem('user_data')
-      if (!userData) return true
-      
-      const user = JSON.parse(userData)
-      const role = user.role || user.cargo
-      
-      if (role === 'admin' || role === 'diretor') return true
-      if (role === 'encarregador' || role === 'supervisor') {
-        return permission.includes('encarregador') || permission.includes('supervisor') || permission.includes('notificacoes') || permission.includes('ponto') || permission.includes('perfil')
-      }
-      if (role === 'funcionario' || role === 'operario') {
-        return permission.includes('ponto') || permission.includes('perfil') || permission.includes('assinatura') || permission.includes('gruas')
-      }
-      
-      return permission.includes('ponto') || permission.includes('perfil') || permission.includes('assinatura') || permission.includes('gruas')
-    } catch (error) {
-      console.warn('Erro ao verificar permissão:', error)
-      return true
-    }
-  }
+  // Hook de permissões PWA (Novo Sistema v2.0)
+  const {
+    menuItems: pwaMenuItems,
+    hasPermission,
+    canViewNotifications,
+    userRole,
+    loading: permissionsLoading
+  } = usePWAPermissions()
   
   // Verificar se estamos no cliente
   useEffect(() => {
@@ -172,80 +155,46 @@ export default function PWALayout({ children }: PWALayoutProps) {
     )
   }
 
-  const navigationItems = [
-    {
-      name: "Home",
-      href: "/pwa",
-      icon: Home,
-      description: "Página inicial",
-      permission: "ponto:visualizar"
-    },
-    {
-      name: "Ponto",
-      href: "/pwa/ponto",
-      icon: Clock,
-      description: "Registrar ponto",
-      permission: "ponto_eletronico:visualizar"
-    },
-    {
-      name: "Espelho",
-      href: "/pwa/espelho-ponto",
-      icon: FileText,
-      description: "Ver espelho de ponto",
-      permission: "ponto_eletronico:visualizar"
-    },
-    {
-      name: "Gruas",
-      href: "/pwa/gruas",
-      icon: Briefcase,
-      description: "Minhas gruas",
-      permission: "gruas:visualizar"
-    },
-    {
-      name: "Docs",
-      href: "/pwa/documentos",
-      icon: FileSignature,
-      description: "Documentos",
-      permission: "assinatura_digital:visualizar"
+  // Mapear itens do menu PWA para formato de navegação
+  // O hook usePWAPermissions já retorna os itens filtrados por permissões
+  const navigationItems = pwaMenuItems
+    .slice(0, 5) // Limitar a 5 itens no menu inferior
+    .map(item => {
+      // Mapear labels para nomes mais curtos para o menu inferior
+      const labelMap: Record<string, string> = {
+        'Ponto Eletrônico': 'Ponto',
+        'Espelho de Ponto': 'Espelho',
+        'Documentos': 'Docs',
+        'Notificações': 'Notif'
+      }
+      
+      return {
+        name: labelMap[item.label] || item.label,
+        href: item.path,
+        icon: item.icon,
+        description: item.description || item.label,
+        permission: Array.isArray(item.permission) ? item.permission[0] : item.permission,
+        label: item.label // Manter label original
+      }
+    })
+
+  // Adicionar notificações com badge se houver documentos pendentes
+  if (canViewNotifications() && documentosPendentes > 0) {
+    const notificacaoItem = pwaMenuItems.find(item => item.path === '/pwa/notificacoes')
+    if (notificacaoItem && !navigationItems.find(item => item.href === '/pwa/notificacoes')) {
+      navigationItems.push({
+        name: "Notif",
+        href: "/pwa/notificacoes",
+        icon: Bell,
+        description: "Notificações",
+        permission: "notificacoes:visualizar",
+        label: "Notificações"
+      })
     }
-  ]
-
-  // Adicionar itens de navegação baseado em permissões
-  if (hasPermission("encarregador:visualizar")) {
-    navigationItems.push({
-      name: "Encarregador",
-      href: "/pwa/encarregador",
-      icon: User,
-      description: "Gerenciar funcionários",
-      permission: "encarregador:visualizar"
-    })
   }
 
-  if (hasPermission("supervisor:visualizar") || hasPermission("admin:visualizar")) {
-    navigationItems.push({
-      name: "Gerenciar",
-      href: "/pwa/gerenciar-funcionarios",
-      icon: Users,
-      description: "Gerenciar funcionários",
-      permission: "supervisor:visualizar"
-    })
-  }
-
-  if (hasPermission("notificacoes:visualizar") && documentosPendentes > 0) {
-    navigationItems.push({
-      name: "Notif",
-      href: "/pwa/notificacoes",
-      icon: Bell,
-      description: "Notificações",
-      permission: "notificacoes:visualizar"
-    })
-  }
-
-  // Filtrar itens de navegação
-  const filteredNavigationItems = navigationItems.filter(item => {
-    if (!item.permission) return true
-    return hasPermission(item.permission)
-  })
+  // Os itens já vêm filtrados do hook, então não precisamos filtrar novamente
+  const filteredNavigationItems = navigationItems
 
   // Rotas que não precisam do layout
   const noLayoutPaths = ['/pwa/login', '/pwa/redirect']

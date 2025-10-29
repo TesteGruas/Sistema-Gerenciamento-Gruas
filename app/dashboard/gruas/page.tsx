@@ -38,6 +38,7 @@ import { mockObras, mockUsers } from "@/lib/mock-data"
 import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
+import { ProtectedRoute } from "@/components/protected-route"
 
 // Interface para o formato da grua usado no componente
 interface GruaFrontend extends GruaBackend {
@@ -686,7 +687,8 @@ export default function GruasPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <ProtectedRoute permission="gruas:visualizar" showAccessDenied={true}>
+      <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Controle de Gruas</h1>
@@ -1513,7 +1515,8 @@ export default function GruasPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProtectedRoute>
   )
 }
 

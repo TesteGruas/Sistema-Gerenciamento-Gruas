@@ -37,6 +37,7 @@ import {
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
+import { ProtectedRoute } from "@/components/protected-route"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -1287,10 +1288,11 @@ export default function PontoPage() {
   ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Ponto Eletrônico</h1>
+    <ProtectedRoute permission="ponto_eletronico:visualizar" showAccessDenied={true}>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Ponto Eletrônico</h1>
           <p className="text-gray-600">Sistema de controle de frequência dos funcionários</p>
         </div>
         <div className="flex gap-2">
@@ -2629,6 +2631,7 @@ export default function PontoPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </ProtectedRoute>
   )
 }

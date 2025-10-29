@@ -18,58 +18,177 @@ import {
   User,
   Eye,
   ExternalLink,
-  CheckSquare
+  CheckSquare,
+  Loader2
 } from 'lucide-react'
 import { 
-  mockAprovacoes, 
-  AprovacaoHorasExtras,
-  formatarData,
-  formatarDataHora,
-  formatarTempoRelativo,
-  getStatusColor
-} from '@/lib/mock-data-aprovacoes'
+  apiAprovacoesHorasExtras,
+  RegistroPontoAprovacao
+} from '@/lib/api-aprovacoes-horas-extras'
+import { useCurrentUser } from '@/hooks/use-current-user'
+import { apiRegistrosPonto } from '@/lib/api-ponto-eletronico'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+
+// Funções utilitárias para formatação
+function formatarData(data: string): string {
+  return new Date(data).toLocaleDateString('pt-BR');
+}
+
+function formatarDataHora(data: string): string {
+  return new Date(data).toLocaleString('pt-BR');
+}
+
+function formatarTempoRelativo(data: string): string {
+  const agora = new Date();
+  const dataComparacao = new Date(data);
+  const diffMs = agora.getTime() - dataComparacao.getTime();
+  const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDias === 0) return 'Hoje';
+  if (diffDias === 1) return 'Ontem';
+  if (diffDias < 7) return `${diffDias} dias atrás`;
+  return formatarData(data);
+}
+
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'Aprovado':
+      return 'text-green-600 bg-green-50 border-green-200';
+    case 'Pendente Aprovação':
+      return 'text-orange-600 bg-orange-50 border-orange-200';
+    case 'Rejeitado':
+      return 'text-red-600 bg-red-50 border-red-200';
+    default:
+      return 'text-gray-600 bg-gray-50 border-gray-200';
+  }
+}
+
+// Converter RegistroPontoAprovacao para formato compatível
+interface AprovacaoDisplay {
+  id: string;
+  funcionario_id: string | number;
+  data_trabalho: string;
+  horas_extras: number;
+  status: string;
+  registro: {
+    entrada: string;
+    saida: string;
+    horas_trabalhadas: number;
+  };
+  funcionario: {
+    nome: string;
+    cargo: string;
+    obra: string;
+  };
+  supervisor?: {
+    nome: string;
+    cargo: string;
+  };
+  observacoes?: string;
+  data_aprovacao?: string;
+  data_limite?: string;
+}
+
+function converterParaDisplay(registro: RegistroPontoAprovacao): AprovacaoDisplay {
+  return {
+    id: registro.id,
+    funcionario_id: registro.funcionario_id,
+    data_trabalho: registro.data,
+    horas_extras: registro.horas_extras,
+    status: registro.status,
+    registro: {
+      entrada: registro.entrada || '08:00',
+      saida: registro.saida || '17:00',
+      horas_trabalhadas: registro.horas_trabalhadas || 0
+    },
+    funcionario: {
+      nome: registro.funcionario?.nome || 'Funcionário',
+      cargo: registro.funcionario?.cargo || 'Cargo',
+      obra: registro.funcionario?.obra_atual_id?.toString() || 'Obra'
+    },
+    supervisor: registro.aprovador ? {
+      nome: registro.aprovador.nome,
+      cargo: 'Supervisor'
+    } : undefined,
+    observacoes: registro.observacoes,
+    data_aprovacao: registro.data_aprovacao,
+    data_limite: registro.created_at ? new Date(new Date(registro.created_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined
+  };
+}
 
 export default function PWAAprovacoesPage() {
   const router = useRouter();
-  const [aprovacoes, setAprovacoes] = useState<AprovacaoHorasExtras[]>([]);
+  const { user, loading: loadingUser } = useCurrentUser();
+  const [aprovacoes, setAprovacoes] = useState<AprovacaoDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('todas');
   const [showDetalhes, setShowDetalhes] = useState(false);
-  const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<AprovacaoHorasExtras | null>(null);
+  const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<AprovacaoDisplay | null>(null);
 
-  // Simular carregamento de dados do funcionário logado
+  // Carregar aprovações do funcionário logado
   useEffect(() => {
     const carregarAprovacoes = async () => {
-      setLoading(true);
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (loadingUser || !user?.funcionario_id) return;
       
-      // Filtrar apenas aprovações do funcionário atual (simulando funcionário João Silva)
-      const aprovacoesFuncionario = mockAprovacoes.filter(a => a.funcionario_id === 'func-001');
-      setAprovacoes(aprovacoesFuncionario);
-      setLoading(false);
+      setLoading(true);
+      try {
+        // Buscar registros com horas extras do funcionário atual
+        const { data } = await apiRegistrosPonto.listar({
+          funcionario_id: user.funcionario_id,
+          status: 'Pendente Aprovação',
+          limit: 100
+        });
+        
+        // Converter para formato de display
+        const aprovacoesConvertidas = data
+          .filter(r => r.horas_extras && r.horas_extras > 0)
+          .map(converterParaDisplay);
+        
+        setAprovacoes(aprovacoesConvertidas);
+      } catch (error: any) {
+        console.error('Erro ao carregar aprovações:', error);
+        toast.error('Erro ao carregar aprovações de horas extras');
+      } finally {
+        setLoading(false);
+      }
     };
 
     carregarAprovacoes();
-  }, []);
+  }, [user, loadingUser]);
 
   // Separar por status
-  const pendentes = aprovacoes.filter(a => a.status === 'pendente');
-  const aprovadas = aprovacoes.filter(a => a.status === 'aprovado');
-  const rejeitadas = aprovacoes.filter(a => a.status === 'rejeitado');
-  const canceladas = aprovacoes.filter(a => a.status === 'cancelado');
+  const pendentes = aprovacoes.filter(a => a.status === 'Pendente Aprovação');
+  const aprovadas = aprovacoes.filter(a => a.status === 'Aprovado');
+  const rejeitadas = aprovacoes.filter(a => a.status === 'Rejeitado');
+  const canceladas: AprovacaoDisplay[] = []; // Canceladas não vêm da API atual
 
   const handleRefresh = async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoading(false);
+    try {
+      if (!user?.funcionario_id) return;
+      
+      const { data } = await apiRegistrosPonto.listar({
+        funcionario_id: user.funcionario_id,
+        limit: 100
+      });
+      
+      const aprovacoesConvertidas = data
+        .filter(r => r.horas_extras && r.horas_extras > 0)
+        .map(converterParaDisplay);
+      
+      setAprovacoes(aprovacoesConvertidas);
+    } catch (error: any) {
+      toast.error('Erro ao atualizar aprovações');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleVerDetalhes = (aprovacao: AprovacaoHorasExtras) => {
+  const handleVerDetalhes = (aprovacao: AprovacaoDisplay) => {
     // Se for aprovação pendente, vai direto para assinatura
-    if (aprovacao.status === 'pendente') {
-      router.push('/pwa/aprovacao-assinatura');
+    if (aprovacao.status === 'Pendente Aprovação') {
+      router.push(`/pwa/aprovacao-assinatura?id=${aprovacao.id}`);
     } else {
       // Se for outro status, mostra detalhes
       setAprovacaoSelecionada(aprovacao);
@@ -79,14 +198,12 @@ export default function PWAAprovacoesPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'aprovado':
+      case 'Aprovado':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case 'pendente':
+      case 'Pendente Aprovação':
         return <Clock className="w-5 h-5 text-orange-600" />;
-      case 'rejeitado':
+      case 'Rejeitado':
         return <XCircle className="w-5 h-5 text-red-600" />;
-      case 'cancelado':
-        return <Timer className="w-5 h-5 text-gray-600" />;
       default:
         return <AlertTriangle className="w-5 h-5 text-gray-600" />;
     }
@@ -94,43 +211,46 @@ export default function PWAAprovacoesPage() {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'aprovado':
+      case 'Aprovado':
         return 'Aprovado';
-      case 'pendente':
+      case 'Pendente Aprovação':
         return 'Aguardando Aprovação';
-      case 'rejeitado':
+      case 'Rejeitado':
         return 'Rejeitado';
-      case 'cancelado':
-        return 'Cancelado';
       default:
         return 'Desconhecido';
     }
   };
 
-  const getStatusDescription = (aprovacao: AprovacaoHorasExtras) => {
+  const getStatusDescription = (aprovacao: AprovacaoDisplay) => {
     switch (aprovacao.status) {
-      case 'aprovado':
-        return `Aprovado em ${formatarDataHora(aprovacao.data_aprovacao!)} por ${aprovacao.supervisor.nome}`;
-      case 'pendente':
-        const isVencida = new Date(aprovacao.data_limite) < new Date();
+      case 'Aprovado':
+        return aprovacao.data_aprovacao && aprovacao.supervisor
+          ? `Aprovado em ${formatarDataHora(aprovacao.data_aprovacao)} por ${aprovacao.supervisor.nome}`
+          : 'Aprovado';
+      case 'Pendente Aprovação':
+        const isVencida = aprovacao.data_limite ? new Date(aprovacao.data_limite) < new Date() : false;
         return isVencida 
           ? 'Prazo expirado - será cancelado automaticamente'
-          : `Prazo limite: ${formatarDataHora(aprovacao.data_limite)}`;
-      case 'rejeitado':
-        return `Rejeitado em ${formatarDataHora(aprovacao.data_aprovacao!)} por ${aprovacao.supervisor.nome}`;
-      case 'cancelado':
-        return 'Cancelado automaticamente por prazo expirado';
+          : aprovacao.data_limite 
+            ? `Prazo limite: ${formatarDataHora(aprovacao.data_limite)}`
+            : 'Aguardando aprovação';
+      case 'Rejeitado':
+        return aprovacao.data_aprovacao && aprovacao.supervisor
+          ? `Rejeitado em ${formatarDataHora(aprovacao.data_aprovacao)}`
+          : 'Rejeitado';
       default:
         return '';
     }
   };
 
-  if (loading) {
+  if (loading || loadingUser) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="flex flex-col items-center justify-center h-64 space-y-4">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <p className="text-gray-600">Carregando aprovações...</p>
           </div>
         </div>
       </div>
