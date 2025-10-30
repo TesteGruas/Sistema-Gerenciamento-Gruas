@@ -5,7 +5,14 @@ import { buildApiUrl, API_ENDPOINTS, fetchWithAuth } from './api'
 export interface FuncionarioBackend {
   id: number
   nome: string
-  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras'
+  cargo: string // Manter para compatibilidade - valor antigo (string)
+  cargo_id?: number // Novo - FK para tabela cargos
+  cargo_info?: { // Novo - retornado via JOIN
+    id: number
+    nome: string
+    nivel: string
+    descricao?: string
+  }
   telefone?: string
   email?: string
   cpf?: string

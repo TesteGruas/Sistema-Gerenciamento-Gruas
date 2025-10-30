@@ -327,7 +327,7 @@ router.delete('/:id', async (req, res) => {
     // Verificar se cargo existe
     const { data: cargo } = await supabaseAdmin
       .from('cargos')
-      .select('id')
+      .select('id, nome')
       .eq('id', id)
       .single()
 
@@ -335,6 +335,35 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Cargo não encontrado'
+      })
+    }
+
+    // ⚠️ VERIFICAR SE HÁ FUNCIONÁRIOS USANDO ESTE CARGO
+    const { data: funcionarios, error: checkError, count } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome', { count: 'exact', head: false })
+      .eq('cargo_id', id)
+      .limit(5)
+
+    if (checkError) {
+      console.error('Erro ao verificar funcionários:', checkError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao verificar uso do cargo',
+        error: checkError.message
+      })
+    }
+
+    if (funcionarios && funcionarios.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Não é possível desativar cargo que está sendo usado por funcionários',
+        detalhes: {
+          cargo: cargo.nome,
+          funcionarios_total: count || funcionarios.length,
+          funcionarios_exemplos: funcionarios.slice(0, 3).map(f => f.nome),
+          orientacao: 'Reatribua os funcionários a outros cargos antes de desativar este cargo'
+        }
       })
     }
 

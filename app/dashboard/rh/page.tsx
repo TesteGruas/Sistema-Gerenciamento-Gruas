@@ -44,6 +44,7 @@ interface FuncionarioRH {
   nome: string
   cpf: string
   cargo: string
+  cargo_id?: number // Adicionar ID do cargo
   departamento: string
   salario: number
   data_admissao: string
@@ -110,7 +111,8 @@ export default function RHPage() {
           id: func.id,
           nome: func.nome,
           cpf: func.cpf || '',
-          cargo: func.cargo,
+          cargo: func.cargo_info?.nome || func.cargo, // Priorizar JOIN, fallback para string
+          cargo_id: func.cargo_id, // Adicionar ID do cargo
           departamento: '',
           salario: func.salario || 0,
           data_admissao: func.data_admissao || '',
@@ -282,10 +284,10 @@ export default function RHPage() {
     }
   }, [criarCargo, toast])
 
-  // Memoizar cálculos pesados
-  const cargosUnicos = useMemo(
-    () => Array.from(new Set(funcionarios.map(f => f.cargo))).sort(),
-    [funcionarios]
+  // Memoizar cálculos pesados - usar lista de cargos da API
+  const cargosDisponiveis = useMemo(
+    () => cargosAtivos.map(c => c.nome).sort(),
+    [cargosAtivos]
   )
 
   // Debounce do termo de busca
@@ -327,7 +329,8 @@ export default function RHPage() {
             id: func.id,
             nome: func.nome,
             cpf: func.cpf || "",
-            cargo: func.cargo,
+            cargo: func.cargo_info?.nome || func.cargo, // Priorizar JOIN, fallback para string
+            cargo_id: func.cargo_id, // Adicionar ID do cargo
             departamento: "",
             salario: func.salario || 0,
             data_admissao: func.data_admissao || "",
@@ -490,7 +493,7 @@ export default function RHPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os cargos</SelectItem>
-                {cargosUnicos.map(cargo => (
+                {cargosDisponiveis.map(cargo => (
                   <SelectItem key={cargo} value={cargo}>{cargo}</SelectItem>
                 ))}
               </SelectContent>

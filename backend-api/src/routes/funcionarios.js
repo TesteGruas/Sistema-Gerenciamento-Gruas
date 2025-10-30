@@ -148,6 +148,12 @@ router.get('/', authenticateToken, async (req, res) => {
       .from('funcionarios')
       .select(`
         *,
+        cargo_info:cargos!cargo_id(
+          id,
+          nome,
+          nivel,
+          descricao
+        ),
         usuario:usuarios!funcionario_id(
           id,
           nome,
@@ -376,6 +382,12 @@ router.get('/:id', async (req, res) => {
       .from('funcionarios')
       .select(`
         *,
+        cargo_info:cargos!cargo_id(
+          id,
+          nome,
+          nivel,
+          descricao
+        ),
         usuario:usuarios!funcionario_id(
           id,
           nome,
@@ -695,10 +707,25 @@ router.post('/', async (req, res) => {
           // Não falha a criação do funcionário se o email falhar
         }
 
+        // Buscar dados completos do funcionário com JOIN
+        const { data: funcionarioCompleto } = await supabaseAdmin
+          .from('funcionarios')
+          .select(`
+            *,
+            cargo_info:cargos!cargo_id(
+              id,
+              nome,
+              nivel,
+              descricao
+            )
+          `)
+          .eq('id', novoFuncionario.id)
+          .single()
+
         res.status(201).json({
           success: true,
           data: {
-            ...novoFuncionario,
+            ...(funcionarioCompleto || novoFuncionario),
             usuario_criado: true,
             usuario_id: usuarioId
             // Por segurança, NÃO retornar senha_temporaria - foi enviada por email
@@ -728,10 +755,25 @@ router.post('/', async (req, res) => {
         })
       }
 
+      // Buscar dados completos do funcionário com JOIN
+      const { data: funcionarioCompleto } = await supabaseAdmin
+        .from('funcionarios')
+        .select(`
+          *,
+          cargo_info:cargos!cargo_id(
+            id,
+            nome,
+            nivel,
+            descricao
+          )
+        `)
+        .eq('id', data.id)
+        .single()
+
       res.status(201).json({
         success: true,
         data: {
-          ...data,
+          ...(funcionarioCompleto || data),
           usuario_criado: false
         },
         message: 'Funcionário criado com sucesso'
@@ -871,9 +913,24 @@ router.put('/:id', async (req, res) => {
       })
     }
 
+    // Buscar dados completos do funcionário com JOIN
+    const { data: funcionarioCompleto } = await supabaseAdmin
+      .from('funcionarios')
+      .select(`
+        *,
+        cargo_info:cargos!cargo_id(
+          id,
+          nome,
+          nivel,
+          descricao
+        )
+      `)
+      .eq('id', id)
+      .single()
+
     res.json({
       success: true,
-      data
+      data: funcionarioCompleto || data
     })
   } catch (error) {
     console.error('Erro ao atualizar funcionário:', error)
