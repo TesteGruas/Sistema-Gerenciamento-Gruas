@@ -76,20 +76,48 @@ router.get('/gruas', authenticateToken, requirePermission('financeiro:visualizar
 
     // Analisar rentabilidade de cada grua
     const analiseGruas = await Promise.all(gruas.map(async (grua) => {
-      // Buscar receitas (locações) da grua
-      const { data: receitas, error: receitasError } = await supabaseAdmin
+      // Buscar receitas vinculadas diretamente à grua
+      const { data: receitasGrua, error: receitasError } = await supabaseAdmin
         .from('receitas')
         .select('valor, data_receita, tipo, descricao')
-        .eq('tipo', 'locacao')
+        .eq('grua_id', grua.id)
         .gte('data_receita', data_inicio)
         .lte('data_receita', data_fim);
 
-      // Buscar custos da grua (manutenção, operação, etc)
-      const { data: custos, error: custosError } = await supabaseAdmin
+      // Buscar custos vinculados diretamente à grua
+      const { data: custosGrua, error: custosError } = await supabaseAdmin
         .from('custos')
         .select('valor, data_custo, tipo, descricao')
+        .eq('grua_id', grua.id)
         .gte('data_custo', data_inicio)
         .lte('data_custo', data_fim);
+
+      // Buscar obras onde a grua está alocada no período
+      const { data: gruaObras } = await supabaseAdmin
+        .from('grua_obra')
+        .select('obra_id')
+        .eq('grua_id', grua.id)
+        .or(`data_inicio_locacao.lte.${data_fim},data_fim_locacao.gte.${data_inicio},data_fim_locacao.is.null`);
+
+      const obrasIds = gruaObras?.map(go => go.obra_id) || [];
+
+      // Buscar custos das obras (como backup se não houver custos diretos)
+      let custosObra = [];
+      if (obrasIds.length > 0) {
+        const { data } = await supabaseAdmin
+          .from('custos')
+          .select('valor, data_custo, tipo, descricao')
+          .in('obra_id', obrasIds)
+          .is('grua_id', null) // Apenas custos não vinculados a grua específica
+          .gte('data_custo', data_inicio)
+          .lte('data_custo', data_fim);
+        
+        custosObra = data || [];
+      }
+
+      // Combinar receitas e custos
+      const receitas = receitasGrua || [];
+      const custos = [...(custosGrua || []), ...custosObra];
 
       // Buscar locações da grua
       const { data: locacoes, error: locacoesError } = await supabaseAdmin
@@ -111,6 +139,17 @@ router.get('/gruas', authenticateToken, requirePermission('financeiro:visualizar
       const totalCustos = custos?.reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;
       const totalLocacoes = locacoes?.reduce((sum, l) => sum + parseFloat(l.valor_mensal || 0), 0) || 0;
       const totalMedicoes = medicoes?.reduce((sum, m) => sum + parseFloat(m.valor_total || 0), 0) || 0;
+
+      // Log de debug
+      console.log(`[Rentabilidade] Processando grua ${grua.id}:`, {
+        receitasEncontradas: receitas.length,
+        custosEncontrados: custos.length,
+        custosGruaDiretos: custosGrua?.length || 0,
+        custosObra: custosObra.length,
+        totalReceitas,
+        totalCustos,
+        obrasVinculadas: obrasIds.length
+      });
 
       // Usar medições se disponíveis, senão usar valor mensal das locações
       const receitaReal = totalMedicoes > 0 ? totalMedicoes : totalLocacoes;
@@ -332,18 +371,47 @@ async function analisarPeriodo(data_inicio, data_fim) {
     .select('id, name');
 
   return Promise.all(gruas.map(async (grua) => {
-    const { data: receitas } = await supabaseAdmin
+    // Buscar receitas vinculadas diretamente à grua
+    const { data: receitasGrua } = await supabaseAdmin
       .from('receitas')
       .select('valor')
-      .eq('tipo', 'locacao')
+      .eq('grua_id', grua.id)
       .gte('data_receita', data_inicio)
       .lte('data_receita', data_fim);
 
-    const { data: custos } = await supabaseAdmin
+    // Buscar custos vinculados diretamente à grua
+    const { data: custosGrua } = await supabaseAdmin
       .from('custos')
       .select('valor')
+      .eq('grua_id', grua.id)
       .gte('data_custo', data_inicio)
       .lte('data_custo', data_fim);
+
+    // Buscar obras onde a grua está alocada no período
+    const { data: gruaObras } = await supabaseAdmin
+      .from('grua_obra')
+      .select('obra_id')
+      .eq('grua_id', grua.id)
+      .or(`data_inicio_locacao.lte.${data_fim},data_fim_locacao.gte.${data_inicio},data_fim_locacao.is.null`);
+
+    const obrasIds = gruaObras?.map(go => go.obra_id) || [];
+
+    // Buscar custos das obras (como backup se não houver custos diretos)
+    let custosObra = [];
+    if (obrasIds.length > 0) {
+      const { data } = await supabaseAdmin
+        .from('custos')
+        .select('valor')
+        .in('obra_id', obrasIds)
+        .is('grua_id', null)
+        .gte('data_custo', data_inicio)
+        .lte('data_custo', data_fim);
+      
+      custosObra = data || [];
+    }
+
+    const receitas = receitasGrua || [];
+    const custos = [...(custosGrua || []), ...custosObra];
 
     const totalReceitas = receitas?.reduce((sum, r) => sum + parseFloat(r.valor || 0), 0) || 0;
     const totalCustos = custos?.reduce((sum, c) => sum + parseFloat(c.valor || 0), 0) || 0;

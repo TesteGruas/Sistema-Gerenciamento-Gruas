@@ -310,15 +310,96 @@ router.patch('/:id/finalizar', authenticateToken, requirePermission('obras:edita
       const medicao = data;
       const locacao = medicao.locacoes;
       
+      // Log adicional para debug
+      console.log(`[Medição] DEBUG - Dados da locação:`, {
+        locacao_existe: !!locacao,
+        locacao_id: locacao?.id,
+        equipamento_id: locacao?.equipamento_id,
+        tipo_equipamento: locacao?.tipo_equipamento,
+        contrato_id: locacao?.contrato_id,
+        valor_total: medicao.valor_total,
+        condicao_atendida: !!(locacao && medicao.valor_total > 0)
+      });
+      
       if (locacao && medicao.valor_total > 0) {
-        // Buscar obra_id da locação através dos contratos ou diretamente
-        const { data: obraData } = await supabaseAdmin
+        // Tentar buscar obra_id de múltiplas formas
+        let obra_id = null;
+        let metodo_busca = null;
+
+        // Método 1: obra_gruas_configuracao
+        const { data: configData } = await supabaseAdmin
           .from('obra_gruas_configuracao')
           .select('obra_id')
           .eq('grua_id', locacao.equipamento_id)
-          .single();
+          .maybeSingle();
+
+        console.log(`[Medição] Método 1 (obra_gruas_configuracao) - Resultado:`, { 
+          tentou_buscar: true,
+          grua_id_buscado: locacao.equipamento_id,
+          encontrou: !!configData?.obra_id,
+          dados: configData
+        });
+
+        if (configData?.obra_id) {
+          obra_id = configData.obra_id;
+          metodo_busca = 'obra_gruas_configuracao';
+        }
+
+        // Método 2: grua_obra (se método 1 falhar)
+        if (!obra_id) {
+          const { data: gruaObraData } = await supabaseAdmin
+            .from('grua_obra')
+            .select('obra_id')
+            .eq('grua_id', locacao.equipamento_id)
+            .eq('status', 'Ativa')
+            .maybeSingle();
+          
+          console.log(`[Medição] Método 2 (grua_obra) - Resultado:`, { 
+            tentou_buscar: true,
+            grua_id_buscado: locacao.equipamento_id,
+            encontrou: !!gruaObraData?.obra_id,
+            dados: gruaObraData
+          });
+          
+          if (gruaObraData?.obra_id) {
+            obra_id = gruaObraData.obra_id;
+            metodo_busca = 'grua_obra';
+          }
+        }
+
+        // Método 3: contrato (se método 2 falhar)
+        if (!obra_id && locacao.contrato_id) {
+          const { data: contratoData } = await supabaseAdmin
+            .from('contratos')
+            .select('obra_id')
+            .eq('id', locacao.contrato_id)
+            .maybeSingle();
+          
+          console.log(`[Medição] Método 3 (contratos) - Resultado:`, { 
+            tentou_buscar: true,
+            contrato_id_buscado: locacao.contrato_id,
+            encontrou: !!contratoData?.obra_id,
+            dados: contratoData
+          });
+          
+          if (contratoData?.obra_id) {
+            obra_id = contratoData.obra_id;
+            metodo_busca = 'contratos';
+          }
+        }
         
-        const obra_id = obraData?.obra_id;
+        // Log de debug
+        console.log(`[Medição] Tentando criar receita automática:`, {
+          medicao_id: medicao.id,
+          medicao_numero: medicao.numero,
+          locacao_id: locacao.id,
+          equipamento_id: locacao.equipamento_id,
+          tipo_equipamento: locacao.tipo_equipamento,
+          obra_id,
+          metodo_busca,
+          valor: medicao.valor_total,
+          status: obra_id ? 'sucesso' : 'falhou - obra_id não encontrado'
+        });
         
         if (obra_id) {
           await supabaseAdmin
@@ -331,15 +412,17 @@ router.patch('/:id/finalizar', authenticateToken, requirePermission('obras:edita
               valor: medicao.valor_total,
               data_receita: new Date().toISOString().split('T')[0],
               status: 'confirmada',
-              observacoes: `Gerada automaticamente pela medição ID ${medicao.id}`
+              observacoes: `Gerada automaticamente pela medição ID ${medicao.id} (método: ${metodo_busca})`
             });
           
-          console.log(`Receita automática criada para medição ${medicao.id}`);
+          console.log(`[Medição] ✓ Receita automática criada para medição ${medicao.id} via ${metodo_busca}`);
+        } else {
+          console.warn(`[Medição] ✗ Não foi possível criar receita automática para medição ${medicao.id} - obra_id não encontrado`);
         }
       }
     } catch (receitaError) {
       // Não bloquear a finalização se houver erro na criação da receita
-      console.error('Erro ao criar receita automática:', receitaError);
+      console.error('[Medição] Erro ao criar receita automática:', receitaError);
     }
 
     res.json({

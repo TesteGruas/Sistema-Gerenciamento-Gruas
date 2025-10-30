@@ -15,7 +15,8 @@
     "test:clientes:real": "node src/routes/tests/clientes-integration-real.test.js",
     "test:clientes:database": "node src/routes/tests/clientes-database.test.js",
     "test:clientes:db-corrected": "node src/routes/tests/clientes-database-corrected.test.js",
-    "docs": "swagger-jsdoc -d swaggerDef.js src/routes/*.js -o docs/swagger.json"
+    "docs": "swagger-jsdoc -d swaggerDef.js src/routes/*.js -o docs/swagger.json",
+    "gerar-receitas-retroativas": "node scripts/gerar-receitas-retroativas.js"
   },
   "keywords": [
     "api",

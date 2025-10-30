@@ -335,16 +335,24 @@ router.post('/', async (req, res) => {
     }
 
     // Verificar se a grua existe
-    const { data: grua, error: gruaError } = await supabase
+    const { data: grua, error: gruaError } = await supabaseAdmin
       .from('gruas')
       .select('id, name')
       .eq('id', value.grua_id)
-      .single()
+      .maybeSingle()
 
-    if (gruaError || !grua) {
+    if (gruaError) {
+      console.error('Erro ao buscar grua:', gruaError)
+      return res.status(500).json({
+        error: 'Erro ao verificar grua',
+        message: gruaError.message
+      })
+    }
+
+    if (!grua) {
       return res.status(400).json({
         error: 'Grua não encontrada',
-        message: 'A grua especificada não existe'
+        message: `A grua com ID '${value.grua_id}' não existe no sistema`
       })
     }
 
@@ -427,11 +435,11 @@ router.put('/:id', async (req, res) => {
     }
 
     // Verificar se a configuração existe
-    const { data: configuracaoExistente, error: checkError } = await supabase
+    const { data: configuracaoExistente, error: checkError } = await supabaseAdmin
       .from('grua_configuracoes')
       .select('id')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (checkError || !configuracaoExistente) {
       return res.status(404).json({
@@ -501,13 +509,21 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params
 
     // Verificar se a configuração existe
-    const { data: configuracao, error: checkError } = await supabase
+    const { data: configuracao, error: checkError } = await supabaseAdmin
       .from('grua_configuracoes')
       .select('id, nome')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
-    if (checkError || !configuracao) {
+    if (checkError) {
+      console.error('Erro ao buscar configuração:', checkError)
+      return res.status(500).json({
+        error: 'Erro ao verificar configuração',
+        message: checkError.message
+      })
+    }
+
+    if (!configuracao) {
       return res.status(404).json({
         error: 'Configuração não encontrada',
         message: 'A configuração com o ID especificado não existe'
@@ -583,13 +599,21 @@ router.post('/:id/componentes', async (req, res) => {
     }
 
     // Verificar se a configuração existe
-    const { data: configuracao, error: configError } = await supabase
+    const { data: configuracao, error: configError } = await supabaseAdmin
       .from('grua_configuracoes')
-      .select('id, nome')
+      .select('id, nome, grua_id')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
-    if (configError || !configuracao) {
+    if (configError) {
+      console.error('Erro ao buscar configuração:', configError)
+      return res.status(500).json({
+        error: 'Erro ao verificar configuração',
+        message: configError.message
+      })
+    }
+
+    if (!configuracao) {
       return res.status(404).json({
         error: 'Configuração não encontrada',
         message: 'A configuração especificada não existe'
@@ -597,13 +621,21 @@ router.post('/:id/componentes', async (req, res) => {
     }
 
     // Verificar se o componente existe
-    const { data: componente, error: compError } = await supabase
+    const { data: componente, error: compError } = await supabaseAdmin
       .from('grua_componentes')
       .select('id, nome, grua_id')
       .eq('id', value.componente_id)
-      .single()
+      .maybeSingle()
 
-    if (compError || !componente) {
+    if (compError) {
+      console.error('Erro ao buscar componente:', compError)
+      return res.status(500).json({
+        error: 'Erro ao verificar componente',
+        message: compError.message
+      })
+    }
+
+    if (!componente) {
       return res.status(404).json({
         error: 'Componente não encontrado',
         message: 'O componente especificado não existe'
@@ -611,20 +643,7 @@ router.post('/:id/componentes', async (req, res) => {
     }
 
     // Verificar se o componente pertence à mesma grua da configuração
-    const { data: configuracaoGrua, error: gruaError } = await supabase
-      .from('grua_configuracoes')
-      .select('grua_id')
-      .eq('id', id)
-      .single()
-
-    if (gruaError || !configuracaoGrua) {
-      return res.status(500).json({
-        error: 'Erro ao verificar grua da configuração',
-        message: gruaError.message
-      })
-    }
-
-    if (componente.grua_id !== configuracaoGrua.grua_id) {
+    if (componente.grua_id !== configuracao.grua_id) {
       return res.status(400).json({
         error: 'Componente incompatível',
         message: 'O componente deve pertencer à mesma grua da configuração'
@@ -707,14 +726,22 @@ router.delete('/:id/componentes/:componenteId', async (req, res) => {
     const { id, componenteId } = req.params
 
     // Verificar se o relacionamento existe
-    const { data: relacionamento, error: checkError } = await supabase
+    const { data: relacionamento, error: checkError } = await supabaseAdmin
       .from('componente_configuracao')
       .select('id')
       .eq('configuracao_id', id)
       .eq('componente_id', componenteId)
-      .single()
+      .maybeSingle()
 
-    if (checkError || !relacionamento) {
+    if (checkError) {
+      console.error('Erro ao buscar relacionamento:', checkError)
+      return res.status(500).json({
+        error: 'Erro ao verificar relacionamento',
+        message: checkError.message
+      })
+    }
+
+    if (!relacionamento) {
       return res.status(404).json({
         error: 'Relacionamento não encontrado',
         message: 'O componente não está associado a esta configuração'
