@@ -3,10 +3,6 @@
 // Utilitários de autenticação
 export class AuthService {
   private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
-  private static readonly LOGIN_CREDENTIALS = {
-    email: 'admin@admin.com',
-    password: 'teste@123'
-  }
 
   // Obter token do localStorage
   static getToken(): string | null {
@@ -27,14 +23,14 @@ export class AuthService {
   }
 
   // Fazer login e obter token
-  static async login(): Promise<string> {
+  static async login(email: string, password: string): Promise<string> {
     try {
       const response = await fetch(`${this.API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(this.LOGIN_CREDENTIALS)
+        body: JSON.stringify({ email, password })
       })
 
       if (!response.ok) {
@@ -50,19 +46,42 @@ export class AuthService {
       throw error
     }
   }
+  
+  // Obter usuário atual do backend
+  static async getCurrentUser(): Promise<any> {
+    try {
+      const token = this.getToken()
+      if (!token) {
+        throw new Error('Token não encontrado')
+      }
+
+      const response = await fetch(`${this.API_BASE_URL}/api/auth/me`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao obter usuário atual')
+      }
+
+      const data = await response.json()
+      return data.data || data
+    } catch (error) {
+      console.error('Erro ao obter usuário atual:', error)
+      throw error
+    }
+  }
 
   // Fazer requisição autenticada
   static async authenticatedRequest(url: string, options: RequestInit = {}): Promise<any> {
     let token = this.getToken()
     
-    // Se não tem token, tentar fazer login
+    // Se não tem token, redirecionar para login
     if (!token) {
-      try {
-        token = await this.login()
-      } catch (error) {
-        console.error('Erro no login:', error)
-        throw new Error('Erro ao obter token de autenticação')
-      }
+      throw new Error('Token de autenticação não encontrado. Por favor, faça login.')
     }
 
     const response = await fetch(url, {

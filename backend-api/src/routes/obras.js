@@ -50,6 +50,10 @@ const obraSchema = Joi.object({
       gruaId: Joi.string().allow(null, '').optional()
     })
   ).allow(null).optional(),
+  // Campos de geolocalização
+  latitude: Joi.number().min(-90).max(90).allow(null).optional(),
+  longitude: Joi.number().min(-180).max(180).allow(null).optional(),
+  raio_permitido: Joi.number().integer().positive().default(500).optional(),
   // Custos mensais
   custos_mensais: Joi.array().items(
     Joi.object({
@@ -894,6 +898,10 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       observacoes: value.observacoes,
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
+      // Campos de geolocalização
+      latitude: value.latitude,
+      longitude: value.longitude,
+      raio_permitido: value.raio_permitido || 500,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -1209,8 +1217,19 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       observacoes: value.observacoes,
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
+      // Campos de geolocalização
+      latitude: value.latitude !== undefined ? value.latitude : undefined,
+      longitude: value.longitude !== undefined ? value.longitude : undefined,
+      raio_permitido: value.raio_permitido !== undefined ? value.raio_permitido : undefined,
       updated_at: new Date().toISOString()
     }
+    
+    // Remover campos undefined para não sobrescrever valores existentes
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key]
+      }
+    })
 
     const { data, error: updateError } = await supabaseAdmin
       .from('obras')

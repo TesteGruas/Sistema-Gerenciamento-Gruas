@@ -129,7 +129,7 @@ export function formatarDistancia(metros: number): string {
 }
 
 /**
- * Busca obras do funcionário via API
+ * Busca obras do funcionário via API com coordenadas reais
  * @param funcionarioId ID do funcionário
  * @returns Promise com lista de obras
  */
@@ -145,22 +145,45 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
     
     const obras = response.data || []
     
-    // Mapear obras para o formato esperado
-    // Nota: Assumindo coordenadas padrão caso não existam no backend
-    // Em produção, adicionar campos de coordenadas no backend
-    return obras.map(obra => ({
-      id: obra.id,
-      nome: obra.nome,
-      endereco: obra.endereco || '',
-      coordenadas: {
-        lat: -23.550520, // Coordenadas padrão - deve vir do backend
-        lng: -46.633308
-      },
-      raio_permitido: 500 // Raio padrão em metros - deve vir do backend
-    }))
+    // Mapear obras para o formato esperado usando coordenadas reais do banco
+    return obras
+      .filter(obra => {
+        // Filtrar apenas obras com coordenadas configuradas
+        const temCoordenadas = obra.latitude != null && obra.longitude != null
+        if (!temCoordenadas) {
+          console.warn(`⚠️ Obra "${obra.nome}" (ID: ${obra.id}) não possui coordenadas configuradas`)
+        }
+        return temCoordenadas
+      })
+      .map(obra => ({
+        id: obra.id,
+        nome: obra.nome,
+        endereco: obra.endereco || '',
+        coordenadas: {
+          lat: parseFloat(obra.latitude),
+          lng: parseFloat(obra.longitude)
+        },
+        raio_permitido: obra.raio_permitido || 500 // Usar raio do banco ou padrão de 500m
+      }))
   } catch (error) {
     console.error('Erro ao buscar obras:', error)
     throw new Error('Não foi possível carregar as obras')
+  }
+}
+
+/**
+ * Verifica se uma obra tem coordenadas configuradas
+ * @param obraId ID da obra
+ * @returns Promise<boolean>
+ */
+export async function obraTemCoordenadas(obraId: number): Promise<boolean> {
+  try {
+    const { obrasApi } = await import('./api-obras')
+    const obra = await obrasApi.obterObra(obraId)
+    return obra.latitude != null && obra.longitude != null
+  } catch (error) {
+    console.error('Erro ao verificar coordenadas da obra:', error)
+    return false
   }
 }
 

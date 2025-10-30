@@ -99,6 +99,7 @@ import exportarRelatoriosRoutes from './routes/exportar-relatorios.js'
 import relatoriosFaturamentoRoutes from './routes/relatorios-faturamento.js'
 import relatoriosImpostosRoutes from './routes/relatorios-impostos.js'
 import aprovacoesHorasExtrasRoutes from './routes/aprovacoes-horas-extras.js'
+import buscaGlobalRoutes from './routes/busca-global.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -319,6 +320,7 @@ app.use('/api/exportar-relatorios', exportarRelatoriosRoutes)
 app.use('/api/relatorios-faturamento', relatoriosFaturamentoRoutes)
 app.use('/api/relatorios-impostos', relatoriosImpostosRoutes)
 app.use('/api/aprovacoes-horas-extras', aprovacoesHorasExtrasRoutes)
+app.use('/api/busca-global', buscaGlobalRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {
