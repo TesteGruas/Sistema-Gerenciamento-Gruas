@@ -1438,7 +1438,8 @@ function ObraDetailsPageContent() {
 
   // Definir variáveis que dependem de obra
   const gruasVinculadas = gruasReais.length > 0 ? gruasReais : (obra?.gruasVinculadas || [])
-  const custos = getCustosByObra(obra?.id || '')
+  // Usar custos que já vêm da API (store ou obra)
+  const custos = custosMensais || []
   
 
   return (

@@ -772,8 +772,9 @@ export default function ObrasPage() {
     try {
       setDeleting(true)
 
-      // Verificar se a obra tem gruas vinculadas
-      const gruasVinculadas = getGruasByObra(obraToDelete.id)
+      // Verificar se a obra tem gruas vinculadas (usar dados da API)
+      const obraCompleta = obras.find(o => o.id === obraToDelete.id)
+      const gruasVinculadas = obraCompleta?.grua_obra || obraCompleta?.gruas || []
       if (gruasVinculadas.length > 0) {
         toast({
           title: "Não é possível excluir",
@@ -784,12 +785,13 @@ export default function ObrasPage() {
         return
       }
 
-      // Verificar se a obra tem custos
-      const custos = getCustosByObra(obraToDelete.id)
-      if (custos.length > 0) {
+      // Verificar se a obra tem custos (usar dados da API)
+      const custosMensais = obraCompleta?.custos_mensais || []
+      const custosGerais = obraCompleta?.total_custos || obraCompleta?.total_custos_mensais || 0
+      if (custosMensais.length > 0 || custosGerais > 0) {
         toast({
           title: "Não é possível excluir",
-          description: `A obra "${obraToDelete.name}" possui ${custos.length} custo(s) registrado(s). Remova os custos primeiro.`,
+          description: `A obra "${obraToDelete.name}" possui custo(s) registrado(s). Remova os custos primeiro.`,
           variant: "destructive"
         })
         setIsDeleteDialogOpen(false)
@@ -1198,7 +1200,8 @@ export default function ObrasPage() {
             : 'grid-cols-1 md:grid-cols-2'
         }`}>
           {paginatedObras.map((obra) => {
-          const custos = getCustosByObra(obra.id)
+          // A função converterObraBackendParaFrontend já retorna gruasVinculadas e outros campos
+          // Usar os campos que já vêm da conversão
           const obraComRelacionamentos = obra as any
           
           return (
@@ -2457,7 +2460,12 @@ export default function ObrasPage() {
             <p className="text-xs text-red-600">
               ⚠️ Esta ação não pode ser desfeita. A obra será permanentemente removida do sistema.
             </p>
-            {obraToDelete && (getGruasByObra(obraToDelete.id).length > 0 || getCustosByObra(obraToDelete.id).length > 0) && (
+            {obraToDelete && (() => {
+              const obraCompleta = obras.find(o => o.id === obraToDelete.id)
+              const gruasVinculadas = obraCompleta?.grua_obra || obraCompleta?.gruas || []
+              const custos = obraCompleta?.custos_mensais || []
+              return (gruasVinculadas.length > 0 || custos.length > 0)
+            })() && (
               <p className="text-xs text-orange-600">
                 ⚠️ Esta obra possui gruas ou custos vinculados. A exclusão será bloqueada.
               </p>
@@ -2473,7 +2481,12 @@ export default function ObrasPage() {
             <Button 
               variant="destructive" 
               onClick={confirmDeleteObra}
-              disabled={deleting || (obraToDelete && (getGruasByObra(obraToDelete.id).length > 0 || getCustosByObra(obraToDelete.id).length > 0))}
+              disabled={deleting || (obraToDelete && (() => {
+                const obraCompleta = obras.find(o => o.id === obraToDelete.id)
+                const gruasVinculadas = obraCompleta?.grua_obra || obraCompleta?.gruas || []
+                const custos = obraCompleta?.custos_mensais || []
+                return gruasVinculadas.length > 0 || custos.length > 0
+              })())}
             >
               {deleting ? (
                 <ButtonLoader text="Excluindo..." />
