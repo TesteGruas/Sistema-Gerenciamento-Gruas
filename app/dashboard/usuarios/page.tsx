@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 import { useToast } from "@/hooks/use-toast"
+import { useDebounce } from "@/hooks/use-debounce"
 import { apiPerfis, apiPermissoes, apiPerfilPermissoes, utilsPermissoes, type Perfil, type Permissao, type PerfilPermissao } from "@/lib/api-permissoes"
 import { apiUsuarios, utilsUsuarios, type Usuario } from "@/lib/api-usuarios"
 import { CardLoader, ButtonLoader } from "@/components/ui/loader"
@@ -309,10 +310,14 @@ export default function UsuariosPage() {
     return roleToPerfilMap[role] || null
   }
 
-  const carregarUsuarios = async (page: number = 1, limit: number = itemsPerPage) => {
+  const carregarUsuarios = async (page: number = 1, limit: number = itemsPerPage, search?: string) => {
     try {
       setLoading(true)
-      const response = await apiUsuarios.listar({ page, limit })
+      const response = await apiUsuarios.listar({ 
+        page, 
+        limit,
+        ...(search && search.trim() && { search: search.trim() })
+      })
       setUsuariosBackend(response.data)
       
       // Atualizar informações de paginação
@@ -374,29 +379,36 @@ export default function UsuariosPage() {
     }
   }
 
+  // Debounce do termo de busca (500ms)
+  const debouncedSearchTerm = useDebounce(searchTerm, 500)
+
   // Carregar dados quando o componente montar
   useEffect(() => {
-    carregarUsuarios()
+    carregarUsuarios(1, itemsPerPage)
   }, [])
+
+  // Recarregar usuários quando o termo de busca mudar (com debounce)
+  useEffect(() => {
+    // Resetar para primeira página ao buscar
+    setCurrentPage(1)
+    carregarUsuarios(1, itemsPerPage, debouncedSearchTerm)
+  }, [debouncedSearchTerm])
 
   // Função para mudar de página
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    carregarUsuarios(page, itemsPerPage)
+    carregarUsuarios(page, itemsPerPage, debouncedSearchTerm)
   }
 
   // Função para mudar itens por página
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage)
     setCurrentPage(1)
-    carregarUsuarios(1, newItemsPerPage)
+    carregarUsuarios(1, newItemsPerPage, debouncedSearchTerm)
   }
 
-  const filteredUsuarios = usuarios.filter(usuario =>
-    (usuario.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (usuario.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (usuario.role || '').toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Usar os usuários diretamente da API (já filtrados pelo backend)
+  const filteredUsuarios = usuarios
 
   const getRoleIcon = (role: string) => {
     switch (role) {

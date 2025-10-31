@@ -84,6 +84,11 @@ const userUpdateSchema = Joi.object({
  *           type: string
  *           enum: [Ativo, Inativo, Bloqueado, Pendente]
  *         description: Filtrar por status
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar por nome ou email (LIKE)
  *     responses:
  *       200:
  *         description: Lista de usuários
@@ -107,12 +112,18 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
-    const { status } = req.query
+    const { status, search } = req.query
 
     // Primeiro buscar usuários
     let query = supabaseAdmin
       .from('usuarios')
       .select('*', { count: 'exact' })
+
+    // Aplicar filtro de busca por nome ou email
+    if (search) {
+      const searchTerm = `%${search}%`
+      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm}`)
+    }
 
     if (status) {
       query = query.eq('status', status)

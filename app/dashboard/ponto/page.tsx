@@ -182,10 +182,8 @@ export default function PontoPage() {
       const isAdmin = funcionariosResponse?.isAdmin || false
       const funcionarios = funcionariosResponse?.funcionarios || []
 
-      // Definir usuário atual (primeiro funcionário da lista se não for admin)
-      const usuarioAtual = isAdmin 
-        ? null 
-        : funcionarios[0] || null
+      // Definir usuário atual (encontrar o funcionário que corresponde ao usuário logado)
+      const usuarioAtual = funcionarios.find(f => f.id === usuarioId) || funcionarios[0] || null
 
       const registros = registrosResponse.data || []
       const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }
@@ -212,8 +210,8 @@ export default function PontoPage() {
       
       setPagination(paginationData)
 
-      // Se não for admin, selecionar automaticamente o próprio usuário
-      if (!isAdmin && usuarioAtual) {
+      // Definir funcionário selecionado padrão (usuário atual ou primeiro da lista)
+      if (!selectedFuncionario && usuarioAtual) {
         setSelectedFuncionario(usuarioAtual.id.toString())
       }
     } catch (error) {
@@ -1637,24 +1635,27 @@ export default function PontoPage() {
             {/* Seleção de Funcionário */}
             <div className="space-y-2">
               <Label htmlFor="funcionario">Funcionário</Label>
-              {data.isAdmin ? (
-                <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um funcionário" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {data.funcionarios.map((func) => (
+              <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um funcionário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.funcionarios.length > 0 ? (
+                    data.funcionarios.map((func) => (
                       <SelectItem key={func.id} value={func.id.toString()}>
                         {func.nome} - {func.cargo || 'Sem cargo'}
+                        {data.usuarioAtual?.id === func.id && ' (Você)'}
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="p-3 bg-gray-50 rounded-md border">
-                  <p className="font-medium">{data.usuarioAtual?.nome || 'Carregando...'}</p>
-                  <p className="text-sm text-gray-500">Seu registro de ponto</p>
-                </div>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1.5 text-sm text-gray-500">
+                      Nenhum funcionário disponível
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedFuncionario && data.usuarioAtual?.id === parseInt(selectedFuncionario) && (
+                <p className="text-xs text-gray-500">Seu registro de ponto</p>
               )}
             </div>
 

@@ -130,6 +130,7 @@ function ObraDetailsPageContent() {
   // Estados locais que não estão no store
   const [gruasReais, setGruasReais] = useState<any[]>([])
   const [loadingGruas, setLoadingGruas] = useState(false)
+  const [historicosGruas, setHistoricosGruas] = useState<Record<string, EntradaLivroGruaCompleta[]>>({})
   
   // Estados para funcionários
   const [funcionariosVinculados, setFuncionariosVinculados] = useState<any[]>([])
@@ -1205,6 +1206,26 @@ function ObraDetailsPageContent() {
           
           console.log('✅ Gruas convertidas:', gruasConvertidas)
           setGruasReais(gruasConvertidas)
+          
+          // Carregar históricos das gruas
+          const historicosCarregados: Record<string, EntradaLivroGruaCompleta[]> = {}
+          for (const grua of gruasConvertidas) {
+            try {
+              const historicoResponse = await livroGruaApi.listarEntradas({ 
+                grua_id: grua.id.toString(),
+                limit: 5 // Apenas as últimas 5 entradas para exibição rápida
+              })
+              if (historicoResponse.success && historicoResponse.data) {
+                historicosCarregados[grua.id.toString()] = Array.isArray(historicoResponse.data) 
+                  ? historicoResponse.data 
+                  : [historicoResponse.data]
+              }
+            } catch (error) {
+              console.error(`Erro ao carregar histórico da grua ${grua.id}:`, error)
+              historicosCarregados[grua.id.toString()] = []
+            }
+          }
+          setHistoricosGruas(historicosCarregados)
         } else {
           console.log('⚠️ Nenhuma grua encontrada para esta obra')
           setGruasReais([])
@@ -1590,7 +1611,7 @@ function ObraDetailsPageContent() {
               ) : gruasVinculadas.length > 0 ? (
                 <div className="space-y-6">
                   {gruasVinculadas.map((grua) => {
-                    const historico = getHistoricoByGrua(grua.id)
+                    const historico = historicosGruas[grua.id?.toString() || ''] || []
                     const isGruaReal = gruasReais.some(gr => gr.id === grua.id)
                     
                     return (
@@ -1657,23 +1678,30 @@ function ObraDetailsPageContent() {
                           </div>
                           {historico.length > 0 ? (
                             <div className="space-y-2">
-                              {historico.slice(0, 5).map((entry) => (
-                                <div key={entry.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-2 h-2 rounded-full ${
-                                      entry.status === 'ok' ? 'bg-green-500' : 
-                                      entry.status === 'falha' ? 'bg-red-500' : 'bg-yellow-500'
-                                    }`} />
-                                    <span className="text-sm">{entry.observacoes}</span>
-                                    {entry.status === 'falha' && (
-                                      <AlertTriangle className="w-4 h-4 text-red-500" />
-                                    )}
+                              {historico.slice(0, 5).map((entry) => {
+                                // Mapear propriedades da API para o formato esperado
+                                const status = entry.status_entrada || entry.status || 'ok'
+                                const observacoes = entry.observacoes || entry.descricao || 'Sem observações'
+                                const data = entry.data_entrada || entry.data || entry.created_at || new Date().toISOString()
+                                
+                                return (
+                                  <div key={entry.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-2 h-2 rounded-full ${
+                                        status === 'ok' ? 'bg-green-500' : 
+                                        status === 'falha' ? 'bg-red-500' : 'bg-yellow-500'
+                                      }`} />
+                                      <span className="text-sm">{observacoes}</span>
+                                      {status === 'falha' && (
+                                        <AlertTriangle className="w-4 h-4 text-red-500" />
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {new Date(data).toLocaleDateString('pt-BR')}
+                                    </div>
                                   </div>
-                                  <div className="text-xs text-gray-500">
-                                    {new Date(entry.data).toLocaleDateString('pt-BR')}
-                                  </div>
-                                </div>
-                              ))}
+                                )
+                              })}
                               {historico.length > 5 && (
                                 <div className="text-xs text-gray-500 text-center">
                                   +{historico.length - 5} entradas anteriores
