@@ -146,7 +146,8 @@ export default function FeriasPage() {
         ...feriasForm,
         funcionario_id: parseInt(feriasForm.funcionario_id),
         dias_solicitados: parseInt(feriasForm.dias_solicitados),
-        saldo_anterior: 30, // Simular saldo
+        // TODO: Buscar saldo real via API GET /api/funcionarios/:id/ferias/saldo quando disponível
+        saldo_anterior: 30, // Valor temporário até endpoint estar disponível
         saldo_restante: 30 - parseInt(feriasForm.dias_solicitados)
       }
 

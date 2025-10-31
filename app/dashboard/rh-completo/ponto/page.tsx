@@ -206,12 +206,11 @@ export default function PontoEletronicoPage() {
   const registrarPonto = async (funcionarioId: number, tipo: 'entrada' | 'saida') => {
     setLoading(true)
     try {
-      // Simular registro de ponto
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+      // TODO: Implementar endpoint POST /api/funcionarios/:id/ponto quando disponível
+      // await api.post(`/funcionarios/${funcionarioId}/ponto`, { tipo })
       toast({
-        title: "Ponto Registrado",
-        description: `${tipo === 'entrada' ? 'Entrada' : 'Saída'} registrada com sucesso!`,
+        title: "Funcionalidade em desenvolvimento",
+        description: `Endpoint de registro de ponto ainda não implementado no backend.`,
       })
     } catch (error) {
       toast({

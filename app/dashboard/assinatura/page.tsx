@@ -247,34 +247,59 @@ export default function AssinaturaPage() {
   }
 
 
-  const handleSendToDocuSign = (documento: any) => {
-    // Simular envio para DocuSign
-    console.log('Enviando para DocuSign:', documento.id)
-    toast({
-        title: "Informação",
-        description: "Documento enviado para DocuSign! Links individuais serão gerados e enviados por email para cada assinante.",
+  const handleSendToDocuSign = async (documento: any) => {
+    // TODO: Implementar integração real com DocuSign quando disponível
+    try {
+      // Se houver endpoint para enviar para DocuSign:
+      // await obrasDocumentosApi.enviarParaDocuSign(documento.obra_id, documento.id)
+      toast({
+        title: "Funcionalidade em desenvolvimento",
+        description: "Integração com DocuSign será implementada em breve.",
         variant: "default"
       })
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível enviar para DocuSign",
+        variant: "destructive"
+      })
+    }
   }
 
-  const handleSendIndividualLink = (documento: any, assinante: any) => {
-    // Simular envio de link individual
-    console.log('Enviando link individual:', { documentoId: documento.id, assinanteId: assinante.userId })
-    toast({
-        title: "Informação",
-        description: "Link do DocuSign enviado por email para ${assinante.userName}!",
+  const handleSendIndividualLink = async (documento: any, assinante: any) => {
+    // TODO: Implementar envio real de link quando DocuSign estiver integrado
+    try {
+      // await obrasDocumentosApi.enviarLinkDocuSign(documento.id, assinante.id)
+      toast({
+        title: "Funcionalidade em desenvolvimento",
+        description: "Envio de links individuais será implementado em breve.",
         variant: "default"
       })
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível enviar o link",
+        variant: "destructive"
+      })
+    }
   }
 
-  const handleGenerateDocuSignLinks = (documento: any) => {
-    // Simular geração de todos os links
-    console.log('Gerando links DocuSign para todos os assinantes:', documento.id)
-    toast({
-        title: "Informação",
-        description: "Links do DocuSign gerados com sucesso! Emails serão enviados automaticamente.",
+  const handleGenerateDocuSignLinks = async (documento: any) => {
+    // TODO: Implementar geração real de links quando DocuSign estiver integrado
+    try {
+      // await obrasDocumentosApi.gerarLinksDocuSign(documento.id)
+      toast({
+        title: "Funcionalidade em desenvolvimento",
+        description: "Geração de links DocuSign será implementada em breve.",
         variant: "default"
       })
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível gerar os links",
+        variant: "destructive"
+      })
+    }
   }
 
   const stats = [
@@ -735,30 +760,46 @@ export default function AssinaturaPage() {
   )
 }
 
-function DocumentoDetails({ documento, onClose }: { documento: any; onClose: () => void }) {
+function DocumentoDetails({ documento, onClose, obras }: { documento: any; onClose: () => void; obras: any[] }) {
   const { toast } = useToast()
-  const obra = mockObras.find(o => o.id === documento.obraId)
+  const obra = obras.find(o => o.id === documento.obra_id || o.id === documento.obraId)
   const progress = getProgressPercentage(documento)
-  const currentSigner = documento.ordemAssinatura.find((a: any) => a.status === 'aguardando')
+  const currentSigner = documento.ordemAssinatura?.find((a: any) => a.status === 'aguardando')
 
-  const handleGenerateDocuSignLinks = (documento: any) => {
-    // Simular geração de todos os links
-    console.log('Gerando links DocuSign para todos os assinantes:', documento.id)
-    toast({
-        title: "Informação",
-        description: "Links do DocuSign gerados com sucesso! Emails serão enviados automaticamente.",
+  const handleGenerateDocuSignLinks = async (documento: any) => {
+    // TODO: Implementar geração real de links quando DocuSign estiver integrado
+    try {
+      // await obrasDocumentosApi.gerarLinksDocuSign(documento.id)
+      toast({
+        title: "Funcionalidade em desenvolvimento",
+        description: "Geração de links DocuSign será implementada em breve.",
         variant: "default"
       })
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível gerar os links",
+        variant: "destructive"
+      })
+    }
   }
 
-  const handleSendIndividualLink = (documento: any, assinante: any) => {
-    // Simular envio de link individual
-    console.log('Enviando link individual:', { documentoId: documento.id, assinanteId: assinante.userId })
-    toast({
-        title: "Informação",
-        description: "Link do DocuSign enviado por email para ${assinante.userName}!",
+  const handleSendIndividualLink = async (documento: any, assinante: any) => {
+    // TODO: Implementar envio real de link quando DocuSign estiver integrado
+    try {
+      // await obrasDocumentosApi.enviarLinkDocuSign(documento.id, assinante.id)
+      toast({
+        title: "Funcionalidade em desenvolvimento",
+        description: "Envio de links individuais será implementado em breve.",
         variant: "default"
       })
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível enviar o link",
+        variant: "destructive"
+      })
+    }
   }
 
   return (
@@ -881,13 +922,15 @@ function DocumentoDetails({ documento, onClose }: { documento: any; onClose: () 
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {documento.ordemAssinatura.map((assinatura: any, index: number) => {
-                          const user = mockUsers.find(u => u.id === assinatura.userId)
+                        {documento.ordemAssinatura?.map((assinatura: any, index: number) => {
+                          // O usuário já vem na resposta da API ou pode ser buscado se necessário
+                          const userName = assinatura.userName || assinatura.user_nome || `Usuário ${assinatura.userId}`
+                          const userRole = assinatura.role || assinatura.user_role || 'N/A'
                           return (
                             <TableRow key={assinatura.userId}>
                               <TableCell>{index + 1}</TableCell>
-                              <TableCell>{assinatura.userName}</TableCell>
-                              <TableCell>{assinatura.role}</TableCell>
+                              <TableCell>{userName}</TableCell>
+                              <TableCell>{userRole}</TableCell>
                               <TableCell>
                                 <Badge className={assinatura.status === 'assinado' ? 'bg-green-100 text-green-800' : 
                                                  assinatura.status === 'aguardando' ? 'bg-blue-100 text-blue-800' :
@@ -968,8 +1011,8 @@ function DocumentoDetails({ documento, onClose }: { documento: any; onClose: () 
                                       Baixar
                                     </Button>
                                   )}
-                                  {user?.email && (
-                                    <Button variant="outline" size="sm" title={`Email: ${user.email}`}>
+                                  {assinatura.user_email && (
+                                    <Button variant="outline" size="sm" title={`Email: ${assinatura.user_email}`}>
                                       <Users className="w-3 h-3" />
                                     </Button>
                                   )}
@@ -1301,7 +1344,12 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
           setFuncionarios(funcionariosResponse.data.data || [])
         } catch (funcionariosError) {
           console.warn('Erro ao carregar funcionários:', funcionariosError)
-          setFuncionarios(mockUsers.filter(u => u.role !== 'cliente'))
+          setFuncionarios([])
+          toast({
+            title: "Aviso",
+            description: "Não foi possível carregar funcionários. Algumas funcionalidades podem estar limitadas.",
+            variant: "default"
+          })
         }
         
         // Carregar clientes - tentar API primeiro, depois usar dados das obras
@@ -1324,9 +1372,13 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
         }
       } catch (error) {
         console.error('Erro ao carregar dados:', error)
-        // Fallback para dados mockados
-        setFuncionarios(mockUsers.filter(u => u.role !== 'cliente'))
-        setClientes(mockUsers.filter(u => u.role === 'cliente'))
+        setFuncionarios([])
+        setClientes([])
+        toast({
+          title: "Erro",
+          description: "Não foi possível carregar todos os dados. Tente recarregar a página.",
+          variant: "destructive"
+        })
       }
     }
     
@@ -1951,10 +2003,8 @@ function LoginDialog({ onClose }: { onClose: () => void }) {
     setIsLoading(true)
     setError("")
 
-    // Simular delay de login
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    const success = login(email, password)
+    // TODO: Substituir por chamada real de API quando endpoint estiver disponível
+    const success = await login(email, password)
     if (success) {
       onClose()
     } else {

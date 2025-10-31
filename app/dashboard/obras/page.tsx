@@ -597,8 +597,8 @@ export default function ObrasPage() {
     try {
       startCreating()
       
-      // Buscar dados do cliente selecionado
-      const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
+      // Usar cliente selecionado do estado (já carregado via ClienteSearch)
+      // Se não houver no estado, usar os dados do formulário
       
             // Preparar dados para o backend
             const obraData = {
@@ -632,7 +632,7 @@ export default function ObrasPage() {
                 tipo: custo.tipo || 'contrato'
               })),
               // Dados adicionais para criação automática de cliente se necessário
-              cliente_nome: clienteSelecionado?.name,
+              cliente_nome: clienteSelecionado?.nome || clienteSelecionado?.name,
               cliente_cnpj: clienteSelecionado?.cnpj,
               cliente_email: clienteSelecionado?.email,
               cliente_telefone: clienteSelecionado?.telefone,
@@ -702,30 +702,15 @@ export default function ObrasPage() {
       // Debug: Log dos dados após conversão
       console.log('🔍 DEBUG - Dados após conversão:', obraBackendData)
       
-      // Criar obra no backend
+      // Criar obra no backend (a grua será atualizada automaticamente via relação grua_obra)
       const response = await obrasApi.criarObra(obraBackendData)
       
-      // Atualizar grua selecionada para estar em obra (ainda usando mock)
-      const selectedGrua = mockGruas.find(g => g.id === obraFormData.gruaId)
-      if (selectedGrua) {
-        selectedGrua.status = 'em_obra'
-        selectedGrua.currentObraId = response.data.id.toString()
-        selectedGrua.currentObraName = obraFormData.name
-        // Nota: As propriedades value e monthlyFee não existem no tipo Grua
-        // Em uma implementação real, isso seria salvo em uma tabela separada
-        console.log('Valor da grua:', parseFloat(obraFormData.gruaValue) || 0)
-        console.log('Mensalidade:', parseFloat(obraFormData.monthlyFee) || 0)
-      }
-
-      // Criar custos iniciais automaticamente (ainda usando mock)
-      const mesInicial = new Date(obraFormData.startDate).toISOString().slice(0, 7)
-      const custosIniciais = criarCustosIniciais(response.data.id.toString(), mesInicial)
-      mockCustosMensais.push(...custosIniciais)
-
+      // Os custos mensais já foram incluídos no payload e serão criados pelo backend
+      // A grua será vinculada à obra através da relação grua_obra criada pelo backend
       console.log('Nova obra criada no backend:', response.data)
-      console.log('Grua selecionada:', selectedGrua)
+      console.log('Grua selecionada:', gruaSelecionada)
       console.log('Funcionários:', obraFormData.funcionarios)
-      console.log('Custos iniciais criados:', custosIniciais)
+      console.log('Custos mensais enviados:', obraData.custos_mensais)
       
       // Recarregar lista de obras
       await carregarObras()
@@ -1001,8 +986,7 @@ export default function ObrasPage() {
     try {
       setUpdating(true)
       
-      // Buscar dados do cliente selecionado
-      const clienteSelecionado = mockClientes.find(c => c.id === obraFormData.clienteId)
+      // Usar cliente selecionado do estado (já carregado via ClienteSearch)
       
       // Preparar dados para o backend
       const obraData = {

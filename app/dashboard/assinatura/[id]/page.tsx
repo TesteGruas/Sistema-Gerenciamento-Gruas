@@ -165,35 +165,42 @@ export default function AssinaturaDocumentoPage() {
 
     setIsLoading(true)
     try {
-      // Simular upload do documento assinado
-      console.log('Simulando upload do arquivo:', arquivoAssinado.name)
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Upload real do documento assinado via API
+      const formData = new FormData()
+      formData.append('arquivo', arquivoAssinado)
+      if (observacoes) {
+        formData.append('observacoes', observacoes)
+      }
+
+      // Fazer upload do arquivo assinado
+      const uploadResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/obras-documentos/${documento.id}/assinaturas/${assinaturaAtual.id}/upload-assinado`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          },
+          body: formData
+        }
+      )
+
+      if (!uploadResponse.ok) {
+        throw new Error('Erro ao fazer upload do documento assinado')
+      }
+
+      const uploadData = await uploadResponse.json()
       
-      // Atualizar status da assinatura localmente
-      if (assinaturaAtual) {
-        assinaturaAtual.status = 'assinado'
-        assinaturaAtual.data_assinatura = new Date().toISOString()
-        assinaturaAtual.arquivo_assinado = arquivoAssinado.name
-        assinaturaAtual.observacoes = observacoes
-      }
-
-      // Ativar próximo assinante se houver
-      const nextAssinatura = documento.assinaturas?.find(a => a.ordem === (assinaturaAtual?.ordem || 0) + 1)
-      if (nextAssinatura) {
-        nextAssinatura.status = 'aguardando'
-      }
-
-      // Atualizar status do documento
-      const assinaturasCompletas = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
-      const totalAssinaturas = documento.assinaturas?.length || 0
+      // Recarregar documento atualizado
+      const updatedDoc = await obrasDocumentosApi.obterPorId(documento.id)
+      const docAtualizado = Array.isArray(updatedDoc.data) ? updatedDoc.data[0] : updatedDoc.data
+      setDocumento(docAtualizado)
       
-      if (assinaturasCompletas + 1 >= totalAssinaturas) {
-        documento.status = 'assinado'
-      } else {
-        documento.status = 'em_assinatura'
-      }
-
-      setDocumento({ ...documento })
+      // Atualizar assinatura atual
+      const assinaturaUsuario = docAtualizado.assinaturas?.find(
+        (ass: AssinaturaDocumento) => ass.user_id === parseInt(currentUser?.id?.toString() || '0')
+      )
+      setAssinaturaAtual(assinaturaUsuario || null)
+      
       setIsUploadDialogOpen(false)
       setArquivoAssinado(null)
       setObservacoes('')

@@ -160,12 +160,11 @@ export default function RelatoriosRHPage() {
   const gerarRelatorio = async (tipo: string) => {
     setLoading(true)
     try {
-      // Simular geração de relatório
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
+      // TODO: Implementar endpoint POST /api/rh/relatorios quando disponível
+      // await api.post('/rh/relatorios', { tipo, ...filtros })
       toast({
-        title: "Sucesso",
-        description: "Relatório gerado com sucesso!",
+        title: "Funcionalidade em desenvolvimento",
+        description: "Endpoint de geração de relatórios ainda não implementado no backend.",
       })
     } catch (error) {
       toast({

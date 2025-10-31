@@ -177,12 +177,11 @@ export default function ObrasRHPage() {
   const alocarFuncionario = async () => {
     setLoading(true)
     try {
-      // Simular alocação
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
+      // TODO: Implementar endpoint POST /api/funcionarios/:id/alocar quando disponível
+      // await api.post(`/funcionarios/${funcionarioId}/alocar`, { obra_id, data_inicio, ... })
       toast({
-        title: "Funcionário Alocado",
-        description: "Funcionário alocado na obra com sucesso!",
+        title: "Funcionalidade em desenvolvimento",
+        description: "Endpoint de alocação de funcionários ainda não implementado no backend.",
       })
       setIsAlocacaoDialogOpen(false)
     } catch (error) {
@@ -199,12 +198,11 @@ export default function ObrasRHPage() {
   const transferirFuncionario = async (alocacaoId: string) => {
     setLoading(true)
     try {
-      // Simular transferência
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+      // TODO: Implementar endpoint POST /api/funcionarios/alocacoes/:id/transferir quando disponível
+      // await api.post(`/funcionarios/alocacoes/${alocacaoId}/transferir`, { nova_obra_id, ... })
       toast({
-        title: "Funcionário Transferido",
-        description: "Funcionário transferido com sucesso!",
+        title: "Funcionalidade em desenvolvimento",
+        description: "Endpoint de transferência de funcionários ainda não implementado no backend.",
       })
     } catch (error) {
       toast({
@@ -220,12 +218,11 @@ export default function ObrasRHPage() {
   const finalizarAlocacao = async (alocacaoId: string) => {
     setLoading(true)
     try {
-      // Simular finalização
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+      // TODO: Implementar endpoint POST /api/funcionarios/alocacoes/:id/finalizar quando disponível
+      // await api.post(`/funcionarios/alocacoes/${alocacaoId}/finalizar`, { data_fim, ... })
       toast({
-        title: "Alocação Finalizada",
-        description: "Alocação finalizada com sucesso!",
+        title: "Funcionalidade em desenvolvimento",
+        description: "Endpoint de finalização de alocação ainda não implementado no backend.",
       })
     } catch (error) {
       toast({

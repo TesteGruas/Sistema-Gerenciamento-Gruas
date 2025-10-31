@@ -29,13 +29,10 @@ export function UserDropdown() {
       try {
         const userData = await AuthService.getCurrentUser()
         setUser(userData)
-      } catch (error) {
-        // Dados mock para desenvolvimento
-        setUser({
-          nome: 'Usuário Teste',
-          email: 'usuario@teste.com',
-          avatar: null
-        })
+      } catch (error: any) {
+        console.error('Erro ao carregar usuário:', error)
+        // Não definir usuário mock - deixar null e tratar na UI
+        setUser(null)
       }
     }
     loadUser()

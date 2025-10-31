@@ -275,12 +275,11 @@ export default function HorasTrabalhadasPage() {
   const calcularHoras = async (funcionarioId: number) => {
     setLoading(true)
     try {
-      // Simular cálculo de horas
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
+      // TODO: Implementar endpoint POST /api/funcionarios/:id/horas/calcular quando disponível
+      // await api.post(`/funcionarios/${funcionarioId}/horas/calcular`)
       toast({
-        title: "Horas Calculadas",
-        description: "Cálculo de horas realizado com sucesso!",
+        title: "Funcionalidade em desenvolvimento",
+        description: "Endpoint de cálculo de horas ainda não implementado no backend.",
       })
     } catch (error) {
       toast({
@@ -296,12 +295,11 @@ export default function HorasTrabalhadasPage() {
   const processarPagamento = async (funcionarioId: number) => {
     setLoading(true)
     try {
-      // Simular processamento de pagamento
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
+      // TODO: Implementar endpoint POST /api/funcionarios/:id/pagamento/processar quando disponível
+      // await api.post(`/funcionarios/${funcionarioId}/pagamento/processar`)
       toast({
-        title: "Pagamento Processado",
-        description: "Pagamento processado com sucesso!",
+        title: "Funcionalidade em desenvolvimento",
+        description: "Endpoint de processamento de pagamento ainda não implementado no backend.",
       })
     } catch (error) {
       toast({

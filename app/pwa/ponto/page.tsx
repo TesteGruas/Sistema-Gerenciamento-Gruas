@@ -87,36 +87,40 @@ export default function PWAPontoPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     
-    const userData = localStorage.getItem('user_data')
-    const userProfile = localStorage.getItem('user_profile')
-    
-    if (userData) {
-      try {
-        const parsedUser = JSON.parse(userData)
-        
-        // Adicionar dados do profile se existir
-        if (userProfile) {
-          const parsedProfile = JSON.parse(userProfile)
-          parsedUser.profile = parsedProfile
+    const loadUserAndObras = async () => {
+      const userData = localStorage.getItem('user_data')
+      const userProfile = localStorage.getItem('user_profile')
+      
+      if (userData) {
+        try {
+          const parsedUser = JSON.parse(userData)
+          
+          // Adicionar dados do profile se existir
+          if (userProfile) {
+            const parsedProfile = JSON.parse(userProfile)
+            parsedUser.profile = parsedProfile
+          }
+          
+          console.log('🔍 [PWA Ponto] Dados do usuário carregados:', {
+            user_id: parsedUser.id,
+            funcionario_id: parsedUser.profile?.funcionario_id,
+            profile: parsedUser.profile
+          })
+          
+          setUser(parsedUser)
+          
+          // Carregar obras do funcionário
+          const obras = await buscarObrasFuncionario(parsedUser.id)
+          if (obras.length > 0) {
+            setObra(obras[0]) // Usar primeira obra por padrão
+          }
+        } catch (error) {
+          console.error('Erro ao carregar dados do usuário:', error)
         }
-        
-        console.log('🔍 [PWA Ponto] Dados do usuário carregados:', {
-          user_id: parsedUser.id,
-          funcionario_id: parsedUser.profile?.funcionario_id,
-          profile: parsedUser.profile
-        })
-        
-        setUser(parsedUser)
-        
-        // Carregar obras do funcionário
-        const obras = await buscarObrasFuncionario(parsedUser.id)
-        if (obras.length > 0) {
-          setObra(obras[0]) // Usar primeira obra por padrão
-        }
-      } catch (error) {
-        console.error('Erro ao carregar dados do usuário:', error)
       }
     }
+    
+    loadUserAndObras()
   }, [])
 
   // Carregar registros do dia
