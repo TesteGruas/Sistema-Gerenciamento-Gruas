@@ -32,6 +32,8 @@ import {
   type ObraGruaConfiguracaoInput 
 } from "@/lib/api-obra-gruas"
 import { getGruas, type Grua } from "@/lib/api-gruas"
+import GruaComplementosManager from "@/components/grua-complementos-manager"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface MultipleGruasManagerProps {
   obraId: number
@@ -406,14 +408,22 @@ export default function MultipleGruasManager({ obraId, obraNome }: MultipleGruas
 
       {/* Dialog Adicionar Grua */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar Grua à Obra</DialogTitle>
             <DialogDescription>
               Adicione uma nova grua a {obraNome}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleAddGrua} className="space-y-4">
+          
+          <Tabs defaultValue="configuracao" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="configuracao">Configuração</TabsTrigger>
+              <TabsTrigger value="complementos">Complementos</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="configuracao" className="space-y-4">
+              <form onSubmit={handleAddGrua} className="space-y-4">
             <div>
               <Label>Grua *</Label>
               <Select
@@ -498,29 +508,48 @@ export default function MultipleGruasManager({ obraId, obraNome }: MultipleGruas
               />
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Adicionar
-              </Button>
-            </div>
-          </form>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Adicionar
+                  </Button>
+                </div>
+              </form>
+            </TabsContent>
+            
+            <TabsContent value="complementos" className="space-y-4">
+              <GruaComplementosManager
+                obraId={obraId}
+                gruaId={gruaForm.grua_id}
+                dataInicioLocacao={gruaForm.data_instalacao}
+                mesesLocacao={12}
+              />
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
       {/* Dialog Editar Grua */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Configuração da Grua</DialogTitle>
             <DialogDescription>
               {editingGrua?.grua?.name}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleUpdateGrua} className="space-y-4">
+          
+          <Tabs defaultValue="configuracao" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="configuracao">Configuração</TabsTrigger>
+              <TabsTrigger value="complementos">Complementos</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="configuracao" className="space-y-4">
+              <form onSubmit={handleUpdateGrua} className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Posição X</Label>
@@ -577,16 +606,30 @@ export default function MultipleGruasManager({ obraId, obraNome }: MultipleGruas
               />
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSubmitting}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Atualizar
-              </Button>
-            </div>
-          </form>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSubmitting}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Atualizar
+                  </Button>
+                </div>
+              </form>
+            </TabsContent>
+            
+            <TabsContent value="complementos" className="space-y-4">
+              {editingGrua && (
+                <GruaComplementosManager
+                  gruaObraId={editingGrua.id.toString()}
+                  obraId={obraId}
+                  gruaId={editingGrua.grua_id}
+                  dataInicioLocacao={editingGrua.data_instalacao}
+                  mesesLocacao={12}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 

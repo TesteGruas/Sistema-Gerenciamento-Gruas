@@ -155,34 +155,33 @@ export default function PWALayout({ children }: PWALayoutProps) {
     )
   }
 
-  // Mapear itens do menu PWA para formato de navegação
+  // Mapear TODOS os itens do menu PWA para formato de navegação
   // O hook usePWAPermissions já retorna os itens filtrados por permissões
-  const navigationItems = pwaMenuItems
-    .slice(0, 5) // Limitar a 5 itens no menu inferior
-    .map(item => {
-      // Mapear labels para nomes mais curtos para o menu inferior
-      const labelMap: Record<string, string> = {
-        'Ponto Eletrônico': 'Ponto',
-        'Espelho de Ponto': 'Espelho',
-        'Documentos': 'Docs',
-        'Notificações': 'Notif'
-      }
-      
-      return {
-        name: labelMap[item.label] || item.label,
-        href: item.path,
-        icon: item.icon,
-        description: item.description || item.label,
-        permission: Array.isArray(item.permission) ? item.permission[0] : item.permission,
-        label: item.label // Manter label original
-      }
-    })
+  const allNavigationItems = pwaMenuItems.map(item => {
+    // Mapear labels para nomes mais curtos para o menu inferior
+    const labelMap: Record<string, string> = {
+      'Ponto Eletrônico': 'Ponto',
+      'Espelho de Ponto': 'Espelho',
+      'Documentos': 'Docs',
+      'Notificações': 'Notif',
+      'Configurações': 'Config'
+    }
+    
+    return {
+      name: labelMap[item.label] || item.label,
+      href: item.path,
+      icon: item.icon,
+      description: item.description || item.label,
+      permission: Array.isArray(item.permission) ? item.permission[0] : item.permission,
+      label: item.label // Manter label original
+    }
+  })
 
   // Adicionar notificações com badge se houver documentos pendentes
   if (canViewNotifications() && documentosPendentes > 0) {
     const notificacaoItem = pwaMenuItems.find(item => item.path === '/pwa/notificacoes')
-    if (notificacaoItem && !navigationItems.find(item => item.href === '/pwa/notificacoes')) {
-      navigationItems.push({
+    if (notificacaoItem && !allNavigationItems.find(item => item.href === '/pwa/notificacoes')) {
+      allNavigationItems.push({
         name: "Notif",
         href: "/pwa/notificacoes",
         icon: Bell,
@@ -193,8 +192,20 @@ export default function PWALayout({ children }: PWALayoutProps) {
     }
   }
 
-  // Os itens já vêm filtrados do hook, então não precisamos filtrar novamente
-  const filteredNavigationItems = navigationItems
+  // Separar itens principais (para menu inferior) e demais (para menu lateral)
+  // Priorizar: Ponto, Espelho, Documentos, Aprovações, Gruas
+  const priorityItems = ['Ponto Eletrônico', 'Espelho de Ponto', 'Documentos', 'Aprovações', 'Gruas']
+  const mainItems = allNavigationItems.filter(item => 
+    priorityItems.some(priority => item.label.includes(priority) || item.label === priority)
+  ).slice(0, 5)
+  
+  // Demais itens vão para o menu lateral
+  const sideMenuItems = allNavigationItems.filter(item => 
+    !mainItems.find(main => main.href === item.href)
+  )
+
+  // Os itens principais para o menu inferior
+  const filteredNavigationItems = mainItems.length > 0 ? mainItems : allNavigationItems.slice(0, 5)
 
   // Rotas que não precisam do layout
   const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
@@ -210,6 +221,18 @@ export default function PWALayout({ children }: PWALayoutProps) {
               <div className="px-4 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
+                    {/* Botão Menu Hambúrguer */}
+                    <button
+                      onClick={() => setIsMenuOpen(!isMenuOpen)}
+                      className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
+                    >
+                      {isMenuOpen ? (
+                        <X className="w-5 h-5 text-white" />
+                      ) : (
+                        <Menu className="w-5 h-5 text-white" />
+                      )}
+                    </button>
+                    
                     <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg">
                       <Smartphone className="w-6 h-6 text-white" />
                     </div>
@@ -276,6 +299,142 @@ export default function PWALayout({ children }: PWALayoutProps) {
                 </div>
               </div>
             </header>
+
+            {/* Menu Lateral (Drawer) */}
+            {isMenuOpen && (
+              <>
+                {/* Overlay */}
+                <div 
+                  className="fixed inset-0 bg-black/50 z-50 transition-opacity"
+                  onClick={() => setIsMenuOpen(false)}
+                />
+                
+                {/* Drawer */}
+                <div className="fixed left-0 top-0 bottom-0 w-80 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-out overflow-y-auto safe-area-pl">
+                  <div className="p-4">
+                    {/* Header do Drawer */}
+                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                      <h2 className="text-xl font-bold text-gray-900">Menu</h2>
+                      <button
+                        onClick={() => setIsMenuOpen(false)}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <X className="w-5 h-5 text-gray-600" />
+                      </button>
+                    </div>
+
+                    {/* Todos os Itens do Menu */}
+                    <div className="space-y-1">
+                      {/* Itens Principais */}
+                      {mainItems.length > 0 && (
+                        <>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">
+                            Principal
+                          </p>
+                          {mainItems.map((item) => {
+                            const Icon = item.icon
+                            const isActive = pathname === item.href
+                            
+                            return (
+                              <button
+                                key={item.href}
+                                onClick={() => {
+                                  router.push(item.href)
+                                  setIsMenuOpen(false)
+                                }}
+                                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
+                                  isActive
+                                    ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                                    : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                              >
+                                <div className={`p-2 rounded-lg ${
+                                  isActive ? 'bg-blue-100' : 'bg-gray-100'
+                                }`}>
+                                  <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-gray-600'}`} />
+                                </div>
+                                <div className="flex-1 text-left">
+                                  <p className="font-medium text-sm">{item.label}</p>
+                                  {item.description && (
+                                    <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                                  )}
+                                </div>
+                                {isActive && (
+                                  <div className="w-2 h-2 bg-blue-600 rounded-full" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </>
+                      )}
+
+                      {/* Demais Itens */}
+                      {sideMenuItems.length > 0 && (
+                        <>
+                          {mainItems.length > 0 && (
+                            <div className="my-4 border-t border-gray-200" />
+                          )}
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">
+                            Mais
+                          </p>
+                          {sideMenuItems.map((item) => {
+                            const Icon = item.icon
+                            const isActive = pathname === item.href
+                            
+                            return (
+                              <button
+                                key={item.href}
+                                onClick={() => {
+                                  router.push(item.href)
+                                  setIsMenuOpen(false)
+                                }}
+                                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
+                                  isActive
+                                    ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                                    : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                              >
+                                <div className={`p-2 rounded-lg ${
+                                  isActive ? 'bg-blue-100' : 'bg-gray-100'
+                                }`}>
+                                  <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-gray-600'}`} />
+                                </div>
+                                <div className="flex-1 text-left">
+                                  <p className="font-medium text-sm">{item.label}</p>
+                                  {item.description && (
+                                    <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                                  )}
+                                </div>
+                                {isActive && (
+                                  <div className="w-2 h-2 bg-blue-600 rounded-full" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </>
+                      )}
+
+                      {/* Se não houver itens */}
+                      {allNavigationItems.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          <p className="text-sm">Nenhum item disponível</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer do Drawer */}
+                    <div className="mt-8 pt-4 border-t border-gray-200">
+                      <div className="px-3 py-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <span>{isOnline ? 'Online' : 'Offline'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Conteúdo principal */}
             <main className="px-4 pt-4 pb-24">

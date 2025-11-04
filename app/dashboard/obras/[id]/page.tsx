@@ -50,6 +50,7 @@ import { obrasArquivosApi, ArquivoObra, ArquivoCreate } from "@/lib/api-obras-ar
 import LivroGruaForm from "@/components/livro-grua-form"
 import LivroGruaList from "@/components/livro-grua-list"
 import { Progress } from "@/components/ui/progress"
+import GruaComplementosManager from "@/components/grua-complementos-manager"
 import { useParams } from "next/navigation"
 import { obrasApi, converterObraBackendParaFrontend, ObraBackend, ensureAuthenticated } from "@/lib/api-obras"
 import { createFuncionarioObra, deleteFuncionarioObra } from "@/lib/api-funcionarios-obras"
@@ -1481,11 +1482,12 @@ function ObraDetailsPageContent() {
       </div>
 
       <Tabs defaultValue="geral" className="w-full">
-      <TabsList className="grid w-full grid-cols-7">
+      <TabsList className="grid w-full grid-cols-8">
         <TabsTrigger value="geral">Geral</TabsTrigger>
         <TabsTrigger value="gruas">Gruas</TabsTrigger>
         <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
         <TabsTrigger value="custos">Custos</TabsTrigger>
+        <TabsTrigger value="complementos">Complementos</TabsTrigger>
         <TabsTrigger value="documentos">Documentos</TabsTrigger>
         <TabsTrigger value="arquivos">Arquivos</TabsTrigger>
         <TabsTrigger value="livro-grua">Livro da Grua</TabsTrigger>
@@ -1807,6 +1809,122 @@ function ObraDetailsPageContent() {
                     <Plus className="w-4 h-4 mr-2" />
                     Vincular Primeiro Funcionário
                   </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="complementos" className="space-y-4">
+          {/* Complementos de Obra (sem grua) */}
+          <Card className="border-l-4 border-l-green-500">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-green-600" />
+                Complementos de Obra
+              </CardTitle>
+              <CardDescription>
+                Acessórios e serviços locados ou comprados para a obra (não vinculados a uma grua específica)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <GruaComplementosManager
+                obraId={obra?.id ? parseInt(obra.id.toString()) : undefined}
+                dataInicioLocacao={obra?.startDate}
+                dataFimLocacao={obra?.endDate}
+                mesesLocacao={obra?.startDate && obra?.endDate ? 
+                  Math.max(1, Math.ceil((new Date(obra.endDate).getTime() - new Date(obra.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))) : 
+                  12
+                }
+              />
+            </CardContent>
+          </Card>
+
+          {/* Complementos das Gruas */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Complementos das Gruas</CardTitle>
+              <CardDescription>
+                Acessórios e serviços locados ou comprados para as gruas específicas desta obra
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingGruas ? (
+                <CardLoader text="Carregando gruas..." />
+              ) : gruasVinculadas.length > 0 ? (
+                <div className="space-y-6">
+                  {gruasVinculadas.map((grua) => {
+                    // Calcular meses de locação
+                    const dataInicio = grua.data_inicio_locacao || grua.dataInicioLocacao || grua.data_instalacao
+                    const dataFim = grua.dataFimLocacao || grua.data_fim_locacao || grua.data_remocao
+                    
+                    let mesesLocacao = 12 // Default
+                    
+                    if (dataInicio) {
+                      const inicioDate = new Date(dataInicio)
+                      if (dataFim) {
+                        const fimDate = new Date(dataFim)
+                        const diffTime = Math.abs(fimDate.getTime() - inicioDate.getTime())
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                        mesesLocacao = Math.max(1, Math.ceil(diffDays / 30))
+                      } else {
+                        // Se não tem data fim, calcular até hoje ou usar 12 meses como padrão
+                        const hoje = new Date()
+                        const diffTime = Math.abs(hoje.getTime() - inicioDate.getTime())
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                        mesesLocacao = Math.max(1, Math.ceil(diffDays / 30))
+                      }
+                    }
+                    
+                    const gruaId = grua.gruaId || grua.grua?.id || grua.id
+                    const gruaObraId = grua.configId || grua.id?.toString()
+                    
+                    return (
+                      <Card key={grua.id || grua.configId} className="border-l-4 border-l-blue-500">
+                        <CardHeader>
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <Wrench className="w-5 h-5 text-blue-600" />
+                            {grua.grua ? `${grua.grua.fabricante} ${grua.grua.modelo}` : `Grua ${gruaId}`}
+                            {grua.grua && (
+                              <Badge variant="outline" className="ml-2">
+                                ID: {grua.grua.id}
+                              </Badge>
+                            )}
+                          </CardTitle>
+                          <CardDescription>
+                            {dataInicio && (
+                              <span>
+                                Locação: {new Date(dataInicio).toLocaleDateString('pt-BR')}
+                                {dataFim && (
+                                  <> até {new Date(dataFim).toLocaleDateString('pt-BR')}</>
+                                )}
+                                {grua.valorLocacaoMensal && (
+                                  <> • R$ {grua.valorLocacaoMensal.toLocaleString('pt-BR')}/mês</>
+                                )}
+                              </span>
+                            )}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <GruaComplementosManager
+                            gruaObraId={gruaObraId}
+                            obraId={obra?.id ? parseInt(obra.id.toString()) : undefined}
+                            gruaId={gruaId}
+                            dataInicioLocacao={dataInicio}
+                            dataFimLocacao={dataFim}
+                            mesesLocacao={mesesLocacao}
+                          />
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Wrench className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">
+                    Nenhuma grua vinculada. Os complementos de obra podem ser gerenciados acima.
+                  </p>
                 </div>
               )}
             </CardContent>
