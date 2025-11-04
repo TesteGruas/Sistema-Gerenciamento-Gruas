@@ -21,7 +21,9 @@ import {
   X,
   Trash2,
   Package,
-  Settings
+  Settings,
+  FileText,
+  AlertCircle
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
@@ -30,6 +32,10 @@ import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
 import FuncionarioSearch from "@/components/funcionario-search"
 import { useToast } from "@/hooks/use-toast"
+import { CnoInput } from "@/components/cno-input"
+import { DocumentoUpload } from "@/components/documento-upload"
+import { ResponsavelTecnicoForm, ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
+import { SinaleirosForm } from "@/components/sinaleiros-form"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -168,6 +174,15 @@ export default function NovaObraPage() {
   const [gruasSelecionadas, setGruasSelecionadas] = useState<any[]>([])
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
   const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
+  
+  // Estados para novos campos obrigatórios
+  const [cno, setCno] = useState<string>('')
+  const [artNumero, setArtNumero] = useState<string>('')
+  const [artArquivo, setArtArquivo] = useState<File | null>(null)
+  const [apoliceNumero, setApoliceNumero] = useState<string>('')
+  const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
+  const [responsavelTecnico, setResponsavelTecnico] = useState<ResponsavelTecnicoData | null>(null)
+  const [sinaleiros, setSinaleiros] = useState<any[]>([])
   
   // Estados para custos mensais
   const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
@@ -335,6 +350,43 @@ export default function NovaObraPage() {
       return
     }
 
+    // Validações dos novos campos obrigatórios
+    if (!cno) {
+      toast({
+        title: "Erro",
+        description: "O campo CNO da obra é obrigatório",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!artNumero || !artArquivo) {
+      toast({
+        title: "Erro",
+        description: "O número e o arquivo da ART são obrigatórios",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!apoliceNumero || !apoliceArquivo) {
+      toast({
+        title: "Erro",
+        description: "O número e o arquivo da Apólice de Seguro são obrigatórios",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!responsavelTecnico) {
+      toast({
+        title: "Erro",
+        description: "Cadastre o responsável técnico da obra",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
       setCreating(true)
       setError(null)
@@ -360,6 +412,14 @@ export default function NovaObraPage() {
         tipo: obraFormData.tipo,
         clienteId: obraFormData.clienteId,
         observations: obraFormData.observations,
+        // Novos campos obrigatórios
+        cno: cno,
+        art_numero: artNumero,
+        art_arquivo: artArquivo,
+        apolice_numero: apoliceNumero,
+        apolice_arquivo: apoliceArquivo,
+        responsavel_tecnico: responsavelTecnico,
+        sinaleiros: sinaleiros,
         // Dados das gruas - usar a primeira grua selecionada (compatibilidade)
         gruaId: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].id : '',
         gruaValue: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].valor_locacao?.toString() || '' : '',
@@ -442,6 +502,14 @@ export default function NovaObraPage() {
     setFuncionariosSelecionados([])
     setResponsavelSelecionado(null)
     setCustosMensais([])
+    // Reset dos novos campos
+    setCno('')
+    setArtNumero('')
+    setArtArquivo(null)
+    setApoliceNumero('')
+    setApoliceArquivo(null)
+    setResponsavelTecnico(null)
+    setSinaleiros([])
   }
 
   return (
@@ -468,8 +536,11 @@ export default function NovaObraPage() {
       {/* Formulário */}
       <form onSubmit={handleCreateObra} className="space-y-6">
         <Tabs defaultValue="obra" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
+            <TabsTrigger value="documentos">Documentos</TabsTrigger>
+            <TabsTrigger value="responsavel-tecnico">Responsável Técnico</TabsTrigger>
+            <TabsTrigger value="sinaleiros">Sinaleiros</TabsTrigger>
             <TabsTrigger value="grua">Grua</TabsTrigger>
             <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
             <TabsTrigger value="custos">Custos Mensais</TabsTrigger>
@@ -664,6 +735,143 @@ export default function NovaObraPage() {
                     rows={3}
                   />
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Aba: Documentos */}
+          <TabsContent value="documentos" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  Documentos Obrigatórios da Obra
+                </CardTitle>
+                <CardDescription>
+                  Preencha os documentos obrigatórios para a obra
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-600" />
+                    <h3 className="font-medium text-yellow-900">Campos Obrigatórios</h3>
+                  </div>
+                  <p className="text-sm text-yellow-700">
+                    Todos os campos abaixo são obrigatórios para o cadastro da obra
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* CNO */}
+                  <div>
+                    <CnoInput
+                      value={cno}
+                      onChange={setCno}
+                      label="CNO da Obra (CNPJ/Documento)"
+                      required={true}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Documento identificador da obra
+                    </p>
+                  </div>
+
+                  {/* ART */}
+                  <div className="space-y-2">
+                    <Label>
+                      Número da ART <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={artNumero}
+                      onChange={(e) => setArtNumero(e.target.value)}
+                      placeholder="Número da Anotação de Responsabilidade Técnica"
+                      required
+                    />
+                    <DocumentoUpload
+                      label="Upload do Documento ART (PDF)"
+                      accept="application/pdf"
+                      maxSize={5 * 1024 * 1024}
+                      required={true}
+                      onUpload={(file) => setArtArquivo(file)}
+                      onRemove={() => setArtArquivo(null)}
+                      currentFile={artArquivo}
+                    />
+                  </div>
+
+                  {/* Apólice de Seguro */}
+                  <div className="space-y-2">
+                    <Label>
+                      Número da Apólice de Seguro <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={apoliceNumero}
+                      onChange={(e) => setApoliceNumero(e.target.value)}
+                      placeholder="Número da apólice de seguro"
+                      required
+                    />
+                    <DocumentoUpload
+                      label="Upload da Apólice de Seguro (PDF)"
+                      accept="application/pdf"
+                      maxSize={5 * 1024 * 1024}
+                      required={true}
+                      onUpload={(file) => setApoliceArquivo(file)}
+                      onRemove={() => setApoliceArquivo(null)}
+                      currentFile={apoliceArquivo}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Aba: Responsável Técnico */}
+          <TabsContent value="responsavel-tecnico" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="w-5 h-5 text-green-600" />
+                  Responsável Técnico da Obra
+                </CardTitle>
+                <CardDescription>
+                  Cadastre o responsável técnico pela obra
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsavelTecnicoForm
+                  onSave={(data) => {
+                    setResponsavelTecnico(data)
+                    toast({
+                      title: "Sucesso",
+                      description: "Responsável técnico salvo com sucesso"
+                    })
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Aba: Sinaleiros */}
+          <TabsContent value="sinaleiros" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-600" />
+                  Sinaleiros da Obra
+                </CardTitle>
+                <CardDescription>
+                  Cadastre os sinaleiros da obra (máximo 2: Principal + Reserva)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SinaleirosForm
+                  onSave={(data) => {
+                    setSinaleiros(data)
+                    toast({
+                      title: "Sucesso",
+                      description: "Sinaleiros salvos com sucesso"
+                    })
+                  }}
+                />
               </CardContent>
             </Card>
           </TabsContent>
