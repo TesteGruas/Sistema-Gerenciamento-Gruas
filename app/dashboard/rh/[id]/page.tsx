@@ -52,6 +52,10 @@ import { useToast } from "@/hooks/use-toast"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { rhApi } from "@/lib/api-rh-completo"
 import { apiRegistrosPonto } from "@/lib/api-ponto-eletronico"
+import { ColaboradorCertificados } from "@/components/colaborador-certificados"
+import { ColaboradorDocumentosAdmissionais } from "@/components/colaborador-documentos-admissionais"
+import { ColaboradorHolerites } from "@/components/colaborador-holerites"
+import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
 
 interface FuncionarioRH {
   id: number
@@ -185,7 +189,29 @@ export default function FuncionarioDetalhesPage() {
   const [loading, setLoading] = useState(true)
   const [isEditMode, setIsEditMode] = useState(false)
   const [isBeneficioDialogOpen, setIsBeneficioDialogOpen] = useState(false)
+  const [isEditBeneficioDialogOpen, setIsEditBeneficioDialogOpen] = useState(false)
+  const [beneficioSelecionado, setBeneficioSelecionado] = useState<BeneficioFuncionario | null>(null)
   const [isDocumentoDialogOpen, setIsDocumentoDialogOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  
+  // Formulário de edição
+  const [editFormData, setEditFormData] = useState({
+    nome: '',
+    email: '',
+    telefone: '',
+    cpf: '',
+    cargo: '',
+    departamento: '',
+    turno: 'Diurno' as 'Diurno' | 'Noturno' | 'Sob Demanda' | 'Integral',
+    status: 'Ativo' as 'Ativo' | 'Inativo' | 'Afastado' | 'Demitido',
+    data_admissao: '',
+    salario: '',
+    endereco: '',
+    cidade: '',
+    estado: '',
+    cep: '',
+    observacoes: ''
+  })
   
   // Estados para formulários
   const [beneficioForm, setBeneficioForm] = useState({
@@ -307,67 +333,69 @@ export default function FuncionarioDetalhesPage() {
     carregarTiposBeneficios()
   }, [])
 
-  // Carregar dados reais do funcionário
-  useEffect(() => {
-    const carregarFuncionario = async () => {
-      try {
-        setLoading(true)
-        const funcionarioId = parseInt(params.id as string)
-        const response = await funcionariosApi.obterFuncionario(funcionarioId)
+  // Função para carregar dados do funcionário (exportada para ser usada em outros lugares)
+  const carregarFuncionario = async () => {
+    try {
+      setLoading(true)
+      const funcionarioId = parseInt(params.id as string)
+      const response = await funcionariosApi.obterFuncionario(funcionarioId)
+      
+      if (response.success && response.data) {
+        const func = response.data
         
-        if (response.success && response.data) {
-          const func = response.data
-          
-          // Mapear dados do backend para o formato esperado
-          const funcAny = func as any
-          const funcionarioMapeado: FuncionarioRH = {
-            id: func.id,
-            nome: func.nome,
-            cpf: func.cpf || '',
-            cargo: func.cargo,
-            departamento: funcAny.departamento || '',
-            salario: func.salario || 0,
-            data_admissao: func.data_admissao || '',
-            telefone: func.telefone,
-            email: func.email,
-            endereco: funcAny.endereco || '',
-            cidade: funcAny.cidade || '',
-            estado: funcAny.estado || '',
-            cep: funcAny.cep || '',
-            status: func.status as any,
-            turno: funcAny.turno as any,
-            observacoes: func.observacoes,
-            created_at: func.created_at,
-            updated_at: func.updated_at,
-            usuario: funcAny.usuario && Array.isArray(funcAny.usuario) && funcAny.usuario.length > 0 ? funcAny.usuario[0] : undefined,
-            obra_atual: funcAny.obra_atual || undefined
-          }
-          
-          setFuncionario(funcionarioMapeado)
-          
-          // Carregar dados das tabs
-          await carregarDadosTabs(funcionarioId)
-        } else {
-          throw new Error('Funcionário não encontrado')
+        // Mapear dados do backend para o formato esperado
+        const funcAny = func as any
+        const funcionarioMapeado: FuncionarioRH = {
+          id: func.id,
+          nome: func.nome,
+          cpf: func.cpf || '',
+          cargo: func.cargo,
+          departamento: funcAny.departamento || '',
+          salario: func.salario || 0,
+          data_admissao: func.data_admissao || '',
+          telefone: func.telefone,
+          email: func.email,
+          endereco: funcAny.endereco || '',
+          cidade: funcAny.cidade || '',
+          estado: funcAny.estado || '',
+          cep: funcAny.cep || '',
+          status: func.status as any,
+          turno: funcAny.turno as any,
+          observacoes: func.observacoes,
+          created_at: func.created_at,
+          updated_at: func.updated_at,
+          usuario: funcAny.usuario && Array.isArray(funcAny.usuario) && funcAny.usuario.length > 0 ? funcAny.usuario[0] : undefined,
+          obra_atual: funcAny.obra_atual || undefined
         }
         
-      } catch (error) {
-        console.error('Erro ao carregar funcionário:', error)
-        toast({
-          title: "Erro",
-          description: "Erro ao carregar dados do funcionário",
-          variant: "destructive"
-        })
-        router.push('/dashboard/rh')
-      } finally {
-        setLoading(false)
+        setFuncionario(funcionarioMapeado)
+        
+        // Carregar dados das tabs
+        await carregarDadosTabs(funcionarioId)
+      } else {
+        throw new Error('Funcionário não encontrado')
       }
+      
+    } catch (error) {
+      console.error('Erro ao carregar funcionário:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados do funcionário",
+        variant: "destructive"
+      })
+      router.push('/dashboard/rh')
+    } finally {
+      setLoading(false)
     }
+  }
 
+  // Carregar dados reais do funcionário
+  useEffect(() => {
     if (params.id) {
       carregarFuncionario()
     }
-  }, [params.id, toast, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -431,6 +459,26 @@ export default function FuncionarioDetalhesPage() {
   }
 
   const handleEdit = () => {
+    if (!isEditMode && funcionario) {
+      // Preencher formulário com dados atuais
+      setEditFormData({
+        nome: funcionario.nome || '',
+        email: funcionario.email || '',
+        telefone: funcionario.telefone || '',
+        cpf: funcionario.cpf || '',
+        cargo: funcionario.cargo || '',
+        departamento: funcionario.departamento || '',
+        turno: funcionario.turno || 'Diurno',
+        status: funcionario.status || 'Ativo',
+        data_admissao: funcionario.data_admissao || '',
+        salario: funcionario.salario ? funcionario.salario.toString() : '',
+        endereco: funcionario.endereco || '',
+        cidade: funcionario.cidade || '',
+        estado: funcionario.estado || '',
+        cep: funcionario.cep || '',
+        observacoes: funcionario.observacoes || ''
+      })
+    }
     setIsEditMode(!isEditMode)
     toast({
       title: isEditMode ? "Modo Visualização" : "Modo Edição",
@@ -438,12 +486,50 @@ export default function FuncionarioDetalhesPage() {
     })
   }
 
-  const handleSave = () => {
-    setIsEditMode(false)
-    toast({
-      title: "Salvo",
-      description: "Informações atualizadas com sucesso!",
-    })
+  const handleSave = async () => {
+    if (!funcionario) return
+
+    try {
+      setSubmitting(true)
+
+      // Preparar dados para atualização
+      const updateData = {
+        nome: editFormData.nome,
+        email: editFormData.email,
+        telefone: editFormData.telefone,
+        cpf: editFormData.cpf,
+        cargo: editFormData.cargo,
+        turno: editFormData.turno,
+        status: editFormData.status,
+        data_admissao: editFormData.data_admissao,
+        salario: editFormData.salario ? parseFloat(editFormData.salario) : undefined,
+        observacoes: editFormData.observacoes
+      }
+
+      // Atualizar funcionário via API
+      const response = await funcionariosApi.atualizarFuncionario(funcionario.id, updateData)
+
+      if (response.success) {
+        // Recarregar dados do funcionário
+        await carregarFuncionario()
+        setIsEditMode(false)
+        toast({
+          title: "Sucesso",
+          description: "Informações atualizadas com sucesso!",
+        })
+      } else {
+        throw new Error('Erro ao atualizar funcionário')
+      }
+    } catch (error: any) {
+      console.error('Erro ao salvar funcionário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar informações do funcionário",
+        variant: "destructive"
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const resetBeneficioForm = () => {
@@ -507,6 +593,97 @@ export default function FuncionarioDetalhesPage() {
       toast({
         title: "Erro",
         description: error instanceof Error ? error.message : "Erro ao adicionar benefício",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleEditarBeneficio = (beneficio: BeneficioFuncionario) => {
+    setBeneficioSelecionado(beneficio)
+    setBeneficioForm({
+      tipo: beneficio.beneficio_tipo_id.toString(),
+      dataInicio: beneficio.data_inicio.split('T')[0],
+      observacoes: beneficio.observacoes || ''
+    })
+    setIsEditBeneficioDialogOpen(true)
+  }
+
+  const handleSalvarEdicaoBeneficio = async () => {
+    if (!beneficioSelecionado) return
+    
+    try {
+      // Validação básica
+      if (!beneficioForm.tipo || !beneficioForm.dataInicio) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios (Tipo de Benefício e Data Início)",
+          variant: "destructive"
+        })
+        return
+      }
+      
+      const funcionarioId = parseInt(params.id as string)
+      
+      // Chamar API para atualizar benefício
+      const response = await rhApi.atualizarBeneficioFuncionario(beneficioSelecionado.id, {
+        funcionario_id: funcionarioId,
+        beneficio_tipo_id: parseInt(beneficioForm.tipo),
+        data_inicio: beneficioForm.dataInicio,
+        observacoes: beneficioForm.observacoes || undefined
+      } as any)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Benefício atualizado com sucesso!",
+        })
+        
+        // Recarregar benefícios
+        await carregarDadosTabs(funcionarioId)
+        
+        setIsEditBeneficioDialogOpen(false)
+        setBeneficioSelecionado(null)
+        resetBeneficioForm()
+      } else {
+        throw new Error(response.message || 'Erro ao atualizar benefício')
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar benefício:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao atualizar benefício",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleRemoverBeneficio = async (beneficioId: number) => {
+    if (!confirm('Tem certeza que deseja remover este benefício?')) {
+      return
+    }
+    
+    try {
+      const funcionarioId = parseInt(params.id as string)
+      
+      // Chamar API para excluir benefício
+      const response = await rhApi.excluirBeneficioFuncionario(beneficioId)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Benefício removido com sucesso!",
+        })
+        
+        // Recarregar benefícios
+        await carregarDadosTabs(funcionarioId)
+      } else {
+        throw new Error(response.message || 'Erro ao remover benefício')
+      }
+    } catch (error) {
+      console.error('Erro ao remover benefício:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao remover benefício",
         variant: "destructive"
       })
     }
@@ -627,9 +804,9 @@ export default function FuncionarioDetalhesPage() {
             {isEditMode ? 'Cancelar' : 'Editar'}
           </Button>
           {isEditMode && (
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} disabled={submitting}>
               <CheckCircle className="w-4 h-4 mr-2" />
-              Salvar
+              {submitting ? 'Salvando...' : 'Salvar'}
             </Button>
           )}
         </div>
@@ -712,11 +889,13 @@ export default function FuncionarioDetalhesPage() {
 
       {/* Tabs de Detalhes */}
       <Tabs defaultValue="informacoes" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-9">
           <TabsTrigger value="informacoes">Informações</TabsTrigger>
-          <TabsTrigger value="obras">Obras</TabsTrigger>
           <TabsTrigger value="salarios">Salários</TabsTrigger>
           <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
+          <TabsTrigger value="certificados">Certificados</TabsTrigger>
+          <TabsTrigger value="documentos-admissionais">Admissionais</TabsTrigger>
+          <TabsTrigger value="holerites">Holerites</TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
           <TabsTrigger value="pontos">Pontos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
@@ -735,23 +914,84 @@ export default function FuncionarioDetalhesPage() {
               <CardContent className="space-y-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Email</Label>
-                  <p className="text-sm">{funcionario.email || '-'}</p>
+                  {isEditMode ? (
+                    <Input
+                      value={editFormData.email}
+                      onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                      placeholder="email@exemplo.com"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm">{funcionario.email || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Telefone</Label>
-                  <p className="text-sm">{funcionario.telefone || '-'}</p>
+                  {isEditMode ? (
+                    <Input
+                      value={editFormData.telefone}
+                      onChange={(e) => setEditFormData({ ...editFormData, telefone: e.target.value })}
+                      placeholder="(11) 99999-9999"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm">{funcionario.telefone || '-'}</p>
+                  )}
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Endereço</Label>
-                  <p className="text-sm">{funcionario.endereco || '-'}</p>
+                  {isEditMode ? (
+                    <Input
+                      value={editFormData.endereco}
+                      onChange={(e) => setEditFormData({ ...editFormData, endereco: e.target.value })}
+                      placeholder="Rua, número, complemento"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm">{funcionario.endereco || '-'}</p>
+                  )}
                 </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Cidade/Estado</Label>
-                  <p className="text-sm">{funcionario.cidade || '-'} / {funcionario.estado || '-'}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Cidade</Label>
+                    {isEditMode ? (
+                      <Input
+                        value={editFormData.cidade}
+                        onChange={(e) => setEditFormData({ ...editFormData, cidade: e.target.value })}
+                        placeholder="Cidade"
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-sm">{funcionario.cidade || '-'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Estado</Label>
+                    {isEditMode ? (
+                      <Input
+                        value={editFormData.estado}
+                        onChange={(e) => setEditFormData({ ...editFormData, estado: e.target.value })}
+                        placeholder="UF"
+                        maxLength={2}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-sm">{funcionario.estado || '-'}</p>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">CEP</Label>
-                  <p className="text-sm">{funcionario.cep || '-'}</p>
+                  {isEditMode ? (
+                    <Input
+                      value={editFormData.cep}
+                      onChange={(e) => setEditFormData({ ...editFormData, cep: e.target.value })}
+                      placeholder="00000-000"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm">{funcionario.cep || '-'}</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -766,99 +1006,179 @@ export default function FuncionarioDetalhesPage() {
               <CardContent className="space-y-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Turno</Label>
-                  <p className="text-sm">{funcionario.turno || '-'}</p>
+                  {isEditMode ? (
+                    <Select
+                      value={editFormData.turno}
+                      onValueChange={(value) => setEditFormData({ ...editFormData, turno: value as any })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Diurno">Diurno</SelectItem>
+                        <SelectItem value="Noturno">Noturno</SelectItem>
+                        <SelectItem value="Sob Demanda">Sob Demanda</SelectItem>
+                        <SelectItem value="Integral">Integral</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm">{funcionario.turno || '-'}</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Status</Label>
+                  {isEditMode ? (
+                    <Select
+                      value={editFormData.status}
+                      onValueChange={(value) => setEditFormData({ ...editFormData, status: value as any })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Ativo">Ativo</SelectItem>
+                        <SelectItem value="Inativo">Inativo</SelectItem>
+                        <SelectItem value="Afastado">Afastado</SelectItem>
+                        <SelectItem value="Demitido">Demitido</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="mt-1">
+                      <Badge className={`${getStatusColor(funcionario.status)} border`}>
+                        {getStatusIcon(funcionario.status)}
+                        <span className="ml-1">{funcionario.status}</span>
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Observações</Label>
-                  <p className="text-sm">{funcionario.observacoes || '-'}</p>
+                  {isEditMode ? (
+                    <Textarea
+                      value={editFormData.observacoes}
+                      onChange={(e) => setEditFormData({ ...editFormData, observacoes: e.target.value })}
+                      placeholder="Observações sobre o funcionário"
+                      className="mt-1"
+                      rows={4}
+                    />
+                  ) : (
+                    <p className="text-sm">{funcionario.observacoes || '-'}</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
 
-        {/* Tab Obras */}
-        <TabsContent value="obras" className="space-y-6">
+          {/* Card de Dados Básicos (Nome, CPF, Cargo, Salário) */}
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Histórico de Obras</CardTitle>
-                  <CardDescription>Obras onde o funcionário esteve alocado</CardDescription>
-                </div>
-              </div>
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5" />
+                Dados Básicos
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {obrasFuncionario.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Obra</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Data Início</TableHead>
-                      <TableHead>Data Fim</TableHead>
-                      <TableHead>Horas Trabalhadas</TableHead>
-                      <TableHead>Valor Hora</TableHead>
-                      <TableHead>Total Receber</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {obrasFuncionario.map((obra: any) => (
-                      <TableRow key={obra.id}>
-                        <TableCell>
-                          <div className="font-medium">{obra.obras?.nome || 'Obra não encontrada'}</div>
-                          {obra.obras?.cidade && (
-                            <div className="text-xs text-gray-500">{obra.obras.cidade}, {obra.obras.estado}</div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div>{obra.obras?.cliente?.nome || '-'}</div>
-                          {obra.obras?.cliente?.cnpj && (
-                            <div className="text-xs text-gray-500">{obra.obras.cliente.cnpj}</div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">
-                            {obra.data_inicio ? format(new Date(obra.data_inicio), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">
-                            {obra.data_fim ? format(new Date(obra.data_fim), 'dd/MM/yyyy', { locale: ptBR }) : 'Em andamento'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium">
-                            {obra.horas_trabalhadas ? `${obra.horas_trabalhadas}h` : '0h'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">
-                            {obra.valor_hora ? `R$ ${obra.valor_hora.toFixed(2)}` : '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-semibold text-green-600">
-                            {obra.total_receber ? `R$ ${obra.total_receber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${getStatusColor(obra.status)} border`}>
-                            {obra.status === 'ativo' ? 'Ativo' : obra.status === 'finalizado' ? 'Finalizado' : obra.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p>Nenhuma obra vinculada</p>
-                  <p className="text-sm">Este funcionário ainda não foi alocado em nenhuma obra</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Nome Completo</Label>
+                  {isEditMode ? (
+                    <Input
+                      value={editFormData.nome}
+                      onChange={(e) => setEditFormData({ ...editFormData, nome: e.target.value })}
+                      placeholder="Nome completo"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold mt-1">{funcionario.nome}</p>
+                  )}
                 </div>
-              )}
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">CPF</Label>
+                  {isEditMode ? (
+                    <Input
+                      value={editFormData.cpf}
+                      onChange={(e) => setEditFormData({ ...editFormData, cpf: e.target.value })}
+                      placeholder="000.000.000-00"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm mt-1">{funcionario.cpf}</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Cargo</Label>
+                  {isEditMode ? (
+                    <Select
+                      value={editFormData.cargo}
+                      onValueChange={(value) => setEditFormData({ ...editFormData, cargo: value })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Selecione um cargo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CARGOS_PREDEFINIDOS.map((cargo) => (
+                          <SelectItem key={cargo} value={cargo}>
+                            {cargo}
+                          </SelectItem>
+                        ))}
+                        {/* Se o cargo atual não estiver na lista, mostrar também */}
+                        {editFormData.cargo && !CARGOS_PREDEFINIDOS.some(c => c.toLowerCase() === editFormData.cargo.toLowerCase()) && (
+                          <SelectItem value={editFormData.cargo}>
+                            {editFormData.cargo}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm mt-1">{funcionario.cargo}</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Departamento</Label>
+                  {isEditMode ? (
+                    <Input
+                      value={editFormData.departamento}
+                      onChange={(e) => setEditFormData({ ...editFormData, departamento: e.target.value })}
+                      placeholder="Departamento"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm mt-1">{funcionario.departamento || '-'}</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Data de Admissão</Label>
+                  {isEditMode ? (
+                    <Input
+                      type="date"
+                      value={editFormData.data_admissao}
+                      onChange={(e) => setEditFormData({ ...editFormData, data_admissao: e.target.value })}
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm mt-1">
+                      {funcionario.data_admissao ? format(new Date(funcionario.data_admissao), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Salário</Label>
+                  {isEditMode ? (
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={editFormData.salario}
+                      onChange={(e) => setEditFormData({ ...editFormData, salario: e.target.value })}
+                      placeholder="0.00"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold mt-1">
+                      R$ {(funcionario.salario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1034,6 +1354,73 @@ export default function FuncionarioDetalhesPage() {
                     </div>
                   </DialogContent>
                 </Dialog>
+
+                {/* Dialog de Editar Benefício */}
+                <Dialog open={isEditBeneficioDialogOpen} onOpenChange={setIsEditBeneficioDialogOpen}>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Editar Benefício</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="tipo-beneficio-edit">Tipo de Benefício *</Label>
+                        <Select
+                          value={beneficioForm.tipo}
+                          onValueChange={(value) => setBeneficioForm({ ...beneficioForm, tipo: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {tiposBeneficios.length === 0 ? (
+                              <SelectItem value="loading" disabled>Carregando tipos...</SelectItem>
+                            ) : (
+                              tiposBeneficios.map((tipo) => (
+                                <SelectItem key={tipo.id} value={tipo.id.toString()}>
+                                  {tipo.tipo} - R$ {parseFloat(tipo.valor || '0').toFixed(2)}
+                                  {tipo.descricao && ` (${tipo.descricao})`}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="data-inicio-beneficio-edit">Data de Início *</Label>
+                        <Input
+                          id="data-inicio-beneficio-edit"
+                          type="date"
+                          value={beneficioForm.dataInicio}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, dataInicio: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="observacoes-beneficio-edit">Observações</Label>
+                        <Textarea
+                          id="observacoes-beneficio-edit"
+                          placeholder="Informações adicionais sobre o benefício"
+                          value={beneficioForm.observacoes}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, observacoes: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsEditBeneficioDialogOpen(false)
+                            setBeneficioSelecionado(null)
+                            resetBeneficioForm()
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button onClick={handleSalvarEdicaoBeneficio}>
+                          Salvar Alterações
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -1042,10 +1429,30 @@ export default function FuncionarioDetalhesPage() {
                   {beneficios.map((beneficio) => (
                     <Card key={beneficio.id}>
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Gift className="w-5 h-5" />
-                          {beneficio.beneficios_tipo?.descricao || 'Benefício'}
-                        </CardTitle>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="flex items-center gap-2">
+                            <Gift className="w-5 h-5" />
+                            {beneficio.beneficios_tipo?.descricao || 'Benefício'}
+                          </CardTitle>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditarBeneficio(beneficio)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoverBeneficio(beneficio.id)}
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
@@ -1094,6 +1501,44 @@ export default function FuncionarioDetalhesPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Tab Certificados */}
+        <TabsContent value="certificados" className="space-y-6">
+          {funcionario && (
+            <ColaboradorCertificados
+              colaboradorId={funcionario.id}
+              readOnly={false}
+            />
+          )}
+        </TabsContent>
+
+        {/* Tab Documentos Admissionais */}
+        <TabsContent value="documentos-admissionais" className="space-y-6">
+          {funcionario && funcionario.id ? (
+            <ColaboradorDocumentosAdmissionais
+              colaboradorId={funcionario.id}
+              readOnly={false}
+            />
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-center text-gray-500">Carregando dados do funcionário...</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Tab Holerites */}
+        <TabsContent value="holerites" className="space-y-6">
+          {funcionario && (
+            <ColaboradorHolerites
+              colaboradorId={funcionario.id}
+              readOnly={false}
+              isCliente={false}
+              isFuncionario={false}
+            />
+          )}
         </TabsContent>
 
         {/* Tab Documentos */}

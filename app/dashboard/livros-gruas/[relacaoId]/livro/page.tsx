@@ -6,24 +6,19 @@ import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   ArrowLeft, 
   Wrench, 
   BookOpen, 
-  Plus, 
-  Download, 
-  BarChart3,
   AlertCircle,
   Building2,
   MapPin,
   Calendar
 } from "lucide-react"
-import LivroGruaForm from "@/components/livro-grua-form"
-import LivroGruaList from "@/components/livro-grua-list"
+import { LivroGruaObra } from "@/components/livro-grua-obra"
 import { PageLoader } from "@/components/ui/loader"
-import { livroGruaApi, EntradaLivroGruaCompleta } from "@/lib/api-livro-grua"
+import { livroGruaApi } from "@/lib/api-livro-grua"
 import { useCurrentUser } from "@/hooks/use-current-user"
 
 interface GruaCompleta {
@@ -58,15 +53,11 @@ export default function LivroGruaRelacaoPage() {
 
   // Estados
   const [grua, setGrua] = useState<GruaCompleta | null>(null)
+  const [obra, setObra] = useState<any>(null)
+  const [relacao, setRelacao] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [estatisticas, setEstatisticas] = useState<any>(null)
   
-  // Estados dos modais
-  const [isNovaEntradaOpen, setIsNovaEntradaOpen] = useState(false)
-  const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
-  const [isVisualizarEntradaOpen, setIsVisualizarEntradaOpen] = useState(false)
-  const [entradaSelecionada, setEntradaSelecionada] = useState<EntradaLivroGruaCompleta | null>(null)
 
   // Carregar dados da grua
   const carregarGrua = async () => {
@@ -85,16 +76,18 @@ export default function LivroGruaRelacaoPage() {
       }
 
       // Buscar dados do backend
-      const { relacao, grua: gruaData, obra } = await livroGruaApi.buscarGruaPorRelacao(parseInt(relacaoId))
+      const { relacao: relacaoData, grua: gruaData, obra: obraData } = await livroGruaApi.buscarGruaPorRelacao(parseInt(relacaoId))
       
       if (gruaData) {
         // Adicionar informações da obra à grua
         const gruaCompleta: GruaCompleta = {
           ...gruaData,
-          obraAtual: obra,
-          relacaoAtual: relacao
+          obraAtual: obraData,
+          relacaoAtual: relacaoData
         }
         setGrua(gruaCompleta)
+        setObra(obraData)
+        setRelacao(relacaoData)
       } else {
         setError('Grua não encontrada ou você não tem acesso a esta grua.')
       }
@@ -115,63 +108,13 @@ export default function LivroGruaRelacaoPage() {
     }
   }
 
-  // Carregar estatísticas
-  const carregarEstatisticas = async () => {
-    if (!grua) return
-
-    try {
-      const response = await livroGruaApi.obterEstatisticas(grua.id)
-      if (response.success) {
-        setEstatisticas(response.data)
-      }
-    } catch (err) {
-      console.error('Erro ao carregar estatísticas:', err)
-    }
-  }
 
   // Carregar dados na inicialização
   useEffect(() => {
     carregarGrua()
   }, [relacaoId, user, userLoading])
 
-  // Carregar estatísticas quando a grua for carregada
-  useEffect(() => {
-    if (grua) {
-      carregarEstatisticas()
-    }
-  }, [grua])
 
-  // Handlers dos modais
-  const handleNovaEntrada = () => {
-    setIsNovaEntradaOpen(true)
-  }
-
-  const handleEditarEntrada = (entrada: EntradaLivroGruaCompleta) => {
-    setEntradaSelecionada(entrada)
-    setIsEditarEntradaOpen(true)
-  }
-
-  const handleVisualizarEntrada = (entrada: EntradaLivroGruaCompleta) => {
-    setEntradaSelecionada(entrada)
-    setIsVisualizarEntradaOpen(true)
-  }
-
-  const handleFecharModais = () => {
-    setIsNovaEntradaOpen(false)
-    setIsEditarEntradaOpen(false)
-    setIsVisualizarEntradaOpen(false)
-    setEntradaSelecionada(null)
-  }
-
-  const handleEntradaSalva = () => {
-    handleFecharModais()
-    carregarEstatisticas()
-    toast({
-      title: "Sucesso",
-      description: "Entrada salva com sucesso!",
-      variant: "default"
-    })
-  }
 
   // Tratamento de loading e erro
   if (loading) {
@@ -243,16 +186,6 @@ export default function LivroGruaRelacaoPage() {
               Livro de Ocorrências da Grua
             </p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
-          </Button>
-          <Button onClick={handleNovaEntrada}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Entrada
-          </Button>
         </div>
       </div>
 
@@ -336,141 +269,25 @@ export default function LivroGruaRelacaoPage() {
         </Card>
       </div>
 
-      {/* Estatísticas */}
-      {estatisticas && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-purple-600" />
-              Estatísticas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">
-                  {estatisticas.totalEntradas || 0}
-                </div>
-                <div className="text-sm text-blue-600">Total de Entradas</div>
+      {/* Livro da Grua */}
+      {(() => {
+        // Tentar obter o ID da obra de diferentes formas
+        const obraId = obra?.id || obra?.obra_id || grua?.obraAtual?.id || relacao?.obra_id
+        return obraId ? (
+          <LivroGruaObra obraId={obraId.toString()} />
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-8 text-gray-500">
+                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <p>Obra não encontrada para exibir o Livro da Grua</p>
+                <p className="text-xs mt-2 text-gray-400">Relacao ID: {relacaoId}</p>
               </div>
-              <div className="text-center p-4 bg-green-50 rounded-lg">
-                <div className="text-2xl font-bold text-green-600">
-                  {estatisticas.entradasEsteMes || 0}
-                </div>
-                <div className="text-sm text-green-600">Este Mês</div>
-              </div>
-              <div className="text-center p-4 bg-orange-50 rounded-lg">
-                <div className="text-2xl font-bold text-orange-600">
-                  {estatisticas.manutencoesPendentes || 0}
-                </div>
-                <div className="text-sm text-orange-600">Manutenções Pendentes</div>
-              </div>
-              <div className="text-center p-4 bg-red-50 rounded-lg">
-                <div className="text-2xl font-bold text-red-600">
-                  {estatisticas.alertas || 0}
-                </div>
-                <div className="text-sm text-red-600">Alertas</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )
+      })()}
 
-      {/* Lista de Entradas */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-indigo-600" />
-            Entradas do Livro
-          </CardTitle>
-          <CardDescription>
-            Registro de todas as ocorrências e manutenções da grua
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LivroGruaList
-            gruaId={grua.id}
-            onEditar={handleEditarEntrada}
-            onVisualizar={handleVisualizarEntrada}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Modais */}
-      <Dialog open={isNovaEntradaOpen} onOpenChange={setIsNovaEntradaOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Nova Entrada no Livro</DialogTitle>
-          </DialogHeader>
-          <LivroGruaForm
-            gruaId={grua.id}
-            onSave={handleEntradaSalva}
-            onCancel={handleFecharModais}
-            funcionarioLogado={user}
-          />
-          {/* Debug */}
-          {console.log('LivroGruaPage - user sendo passado:', user)}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEditarEntradaOpen} onOpenChange={setIsEditarEntradaOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Entrada</DialogTitle>
-          </DialogHeader>
-          {entradaSelecionada && (
-            <LivroGruaForm
-              gruaId={grua.id}
-              entrada={entradaSelecionada}
-              onSave={handleEntradaSalva}
-              onCancel={handleFecharModais}
-              modoEdicao={true}
-              funcionarioLogado={user}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isVisualizarEntradaOpen} onOpenChange={setIsVisualizarEntradaOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Visualizar Entrada</DialogTitle>
-          </DialogHeader>
-          {entradaSelecionada && (
-            <div className="space-y-4">
-              {/* Conteúdo da visualização */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Data</label>
-                  <p className="text-lg">{new Date(entradaSelecionada.data).toLocaleDateString('pt-BR')}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Tipo</label>
-                  <p className="text-lg">{entradaSelecionada.tipo}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Responsável</label>
-                  <p className="text-lg">{entradaSelecionada.responsavel}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Status</label>
-                  <p className="text-lg">{entradaSelecionada.status}</p>
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Descrição</label>
-                <p className="text-lg">{entradaSelecionada.descricao}</p>
-              </div>
-              {entradaSelecionada.observacoes && (
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Observações</label>
-                  <p className="text-lg">{entradaSelecionada.observacoes}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

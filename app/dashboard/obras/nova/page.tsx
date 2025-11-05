@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { 
   Building2, 
   Plus, 
@@ -23,7 +24,12 @@ import {
   Package,
   Settings,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Gauge,
+  Battery,
+  Truck,
+  CreditCard
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
@@ -913,66 +919,685 @@ export default function NovaObraPage() {
 
                 {/* Lista de gruas selecionadas */}
                 {gruasSelecionadas.length > 0 && (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <h4 className="font-medium text-sm">Gruas Selecionadas ({gruasSelecionadas.length})</h4>
-                    {gruasSelecionadas.map((grua) => (
-                      <div key={grua.id} className="flex gap-2 p-3 border rounded-lg bg-blue-50">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <Crane className="w-4 h-4 text-blue-600" />
-                            <div>
-                              <p className="font-medium text-blue-900">{grua.name}</p>
-                              <p className="text-sm text-blue-700">{grua.model} - {grua.capacity}</p>
-                            </div>
+                    <Accordion type="multiple" className="space-y-3">
+                      {gruasSelecionadas.map((grua) => (
+                        <AccordionItem key={grua.id} value={grua.id} className="border rounded-lg bg-blue-50 px-4">
+                          <div className="flex items-center gap-2 py-3">
+                            <Crane className="w-5 h-5 text-blue-600" />
+                            <AccordionTrigger className="flex-1 hover:no-underline">
+                              <div className="flex-1 text-left">
+                                <p className="font-medium text-blue-900">{grua.name}</p>
+                                <p className="text-sm text-blue-700">{grua.model} - {grua.capacity}</p>
+                              </div>
+                            </AccordionTrigger>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                removeGruaSelecionada(grua.id)
+                              }}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                            <div>
-                              <Label htmlFor={`gruaValue-${grua.id}`}>Valor da Locação (R$)</Label>
-                              <Input
-                                id={`gruaValue-${grua.id}`}
-                                type="text"
-                                value={grua.valor_locacao && grua.valor_locacao > 0 ? formatCurrency((grua.valor_locacao * 100).toString()) : ''}
-                                onChange={(e) => {
-                                  const formatted = formatCurrency(e.target.value)
-                                  const numericValue = parseCurrency(formatted)
-                                  const updatedGruas = gruasSelecionadas.map(g => 
-                                    g.id === grua.id ? { ...g, valor_locacao: numericValue } : g
-                                  )
-                                  setGruasSelecionadas(updatedGruas)
-                                }}
-                                placeholder="0,00"
-                              />
+                          <AccordionContent>
+                            <div className="space-y-4 pb-4">
+                              {/* Seção: Parâmetros Técnicos */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-base flex items-center gap-2">
+                                    <Settings className="w-4 h-4" />
+                                    Parâmetros Técnicos
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div>
+                                      <Label htmlFor={`tipoBase-${grua.id}`}>Tipo de Base</Label>
+                                      <Select 
+                                        value={grua.tipo_base || ''} 
+                                        onValueChange={(value) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, tipo_base: value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="chumbador">Chumbador</SelectItem>
+                                          <SelectItem value="trilho">Trilho</SelectItem>
+                                          <SelectItem value="cruzeta">Cruzeta</SelectItem>
+                                          <SelectItem value="outro">Outro</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`alturaInicial-${grua.id}`}>Altura Inicial (m)</Label>
+                                      <Input
+                                        id={`alturaInicial-${grua.id}`}
+                                        type="number"
+                                        step="0.01"
+                                        value={grua.altura_inicial || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, altura_inicial: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`alturaFinal-${grua.id}`}>Altura Final (m)</Label>
+                                      <Input
+                                        id={`alturaFinal-${grua.id}`}
+                                        type="number"
+                                        step="0.01"
+                                        value={grua.altura_final || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, altura_final: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`velocidadeGiro-${grua.id}`}>Velocidade de Giro (rpm)</Label>
+                                      <Input
+                                        id={`velocidadeGiro-${grua.id}`}
+                                        type="number"
+                                        step="0.1"
+                                        value={grua.velocidade_giro || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, velocidade_giro: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`velocidadeElevacao-${grua.id}`}>Velocidade de Elevação (m/min)</Label>
+                                      <Input
+                                        id={`velocidadeElevacao-${grua.id}`}
+                                        type="number"
+                                        step="0.1"
+                                        value={grua.velocidade_elevacao || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, velocidade_elevacao: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`velocidadeTranslacao-${grua.id}`}>Velocidade de Translação (m/min)</Label>
+                                      <Input
+                                        id={`velocidadeTranslacao-${grua.id}`}
+                                        type="number"
+                                        step="0.1"
+                                        value={grua.velocidade_translacao || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, velocidade_translacao: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`potenciaInstalada-${grua.id}`}>Potência Instalada (kVA)</Label>
+                                      <Input
+                                        id={`potenciaInstalada-${grua.id}`}
+                                        type="number"
+                                        step="0.1"
+                                        value={grua.potencia_instalada || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, potencia_instalada: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`voltagem-${grua.id}`}>Voltagem (V)</Label>
+                                      <Select 
+                                        value={grua.voltagem || ''} 
+                                        onValueChange={(value) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, voltagem: value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="220">220V</SelectItem>
+                                          <SelectItem value="380">380V</SelectItem>
+                                          <SelectItem value="440">440V</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`tipoLigacao-${grua.id}`}>Tipo de Ligação Elétrica</Label>
+                                      <Select 
+                                        value={grua.tipo_ligacao || ''} 
+                                        onValueChange={(value) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, tipo_ligacao: value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="monofasica">Monofásica</SelectItem>
+                                          <SelectItem value="trifasica">Trifásica</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`capacidadePonta-${grua.id}`}>Capacidade na Ponta (kg)</Label>
+                                      <Input
+                                        id={`capacidadePonta-${grua.id}`}
+                                        type="number"
+                                        value={grua.capacidade_ponta || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, capacidade_ponta: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`capacidadeMaximaRaio-${grua.id}`}>Capacidade Máx. por Raio (kg)</Label>
+                                      <Input
+                                        id={`capacidadeMaximaRaio-${grua.id}`}
+                                        type="number"
+                                        value={grua.capacidade_maxima_raio || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, capacidade_maxima_raio: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`anoFabricacao-${grua.id}`}>Ano de Fabricação</Label>
+                                      <Input
+                                        id={`anoFabricacao-${grua.id}`}
+                                        type="number"
+                                        min="1900"
+                                        max={new Date().getFullYear()}
+                                        value={grua.ano_fabricacao || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, ano_fabricacao: parseInt(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="YYYY"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`vidaUtil-${grua.id}`}>Vida Útil Estimada (anos)</Label>
+                                      <Input
+                                        id={`vidaUtil-${grua.id}`}
+                                        type="number"
+                                        value={grua.vida_util || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, vida_util: parseInt(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0"
+                                      />
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+
+                              {/* Seção: Valores Detalhados */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-base flex items-center gap-2">
+                                    <DollarSign className="w-4 h-4" />
+                                    Valores Detalhados e Itens de Cobrança
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div>
+                                      <Label htmlFor={`valorLocacao-${grua.id}`}>Locação Mensal da Grua (R$)</Label>
+                                      <Input
+                                        id={`valorLocacao-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_locacao && grua.valor_locacao > 0 ? formatCurrency((grua.valor_locacao * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_locacao: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorOperador-${grua.id}`}>Operador / Sinaleiro (R$)</Label>
+                                      <Input
+                                        id={`valorOperador-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_operador && grua.valor_operador > 0 ? formatCurrency((grua.valor_operador * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_operador: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorManutencao-${grua.id}`}>Manutenção Preventiva (R$)</Label>
+                                      <Input
+                                        id={`valorManutencao-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_manutencao && grua.valor_manutencao > 0 ? formatCurrency((grua.valor_manutencao * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_manutencao: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorEstaiamento-${grua.id}`}>Estaiamento por Unidade (R$)</Label>
+                                      <Input
+                                        id={`valorEstaiamento-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_estaiamento && grua.valor_estaiamento > 0 ? formatCurrency((grua.valor_estaiamento * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_estaiamento: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorChumbadores-${grua.id}`}>Chumbadores (R$)</Label>
+                                      <Input
+                                        id={`valorChumbadores-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_chumbadores && grua.valor_chumbadores > 0 ? formatCurrency((grua.valor_chumbadores * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_chumbadores: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorMontagem-${grua.id}`}>Montagem (R$)</Label>
+                                      <Input
+                                        id={`valorMontagem-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_montagem && grua.valor_montagem > 0 ? formatCurrency((grua.valor_montagem * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_montagem: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorDesmontagem-${grua.id}`}>Desmontagem (R$)</Label>
+                                      <Input
+                                        id={`valorDesmontagem-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_desmontagem && grua.valor_desmontagem > 0 ? formatCurrency((grua.valor_desmontagem * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_desmontagem: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorTransporte-${grua.id}`}>Transporte Ida/Volta por Viagem (R$)</Label>
+                                      <Input
+                                        id={`valorTransporte-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_transporte && grua.valor_transporte > 0 ? formatCurrency((grua.valor_transporte * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_transporte: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorHoraExtra-${grua.id}`}>Hora Extra (R$)</Label>
+                                      <Input
+                                        id={`valorHoraExtra-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_hora_extra && grua.valor_hora_extra > 0 ? formatCurrency((grua.valor_hora_extra * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_hora_extra: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorSeguro-${grua.id}`}>Seguro Responsabilidade Civil (R$)</Label>
+                                      <Input
+                                        id={`valorSeguro-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_seguro && grua.valor_seguro > 0 ? formatCurrency((grua.valor_seguro * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_seguro: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`valorCaucao-${grua.id}`}>Caução / Depósito de Garantia (R$)</Label>
+                                      <Input
+                                        id={`valorCaucao-${grua.id}`}
+                                        type="text"
+                                        value={grua.valor_caucao && grua.valor_caucao > 0 ? formatCurrency((grua.valor_caucao * 100).toString()) : ''}
+                                        onChange={(e) => {
+                                          const formatted = formatCurrency(e.target.value)
+                                          const numericValue = parseCurrency(formatted)
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, valor_caucao: numericValue } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0,00"
+                                      />
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+
+                              {/* Seção: Serviços e Logística */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-base flex items-center gap-2">
+                                    <Truck className="w-4 h-4" />
+                                    Serviços e Logística
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div>
+                                      <Label htmlFor={`guindasteMontagem-${grua.id}`}>Guindaste para Montagem/Desmontagem</Label>
+                                      <Select 
+                                        value={grua.guindaste_montagem || ''} 
+                                        onValueChange={(value) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, guindaste_montagem: value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="incluso">Incluso</SelectItem>
+                                          <SelectItem value="cliente">Por conta do cliente</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`quantidadeViagens-${grua.id}`}>Quantidade de Viagens de Transporte</Label>
+                                      <Input
+                                        id={`quantidadeViagens-${grua.id}`}
+                                        type="number"
+                                        min="0"
+                                        value={grua.quantidade_viagens || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, quantidade_viagens: parseInt(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`alojamentoAlimentacao-${grua.id}`}>Alojamento / Alimentação Equipe</Label>
+                                      <Select 
+                                        value={grua.alojamento_alimentacao || ''} 
+                                        onValueChange={(value) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, alojamento_alimentacao: value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="incluso">Incluso</SelectItem>
+                                          <SelectItem value="cliente">Por conta do cliente</SelectItem>
+                                          <SelectItem value="nao_aplicavel">Não aplicável</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="md:col-span-2 lg:col-span-3">
+                                      <Label htmlFor={`responsabilidadeAcessorios-${grua.id}`}>Responsabilidade por Acessórios</Label>
+                                      <Textarea
+                                        id={`responsabilidadeAcessorios-${grua.id}`}
+                                        value={grua.responsabilidade_acessorios || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, responsabilidade_acessorios: e.target.value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="Ex: Estropos, caçambas, garfos, baldes fornecidos por..."
+                                        rows={3}
+                                      />
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+
+                              {/* Seção: Condições Comerciais */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-base flex items-center gap-2">
+                                    <CreditCard className="w-4 h-4" />
+                                    Condições Comerciais e Contratuais
+                                  </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div>
+                                      <Label htmlFor={`prazoValidade-${grua.id}`}>Prazo de Validade da Proposta (dias)</Label>
+                                      <Input
+                                        id={`prazoValidade-${grua.id}`}
+                                        type="number"
+                                        min="0"
+                                        value={grua.prazo_validade || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, prazo_validade: parseInt(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`formaPagamento-${grua.id}`}>Forma de Pagamento / Medição Mensal</Label>
+                                      <Select 
+                                        value={grua.forma_pagamento || ''} 
+                                        onValueChange={(value) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, forma_pagamento: value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="mensal">Mensal</SelectItem>
+                                          <SelectItem value="quinzenal">Quinzenal</SelectItem>
+                                          <SelectItem value="semanal">Semanal</SelectItem>
+                                          <SelectItem value="unica">Única</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`multaAtraso-${grua.id}`}>Multa por Atraso (%)</Label>
+                                      <Input
+                                        id={`multaAtraso-${grua.id}`}
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        value={grua.multa_atraso || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, multa_atraso: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.00"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`reajusteIndice-${grua.id}`}>Reajuste por Índice</Label>
+                                      <Select 
+                                        value={grua.reajuste_indice || ''} 
+                                        onValueChange={(value) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, reajuste_indice: value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Selecione" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="igp_m">IGP-M</SelectItem>
+                                          <SelectItem value="ipca">IPCA</SelectItem>
+                                          <SelectItem value="inpc">INPC</SelectItem>
+                                          <SelectItem value="sem_reajuste">Sem reajuste</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`garantiaCaucao-${grua.id}`}>Garantia / Caução de Mobilização</Label>
+                                      <Input
+                                        id={`garantiaCaucao-${grua.id}`}
+                                        type="text"
+                                        value={grua.garantia_caucao || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, garantia_caucao: e.target.value } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="Ex: 10% do valor total"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`retencaoContratual-${grua.id}`}>Retenção Contratual (%)</Label>
+                                      <Input
+                                        id={`retencaoContratual-${grua.id}`}
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        value={grua.retencao_contratual || ''}
+                                        onChange={(e) => {
+                                          const updatedGruas = gruasSelecionadas.map(g => 
+                                            g.id === grua.id ? { ...g, retencao_contratual: parseFloat(e.target.value) || 0 } : g
+                                          )
+                                          setGruasSelecionadas(updatedGruas)
+                                        }}
+                                        placeholder="0.00"
+                                      />
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
                             </div>
-                            <div>
-                              <Label htmlFor={`monthlyFee-${grua.id}`}>Taxa Mensal (R$)</Label>
-                              <Input
-                                id={`monthlyFee-${grua.id}`}
-                                type="text"
-                                value={grua.taxa_mensal && grua.taxa_mensal > 0 ? formatCurrency((grua.taxa_mensal * 100).toString()) : ''}
-                                onChange={(e) => {
-                                  const formatted = formatCurrency(e.target.value)
-                                  const numericValue = parseCurrency(formatted)
-                                  const updatedGruas = gruasSelecionadas.map(g => 
-                                    g.id === grua.id ? { ...g, taxa_mensal: numericValue } : g
-                                  )
-                                  setGruasSelecionadas(updatedGruas)
-                                }}
-                                placeholder="0,00"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeGruaSelecionada(grua.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
                   </div>
                 )}
 

@@ -62,6 +62,19 @@ export interface EntradaLivroGrua {
   responsavel_resolucao?: string
   data_resolucao?: string
   status_resolucao?: 'pendente' | 'em_andamento' | 'concluido' | 'cancelado'
+  // Campos específicos do checklist diário
+  cabos?: boolean
+  polias?: boolean
+  estrutura?: boolean
+  movimentos?: boolean
+  freios?: boolean
+  limitadores?: boolean
+  indicadores?: boolean
+  aterramento?: boolean
+  // Campos específicos de manutenção
+  realizado_por_id?: number
+  realizado_por_nome?: string
+  cargo?: string
   anexos?: Array<{
     nome: string
     tipo: string

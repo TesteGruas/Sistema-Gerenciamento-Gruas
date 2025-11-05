@@ -15,12 +15,16 @@ import {
   Plus, 
   Download, 
   BarChart3,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2
 } from "lucide-react"
-import LivroGruaForm from "@/components/livro-grua-form"
-import LivroGruaList from "@/components/livro-grua-list"
 import { PageLoader } from "@/components/ui/loader"
-import { livroGruaApi, EntradaLivroGruaCompleta } from "@/lib/api-livro-grua"
+import { livroGruaApi } from "@/lib/api-livro-grua"
+import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diario"
+import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
+import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
+import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function LivroGruaPage() {
   const { toast } = useToast()
@@ -35,10 +39,15 @@ export default function LivroGruaPage() {
   const [estatisticas, setEstatisticas] = useState<any>(null)
   
   // Estados dos modais
-  const [isNovaEntradaOpen, setIsNovaEntradaOpen] = useState(false)
-  const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
-  const [isVisualizarEntradaOpen, setIsVisualizarEntradaOpen] = useState(false)
-  const [entradaSelecionada, setEntradaSelecionada] = useState<EntradaLivroGruaCompleta | null>(null)
+  const [isNovoChecklistOpen, setIsNovoChecklistOpen] = useState(false)
+  const [isEditarChecklistOpen, setIsEditarChecklistOpen] = useState(false)
+  const [isVisualizarChecklistOpen, setIsVisualizarChecklistOpen] = useState(false)
+  const [checklistSelecionado, setChecklistSelecionado] = useState<any>(null)
+  
+  const [isNovaManutencaoOpen, setIsNovaManutencaoOpen] = useState(false)
+  const [isEditarManutencaoOpen, setIsEditarManutencaoOpen] = useState(false)
+  const [isVisualizarManutencaoOpen, setIsVisualizarManutencaoOpen] = useState(false)
+  const [manutencaoSelecionada, setManutencaoSelecionada] = useState<any>(null)
 
   // Carregar dados da grua
   const carregarGrua = async () => {
@@ -108,45 +117,91 @@ export default function LivroGruaPage() {
     }
   }, [grua])
 
-  // Handlers
-  const handleNovaEntrada = () => {
-    setEntradaSelecionada(null)
-    setIsNovaEntradaOpen(true)
+  // Handlers Checklist
+  const handleNovoChecklist = () => {
+    setChecklistSelecionado(null)
+    setIsNovoChecklistOpen(true)
   }
 
-  const handleEditarEntrada = (entrada: EntradaLivroGruaCompleta) => {
-    setEntradaSelecionada(entrada)
-    setIsEditarEntradaOpen(true)
+  const handleEditarChecklist = (checklist: any) => {
+    setChecklistSelecionado(checklist)
+    setIsEditarChecklistOpen(true)
   }
 
-  const handleVisualizarEntrada = (entrada: EntradaLivroGruaCompleta) => {
-    setEntradaSelecionada(entrada)
-    setIsVisualizarEntradaOpen(true)
+  const handleVisualizarChecklist = (checklist: any) => {
+    setChecklistSelecionado(checklist)
+    setIsVisualizarChecklistOpen(true)
   }
 
-  const handleExcluirEntrada = async (entrada: EntradaLivroGruaCompleta) => {
-    if (!entrada.id) return
+  const handleExcluirChecklist = async (checklist: any) => {
+    if (!checklist.id) return
 
-    if (confirm(`Tem certeza que deseja excluir esta entrada?`)) {
+    if (confirm(`Tem certeza que deseja excluir este checklist?`)) {
       try {
-        await livroGruaApi.excluirEntrada(entrada.id)
-        // Recarregar lista
+        await livroGruaApi.excluirEntrada(checklist.id)
+        toast({
+          title: "Sucesso",
+          description: "Checklist excluído com sucesso"
+        })
         window.location.reload()
       } catch (err) {
-        console.error('Erro ao excluir entrada:', err)
+        console.error('Erro ao excluir checklist:', err)
         toast({
-        title: "Informação",
-        description: "Erro ao excluir entrada",
-        variant: "default"
-      })
+          title: "Erro",
+          description: "Erro ao excluir checklist",
+          variant: "destructive"
+        })
       }
     }
   }
 
-  const handleSucessoEntrada = () => {
-    setIsNovaEntradaOpen(false)
-    setIsEditarEntradaOpen(false)
-    // Recarregar estatísticas
+  const handleSucessoChecklist = () => {
+    setIsNovoChecklistOpen(false)
+    setIsEditarChecklistOpen(false)
+    carregarEstatisticas()
+  }
+
+  // Handlers Manutenção
+  const handleNovaManutencao = () => {
+    setManutencaoSelecionada(null)
+    setIsNovaManutencaoOpen(true)
+  }
+
+  const handleEditarManutencao = (manutencao: any) => {
+    setManutencaoSelecionada(manutencao)
+    setIsEditarManutencaoOpen(true)
+  }
+
+  const handleVisualizarManutencao = (manutencao: any) => {
+    setManutencaoSelecionada(manutencao)
+    setIsVisualizarManutencaoOpen(true)
+  }
+
+  const handleExcluirManutencao = async (manutencao: any) => {
+    if (!manutencao.id) return
+
+    if (confirm(`Tem certeza que deseja excluir esta manutenção?`)) {
+      try {
+        await livroGruaApi.excluirEntrada(manutencao.id)
+        toast({
+          title: "Sucesso",
+          description: "Manutenção excluída com sucesso"
+        })
+        window.location.reload()
+      } catch (err) {
+        console.error('Erro ao excluir manutenção:', err)
+        toast({
+          title: "Erro",
+          description: "Erro ao excluir manutenção",
+          variant: "destructive"
+        })
+      }
+    }
+  }
+
+  const handleSucessoManutencao = () => {
+    setIsNovaManutencaoOpen(false)
+    setIsEditarManutencaoOpen(false)
     carregarEstatisticas()
   }
 
@@ -298,54 +353,74 @@ export default function LivroGruaPage() {
         </Card>
       )}
 
-      {/* Lista de Entradas */}
-        <LivroGruaList
-          gruaId={grua?.id || gruaId}
-          onNovaEntrada={handleNovaEntrada}
-          onEditarEntrada={handleEditarEntrada}
-          onVisualizarEntrada={handleVisualizarEntrada}
-          onExcluirEntrada={handleExcluirEntrada}
-        />
+      {/* Abas: Checklist e Manutenções */}
+      <Tabs defaultValue="checklist" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="checklist">Checklists Diários</TabsTrigger>
+          <TabsTrigger value="manutencoes">Manutenções</TabsTrigger>
+        </TabsList>
 
-      {/* Modal Nova Entrada */}
-      <Dialog open={isNovaEntradaOpen} onOpenChange={setIsNovaEntradaOpen}>
+        {/* Aba: Checklists Diários */}
+        <TabsContent value="checklist" className="space-y-4">
+          <LivroGruaChecklistList
+            gruaId={grua?.id || gruaId}
+            onNovoChecklist={handleNovoChecklist}
+            onEditarChecklist={handleEditarChecklist}
+            onVisualizarChecklist={handleVisualizarChecklist}
+            onExcluirChecklist={handleExcluirChecklist}
+          />
+        </TabsContent>
+
+        {/* Aba: Manutenções */}
+        <TabsContent value="manutencoes" className="space-y-4">
+          <LivroGruaManutencaoList
+            gruaId={grua?.id || gruaId}
+            onNovaManutencao={handleNovaManutencao}
+            onEditarManutencao={handleEditarManutencao}
+            onVisualizarManutencao={handleVisualizarManutencao}
+            onExcluirManutencao={handleExcluirManutencao}
+          />
+        </TabsContent>
+      </Tabs>
+
+      {/* Modal Novo Checklist */}
+      <Dialog open={isNovoChecklistOpen} onOpenChange={setIsNovoChecklistOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nova Entrada no Livro da Grua</DialogTitle>
+            <DialogTitle>Novo Checklist Diário</DialogTitle>
           </DialogHeader>
-          <LivroGruaForm
+          <LivroGruaChecklistDiario
             gruaId={grua?.id || gruaId}
-            onSave={handleSucessoEntrada}
-            onCancel={() => setIsNovaEntradaOpen(false)}
+            onSave={handleSucessoChecklist}
+            onCancel={() => setIsNovoChecklistOpen(false)}
           />
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar Entrada */}
-      <Dialog open={isEditarEntradaOpen} onOpenChange={setIsEditarEntradaOpen}>
+      {/* Modal Editar Checklist */}
+      <Dialog open={isEditarChecklistOpen} onOpenChange={setIsEditarChecklistOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editar Entrada do Livro da Grua</DialogTitle>
+            <DialogTitle>Editar Checklist Diário</DialogTitle>
           </DialogHeader>
-          <LivroGruaForm
+          <LivroGruaChecklistDiario
             gruaId={grua?.id || gruaId}
+            checklist={checklistSelecionado}
             modoEdicao={true}
-            entrada={entradaSelecionada || undefined}
-            onSave={handleSucessoEntrada}
-            onCancel={() => setIsEditarEntradaOpen(false)}
+            onSave={handleSucessoChecklist}
+            onCancel={() => setIsEditarChecklistOpen(false)}
           />
         </DialogContent>
       </Dialog>
 
-      {/* Modal Visualizar Entrada */}
-      <Dialog open={isVisualizarEntradaOpen} onOpenChange={setIsVisualizarEntradaOpen}>
+      {/* Modal Visualizar Checklist */}
+      <Dialog open={isVisualizarChecklistOpen} onOpenChange={setIsVisualizarChecklistOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalhes da Entrada</DialogTitle>
+            <DialogTitle>Detalhes do Checklist</DialogTitle>
           </DialogHeader>
-          {entradaSelecionada && (
+          {checklistSelecionado && (
             <div className="space-y-6">
-              {/* Informações Básicas */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Informações Básicas</CardTitle>
@@ -353,81 +428,185 @@ export default function LivroGruaPage() {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Data e Hora</p>
+                      <p className="text-sm font-medium text-gray-600">Data</p>
                       <p className="text-sm">
-                        {livroGruaApi.formatarDataHora(entradaSelecionada.data_entrada, entradaSelecionada.hora_entrada)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Grua</p>
-                      <p className="text-sm font-medium">
-                        {entradaSelecionada.grua_modelo || entradaSelecionada.grua_id}
+                        {new Date(checklistSelecionado.data).toLocaleDateString('pt-BR')}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-600">Funcionário</p>
-                      <p className="text-sm">{entradaSelecionada.funcionario_nome || 'N/A'}</p>
+                      <p className="text-sm">{checklistSelecionado.funcionario_nome || 'N/A'}</p>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Tipo</p>
-                      <Badge className={livroGruaApi.obterCorTipo(entradaSelecionada.tipo_entrada)}>
-                        {entradaSelecionada.tipo_entrada_display || entradaSelecionada.tipo_entrada}
-                      </Badge>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Status</p>
-                      <Badge className={livroGruaApi.obterCorStatus(entradaSelecionada.status_entrada)}>
-                        {entradaSelecionada.status_entrada}
-                      </Badge>
-                    </div>
-                    {entradaSelecionada.responsavel_resolucao && (
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Responsável pela Resolução</p>
-                        <p className="text-sm">{entradaSelecionada.responsavel_resolucao}</p>
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Descrição */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Descrição</CardTitle>
+                  <CardTitle className="text-lg">Itens Verificados</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                    {entradaSelecionada.descricao}
-                  </p>
+                  <div className="space-y-2">
+                    {[
+                      { key: 'cabos', label: 'Cabos' },
+                      { key: 'polias', label: 'Polias' },
+                      { key: 'estrutura', label: 'Estrutura' },
+                      { key: 'movimentos', label: 'Movimentos' },
+                      { key: 'freios', label: 'Freios' },
+                      { key: 'limitadores', label: 'Limitadores' },
+                      { key: 'indicadores', label: 'Indicadores' },
+                      { key: 'aterramento', label: 'Aterramento' }
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center gap-2">
+                        {checklistSelecionado[item.key as keyof typeof checklistSelecionado] ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-gray-300" />
+                        )}
+                        <span className={checklistSelecionado[item.key as keyof typeof checklistSelecionado] ? 'text-gray-900' : 'text-gray-400'}>
+                          {item.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
 
-              {/* Observações */}
-              {entradaSelecionada.observacoes && (
+              {checklistSelecionado.observacoes && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Observações</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {entradaSelecionada.observacoes}
+                      {checklistSelecionado.observacoes}
                     </p>
                   </CardContent>
                 </Card>
               )}
 
-              {/* Ações */}
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button 
                   variant="outline" 
-                  onClick={() => setIsVisualizarEntradaOpen(false)}
+                  onClick={() => setIsVisualizarChecklistOpen(false)}
                 >
                   Fechar
                 </Button>
                 <Button 
                   onClick={() => {
-                    setIsVisualizarEntradaOpen(false)
-                    handleEditarEntrada(entradaSelecionada)
+                    setIsVisualizarChecklistOpen(false)
+                    handleEditarChecklist(checklistSelecionado)
+                  }}
+                >
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Nova Manutenção */}
+      <Dialog open={isNovaManutencaoOpen} onOpenChange={setIsNovaManutencaoOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nova Manutenção</DialogTitle>
+          </DialogHeader>
+          <LivroGruaManutencao
+            gruaId={grua?.id || gruaId}
+            onSave={handleSucessoManutencao}
+            onCancel={() => setIsNovaManutencaoOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Manutenção */}
+      <Dialog open={isEditarManutencaoOpen} onOpenChange={setIsEditarManutencaoOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Manutenção</DialogTitle>
+          </DialogHeader>
+          <LivroGruaManutencao
+            gruaId={grua?.id || gruaId}
+            manutencao={manutencaoSelecionada}
+            modoEdicao={true}
+            onSave={handleSucessoManutencao}
+            onCancel={() => setIsEditarManutencaoOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Visualizar Manutenção */}
+      <Dialog open={isVisualizarManutencaoOpen} onOpenChange={setIsVisualizarManutencaoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Manutenção</DialogTitle>
+          </DialogHeader>
+          {manutencaoSelecionada && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Informações Básicas</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Data</p>
+                      <p className="text-sm">
+                        {new Date(manutencaoSelecionada.data).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Realizado Por</p>
+                      <p className="text-sm">{manutencaoSelecionada.realizado_por_nome || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Cargo</p>
+                      <Badge variant="outline">
+                        {manutencaoSelecionada.cargo || 'N/A'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {manutencaoSelecionada.descricao && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Descrição</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {manutencaoSelecionada.descricao}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {manutencaoSelecionada.observacoes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Observações</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {manutencaoSelecionada.observacoes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsVisualizarManutencaoOpen(false)}
+                >
+                  Fechar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIsVisualizarManutencaoOpen(false)
+                    handleEditarManutencao(manutencaoSelecionada)
                   }}
                 >
                   Editar

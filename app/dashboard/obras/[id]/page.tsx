@@ -41,7 +41,8 @@ import {
   File,
   Trash2,
   Paperclip,
-  X
+  X,
+  Shield
 } from "lucide-react"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalCreate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
@@ -49,6 +50,14 @@ import { obrasDocumentosApi, DocumentoObra, DocumentoCreate } from "@/lib/api-ob
 import { obrasArquivosApi, ArquivoObra, ArquivoCreate } from "@/lib/api-obras-arquivos"
 import LivroGruaForm from "@/components/livro-grua-form"
 import LivroGruaList from "@/components/livro-grua-list"
+import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diario"
+import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
+import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
+import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
+import { LivroGruaObra } from "@/components/livro-grua-obra"
+import { EditarSinaleiroDialog } from "@/components/editar-sinaleiro-dialog"
+import { CheckCircle2 } from "lucide-react"
+import { exportTabToPDF } from "@/lib/utils/export-pdf"
 import { Progress } from "@/components/ui/progress"
 import GruaComplementosManager from "@/components/grua-complementos-manager"
 import { useParams } from "next/navigation"
@@ -155,17 +164,36 @@ function ObraDetailsPageContent() {
   
   // Estados para documentos e arquivos - agora no store
   
-  // Estados para livro da grua
-  const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
-  const [entradaSelecionada, setEntradaSelecionada] = useState<EntradaLivroGruaCompleta | null>(null)
+  // Estados para edição de sinaleiro
+  const [isEditarSinaleiroOpen, setIsEditarSinaleiroOpen] = useState(false)
+  const [sinaleiroSelecionado, setSinaleiroSelecionado] = useState<any>(null)
+
+  // Estado para tab ativa (para exportação PDF)
+  const [activeTab, setActiveTab] = useState<string>('geral')
+
+  // Estados para livro da grua - Checklist Diários
+  const [isNovoChecklistOpen, setIsNovoChecklistOpen] = useState(false)
+  const [isEditarChecklistOpen, setIsEditarChecklistOpen] = useState(false)
+  const [isVisualizarChecklistOpen, setIsVisualizarChecklistOpen] = useState(false)
+  const [checklistSelecionado, setChecklistSelecionado] = useState<any>(null)
+  const [gruaSelecionadaChecklist, setGruaSelecionadaChecklist] = useState<string>("")
   
-  // Estados para filtros e nova entrada
+  // Estados para livro da grua - Manutenções
+  const [isNovaManutencaoOpen, setIsNovaManutencaoOpen] = useState(false)
+  const [isEditarManutencaoOpen, setIsEditarManutencaoOpen] = useState(false)
+  const [isVisualizarManutencaoOpen, setIsVisualizarManutencaoOpen] = useState(false)
+  const [manutencaoSelecionada, setManutencaoSelecionada] = useState<any>(null)
+  const [gruaSelecionadaManutencao, setGruaSelecionadaManutencao] = useState<string>("")
+  
+  // Estados para filtros e nova entrada (mantidos para compatibilidade)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedGrua, setSelectedGrua] = useState("all")
   const [selectedTipo, setSelectedTipo] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [isNovaEntradaOpen, setIsNovaEntradaOpen] = useState(false)
   const [isVisualizarEntradaOpen, setIsVisualizarEntradaOpen] = useState(false)
+  const [entradaSelecionada, setEntradaSelecionada] = useState<EntradaLivroGruaCompleta | null>(null)
+  const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
   const [isNovoArquivoOpen, setIsNovoArquivoOpen] = useState(false)
   const [arquivosAdicionais, setArquivosAdicionais] = useState<any[]>([])
   const [novoArquivoData, setNovoArquivoData] = useState({
@@ -272,6 +300,98 @@ function ObraDetailsPageContent() {
 
   const handleImprimirEntradas = () => {
     window.print()
+  }
+
+  // Handlers Checklist Diários
+  const handleNovoChecklist = (gruaId: string) => {
+    setGruaSelecionadaChecklist(gruaId)
+    setChecklistSelecionado(null)
+    setIsNovoChecklistOpen(true)
+  }
+
+  const handleEditarChecklist = (checklist: any, gruaId: string) => {
+    setGruaSelecionadaChecklist(gruaId)
+    setChecklistSelecionado(checklist)
+    setIsEditarChecklistOpen(true)
+  }
+
+  const handleVisualizarChecklist = (checklist: any) => {
+    setChecklistSelecionado(checklist)
+    setIsVisualizarChecklistOpen(true)
+  }
+
+  const handleExcluirChecklist = async (checklist: any) => {
+    if (!checklist.id) return
+
+    if (confirm(`Tem certeza que deseja excluir este checklist?`)) {
+      try {
+        await livroGruaApi.excluirEntrada(checklist.id)
+        toast({
+          title: "Sucesso",
+          description: "Checklist excluído com sucesso"
+        })
+        window.location.reload()
+      } catch (err) {
+        console.error('Erro ao excluir checklist:', err)
+        toast({
+          title: "Erro",
+          description: "Erro ao excluir checklist",
+          variant: "destructive"
+        })
+      }
+    }
+  }
+
+  const handleSucessoChecklist = () => {
+    setIsNovoChecklistOpen(false)
+    setIsEditarChecklistOpen(false)
+    window.location.reload()
+  }
+
+  // Handlers Manutenções
+  const handleNovaManutencao = (gruaId: string) => {
+    setGruaSelecionadaManutencao(gruaId)
+    setManutencaoSelecionada(null)
+    setIsNovaManutencaoOpen(true)
+  }
+
+  const handleEditarManutencao = (manutencao: any, gruaId: string) => {
+    setGruaSelecionadaManutencao(gruaId)
+    setManutencaoSelecionada(manutencao)
+    setIsEditarManutencaoOpen(true)
+  }
+
+  const handleVisualizarManutencao = (manutencao: any) => {
+    setManutencaoSelecionada(manutencao)
+    setIsVisualizarManutencaoOpen(true)
+  }
+
+  const handleExcluirManutencao = async (manutencao: any) => {
+    if (!manutencao.id) return
+
+    if (confirm(`Tem certeza que deseja excluir esta manutenção?`)) {
+      try {
+        await livroGruaApi.excluirEntrada(manutencao.id)
+        toast({
+          title: "Sucesso",
+          description: "Manutenção excluída com sucesso"
+        })
+        window.location.reload()
+      } catch (err) {
+        console.error('Erro ao excluir manutenção:', err)
+        toast({
+          title: "Erro",
+          description: "Erro ao excluir manutenção",
+          variant: "destructive"
+        })
+      }
+    }
+  }
+
+  const handleSucessoManutencao = () => {
+    setIsNovaManutencaoOpen(false)
+    setIsEditarManutencaoOpen(false)
+    window.location.reload()
   }
 
   const handleNovoArquivo = async (e: React.FormEvent) => {
@@ -1463,26 +1583,124 @@ function ObraDetailsPageContent() {
   // Usar custos que já vêm da API (store ou obra)
   const custos = custosMensais || []
   
+  // Função auxiliar para nome da tab
+  const getTabName = (tabValue: string): string => {
+    const tabNames: Record<string, string> = {
+      'geral': 'Geral',
+      'gruas': 'Gruas',
+      'funcionarios': 'Funcionários',
+      'custos': 'Custos',
+      'complementos': 'Complementos',
+      'documentos': 'Documentos',
+      'arquivos': 'Arquivos',
+      'checklists': 'Checklists Diários',
+      'manutencoes': 'Manutenções',
+      'livro-grua': 'Livro da Grua'
+    }
+    return tabNames[tabValue] || tabValue
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={() => window.history.back()}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Voltar
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{obra.name}</h1>
-          <p className="text-gray-600">{obra.description}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => window.history.back()}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{obra.name}</h1>
+            <p className="text-gray-600">{obra.description}</p>
+          </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            try {
+              // Aguardar um pouco para garantir que o DOM está atualizado
+              await new Promise(resolve => setTimeout(resolve, 200))
+
+              // Encontrar o conteúdo da tab ativa usando múltiplas estratégias
+              let tabElement: HTMLElement | null = null
+
+              // Estratégia 1: Buscar pelo TabsContent do Radix UI (mais confiável)
+              // O Radix UI usa data-state e data-value nos TabsContent
+              const allTabsContent = document.querySelectorAll('[role="tabpanel"], [data-radix-tabs-content]')
+              allTabsContent.forEach((el) => {
+                const value = el.getAttribute('data-value') || el.getAttribute('value')
+                const state = el.getAttribute('data-state')
+                
+                if (value === activeTab || (state === 'active' && value === activeTab)) {
+                  tabElement = el as HTMLElement
+                }
+              })
+
+              // Estratégia 2: Buscar diretamente pelo seletor de classe que contém o value
+              if (!tabElement) {
+                // Tentar encontrar pelo seletor CSS que o Radix UI usa
+                const radixContent = document.querySelector(`[data-radix-tabs-content][value="${activeTab}"]`) as HTMLElement
+                if (radixContent) {
+                  tabElement = radixContent
+                }
+              }
+
+              // Estratégia 3: Buscar pelo TabsContent com value
+              if (!tabElement) {
+                const contentByValue = document.querySelector(`[data-value="${activeTab}"]`) as HTMLElement
+                if (contentByValue && contentByValue.classList.contains('space-y-4')) {
+                  tabElement = contentByValue
+                }
+              }
+
+              // Estratégia 4: Buscar todos os TabsContent e verificar qual está visível
+              if (!tabElement) {
+                const allContent = document.querySelectorAll('[class*="TabsContent"], [class*="space-y-4"]')
+                allContent.forEach((el) => {
+                  const computedStyle = window.getComputedStyle(el)
+                  if (computedStyle.display !== 'none' && el.getAttribute('data-value') === activeTab) {
+                    tabElement = el as HTMLElement
+                  }
+                })
+              }
+
+              if (!tabElement) {
+                throw new Error(`Conteúdo da tab "${getTabName(activeTab)}" não encontrado. Tente recarregar a página.`)
+              }
+
+              await exportTabToPDF(tabElement, {
+                titulo: `Relatório - ${obra.name}`,
+                subtitulo: `Aba: ${getTabName(activeTab)}`,
+                obraNome: obra.name,
+                obraId: obra.id?.toString(),
+                tabName: getTabName(activeTab)
+              })
+
+              toast({
+                title: "Sucesso",
+                description: "PDF exportado com sucesso"
+              })
+            } catch (error: any) {
+              console.error('Erro ao exportar PDF:', error)
+              toast({
+                title: "Erro",
+                description: error.message || "Erro ao exportar PDF",
+                variant: "destructive"
+              })
+            }
+          }}
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Exportar PDF
+        </Button>
       </div>
 
-      <Tabs defaultValue="geral" className="w-full">
-      <TabsList className="grid w-full grid-cols-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <TabsList className="grid w-full grid-cols-10">
         <TabsTrigger value="geral">Geral</TabsTrigger>
         <TabsTrigger value="gruas">Gruas</TabsTrigger>
         <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
@@ -1490,7 +1708,16 @@ function ObraDetailsPageContent() {
         <TabsTrigger value="complementos">Complementos</TabsTrigger>
         <TabsTrigger value="documentos">Documentos</TabsTrigger>
         <TabsTrigger value="arquivos">Arquivos</TabsTrigger>
-        <TabsTrigger value="livro-grua">Livro da Grua</TabsTrigger>
+        <TabsTrigger value="checklists">
+          <CheckCircle2 className="w-4 h-4 mr-2" />
+          Checklists Diários
+        </TabsTrigger>
+        <TabsTrigger value="manutencoes">
+          Manutenções
+        </TabsTrigger>
+        <TabsTrigger value="livro-grua">
+          Livro da Grua
+        </TabsTrigger>
       </TabsList>
 
         <TabsContent value="geral" className="space-y-4">
@@ -1665,8 +1892,141 @@ function ObraDetailsPageContent() {
                           </div>
                         </div>
                         
+                        {/* Sinaleiros da Grua */}
+                        <div className="mt-4 pt-4 border-t">
+                          <h4 className="font-medium text-sm mb-3">Sinaleiros</h4>
+                          {(() => {
+                            // Buscar sinaleiros da obra (sempre devem ser 2: interno e cliente)
+                            const sinaleirosGrua = obra?.sinaleiros || []
+                            
+                            // Garantir que sempre existam 2 sinaleiros
+                            const sinaleirosMockados = sinaleirosGrua.length >= 2 ? sinaleirosGrua : [
+                              {
+                                nome: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.nome || 'Não cadastrado',
+                                tipo_vinculo: 'interno',
+                                cpf: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.cpf || '',
+                                rg: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.rg || '',
+                                documentos: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.documentos || [],
+                                certificados: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.certificados || []
+                              },
+                              {
+                                nome: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.nome || 'Não cadastrado',
+                                tipo_vinculo: 'cliente',
+                                cpf: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.cpf || '',
+                                rg: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.rg || '',
+                                documentos: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.documentos || [],
+                                certificados: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.certificados || []
+                              }
+                            ]
+                            
+                            return (
+                              <div className="space-y-3">
+                                {sinaleirosMockados.map((s: any, idx: number) => (
+                                  <div key={idx} className="p-3 bg-gray-50 rounded-md border border-gray-200">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'} className="text-xs">
+                                        {s.tipo_vinculo === 'interno' ? 'Interno' : 'Indicado pelo Cliente'}
+                                      </Badge>
+                                      {(s.tipo_vinculo === 'cliente' || s.tipo_vinculo === 'interno') && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            try {
+                                              // Converter o objeto mockado para o formato Sinaleiro
+                                              const sinaleiroFormatado: any = {
+                                                id: s.id || `s_${Date.now()}_${idx}`,
+                                                obra_id: parseInt(obraId) || 0,
+                                                nome: s.nome || 'Não informado',
+                                                cpf: s.cpf || '',
+                                                rg: s.rg || s.rg_cpf || '',
+                                                rg_cpf: s.cpf || s.rg || s.rg_cpf || '',
+                                                telefone: s.telefone || '',
+                                                email: s.email || '',
+                                                tipo: s.tipo_vinculo === 'interno' ? 'principal' : 'reserva',
+                                                tipo_vinculo: s.tipo_vinculo || 'cliente',
+                                                cliente_informou: s.tipo_vinculo === 'cliente',
+                                                documentos: s.documentos || [],
+                                                certificados: s.certificados || []
+                                              }
+                                              
+                                              console.log('🔍 Abrindo modal de edição para sinaleiro:', sinaleiroFormatado)
+                                              setSinaleiroSelecionado(sinaleiroFormatado)
+                                              setIsEditarSinaleiroOpen(true)
+                                            } catch (error) {
+                                              console.error('Erro ao abrir modal de edição:', error)
+                                              toast({
+                                                title: "Erro",
+                                                description: "Erro ao abrir modal de edição",
+                                                variant: "destructive"
+                                              })
+                                            }
+                                          }}
+                                        >
+                                          <Edit className="w-3 h-3 mr-1" />
+                                          Editar
+                                        </Button>
+                                      )}
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">Nome</p>
+                                        <p className="font-medium text-sm">{s.nome || 'Não informado'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">CPF</p>
+                                        <p className="font-medium text-sm">{s.cpf || 'Não informado'}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">RG</p>
+                                        <p className="font-medium text-sm">{s.rg || s.rg_cpf || 'Não informado'}</p>
+                                      </div>
+                                      {(s.documentos && s.documentos.length > 0) || (s.certificados && s.certificados.length > 0) ? (
+                                        <>
+                                          {s.documentos && s.documentos.length > 0 && (
+                                            <div className="md:col-span-2">
+                                              <p className="text-xs text-gray-500 mb-1">Documentos</p>
+                                              <div className="flex flex-wrap gap-1">
+                                                {s.documentos.map((doc: any, docIdx: number) => (
+                                                  <Badge key={docIdx} variant="outline" className="flex items-center gap-1 text-xs">
+                                                    <FileText className="w-3 h-3" />
+                                                    {doc.nome || doc.tipo || 'Documento'}
+                                                  </Badge>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                          {s.certificados && s.certificados.length > 0 && (
+                                            <div className="md:col-span-2">
+                                              <p className="text-xs text-gray-500 mb-1">Certificados</p>
+                                              <div className="flex flex-wrap gap-1">
+                                                {s.certificados.map((cert: any, certIdx: number) => (
+                                                  <Badge key={certIdx} variant="outline" className="flex items-center gap-1 text-xs">
+                                                    <Shield className="w-3 h-3" />
+                                                    {cert.nome || cert.tipo || 'Certificado'}
+                                                    {cert.numero && ` - ${cert.numero}`}
+                                                    {cert.validade && ` (${new Date(cert.validade).toLocaleDateString('pt-BR')})`}
+                                                  </Badge>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <div className="md:col-span-2">
+                                          <p className="text-xs text-gray-500">Documentos e Certificados: Não informado</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })()}
+                        </div>
+
                         {/* Histórico da Grua */}
-                        <div>
+                        <div className="mt-4 pt-4 border-t">
                           <div className="flex justify-between items-center mb-3">
                             <h4 className="font-medium text-sm">Livro da Grua</h4>
                             <Button 
@@ -2645,144 +3005,93 @@ function ObraDetailsPageContent() {
           </Card>
         </TabsContent>
 
-        {/* Aba: Livro da Grua */}
-        <TabsContent value="livro-grua" className="space-y-4">
-          <Card>
-            <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5" />
-                Livro da Grua - {obra.name}
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button 
-                  size="sm"
-                  variant="outline"
-                  onClick={handleExportarEntradas}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Exportar CSV
-                </Button>
-                <Button 
-                  size="sm"
-                  variant="outline"
-                  onClick={handleImprimirEntradas}
-                >
-                  <Printer className="w-4 h-4 mr-2" />
-                  Imprimir
-                </Button>
-                <Button 
-                  size="sm"
-                  onClick={handleNovaEntrada}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nova Entrada
-                </Button>
-              </div>
+        {/* Aba: Checklists Diários */}
+        <TabsContent value="checklists" className="space-y-4">
+          {gruasVinculadas.length > 0 ? (
+            <div className="space-y-4">
+              {gruasVinculadas.map((grua) => (
+                <Card key={grua.id} className="border-l-4 border-l-blue-500">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Wrench className="w-5 h-5" />
+                      {grua.name}
+                    </CardTitle>
+                    <CardDescription>
+                      {grua.fabricante} {grua.modelo} - {grua.capacidade}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <LivroGruaChecklistList
+                      gruaId={grua.id.toString()}
+                      onNovoChecklist={() => handleNovoChecklist(grua.id.toString())}
+                      onEditarChecklist={(checklist) => handleEditarChecklist(checklist, grua.id.toString())}
+                      onVisualizarChecklist={handleVisualizarChecklist}
+                      onExcluirChecklist={handleExcluirChecklist}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-            </CardHeader>
-            <CardContent>
-              {gruasVinculadas.length > 0 ? (
-                <div className="space-y-6">
-                  {/* Filtros */}
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex gap-4">
-                        <div className="flex-1">
-                          <Label>Buscar entradas</Label>
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                            <Input
-                              placeholder="Funcionário, descrição..."
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>Grua</Label>
-                          <Select value={selectedGrua} onValueChange={setSelectedGrua}>
-                            <SelectTrigger className="w-48">
-                              <SelectValue placeholder="Todas as gruas" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Todas as gruas</SelectItem>
-                              {gruasVinculadas.map(grua => (
-                                <SelectItem key={grua.id} value={grua.id}>
-                                  {grua.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Tipo</Label>
-                          <Select value={selectedTipo} onValueChange={setSelectedTipo}>
-                            <SelectTrigger className="w-32">
-                              <SelectValue placeholder="Todos" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Todos</SelectItem>
-                              <SelectItem value="checklist">Checklist</SelectItem>
-                              <SelectItem value="manutencao">Manutenção</SelectItem>
-                              <SelectItem value="falha">Falha</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Status</Label>
-                          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                            <SelectTrigger className="w-32">
-                              <SelectValue placeholder="Todos" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Todos</SelectItem>
-                              <SelectItem value="ok">OK</SelectItem>
-                              <SelectItem value="manutencao">Manutenção</SelectItem>
-                              <SelectItem value="falha">Falha</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Lista de Entradas por Grua */}
-                  {gruasVinculadas.map((grua) => (
-                    <Card key={grua.id} className="border-l-4 border-l-blue-500">
-                      <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Wrench className="w-5 h-5" />
-                          {grua.name}
-                        </CardTitle>
-                        <CardDescription>
-                          {grua.fabricante} {grua.modelo} - {grua.capacidade}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <LivroGruaList
-                          gruaId={grua.id.toString()}
-                          onNovaEntrada={handleNovaEntrada}
-                          onEditarEntrada={handleEditarEntrada}
-                          onVisualizarEntrada={handleVisualizarEntrada}
-                          modoCompacto={true}
-                        />
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
+          ) : (
+            <Card>
+              <CardContent className="py-8">
+                <div className="text-center">
                   <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua vinculada</h3>
                   <p className="text-gray-600 mb-4">
-                    Esta obra ainda não possui gruas vinculadas para exibir o livro de histórico.
+                    Esta obra ainda não possui gruas vinculadas para exibir checklists diários.
                   </p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Aba: Manutenções */}
+        <TabsContent value="manutencoes" className="space-y-4">
+          {gruasVinculadas.length > 0 ? (
+            <div className="space-y-4">
+              {gruasVinculadas.map((grua) => (
+                <Card key={grua.id} className="border-l-4 border-l-green-500">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Wrench className="w-5 h-5" />
+                      {grua.name}
+                    </CardTitle>
+                    <CardDescription>
+                      {grua.fabricante} {grua.modelo} - {grua.capacidade}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <LivroGruaManutencaoList
+                      gruaId={grua.id.toString()}
+                      onNovaManutencao={() => handleNovaManutencao(grua.id.toString())}
+                      onEditarManutencao={(manutencao) => handleEditarManutencao(manutencao, grua.id.toString())}
+                      onVisualizarManutencao={handleVisualizarManutencao}
+                      onExcluirManutencao={handleExcluirManutencao}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-8">
+                <div className="text-center">
+                  <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua vinculada</h3>
+                  <p className="text-gray-600 mb-4">
+                    Esta obra ainda não possui gruas vinculadas para exibir manutenções.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Aba: Livro da Grua */}
+        <TabsContent value="livro-grua" className="space-y-4">
+          <LivroGruaObra obraId={obraId} />
         </TabsContent>
       </Tabs>
 
@@ -4164,6 +4473,240 @@ function ObraDetailsPageContent() {
         </DialogContent>
       </Dialog>
 
+      {/* Modal Novo Checklist */}
+      <Dialog open={isNovoChecklistOpen} onOpenChange={setIsNovoChecklistOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Novo Checklist Diário</DialogTitle>
+          </DialogHeader>
+          <LivroGruaChecklistDiario
+            gruaId={gruaSelecionadaChecklist}
+            onSave={handleSucessoChecklist}
+            onCancel={() => setIsNovoChecklistOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Checklist */}
+      <Dialog open={isEditarChecklistOpen} onOpenChange={setIsEditarChecklistOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Checklist Diário</DialogTitle>
+          </DialogHeader>
+          <LivroGruaChecklistDiario
+            gruaId={gruaSelecionadaChecklist}
+            checklist={checklistSelecionado}
+            modoEdicao={true}
+            onSave={handleSucessoChecklist}
+            onCancel={() => setIsEditarChecklistOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Visualizar Checklist */}
+      <Dialog open={isVisualizarChecklistOpen} onOpenChange={setIsVisualizarChecklistOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Checklist</DialogTitle>
+          </DialogHeader>
+          {checklistSelecionado && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Informações Básicas</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Data</p>
+                      <p className="text-sm">
+                        {new Date(checklistSelecionado.data).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Funcionário</p>
+                      <p className="text-sm">{checklistSelecionado.funcionario_nome || 'N/A'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Itens Verificados</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {[
+                      { key: 'cabos', label: 'Cabos' },
+                      { key: 'polias', label: 'Polias' },
+                      { key: 'estrutura', label: 'Estrutura' },
+                      { key: 'movimentos', label: 'Movimentos' },
+                      { key: 'freios', label: 'Freios' },
+                      { key: 'limitadores', label: 'Limitadores' },
+                      { key: 'indicadores', label: 'Indicadores' },
+                      { key: 'aterramento', label: 'Aterramento' }
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center gap-2">
+                        {checklistSelecionado[item.key as keyof typeof checklistSelecionado] ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-gray-300" />
+                        )}
+                        <span className={checklistSelecionado[item.key as keyof typeof checklistSelecionado] ? 'text-gray-900' : 'text-gray-400'}>
+                          {item.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {checklistSelecionado.observacoes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Observações</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {checklistSelecionado.observacoes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsVisualizarChecklistOpen(false)}
+                >
+                  Fechar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIsVisualizarChecklistOpen(false)
+                    handleEditarChecklist(checklistSelecionado, gruaSelecionadaChecklist)
+                  }}
+                >
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Nova Manutenção */}
+      <Dialog open={isNovaManutencaoOpen} onOpenChange={setIsNovaManutencaoOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nova Manutenção</DialogTitle>
+          </DialogHeader>
+          <LivroGruaManutencao
+            gruaId={gruaSelecionadaManutencao}
+            onSave={handleSucessoManutencao}
+            onCancel={() => setIsNovaManutencaoOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Manutenção */}
+      <Dialog open={isEditarManutencaoOpen} onOpenChange={setIsEditarManutencaoOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Manutenção</DialogTitle>
+          </DialogHeader>
+          <LivroGruaManutencao
+            gruaId={gruaSelecionadaManutencao}
+            manutencao={manutencaoSelecionada}
+            modoEdicao={true}
+            onSave={handleSucessoManutencao}
+            onCancel={() => setIsEditarManutencaoOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Visualizar Manutenção */}
+      <Dialog open={isVisualizarManutencaoOpen} onOpenChange={setIsVisualizarManutencaoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Manutenção</DialogTitle>
+          </DialogHeader>
+          {manutencaoSelecionada && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Informações Básicas</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Data</p>
+                      <p className="text-sm">
+                        {new Date(manutencaoSelecionada.data).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Realizado Por</p>
+                      <p className="text-sm">{manutencaoSelecionada.realizado_por_nome || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Cargo</p>
+                      <Badge variant="outline">
+                        {manutencaoSelecionada.cargo || 'N/A'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {manutencaoSelecionada.descricao && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Descrição</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {manutencaoSelecionada.descricao}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {manutencaoSelecionada.observacoes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Observações</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {manutencaoSelecionada.observacoes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsVisualizarManutencaoOpen(false)}
+                >
+                  Fechar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIsVisualizarManutencaoOpen(false)
+                    handleEditarManutencao(manutencaoSelecionada, gruaSelecionadaManutencao)
+                  }}
+                >
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Modal de Custos Iniciais */}
       <Dialog open={isCustosIniciaisOpen} onOpenChange={setIsCustosIniciaisOpen}>
         <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
@@ -4359,6 +4902,36 @@ function ObraDetailsPageContent() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Editar Sinaleiro */}
+      <EditarSinaleiroDialog
+        open={isEditarSinaleiroOpen}
+        onOpenChange={setIsEditarSinaleiroOpen}
+        sinaleiro={sinaleiroSelecionado}
+        obraId={parseInt(obraId)}
+        onSave={(sinaleiroAtualizado) => {
+          // Atualizar o sinaleiro na obra
+          if (obra) {
+            const sinaleirosAtualizados = obra.sinaleiros?.map((s: any) => 
+              s.id === sinaleiroAtualizado.id ? sinaleiroAtualizado : s
+            ) || [sinaleiroAtualizado]
+            
+            // Atualizar obra localmente (em produção, isso seria feito via API)
+            // obra.sinaleiros = sinaleirosAtualizados
+          }
+          
+          toast({
+            title: "Sucesso",
+            description: "Sinaleiro atualizado com sucesso"
+          })
+          
+          // Recarregar a obra para atualizar os dados
+          if (obraId) {
+            carregarObra(parseInt(obraId))
+          }
+        }}
+        readOnly={false}
+      />
     </div>
   )
 }

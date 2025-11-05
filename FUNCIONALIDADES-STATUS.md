@@ -207,24 +207,61 @@ Este documento mapeia todas as funcionalidades solicitadas e seu estado atual de
 
 ---
 
-## 📚 7. LIVRO DE GRUA – INSERÇÃO NO SISTEMA
+## 📚 7. LIVRO DE GRUA – REFORMULAÇÃO COMPLETA
 
-### ✅ Status: Implementado
+### ✅ Status: Implementado (Nova Estrutura)
+
+**Mudança:** O livro de grua foi reformulado para ter duas funcionalidades principais:
+
+#### 7.1. Checklist Diários ✅
 
 **Arquivos:**
-- ✅ `app/dashboard/gruas/[id]/livro/page.tsx`
-- ✅ `app/dashboard/livros-gruas/page.tsx`
-- ✅ `components/livro-grua-form.tsx`
-- ✅ `lib/api-livro-grua.ts`
-- ✅ `backend-api/src/routes/livro-grua.js`
+- ✅ `components/livro-grua-checklist-diario.tsx` - Formulário de checklist
+- ✅ `components/livro-grua-checklist-list.tsx` - Lista de checklists
+- ✅ Integrado em `app/dashboard/gruas/[id]/livro/page.tsx`
 
 **Funcionalidades:**
-- ✅ Dados da obra, fundação, raio de operação, modelo e altura
-- ✅ Equipe: responsável, engenheiro, operador, sinaleiro, manutenção
-- ✅ Procedimentos: montagem, operação, desmontagem
-- ✅ Registro de ART
-- ✅ Período de locação
-- ✅ Responsabilidades legais
+- ✅ Funcionário identificado automaticamente via token de autenticação
+- ✅ Data do checklist (obrigatória)
+- ✅ Campos de verificação:
+  - ✅ Cabos
+  - ✅ Polias
+  - ✅ Estrutura
+  - ✅ Movimentos
+  - ✅ Freios
+  - ✅ Limitadores
+  - ✅ Indicadores
+  - ✅ Aterramento
+- ✅ Campo de observações
+- ✅ Visualização, edição e exclusão de checklists
+
+#### 7.2. Manutenções ✅
+
+**Arquivos:**
+- ✅ `components/livro-grua-manutencao.tsx` - Formulário de manutenção
+- ✅ `components/livro-grua-manutencao-list.tsx` - Lista de manutenções
+- ✅ Integrado em `app/dashboard/gruas/[id]/livro/page.tsx`
+
+**Funcionalidades:**
+- ✅ Data da manutenção (input livre, não necessariamente diária)
+- ✅ Realizado por (busca de funcionário)
+- ✅ Cargo do funcionário
+- ✅ Descrição da manutenção
+- ✅ Campo de observações
+- ✅ Visualização, edição e exclusão de manutenções
+
+**Estrutura da Página:**
+- ✅ Abas separadas para Checklists Diários e Manutenções
+- ✅ Interface com Tabs do shadcn/ui
+- ✅ Modais para criação, edição e visualização
+
+**Arquivos de Suporte:**
+- ✅ `lib/api-livro-grua.ts` - API client atualizado com novos campos
+- ✅ Interface `EntradaLivroGrua` atualizada com campos específicos
+
+**Pendências:**
+- ⏳ Backend precisa aceitar os novos campos (cabos, polias, estrutura, etc.) na tabela `livro_grua`
+- ⏳ Endpoints devem processar os campos específicos do checklist e manutenção
 
 ---
 

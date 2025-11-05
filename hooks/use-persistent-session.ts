@@ -151,7 +151,13 @@ export function usePersistentSession() {
         rememberEmail: false
       })
       
-      router.push('/pwa/login')
+      // Detectar se é PWA e redirecionar corretamente
+      const isPWA = typeof window !== 'undefined' && (
+        window.matchMedia('(display-mode: standalone)').matches || 
+        (window.navigator as any).standalone === true ||
+        window.location.pathname.startsWith('/pwa')
+      )
+      router.push(isPWA ? '/pwa/login' : '/')
       console.log('[PersistentSession] Logout realizado com sucesso')
     } catch (error) {
       console.error('[PersistentSession] Erro ao fazer logout:', error)

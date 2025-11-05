@@ -82,14 +82,22 @@ class AuthInterceptor {
 
       // Redirecionar para login
       if (typeof window !== 'undefined') {
+        // Detectar se é PWA e redirecionar corretamente
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
+                      (window.navigator as any).standalone === true ||
+                      window.location.pathname.startsWith('/pwa')
+        const loginUrl = isPWA ? '/pwa/login' : '/'
         // Usar replace para não permitir voltar
-        window.location.replace('/pwa/login')
+        window.location.replace(loginUrl)
       }
     } catch (error) {
       console.error('[AuthInterceptor] Erro ao redirecionar para login:', error)
       // Forçar redirecionamento mesmo com erro
       if (typeof window !== 'undefined') {
-        window.location.href = '/pwa/login'
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
+                      (window.navigator as any).standalone === true ||
+                      window.location.pathname.startsWith('/pwa')
+        window.location.href = isPWA ? '/pwa/login' : '/'
       }
     } finally {
       this.isRedirecting = false

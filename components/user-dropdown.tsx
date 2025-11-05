@@ -41,7 +41,7 @@ export function UserDropdown() {
   const handleLogout = async () => {
     try {
       await AuthService.logout()
-      router.push('/')
+      // AuthService.logout já faz o redirecionamento correto
       toast({
         title: 'Logout realizado',
         description: 'Você foi desconectado com sucesso.',
