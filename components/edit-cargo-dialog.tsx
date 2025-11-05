@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Edit, Loader2, Briefcase } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -39,7 +40,8 @@ const EditCargoDialog = memo(function EditCargoDialog({
     descricao: "",
     nivel: "Operacional" as const,
     salario_minimo: "",
-    salario_maximo: ""
+    salario_maximo: "",
+    acesso_global_obras: false
   })
 
   // Atualizar form quando cargo mudar
@@ -50,7 +52,8 @@ const EditCargoDialog = memo(function EditCargoDialog({
         descricao: cargo.descricao || "",
         nivel: cargo.nivel as any,
         salario_minimo: cargo.salario_minimo?.toString() || "",
-        salario_maximo: cargo.salario_maximo?.toString() || ""
+        salario_maximo: cargo.salario_maximo?.toString() || "",
+        acesso_global_obras: cargo.acesso_global_obras || false
       })
     }
   }, [cargo])
@@ -89,7 +92,8 @@ const EditCargoDialog = memo(function EditCargoDialog({
       descricao: form.descricao || undefined,
       nivel: form.nivel,
       salario_minimo: salarioMin,
-      salario_maximo: salarioMax
+      salario_maximo: salarioMax,
+      acesso_global_obras: form.acesso_global_obras
     })
   }, [form, onSubmit, toast])
 
@@ -169,6 +173,20 @@ const EditCargoDialog = memo(function EditCargoDialog({
                 placeholder="0.00"
               />
             </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="edit-acesso-global-obras"
+              checked={form.acesso_global_obras}
+              onCheckedChange={(checked) => handleChange('acesso_global_obras', checked === true)}
+            />
+            <Label
+              htmlFor="edit-acesso-global-obras"
+              className="text-sm font-normal cursor-pointer"
+            >
+              Acesso global a todas as obras
+            </Label>
           </div>
 
           {/* Botões */}

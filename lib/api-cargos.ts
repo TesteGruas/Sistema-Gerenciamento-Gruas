@@ -12,6 +12,7 @@ export interface Cargo {
   requisitos: string[]
   competencias: string[]
   ativo: boolean
+  acesso_global_obras: boolean
   created_at: string
   updated_at: string
 }
@@ -25,6 +26,7 @@ export interface CargoCreateData {
   requisitos?: string[]
   competencias?: string[]
   ativo?: boolean
+  acesso_global_obras?: boolean
 }
 
 export interface CargoUpdateData {
@@ -36,6 +38,7 @@ export interface CargoUpdateData {
   requisitos?: string[]
   competencias?: string[]
   ativo?: boolean
+  acesso_global_obras?: boolean
 }
 
 export interface CargosResponse {

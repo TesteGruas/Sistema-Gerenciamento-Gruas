@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Loader2, Briefcase } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -22,6 +23,7 @@ interface CargoCreateData {
   nivel: 'Operacional' | 'Técnico' | 'Supervisor' | 'Gerencial' | 'Diretoria'
   salario_minimo?: number
   salario_maximo?: number
+  acesso_global_obras?: boolean
 }
 
 interface CreateCargoDialogProps {
@@ -44,7 +46,8 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
     descricao: "",
     nivel: "Operacional" as const,
     salario_minimo: "",
-    salario_maximo: ""
+    salario_maximo: "",
+    acesso_global_obras: false
   })
 
   const handleChange = useCallback((field: string, value: any) => {
@@ -81,7 +84,8 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
       descricao: form.descricao || undefined,
       nivel: form.nivel,
       salario_minimo: salarioMin,
-      salario_maximo: salarioMax
+      salario_maximo: salarioMax,
+      acesso_global_obras: form.acesso_global_obras
     })
   }, [form, onSubmit, toast])
 
@@ -91,7 +95,8 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
       descricao: "",
       nivel: "Operacional",
       salario_minimo: "",
-      salario_maximo: ""
+      salario_maximo: "",
+      acesso_global_obras: false
     })
   }, [])
 
@@ -179,6 +184,20 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
                 placeholder="0.00"
               />
             </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="acesso-global-obras"
+              checked={form.acesso_global_obras}
+              onCheckedChange={(checked) => handleChange('acesso_global_obras', checked === true)}
+            />
+            <Label
+              htmlFor="acesso-global-obras"
+              className="text-sm font-normal cursor-pointer"
+            >
+              Acesso global a todas as obras
+            </Label>
           </div>
 
           {/* Botões */}

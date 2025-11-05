@@ -100,6 +100,10 @@ import relatoriosFaturamentoRoutes from './routes/relatorios-faturamento.js'
 import relatoriosImpostosRoutes from './routes/relatorios-impostos.js'
 import aprovacoesHorasExtrasRoutes from './routes/aprovacoes-horas-extras.js'
 import buscaGlobalRoutes from './routes/busca-global.js'
+import colaboradoresDocumentosRoutes from './routes/colaboradores-documentos.js'
+import checklistDiarioRoutes from './routes/checklist-diario.js'
+import manutencoesRoutes from './routes/manutencoes.js'
+import ordemComprasRoutes from './routes/ordem-compras.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -321,6 +325,10 @@ app.use('/api/relatorios-faturamento', relatoriosFaturamentoRoutes)
 app.use('/api/relatorios-impostos', relatoriosImpostosRoutes)
 app.use('/api/aprovacoes-horas-extras', aprovacoesHorasExtrasRoutes)
 app.use('/api/busca-global', buscaGlobalRoutes)
+app.use('/api/colaboradores', colaboradoresDocumentosRoutes)
+app.use('/api/checklist-diario', checklistDiarioRoutes)
+app.use('/api/manutencoes', manutencoesRoutes)
+app.use('/api/ordem-compras', ordemComprasRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

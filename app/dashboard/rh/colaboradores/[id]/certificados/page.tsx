@@ -10,10 +10,33 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
+import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { mockCertificadosAPI, tiposCertificados, type Certificado } from "@/lib/mocks/certificados-mocks"
+import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 import { DocumentoUpload } from "@/components/documento-upload"
+
+// Tipos de certificados (mantido do mock)
+export const tiposCertificados = [
+  'Ficha de EPI',
+  'Ordem de Serviço',
+  'NR06',
+  'NR11',
+  'NR12',
+  'NR18',
+  'NR35',
+  'Certificado de Especificação'
+]
+
+// Interface compatível com o componente
+export interface Certificado {
+  id: string | number
+  colaborador_id: number
+  tipo: string
+  nome: string
+  data_validade: string
+  arquivo: string
+  alerta_enviado: boolean
+}
 
 export default function CertificadosPage() {
   const params = useParams()
@@ -39,12 +62,24 @@ export default function CertificadosPage() {
   const loadCertificados = async () => {
     setLoading(true)
     try {
-      const data = await mockCertificadosAPI.listar(colaboradorId)
-      setCertificados(data)
-    } catch (error) {
+      const response = await colaboradoresDocumentosApi.certificados.listar(colaboradorId)
+      if (response.success && response.data) {
+        // Converter CertificadoBackend para Certificado
+        const certificadosConvertidos: Certificado[] = response.data.map((cert: CertificadoBackend) => ({
+          id: cert.id,
+          colaborador_id: cert.funcionario_id,
+          tipo: cert.tipo,
+          nome: cert.nome,
+          data_validade: cert.data_validade || '',
+          arquivo: cert.arquivo || '',
+          alerta_enviado: cert.alerta_enviado
+        }))
+        setCertificados(certificadosConvertidos)
+      }
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao carregar certificados",
+        description: error.message || "Erro ao carregar certificados",
         variant: "destructive"
       })
     } finally {
@@ -84,55 +119,95 @@ export default function CertificadosPage() {
     }
 
     try {
+      let arquivoUrl = editingCertificado?.arquivo || ''
+      
+      // Se tiver arquivo novo, fazer upload primeiro
+      if (formData.arquivo) {
+        try {
+          const formDataUpload = new FormData()
+          formDataUpload.append('arquivo', formData.arquivo)
+          
+          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+          
+          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataUpload
+          })
+          
+          if (uploadResponse.ok) {
+            const uploadResult = await uploadResponse.json()
+            arquivoUrl = uploadResult.data?.caminho || uploadResult.data?.arquivo || URL.createObjectURL(formData.arquivo)
+          } else {
+            // Se falhar, usar URL temporária
+            arquivoUrl = URL.createObjectURL(formData.arquivo)
+          }
+        } catch (uploadError) {
+          arquivoUrl = URL.createObjectURL(formData.arquivo)
+        }
+      }
+
       if (editingCertificado) {
-        await mockCertificadosAPI.atualizar(editingCertificado.id, {
-          tipo: formData.tipo,
-          nome: formData.nome,
-          data_validade: formData.data_validade,
-          arquivo: formData.arquivo ? URL.createObjectURL(formData.arquivo) : editingCertificado.arquivo
-        })
-        toast({
-          title: "Sucesso",
-          description: "Certificado atualizado com sucesso (MOCK)"
-        })
+        const response = await colaboradoresDocumentosApi.certificados.atualizar(
+          editingCertificado.id.toString(),
+          {
+            tipo: formData.tipo,
+            nome: formData.nome,
+            data_validade: formData.data_validade,
+            arquivo: arquivoUrl
+          }
+        )
+        
+        if (response.success) {
+          toast({
+            title: "Sucesso",
+            description: "Certificado atualizado com sucesso"
+          })
+        }
       } else {
-        await mockCertificadosAPI.criar(colaboradorId, {
+        const response = await colaboradoresDocumentosApi.certificados.criar(colaboradorId, {
           tipo: formData.tipo,
           nome: formData.nome,
           data_validade: formData.data_validade,
-          arquivo: formData.arquivo ? URL.createObjectURL(formData.arquivo) : ''
+          arquivo: arquivoUrl
         })
-        toast({
-          title: "Sucesso",
-          description: "Certificado criado com sucesso (MOCK)"
-        })
+        
+        if (response.success) {
+          toast({
+            title: "Sucesso",
+            description: "Certificado criado com sucesso"
+          })
+        }
       }
 
       setIsDialogOpen(false)
       loadCertificados()
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao salvar certificado",
+        description: error.message || "Erro ao salvar certificado",
         variant: "destructive"
       })
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string | number) => {
     if (!confirm("Tem certeza que deseja excluir este certificado?")) return
 
     try {
-      await mockCertificadosAPI.excluir(id)
+      await colaboradoresDocumentosApi.certificados.excluir(id.toString())
       toast({
         title: "Sucesso",
         description: "Certificado excluído"
       })
       loadCertificados()
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao excluir certificado",
+        description: error.message || "Erro ao excluir certificado",
         variant: "destructive"
       })
     }

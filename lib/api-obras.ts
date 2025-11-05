@@ -24,6 +24,12 @@ export interface ObraBackend {
   observacoes?: string
   responsavel_id?: number
   responsavel_nome?: string
+  // Campos obrigatórios (CNO, ART, Apólice)
+  cno?: string
+  art_numero?: string
+  art_arquivo?: string
+  apolice_numero?: string
+  apolice_arquivo?: string
   created_at: string
   updated_at: string
   clientes?: {
@@ -102,6 +108,12 @@ export interface ObraCreateData {
   observacoes?: string
   responsavel_id?: number
   responsavel_nome?: string
+  // Campos obrigatórios (CNO, ART, Apólice)
+  cno?: string
+  art_numero?: string
+  art_arquivo?: string
+  apolice_numero?: string
+  apolice_arquivo?: string
   // Dados da grua (mantido para compatibilidade)
   grua_id?: string
   grua_valor?: number
@@ -360,6 +372,12 @@ export const obrasApi = {
         data: null
       }
     }
+  },
+
+  // Listar obras com fim próximo (até 60 dias)
+  async listarAlertasFimProximo(): Promise<{ success: boolean; data: Array<{ id: number; nome: string; data_fim: string; cliente_id: number; clientes?: { nome: string } }> }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/alertas/fim-proximo`)
+    return apiRequest(url)
   },
 
   // Endpoints de teste e utilitários

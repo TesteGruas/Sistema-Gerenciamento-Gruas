@@ -71,7 +71,13 @@ const obraSchema = Joi.object({
   cliente_nome: Joi.string().allow(null, '').optional(),
   cliente_cnpj: Joi.string().allow(null, '').optional(),
   cliente_email: Joi.string().email().allow('', null).optional(),
-  cliente_telefone: Joi.string().allow('', null).optional()
+  cliente_telefone: Joi.string().allow('', null).optional(),
+  // Novos campos obrigatórios
+  cno: Joi.string().allow(null, '').optional(),
+  art_numero: Joi.string().allow(null, '').optional(),
+  art_arquivo: Joi.string().allow(null, '').optional(),
+  apolice_numero: Joi.string().allow(null, '').optional(),
+  apolice_arquivo: Joi.string().allow(null, '').optional()
 })
 
 /**
@@ -256,7 +262,21 @@ router.get('/', authenticateToken, async (req, res) => {
     const hasFullAccess = ['Admin', 'Gestores', 'Supervisores'].includes(userRole)
     const isOperador = userRole === 'Operários'
 
-    console.log(`🔍 [OBRAS] Listagem - Usuário: ${user.id}, Role: ${userRole}, Full Access: ${hasFullAccess}`)
+    // Verificar se funcionário tem acesso global através do cargo
+    let temAcessoGlobal = false
+    if (user.funcionario_id) {
+      const { data: funcionario } = await supabaseAdmin
+        .from('funcionarios')
+        .select('cargo_id, cargos(acesso_global_obras)')
+        .eq('id', user.funcionario_id)
+        .single()
+
+      if (funcionario?.cargos?.acesso_global_obras) {
+        temAcessoGlobal = true
+      }
+    }
+
+    console.log(`🔍 [OBRAS] Listagem - Usuário: ${user.id}, Role: ${userRole}, Full Access: ${hasFullAccess}, Acesso Global: ${temAcessoGlobal}`)
 
     let query = supabaseAdmin
       .from('obras')
@@ -325,11 +345,11 @@ router.get('/', authenticateToken, async (req, res) => {
       })
     }
 
-    // Se for operador, filtrar apenas obras onde está alocado
+    // Se for operador, filtrar apenas obras onde está alocado (a menos que tenha acesso global)
     let filteredData = data || []
     let filteredCount = count
 
-    if (isOperador && user.funcionario_id) {
+    if (isOperador && user.funcionario_id && !temAcessoGlobal) {
       console.log(`🔍 [OBRAS] Filtrando obras para funcionário ID: ${user.funcionario_id}`)
       
       // Buscar obras onde o funcionário está alocado
@@ -346,6 +366,8 @@ router.get('/', authenticateToken, async (req, res) => {
         filteredData = filteredData.filter(obra => obrasIds.includes(obra.id))
         filteredCount = filteredData.length
       }
+    } else if (isOperador && temAcessoGlobal) {
+      console.log(`✅ [OBRAS] Funcionário tem acesso global - mostrando todas as obras`)
     }
 
     const totalPages = Math.ceil(filteredCount / limit)
@@ -515,7 +537,21 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const userRole = user.role || user.perfil?.nome
     const isOperador = userRole === 'Operários'
 
-    console.log(`🔍 [OBRAS] Detalhes - ID: ${id}, Usuário: ${user.id}, Role: ${userRole}`)
+    // Verificar se funcionário tem acesso global através do cargo
+    let temAcessoGlobal = false
+    if (user.funcionario_id) {
+      const { data: funcionario } = await supabaseAdmin
+        .from('funcionarios')
+        .select('cargo_id, cargos(acesso_global_obras)')
+        .eq('id', user.funcionario_id)
+        .single()
+
+      if (funcionario?.cargos?.acesso_global_obras) {
+        temAcessoGlobal = true
+      }
+    }
+
+    console.log(`🔍 [OBRAS] Detalhes - ID: ${id}, Usuário: ${user.id}, Role: ${userRole}, Acesso Global: ${temAcessoGlobal}`)
 
     const { data, error } = await supabaseAdmin
       .from('obras')
@@ -598,8 +634,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
       })
     }
 
-    // Se for operador, verificar se tem acesso a esta obra
-    if (isOperador && user.funcionario_id) {
+    // Se for operador, verificar se tem acesso a esta obra (a menos que tenha acesso global)
+    if (isOperador && user.funcionario_id && !temAcessoGlobal) {
       console.log(`🔍 [OBRAS] Verificando acesso do funcionário ${user.funcionario_id} à obra ${id}`)
       
       const { data: alocacao, error: alocacaoError } = await supabaseAdmin
@@ -619,6 +655,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
       }
       
       console.log(`✅ [OBRAS] Operador tem acesso à obra ${id}`)
+    } else if (isOperador && temAcessoGlobal) {
+      console.log(`✅ [OBRAS] Funcionário tem acesso global - permitindo acesso à obra ${id}`)
     }
 
     // Calcular totais dos custos
@@ -902,6 +940,12 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       latitude: value.latitude,
       longitude: value.longitude,
       raio_permitido: value.raio_permitido || 500,
+      // Campos obrigatórios (CNO, ART, Apólice)
+      cno: value.cno,
+      art_numero: value.art_numero,
+      art_arquivo: value.art_arquivo,
+      apolice_numero: value.apolice_numero,
+      apolice_arquivo: value.apolice_arquivo,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -1221,6 +1265,12 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       latitude: value.latitude !== undefined ? value.latitude : undefined,
       longitude: value.longitude !== undefined ? value.longitude : undefined,
       raio_permitido: value.raio_permitido !== undefined ? value.raio_permitido : undefined,
+      // Campos obrigatórios (CNO, ART, Apólice)
+      cno: value.cno !== undefined ? value.cno : undefined,
+      art_numero: value.art_numero !== undefined ? value.art_numero : undefined,
+      art_arquivo: value.art_arquivo !== undefined ? value.art_arquivo : undefined,
+      apolice_numero: value.apolice_numero !== undefined ? value.apolice_numero : undefined,
+      apolice_arquivo: value.apolice_arquivo !== undefined ? value.apolice_arquivo : undefined,
       updated_at: new Date().toISOString()
     }
     
@@ -1444,5 +1494,315 @@ router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), asy
   }
 })
 
+// ==================== RESPONSÁVEL TÉCNICO ====================
+
+/**
+ * POST /api/obras/:id/responsavel-tecnico
+ * Criar ou atualizar responsável técnico da obra
+ */
+router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { nome, cpf_cnpj, crea, email, telefone } = req.body
+
+    // Validar dados
+    const schema = Joi.object({
+      nome: Joi.string().min(2).required(),
+      cpf_cnpj: Joi.string().required(),
+      crea: Joi.string().allow(null, '').optional(),
+      email: Joi.string().email().allow(null, '').optional(),
+      telefone: Joi.string().allow(null, '').optional()
+    })
+
+    const { error: validationError } = schema.validate({ nome, cpf_cnpj, crea, email, telefone })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    // Verificar se já existe responsável técnico para esta obra
+    const { data: existing, error: checkError } = await supabaseAdmin
+      .from('responsaveis_tecnicos')
+      .select('id')
+      .eq('obra_id', id)
+      .single()
+
+    let result
+    if (existing) {
+      // Atualizar existente
+      const { data, error } = await supabaseAdmin
+        .from('responsaveis_tecnicos')
+        .update({ nome, cpf_cnpj, crea, email, telefone })
+        .eq('id', existing.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      result = data
+    } else {
+      // Criar novo
+      const { data, error } = await supabaseAdmin
+        .from('responsaveis_tecnicos')
+        .insert({ obra_id: id, nome, cpf_cnpj, crea, email, telefone })
+        .select()
+        .single()
+
+      if (error) throw error
+      result = data
+    }
+
+    res.json({ success: true, data: result })
+  } catch (error) {
+    console.error('Erro ao salvar responsável técnico:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/obras/:id/responsavel-tecnico
+ * Obter responsável técnico da obra
+ */
+router.get('/:id/responsavel-tecnico', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('responsaveis_tecnicos')
+      .select('*')
+      .eq('obra_id', id)
+      .single()
+
+    if (error && error.code !== 'PGRST116') throw error
+
+    res.json({ success: true, data: data || null })
+  } catch (error) {
+    console.error('Erro ao obter responsável técnico:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+// ==================== SINALEIROS ====================
+
+/**
+ * POST /api/obras/:id/sinaleiros
+ * Criar ou atualizar sinaleiros da obra
+ */
+router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { sinaleiros } = req.body
+
+    const schema = Joi.object({
+      sinaleiros: Joi.array().items(
+        Joi.object({
+          id: Joi.string().uuid().allow(null, '').optional(),
+          nome: Joi.string().min(2).required(),
+          rg_cpf: Joi.string().required(),
+          telefone: Joi.string().allow(null, '').optional(),
+          email: Joi.string().email().allow(null, '').optional(),
+          tipo: Joi.string().valid('principal', 'reserva').required()
+        })
+      ).min(1).max(2).required()
+    })
+
+    const { error: validationError } = schema.validate({ sinaleiros })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    // Verificar se já existem sinaleiros para esta obra
+    const { data: existing } = await supabaseAdmin
+      .from('sinaleiros_obra')
+      .select('id, tipo')
+      .eq('obra_id', id)
+
+    const existingMap = new Map(existing?.map(s => [s.tipo, s.id]) || [])
+
+    const results = []
+    for (const sinaleiro of sinaleiros) {
+      const { id: sinaleiroId, ...data } = sinaleiro
+
+      if (sinaleiroId && existingMap.has(sinaleiro.tipo)) {
+        // Atualizar existente
+        const { data: updated, error } = await supabaseAdmin
+          .from('sinaleiros_obra')
+          .update(data)
+          .eq('id', sinaleiroId)
+          .select()
+          .single()
+
+        if (error) throw error
+        results.push(updated)
+      } else {
+        // Criar novo
+        const { data: created, error } = await supabaseAdmin
+          .from('sinaleiros_obra')
+          .insert({ obra_id: id, ...data })
+          .select()
+          .single()
+
+        if (error) throw error
+        results.push(created)
+      }
+    }
+
+    res.json({ success: true, data: results })
+  } catch (error) {
+    console.error('Erro ao salvar sinaleiros:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/obras/:id/sinaleiros
+ * Listar sinaleiros da obra
+ */
+router.get('/:id/sinaleiros', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('sinaleiros_obra')
+      .select('*')
+      .eq('obra_id', id)
+      .order('tipo', { ascending: true })
+
+    if (error) throw error
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('Erro ao listar sinaleiros:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+// ==================== DOCUMENTOS SINALEIRO ====================
+
+/**
+ * POST /api/sinaleiros/:id/documentos
+ * Upload de documento do sinaleiro
+ */
+router.post('/sinaleiros/:id/documentos', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { tipo, arquivo, data_validade } = req.body
+
+    const schema = Joi.object({
+      tipo: Joi.string().required(),
+      arquivo: Joi.string().required(),
+      data_validade: Joi.date().allow(null).optional()
+    })
+
+    const { error: validationError } = schema.validate({ tipo, arquivo, data_validade })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_sinaleiro')
+      .insert({ sinaleiro_id: id, tipo, arquivo, data_validade })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao criar documento do sinaleiro:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/sinaleiros/:id/documentos
+ * Listar documentos do sinaleiro
+ */
+router.get('/sinaleiros/:id/documentos', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_sinaleiro')
+      .select('*')
+      .eq('sinaleiro_id', id)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('Erro ao listar documentos do sinaleiro:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * PUT /api/documentos-sinaleiro/:id/aprovar
+ * Aprovar documento do sinaleiro
+ */
+router.put('/documentos-sinaleiro/:id/aprovar', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status, comentarios } = req.body
+    const userId = req.user.id
+
+    const schema = Joi.object({
+      status: Joi.string().valid('aprovado', 'rejeitado').required()
+    })
+
+    const { error: validationError } = schema.validate({ status })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    const updateData = {
+      status,
+      aprovado_por: userId,
+      aprovado_em: new Date().toISOString()
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_sinaleiro')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao aprovar documento:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+// ==================== ALERTAS ====================
+
+/**
+ * GET /api/obras/alertas/fim-proximo
+ * Listar obras com fim em até 60 dias
+ */
+router.get('/alertas/fim-proximo', authenticateToken, async (req, res) => {
+  try {
+    const hoje = new Date()
+    const limite = new Date()
+    limite.setDate(hoje.getDate() + 60)
+
+    const { data, error } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome, data_fim, cliente_id, clientes(nome)')
+      .not('data_fim', 'is', null)
+      .gte('data_fim', hoje.toISOString().split('T')[0])
+      .lte('data_fim', limite.toISOString().split('T')[0])
+      .order('data_fim', { ascending: true })
+
+    if (error) throw error
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('Erro ao listar obras com fim próximo:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
 
 export default router

@@ -22,7 +22,8 @@ const cargoSchema = Joi.object({
   salario_maximo: Joi.number().min(0).allow(null).optional(),
   requisitos: Joi.array().items(Joi.string()).default([]),
   competencias: Joi.array().items(Joi.string()).default([]),
-  ativo: Joi.boolean().default(true)
+  ativo: Joi.boolean().default(true),
+  acesso_global_obras: Joi.boolean().default(false)
 })
 
 // Schema para atualização (campos opcionais)

@@ -6,10 +6,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Save, User } from "lucide-react"
+import { Plus, Trash2, Save, User, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { mockSinaleirosAPI, type Sinaleiro } from "@/lib/mocks/sinaleiros-mocks"
+import { sinaleirosApi, type SinaleiroBackend } from "@/lib/api-sinaleiros"
 import { DocumentosSinaleiroList } from "./documentos-sinaleiro-list"
+
+// Interface compatível com o componente
+export interface Sinaleiro {
+  id: string
+  obra_id: number
+  nome: string
+  rg_cpf: string
+  telefone: string
+  email?: string
+  tipo: 'principal' | 'reserva'
+  cliente_informou?: boolean
+  documentos?: any[]
+}
 
 interface SinaleirosFormProps {
   obraId?: number
@@ -40,12 +53,26 @@ export function SinaleirosForm({
     if (!obraId) return
     setLoading(true)
     try {
-      const data = await mockSinaleirosAPI.listar(obraId)
-      setSinaleiros(data)
-    } catch (error) {
+      const response = await sinaleirosApi.listarPorObra(obraId)
+      if (response.success && response.data) {
+        // Converter SinaleiroBackend para Sinaleiro
+        const sinaleirosConvertidos: Sinaleiro[] = response.data.map((s: SinaleiroBackend) => ({
+          id: s.id,
+          obra_id: s.obra_id,
+          nome: s.nome,
+          rg_cpf: s.rg_cpf,
+          telefone: s.telefone || '',
+          email: s.email,
+          tipo: s.tipo,
+          cliente_informou: false, // Campo não existe no backend, manter compatibilidade
+          documentos: []
+        }))
+        setSinaleiros(sinaleirosConvertidos)
+      }
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao carregar sinaleiros",
+        description: error.message || "Erro ao carregar sinaleiros",
         variant: "destructive"
       })
     } finally {
@@ -98,6 +125,12 @@ export function SinaleirosForm({
   }
 
   const handleSave = async () => {
+    if (!obraId) {
+      // Se não tiver obraId, apenas chamar onSave (para formulários inline)
+      onSave(sinaleiros)
+      return
+    }
+
     // Validar sinaleiro principal obrigatório
     const principal = sinaleiros.find(s => s.tipo === 'principal')
     if (!principal || !principal.nome || !principal.rg_cpf) {
@@ -111,25 +144,44 @@ export function SinaleirosForm({
 
     setLoading(true)
     try {
-      // Mock: Simular salvamento
-      for (const s of sinaleiros) {
-        if (s.id.startsWith('new_')) {
-          await mockSinaleirosAPI.criar(obraId || 0, s)
-        } else {
-          await mockSinaleirosAPI.atualizar(s.id, s)
-        }
+      // Converter Sinaleiro para formato do backend
+      const sinaleirosParaEnviar = sinaleiros.map(s => ({
+        id: s.id.startsWith('new_') ? undefined : s.id,
+        nome: s.nome,
+        rg_cpf: s.rg_cpf,
+        telefone: s.telefone,
+        email: s.email,
+        tipo: s.tipo
+      }))
+
+      const response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
+      
+      if (response.success && response.data) {
+        // Converter resposta para formato do componente
+        const sinaleirosSalvos: Sinaleiro[] = response.data.map((s: SinaleiroBackend) => ({
+          id: s.id,
+          obra_id: s.obra_id,
+          nome: s.nome,
+          rg_cpf: s.rg_cpf,
+          telefone: s.telefone || '',
+          email: s.email,
+          tipo: s.tipo,
+          cliente_informou: false,
+          documentos: []
+        }))
+
+        toast({
+          title: "Sucesso",
+          description: "Sinaleiros salvos com sucesso"
+        })
+
+        setSinaleiros(sinaleirosSalvos)
+        onSave(sinaleirosSalvos)
       }
-
-      toast({
-        title: "Sucesso",
-        description: "Sinaleiros salvos com sucesso (MOCK)"
-      })
-
-      onSave(sinaleiros)
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao salvar sinaleiros",
+        description: error.message || "Erro ao salvar sinaleiros",
         variant: "destructive"
       })
     } finally {
@@ -258,8 +310,17 @@ export function SinaleirosForm({
         {canEdit && sinaleiros.length > 0 && (
           <div className="flex justify-end pt-4 border-t">
             <Button onClick={handleSave} disabled={loading}>
-              <Save className="w-4 h-4 mr-2" />
-              Salvar Sinaleiros
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Sinaleiros
+                </>
+              )}
             </Button>
           </div>
         )}

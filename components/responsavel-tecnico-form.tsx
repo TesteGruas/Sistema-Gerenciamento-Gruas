@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Search, UserPlus, Save, X } from "lucide-react"
+import { Search, UserPlus, Save, X, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { responsavelTecnicoApi, type ResponsavelTecnicoBackend } from "@/lib/api-responsavel-tecnico"
 
 export interface ResponsavelTecnicoData {
-  id?: number
+  id?: string | number
   nome: string
   cpf_cnpj: string
   crea?: string
@@ -25,26 +26,6 @@ interface ResponsavelTecnicoFormProps {
   readOnly?: boolean
 }
 
-// Mock: Lista de responsáveis técnicos existentes
-const mockResponsaveisTecnicos: ResponsavelTecnicoData[] = [
-  {
-    id: 1,
-    nome: "Eng. João Silva",
-    cpf_cnpj: "12345678901",
-    crea: "SP-123456",
-    email: "joao.silva@example.com",
-    telefone: "(11) 98765-4321"
-  },
-  {
-    id: 2,
-    nome: "Eng. Maria Santos",
-    cpf_cnpj: "98765432100",
-    crea: "SP-654321",
-    email: "maria.santos@example.com",
-    telefone: "(11) 91234-5678"
-  }
-]
-
 export function ResponsavelTecnicoForm({
   obraId,
   responsavel,
@@ -56,6 +37,8 @@ export function ResponsavelTecnicoForm({
   const [isSearching, setIsSearching] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [searchResults, setSearchResults] = useState<ResponsavelTecnicoData[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<ResponsavelTecnicoData>({
     nome: responsavel?.nome || "",
     cpf_cnpj: responsavel?.cpf_cnpj || "",
@@ -76,7 +59,7 @@ export function ResponsavelTecnicoForm({
     }
   }, [responsavel])
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!searchTerm.trim()) {
       toast({
         title: "Atenção",
@@ -86,26 +69,53 @@ export function ResponsavelTecnicoForm({
       return
     }
 
-    // Mock: Buscar responsável existente
-    const numericSearch = searchTerm.replace(/\D/g, '')
-    const found = mockResponsaveisTecnicos.find(
-      r => r.cpf_cnpj.replace(/\D/g, '') === numericSearch
-    )
-
-    if (found) {
-      setFormData(found)
-      setSearchResults([found])
-      toast({
-        title: "Responsável encontrado",
-        description: "Dados preenchidos automaticamente"
-      })
-    } else {
-      setSearchResults([])
-      toast({
-        title: "Não encontrado",
-        description: "Nenhum responsável encontrado com este CPF/CNPJ. Você pode cadastrar um novo.",
-        variant: "default"
-      })
+    setIsSearching(true)
+    setLoading(true)
+    try {
+      const found = await responsavelTecnicoApi.buscarPorCpf(searchTerm)
+      
+      if (found) {
+        const responsavelData: ResponsavelTecnicoData = {
+          id: found.id,
+          nome: found.nome,
+          cpf_cnpj: found.cpf_cnpj,
+          crea: found.crea,
+          email: found.email || "",
+          telefone: found.telefone || ""
+        }
+        setFormData(responsavelData)
+        setSearchResults([responsavelData])
+        toast({
+          title: "Responsável encontrado",
+          description: "Dados preenchidos automaticamente"
+        })
+      } else {
+        setSearchResults([])
+        toast({
+          title: "Não encontrado",
+          description: "Nenhum responsável encontrado com este CPF/CNPJ. Você pode cadastrar um novo.",
+          variant: "default"
+        })
+      }
+    } catch (error: any) {
+      // Se o endpoint não existir, apenas mostrar que não foi encontrado
+      if (error.message?.includes('404') || error.message?.includes('não encontrado')) {
+        setSearchResults([])
+        toast({
+          title: "Não encontrado",
+          description: "Nenhum responsável encontrado com este CPF/CNPJ. Você pode cadastrar um novo.",
+          variant: "default"
+        })
+      } else {
+        toast({
+          title: "Erro",
+          description: "Erro ao buscar responsável técnico",
+          variant: "destructive"
+        })
+      }
+    } finally {
+      setIsSearching(false)
+      setLoading(false)
     }
   }
 
@@ -115,7 +125,7 @@ export function ResponsavelTecnicoForm({
     setSearchResults([])
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.nome || !formData.cpf_cnpj || !formData.email) {
       toast({
         title: "Erro",
@@ -136,13 +146,49 @@ export function ResponsavelTecnicoForm({
       return
     }
 
-    // Mock: Simular salvamento
-    toast({
-      title: "Sucesso",
-      description: "Responsável técnico salvo com sucesso (MOCK)"
-    })
+    // Se não tiver obraId, apenas chamar onSave (para formulários inline)
+    if (!obraId) {
+      onSave(formData)
+      return
+    }
 
-    onSave(formData)
+    // Salvar via API
+    setSaving(true)
+    try {
+      const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, {
+        nome: formData.nome,
+        cpf_cnpj: formData.cpf_cnpj,
+        crea: formData.crea,
+        email: formData.email,
+        telefone: formData.telefone
+      })
+
+      if (response.success && response.data) {
+        const savedData: ResponsavelTecnicoData = {
+          id: response.data.id,
+          nome: response.data.nome,
+          cpf_cnpj: response.data.cpf_cnpj,
+          crea: response.data.crea,
+          email: response.data.email || "",
+          telefone: response.data.telefone || ""
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Responsável técnico salvo com sucesso"
+        })
+
+        onSave(savedData)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao salvar responsável técnico",
+        variant: "destructive"
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -169,8 +215,12 @@ export function ResponsavelTecnicoForm({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               />
-              <Button onClick={handleSearch} variant="outline">
-                <Search className="w-4 h-4 mr-2" />
+              <Button onClick={handleSearch} variant="outline" disabled={loading || isSearching}>
+                {loading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4 mr-2" />
+                )}
                 Buscar
               </Button>
             </div>
@@ -272,9 +322,18 @@ export function ResponsavelTecnicoForm({
                 Cancelar
               </Button>
             )}
-            <Button onClick={handleSave}>
-              <Save className="w-4 h-4 mr-2" />
-              Salvar Responsável
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Responsável
+                </>
+              )}
             </Button>
           </div>
         )}

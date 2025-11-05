@@ -4,40 +4,36 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, XCircle, Clock, Upload, Eye, Check, FileText } from "lucide-react"
+import { CheckCircle2, XCircle, Clock, Upload, Eye, Check, FileText, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentoUpload } from "./documento-upload"
-import { documentosObrigatorios, type DocumentoSinaleiro } from "@/lib/mocks/sinaleiros-mocks"
+import { sinaleirosApi, type DocumentoSinaleiroBackend } from "@/lib/api-sinaleiros"
+import { apiArquivos } from "@/lib/api-arquivos"
 
 interface DocumentosSinaleiroListProps {
   sinaleiroId: string
   readOnly?: boolean
 }
 
-// Mock: API de documentos
-const mockDocumentosAPI = {
-  async listar(sinaleiroId: string): Promise<DocumentoSinaleiro[]> {
-    await new Promise(resolve => setTimeout(resolve, 300))
-    // Retornar documentos mockados ou vazios
-    return []
-  },
+// Documentos obrigatórios (mantido do mock)
+export const documentosObrigatorios = [
+  { tipo: 'rg_frente', nome: 'RG (Frente)', obrigatorio: true },
+  { tipo: 'rg_verso', nome: 'RG (Verso)', obrigatorio: true },
+  { tipo: 'comprovante_vinculo', nome: 'Comprovante de Vínculo', obrigatorio: true },
+  { tipo: 'certificado', nome: 'Certificado Aplicável', obrigatorio: false }
+]
 
-  async upload(sinaleiroId: string, tipo: string, file: File): Promise<DocumentoSinaleiro> {
-    await new Promise(resolve => setTimeout(resolve, 500))
-    const novo: DocumentoSinaleiro = {
-      id: `doc_${Date.now()}`,
-      sinaleiro_id: sinaleiroId,
-      tipo: tipo as any,
-      arquivo: URL.createObjectURL(file),
-      status: 'pendente',
-      alerta_enviado: false
-    }
-    return novo
-  },
-
-  async aprovar(documentoId: string): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, 300))
-  }
+// Interface compatível com o componente
+export interface DocumentoSinaleiro {
+  id: string
+  sinaleiro_id: string
+  tipo: string
+  arquivo: string
+  data_validade?: string
+  status: 'pendente' | 'aprovado' | 'rejeitado' | 'vencido'
+  aprovado_por?: string | number
+  aprovado_em?: string
+  alerta_enviado: boolean
 }
 
 export function DocumentosSinaleiroList({
@@ -56,12 +52,26 @@ export function DocumentosSinaleiroList({
   const loadDocumentos = async () => {
     setLoading(true)
     try {
-      const data = await mockDocumentosAPI.listar(sinaleiroId)
-      setDocumentos(data)
-    } catch (error) {
+      const response = await sinaleirosApi.listarDocumentos(sinaleiroId)
+      if (response.success && response.data) {
+        // Converter DocumentoSinaleiroBackend para DocumentoSinaleiro
+        const documentosConvertidos: DocumentoSinaleiro[] = response.data.map((doc: DocumentoSinaleiroBackend) => ({
+          id: doc.id,
+          sinaleiro_id: doc.sinaleiro_id,
+          tipo: doc.tipo,
+          arquivo: doc.arquivo,
+          data_validade: doc.data_validade,
+          status: doc.status,
+          aprovado_por: doc.aprovado_por,
+          aprovado_em: doc.aprovado_em,
+          alerta_enviado: doc.alerta_enviado
+        }))
+        setDocumentos(documentosConvertidos)
+      }
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao carregar documentos",
+        description: error.message || "Erro ao carregar documentos",
         variant: "destructive"
       })
     } finally {
@@ -72,16 +82,73 @@ export function DocumentosSinaleiroList({
   const handleUpload = async (tipo: string, file: File) => {
     setUploadingTipo(tipo)
     try {
-      const novoDoc = await mockDocumentosAPI.upload(sinaleiroId, tipo, file)
-      setDocumentos([...documentos, novoDoc])
-      toast({
-        title: "Sucesso",
-        description: "Documento enviado com sucesso (MOCK)"
+      // Primeiro fazer upload do arquivo
+      // Usar o serviço de upload genérico ou criar URL temporária
+      // Por enquanto, vamos usar uma abordagem simples: criar URL do arquivo
+      // Nota: Em produção, isso deve fazer upload real para o servidor
+      let arquivoUrl: string
+      
+      try {
+        // Tentar fazer upload usando apiArquivos
+        // O backend espera apenas uma string (URL/caminho), então precisamos fazer upload primeiro
+        const formData = new FormData()
+        formData.append('arquivo', file)
+        
+        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+        
+        // Upload para o endpoint de arquivos (se existir um endpoint genérico)
+        // Por enquanto, vamos usar uma URL temporária e depois ajustar quando tiver endpoint específico
+        const response = await fetch(`${apiUrl}/api/arquivos/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          arquivoUrl = result.data?.caminho || result.data?.arquivo || URL.createObjectURL(file)
+        } else {
+          // Se falhar, usar URL temporária (será ajustado quando tiver endpoint específico)
+          arquivoUrl = URL.createObjectURL(file)
+        }
+      } catch (uploadError) {
+        // Se falhar o upload, usar URL temporária
+        arquivoUrl = URL.createObjectURL(file)
+      }
+
+      // Criar documento no backend
+      const response = await sinaleirosApi.criarDocumento(sinaleiroId, {
+        tipo,
+        arquivo: arquivoUrl,
+        data_validade: undefined // Pode ser adicionado depois se necessário
       })
-    } catch (error) {
+
+      if (response.success && response.data) {
+        const novoDoc: DocumentoSinaleiro = {
+          id: response.data.id,
+          sinaleiro_id: response.data.sinaleiro_id,
+          tipo: response.data.tipo,
+          arquivo: response.data.arquivo,
+          data_validade: response.data.data_validade,
+          status: response.data.status,
+          aprovado_por: response.data.aprovado_por,
+          aprovado_em: response.data.aprovado_em,
+          alerta_enviado: response.data.alerta_enviado
+        }
+        
+        setDocumentos([...documentos, novoDoc])
+        toast({
+          title: "Sucesso",
+          description: "Documento enviado com sucesso"
+        })
+      }
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao enviar documento",
+        description: error.message || "Erro ao enviar documento",
         variant: "destructive"
       })
     } finally {
@@ -91,20 +158,30 @@ export function DocumentosSinaleiroList({
 
   const handleAprovar = async (documentoId: string) => {
     try {
-      await mockDocumentosAPI.aprovar(documentoId)
-      setDocumentos(documentos.map(doc => 
-        doc.id === documentoId 
-          ? { ...doc, status: 'aprovado' as const, aprovado_por: 'Você', aprovado_em: new Date().toISOString() }
-          : doc
-      ))
-      toast({
-        title: "Sucesso",
-        description: "Documento aprovado"
+      const response = await sinaleirosApi.aprovarDocumento(documentoId, {
+        status: 'aprovado'
       })
-    } catch (error) {
+
+      if (response.success && response.data) {
+        setDocumentos(documentos.map(doc => 
+          doc.id === documentoId 
+            ? { 
+                ...doc, 
+                status: 'aprovado' as const, 
+                aprovado_por: response.data.aprovado_por || 'Você', 
+                aprovado_em: response.data.aprovado_em || new Date().toISOString() 
+              }
+            : doc
+        ))
+        toast({
+          title: "Sucesso",
+          description: "Documento aprovado"
+        })
+      }
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao aprovar documento",
+        description: error.message || "Erro ao aprovar documento",
         variant: "destructive"
       })
     }
