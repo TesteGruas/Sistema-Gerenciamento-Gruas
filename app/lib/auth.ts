@@ -212,7 +212,11 @@ export class AuthService {
   static logout(): void {
     this.removeToken()
     if (typeof window !== 'undefined') {
-      window.location.href = '/'
+      // Detectar se é PWA e redirecionar corretamente
+      const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
+                    (window.navigator as any).standalone === true ||
+                    window.location.pathname.startsWith('/pwa')
+      window.location.href = isPWA ? '/pwa/login' : '/'
     }
   }
 

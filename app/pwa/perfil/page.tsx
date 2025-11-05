@@ -115,6 +115,7 @@ export default function PWAPerfilPage() {
       description: "Você foi desconectado com sucesso",
     })
     
+    // Como estamos na página PWA, sempre redirecionar para /pwa/login
     router.push('/pwa/login')
   }
 

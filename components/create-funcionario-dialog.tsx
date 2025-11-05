@@ -11,6 +11,7 @@ import { Plus, Loader2, User } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
+import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
 
 interface CreateFuncionarioDialogProps {
   open: boolean
@@ -26,13 +27,15 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   submitting,
 }: CreateFuncionarioDialogProps) {
   const { cargosAtivos, loading: loadingCargos } = useCargos()
+  const [mostrarInputNovoCargo, setMostrarInputNovoCargo] = useState(false)
+  const [novoCargo, setNovoCargo] = useState("")
   
   const [form, setForm] = useState({
     name: "",
     email: "",
     phone: "",
     cpf: "",
-    role: "Operador" as const,
+    role: "" as string,
     status: "Ativo" as const,
     turno: "Diurno" as const,
     salary: "",
@@ -105,7 +108,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       email: "",
       phone: "",
       cpf: "",
-      role: "Operador",
+      role: "",
       status: "Ativo",
       turno: "Diurno",
       salary: "",
@@ -114,6 +117,8 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       criar_usuario: true,
       usuario_senha: ""
     })
+    setMostrarInputNovoCargo(false)
+    setNovoCargo("")
   }, [])
 
   // Reset form when dialog opens
@@ -177,33 +182,79 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
 
             <div className="space-y-2">
               <Label htmlFor="role">Cargo *</Label>
-              <Select
-                value={form.role}
-                onValueChange={(value) => handleChange('role', value)}
-                disabled={loadingCargos}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingCargos ? "Carregando cargos..." : "Selecione um cargo"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {loadingCargos ? (
-                    <div className="p-2 text-sm text-muted-foreground flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Carregando cargos...
-                    </div>
-                  ) : cargosAtivos.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">
-                      Nenhum cargo disponível
-                    </div>
-                  ) : (
-                    cargosAtivos.map((cargo) => (
-                      <SelectItem key={cargo.id} value={cargo.nome}>
-                        {cargo.nome}
+              {!mostrarInputNovoCargo ? (
+                <>
+                  <Select
+                    value={form.role}
+                    onValueChange={(value) => {
+                      if (value === "__novo_cargo__") {
+                        setMostrarInputNovoCargo(true)
+                        setNovoCargo("")
+                      } else {
+                        handleChange('role', value)
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um cargo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CARGOS_PREDEFINIDOS.map((cargo) => (
+                        <SelectItem key={cargo} value={cargo}>
+                          {cargo}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__novo_cargo__" className="text-blue-600 font-medium">
+                        <Plus className="w-4 h-4 inline mr-2" />
+                        Adicionar novo cargo
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                    </SelectContent>
+                  </Select>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Input
+                    value={novoCargo}
+                    onChange={(e) => setNovoCargo(e.target.value)}
+                    placeholder="Digite o nome do novo cargo"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (novoCargo.trim()) {
+                          handleChange('role', novoCargo.trim())
+                          setMostrarInputNovoCargo(false)
+                        }
+                      }
+                    }}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (novoCargo.trim()) {
+                          handleChange('role', novoCargo.trim())
+                        }
+                        setMostrarInputNovoCargo(false)
+                      }}
+                    >
+                      Confirmar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setMostrarInputNovoCargo(false)
+                        setNovoCargo("")
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

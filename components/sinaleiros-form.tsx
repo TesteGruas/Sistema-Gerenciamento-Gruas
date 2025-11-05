@@ -6,10 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Save, User } from "lucide-react"
+import { Plus, Trash2, Save, User, FileText, Shield } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { mockSinaleirosAPI, type Sinaleiro } from "@/lib/mocks/sinaleiros-mocks"
 import { DocumentosSinaleiroList } from "./documentos-sinaleiro-list"
+import { FuncionarioSearch } from "./funcionario-search"
+import { funcionariosApi } from "@/lib/api-funcionarios"
 
 interface SinaleirosFormProps {
   obraId?: number
@@ -53,42 +55,76 @@ export function SinaleirosForm({
     }
   }
 
+  // Garantir que sempre existam 2 sinaleiros: interno e cliente
+  useEffect(() => {
+    const temInterno = sinaleiros.some(s => s.tipo_vinculo === 'interno')
+    const temCliente = sinaleiros.some(s => s.tipo_vinculo === 'cliente')
+    
+    if (temInterno && temCliente) {
+      return // Já tem ambos, não precisa fazer nada
+    }
+    
+    const novos: Sinaleiro[] = [...sinaleiros]
+    
+    if (!temInterno) {
+      novos.push({
+        id: `interno_${Date.now()}`,
+        obra_id: obraId || 0,
+        nome: '',
+        rg_cpf: '',
+        cpf: '',
+        rg: '',
+        telefone: '',
+        email: '',
+        tipo: 'principal',
+        tipo_vinculo: 'interno',
+        cliente_informou: false,
+        documentos: [],
+        certificados: []
+      })
+    }
+    
+    if (!temCliente) {
+      novos.push({
+        id: `cliente_${Date.now()}`,
+        obra_id: obraId || 0,
+        nome: '',
+        rg_cpf: '',
+        cpf: '',
+        rg: '',
+        telefone: '',
+        email: '',
+        tipo: 'reserva',
+        tipo_vinculo: 'cliente',
+        cliente_informou: true,
+        documentos: [],
+        certificados: []
+      })
+    }
+    
+    setSinaleiros(novos)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obraId])
+
   const handleAddSinaleiro = () => {
     if (sinaleiros.length >= 2) {
       toast({
         title: "Limite atingido",
-        description: "Máximo de 2 sinaleiros permitidos (Principal + Reserva)",
+        description: "Apenas 2 sinaleiros permitidos (Interno + Indicado pelo Cliente)",
         variant: "destructive"
       })
       return
     }
-
-    const tipo = sinaleiros.length === 0 ? 'principal' : 'reserva'
-    const novo: Sinaleiro = {
-      id: `new_${Date.now()}`,
-      obra_id: obraId || 0,
-      nome: '',
-      rg_cpf: '',
-      telefone: '',
-      email: '',
-      tipo,
-      cliente_informou: false,
-      documentos: []
-    }
-    setSinaleiros([...sinaleiros, novo])
   }
 
   const handleRemoveSinaleiro = (id: string) => {
     const sinaleiro = sinaleiros.find(s => s.id === id)
-    if (sinaleiro?.tipo === 'principal') {
-      toast({
-        title: "Atenção",
-        description: "Não é possível remover o sinaleiro principal",
-        variant: "destructive"
-      })
-      return
-    }
-    setSinaleiros(sinaleiros.filter(s => s.id !== id))
+    // Não permitir remover nenhum sinaleiro (sempre deve ter 2)
+    toast({
+      title: "Atenção",
+      description: "Não é possível remover sinaleiros. São obrigatórios 2 sinaleiros (Interno + Cliente).",
+      variant: "destructive"
+    })
   }
 
   const handleUpdateSinaleiro = (id: string, field: keyof Sinaleiro, value: any) => {
@@ -98,12 +134,23 @@ export function SinaleirosForm({
   }
 
   const handleSave = async () => {
-    // Validar sinaleiro principal obrigatório
-    const principal = sinaleiros.find(s => s.tipo === 'principal')
-    if (!principal || !principal.nome || !principal.rg_cpf) {
+    // Validar ambos os sinaleiros
+    const interno = sinaleiros.find(s => s.tipo_vinculo === 'interno')
+    const cliente = sinaleiros.find(s => s.tipo_vinculo === 'cliente')
+    
+    if (!interno || !interno.nome || (!interno.cpf && !interno.rg_cpf)) {
       toast({
         title: "Erro",
-        description: "Sinaleiro principal é obrigatório. Preencha nome e RG/CPF.",
+        description: "Sinaleiro interno é obrigatório. Preencha nome e CPF.",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    if (!cliente || !cliente.nome || (!cliente.cpf && !cliente.rg && !cliente.rg_cpf)) {
+      toast({
+        title: "Erro",
+        description: "Sinaleiro indicado pelo cliente é obrigatório. Preencha nome e pelo menos CPF ou RG.",
         variant: "destructive"
       })
       return
@@ -144,8 +191,7 @@ export function SinaleirosForm({
       <CardHeader>
         <CardTitle>Sinaleiros da Obra</CardTitle>
         <CardDescription>
-          Cadastre até 2 sinaleiros (Principal + Reserva). 
-          {clientePodeEditar && " Você pode criar um sinaleiro caso não informe o campo sinaleiro cliente."}
+          Dois sinaleiros obrigatórios: Interno (empresa) e Indicado pelo Cliente (editável pelo cliente).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -156,25 +202,22 @@ export function SinaleirosForm({
                 <div className="flex items-center gap-2">
                   <User className="w-5 h-5" />
                   <CardTitle className="text-base">
-                    {sinaleiro.tipo === 'principal' ? 'Sinaleiro Principal' : 'Sinaleiro Reserva'}
+                    {sinaleiro.tipo_vinculo === 'interno' ? 'Sinaleiro Interno' : 'Sinaleiro Indicado pelo Cliente'}
                   </CardTitle>
-                  <Badge variant={sinaleiro.tipo === 'principal' ? 'default' : 'secondary'}>
-                    {sinaleiro.tipo === 'principal' ? 'Obrigatório' : 'Opcional'}
+                  <Badge variant={sinaleiro.tipo_vinculo === 'interno' ? 'default' : 'outline'}>
+                    {sinaleiro.tipo_vinculo === 'interno' ? 'Interno' : 'Cliente'}
                   </Badge>
                 </div>
-                {canEdit && sinaleiro.tipo !== 'principal' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveSinaleiro(sinaleiro.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              {sinaleiro.tipo_vinculo === 'cliente' && (
+                <div className="mb-3 p-2 bg-blue-50 rounded-md">
+                  <p className="text-xs text-blue-700">Este sinaleiro pode ser editado pelo cliente</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>
                     Nome <span className="text-red-500">*</span>
@@ -183,22 +226,51 @@ export function SinaleirosForm({
                     value={sinaleiro.nome}
                     onChange={(e) => handleUpdateSinaleiro(sinaleiro.id, 'nome', e.target.value)}
                     placeholder="Nome completo"
-                    disabled={!canEdit}
+                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
                   />
                 </div>
 
                 <div>
                   <Label>
-                    RG ou CPF <span className="text-red-500">*</span>
+                    CPF {sinaleiro.tipo_vinculo === 'interno' ? <span className="text-red-500">*</span> : sinaleiro.tipo_vinculo === 'cliente' ? <span className="text-xs text-gray-500">(ou RG)</span> : null}
                   </Label>
                   <Input
-                    value={sinaleiro.rg_cpf}
+                    value={sinaleiro.cpf || sinaleiro.rg_cpf || ''}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, '')
-                      handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', value)
+                      let formatted = value
+                      if (value.length <= 11) {
+                        formatted = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+                      }
+                      handleUpdateSinaleiro(sinaleiro.id, 'cpf', formatted)
+                      if (!sinaleiro.cpf) {
+                        handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', formatted)
+                      }
                     }}
                     placeholder="000.000.000-00"
-                    disabled={!canEdit}
+                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
+                  />
+                </div>
+
+                <div>
+                  <Label>
+                    RG {sinaleiro.tipo_vinculo === 'interno' ? <span className="text-red-500">*</span> : sinaleiro.tipo_vinculo === 'cliente' ? <span className="text-xs text-gray-500">(ou CPF)</span> : null}
+                  </Label>
+                  <Input
+                    value={sinaleiro.rg || sinaleiro.rg_cpf || ''}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '')
+                      let formatted = value
+                      if (value.length <= 9) {
+                        formatted = value.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4')
+                      }
+                      handleUpdateSinaleiro(sinaleiro.id, 'rg', formatted)
+                      if (!sinaleiro.rg) {
+                        handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', formatted)
+                      }
+                    }}
+                    placeholder="00.000.000-0"
+                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
                   />
                 </div>
 
@@ -217,7 +289,7 @@ export function SinaleirosForm({
                       handleUpdateSinaleiro(sinaleiro.id, 'telefone', formatted)
                     }}
                     placeholder="(11) 98765-4321"
-                    disabled={!canEdit}
+                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
                   />
                 </div>
 
@@ -228,32 +300,62 @@ export function SinaleirosForm({
                     value={sinaleiro.email || ''}
                     onChange={(e) => handleUpdateSinaleiro(sinaleiro.id, 'email', e.target.value)}
                     placeholder="email@example.com"
-                    disabled={!canEdit}
+                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
                   />
                 </div>
               </div>
 
-              {/* Documentos do Sinaleiro */}
+              {/* Documentos e Certificados */}
+              <div className="space-y-3 pt-3 border-t">
+                <div>
+                  <Label className="text-sm font-medium mb-2">Documentos</Label>
+                  <div className="space-y-2">
+                    {sinaleiro.documentos && sinaleiro.documentos.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {sinaleiro.documentos.map((doc: any, docIdx: number) => (
+                          <Badge key={docIdx} variant="outline" className="flex items-center gap-1">
+                            <FileText className="w-3 h-3" />
+                            {doc.nome || doc.tipo || 'Documento'}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">Nenhum documento cadastrado</p>
+                    )}
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-sm font-medium mb-2">Certificados</Label>
+                  <div className="space-y-2">
+                    {sinaleiro.certificados && sinaleiro.certificados.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {sinaleiro.certificados.map((cert: any, certIdx: number) => (
+                          <Badge key={certIdx} variant="outline" className="flex items-center gap-1">
+                            <Shield className="w-3 h-3" />
+                            {cert.nome || cert.tipo || 'Certificado'}
+                            {cert.numero && ` - ${cert.numero}`}
+                            {cert.validade && ` (${new Date(cert.validade).toLocaleDateString('pt-BR')})`}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">Nenhum certificado cadastrado</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Documentos do Sinaleiro - Componente existente */}
               {sinaleiro.id && !sinaleiro.id.startsWith('new_') && (
                 <DocumentosSinaleiroList
                   sinaleiroId={sinaleiro.id}
-                  readOnly={!canEdit}
+                  readOnly={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
                 />
               )}
             </CardContent>
           </Card>
         ))}
-
-        {canEdit && sinaleiros.length < 2 && (
-          <Button
-            variant="outline"
-            onClick={handleAddSinaleiro}
-            className="w-full"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Adicionar Sinaleiro {sinaleiros.length === 0 ? 'Principal' : 'Reserva'}
-          </Button>
-        )}
 
         {canEdit && sinaleiros.length > 0 && (
           <div className="flex justify-end pt-4 border-t">

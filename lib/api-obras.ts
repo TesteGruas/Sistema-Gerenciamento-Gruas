@@ -50,8 +50,46 @@ export interface ObraBackend {
     data_inicio_locacao: string
     data_fim_locacao?: string
     valor_locacao_mensal?: number
+    valor_locacao?: number
     status: string
     observacoes?: string
+    // Parâmetros técnicos
+    tipo_base?: string
+    altura_inicial?: number
+    altura_final?: number
+    velocidade_giro?: number
+    velocidade_elevacao?: number
+    velocidade_translacao?: number
+    potencia_instalada?: number
+    voltagem?: string
+    tipo_ligacao?: string
+    capacidade_ponta?: number
+    capacidade_maxima_raio?: number
+    ano_fabricacao?: number
+    vida_util?: number
+    // Valores detalhados
+    valor_operador?: number
+    valor_manutencao?: number
+    valor_estaiamento?: number
+    valor_chumbadores?: number
+    valor_montagem?: number
+    valor_desmontagem?: number
+    valor_transporte?: number
+    valor_hora_extra?: number
+    valor_seguro?: number
+    valor_caucao?: number
+    // Serviços e logística
+    guindaste_montagem?: string
+    quantidade_viagens?: number
+    alojamento_alimentacao?: string
+    responsabilidade_acessorios?: string
+    // Condições comerciais
+    prazo_validade?: number
+    forma_pagamento?: string
+    multa_atraso?: number
+    reajuste_indice?: string
+    garantia_caucao?: string
+    retencao_contratual?: number
     grua: {
       id: string
       modelo: string
@@ -111,6 +149,43 @@ export interface ObraCreateData {
     grua_id: string
     valor_locacao: number
     taxa_mensal: number
+    // Parâmetros técnicos
+    tipo_base?: string
+    altura_inicial?: number
+    altura_final?: number
+    velocidade_giro?: number
+    velocidade_elevacao?: number
+    velocidade_translacao?: number
+    potencia_instalada?: number
+    voltagem?: string
+    tipo_ligacao?: string
+    capacidade_ponta?: number
+    capacidade_maxima_raio?: number
+    ano_fabricacao?: number
+    vida_util?: number
+    // Valores detalhados
+    valor_operador?: number
+    valor_manutencao?: number
+    valor_estaiamento?: number
+    valor_chumbadores?: number
+    valor_montagem?: number
+    valor_desmontagem?: number
+    valor_transporte?: number
+    valor_hora_extra?: number
+    valor_seguro?: number
+    valor_caucao?: number
+    // Serviços e logística
+    guindaste_montagem?: string
+    quantidade_viagens?: number
+    alojamento_alimentacao?: string
+    responsabilidade_acessorios?: string
+    // Condições comerciais
+    prazo_validade?: number
+    forma_pagamento?: string
+    multa_atraso?: number
+    reajuste_indice?: string
+    garantia_caucao?: string
+    retencao_contratual?: number
   }>
   // Dados dos funcionários
   funcionarios?: Array<{
@@ -520,7 +595,44 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     gruas = obraFrontend.gruasSelecionadas.map((grua: any) => ({
       grua_id: grua.id,
       valor_locacao: grua.valor_locacao || 0,
-      taxa_mensal: grua.taxa_mensal || 0
+      taxa_mensal: grua.taxa_mensal || 0,
+      // Parâmetros técnicos
+      tipo_base: grua.tipo_base,
+      altura_inicial: grua.altura_inicial,
+      altura_final: grua.altura_final,
+      velocidade_giro: grua.velocidade_giro,
+      velocidade_elevacao: grua.velocidade_elevacao,
+      velocidade_translacao: grua.velocidade_translacao,
+      potencia_instalada: grua.potencia_instalada,
+      voltagem: grua.voltagem,
+      tipo_ligacao: grua.tipo_ligacao,
+      capacidade_ponta: grua.capacidade_ponta,
+      capacidade_maxima_raio: grua.capacidade_maxima_raio,
+      ano_fabricacao: grua.ano_fabricacao,
+      vida_util: grua.vida_util,
+      // Valores detalhados
+      valor_operador: grua.valor_operador,
+      valor_manutencao: grua.valor_manutencao,
+      valor_estaiamento: grua.valor_estaiamento,
+      valor_chumbadores: grua.valor_chumbadores,
+      valor_montagem: grua.valor_montagem,
+      valor_desmontagem: grua.valor_desmontagem,
+      valor_transporte: grua.valor_transporte,
+      valor_hora_extra: grua.valor_hora_extra,
+      valor_seguro: grua.valor_seguro,
+      valor_caucao: grua.valor_caucao,
+      // Serviços e logística
+      guindaste_montagem: grua.guindaste_montagem,
+      quantidade_viagens: grua.quantidade_viagens,
+      alojamento_alimentacao: grua.alojamento_alimentacao,
+      responsabilidade_acessorios: grua.responsabilidade_acessorios,
+      // Condições comerciais
+      prazo_validade: grua.prazo_validade,
+      forma_pagamento: grua.forma_pagamento,
+      multa_atraso: grua.multa_atraso,
+      reajuste_indice: grua.reajuste_indice,
+      garantia_caucao: grua.garantia_caucao,
+      retencao_contratual: grua.retencao_contratual
     }))
   }
   

@@ -5,12 +5,21 @@ export interface Sinaleiro {
   id: string
   obra_id: number
   nome: string
-  rg_cpf: string
+  rg_cpf?: string
+  cpf?: string
+  rg?: string
   telefone: string
   email?: string
   tipo: 'principal' | 'reserva'
+  tipo_vinculo?: 'interno' | 'cliente'
   cliente_informou: boolean
   documentos?: DocumentoSinaleiro[]
+  certificados?: Array<{
+    nome: string
+    tipo: string
+    numero?: string
+    validade?: string
+  }>
 }
 
 export interface DocumentoSinaleiro {
