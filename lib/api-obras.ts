@@ -236,6 +236,19 @@ export interface ObraUpdateData {
   telefone_obra?: string
   email_obra?: string
   status?: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
+  descricao?: string
+  data_inicio?: string
+  data_fim?: string
+  orcamento?: number
+  observacoes?: string
+  responsavel_id?: number
+  responsavel_nome?: string
+  // Campos obrigatórios (CNO, ART, Apólice)
+  cno?: string
+  art_numero?: string
+  art_arquivo?: string
+  apolice_numero?: string
+  apolice_arquivo?: string
 }
 
 export interface ObrasResponse {
@@ -252,6 +265,14 @@ export interface ObrasResponse {
 export interface ObraResponse {
   success: boolean
   data: ObraBackend
+}
+
+export interface ObraDocumentosUpdateData {
+  cno?: string
+  art_numero?: string
+  art_arquivo?: string
+  apolice_numero?: string
+  apolice_arquivo?: string
 }
 
 // Tipo para o frontend
@@ -342,6 +363,20 @@ export const obrasApi = {
     }, {} as any)
     
     const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${id}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(cleanData),
+    })
+  },
+
+  // Atualizar apenas documentos (CNO, ART, Apólice)
+  async atualizarDocumentos(id: number, data: ObraDocumentosUpdateData): Promise<ObraResponse> {
+    const cleanData = Object.entries(data).reduce((acc, [key, value]) => {
+      if (value !== null && value !== undefined) acc[key] = value
+      return acc
+    }, {} as any)
+
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${id}/documentos`)
     return apiRequest(url, {
       method: 'PUT',
       body: JSON.stringify(cleanData),
@@ -578,6 +613,12 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     contato_obra: obraBackend.contato_obra,
     telefone_obra: obraBackend.telefone_obra,
     email_obra: obraBackend.email_obra,
+    // Campos obrigatórios (CNO, ART, Apólice)
+    cno: obraBackend.cno,
+    art_numero: obraBackend.art_numero,
+    art_arquivo: obraBackend.art_arquivo,
+    apolice_numero: obraBackend.apolice_numero,
+    apolice_arquivo: obraBackend.apolice_arquivo,
     // Relacionamentos - usar os que vêm do backend ou fallback para os passados como parâmetro
     gruasVinculadas: gruasVinculadas.length > 0 ? gruasVinculadas : (relacionamentos?.gruasVinculadas || []),
     funcionariosVinculados: funcionariosVinculados.length > 0 ? funcionariosVinculados : (relacionamentos?.funcionariosVinculados || [])
@@ -688,6 +729,12 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     observacoes: obraFrontend.observations,
     responsavel_id: obraFrontend.responsavelId ? parseInt(obraFrontend.responsavelId) : undefined,
     responsavel_nome: obraFrontend.responsavelName,
+    // Campos obrigatórios (CNO, ART, Apólice)
+    cno: obraFrontend.cno,
+    art_numero: obraFrontend.art_numero,
+    art_arquivo: obraFrontend.art_arquivo, // URL do arquivo após upload
+    apolice_numero: obraFrontend.apolice_numero,
+    apolice_arquivo: obraFrontend.apolice_arquivo, // URL do arquivo após upload
     // Dados da grua (mantido para compatibilidade)
     grua_id: obraFrontend.gruaId || null,
     grua_valor: obraFrontend.gruaValue ? parseFloat(obraFrontend.gruaValue) : null,

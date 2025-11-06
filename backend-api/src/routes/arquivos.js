@@ -998,6 +998,52 @@ router.get('/download/:arquivoId', authenticateToken, async (req, res) => {
 })
 
 /**
+ * GET /api/arquivos/url-assinada
+ * Gera URL assinada para download a partir do caminho do arquivo
+ */
+router.get('/url-assinada', authenticateToken, async (req, res) => {
+  try {
+    const { caminho } = req.query
+
+    if (!caminho || typeof caminho !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Caminho do arquivo é obrigatório'
+      })
+    }
+
+    // Gerar URL assinada para download
+    const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .createSignedUrl(caminho, 3600) // URL válida por 1 hora
+
+    if (urlError) {
+      console.error('Erro ao gerar URL:', urlError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao gerar URL de download',
+        error: urlError.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: {
+        url: signedUrl.signedUrl
+      }
+    })
+
+  } catch (error) {
+    console.error('Erro ao gerar URL assinada:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
  * @swagger
  * /api/arquivos/{arquivoId}:
  *   put:

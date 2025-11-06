@@ -15,8 +15,9 @@ export interface ResponsavelTecnicoBackend {
 }
 
 export interface ResponsavelTecnicoCreateData {
-  nome: string
-  cpf_cnpj: string
+  funcionario_id?: number
+  nome?: string
+  cpf_cnpj?: string
   crea?: string
   email?: string
   telefone?: string
@@ -65,13 +66,27 @@ export const responsavelTecnicoApi = {
   },
 
   // Buscar responsável técnico por CPF/CNPJ (endpoint pode não existir ainda, mas preparado)
-  async buscarPorCpf(cpfCnpj: string): Promise<ResponsavelTecnicoBackend | null> {
+  async buscarPorCpf(cpfCnpj: string): Promise<any | null> {
     try {
       // Remove caracteres não numéricos
       const cpfLimpo = cpfCnpj.replace(/\D/g, '')
       const url = buildApiUrl(`responsaveis-tecnicos/buscar?cpf=${cpfLimpo}`)
       const response = await apiRequest(url)
-      return response.data || null
+      const d = response.data
+      if (!d) return null
+      // Se veio de funcionarios
+      if (d.origem === 'funcionarios') {
+        return {
+          origem: 'funcionarios',
+          funcionario_id: d.funcionario_id,
+          nome: d.nome,
+          cpf_cnpj: d.cpf_cnpj,
+          email: d.email,
+          telefone: d.telefone,
+        }
+      }
+      // Fallback: tabela responsaveis_tecnicos
+      return d
     } catch (error) {
       // Se o endpoint não existir, retornar null
       if (error.message.includes('404') || error.message.includes('não encontrado')) {

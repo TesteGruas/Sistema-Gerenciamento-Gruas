@@ -11,6 +11,7 @@ import { responsavelTecnicoApi, type ResponsavelTecnicoBackend } from "@/lib/api
 
 export interface ResponsavelTecnicoData {
   id?: string | number
+  funcionario_id?: number
   nome: string
   cpf_cnpj: string
   crea?: string
@@ -75,14 +76,22 @@ export function ResponsavelTecnicoForm({
       const found = await responsavelTecnicoApi.buscarPorCpf(searchTerm)
       
       if (found) {
-        const responsavelData: ResponsavelTecnicoData = {
-          id: found.id,
-          nome: found.nome,
-          cpf_cnpj: found.cpf_cnpj,
-          crea: found.crea,
-          email: found.email || "",
-          telefone: found.telefone || ""
-        }
+        const responsavelData: ResponsavelTecnicoData = found.origem === 'funcionarios'
+          ? {
+              funcionario_id: found.funcionario_id,
+              nome: found.nome,
+              cpf_cnpj: found.cpf_cnpj,
+              email: found.email || "",
+              telefone: found.telefone || "",
+            }
+          : {
+              id: found.id,
+              nome: found.nome,
+              cpf_cnpj: found.cpf_cnpj,
+              crea: found.crea,
+              email: found.email || "",
+              telefone: found.telefone || ""
+            }
         setFormData(responsavelData)
         setSearchResults([responsavelData])
         toast({
@@ -126,7 +135,10 @@ export function ResponsavelTecnicoForm({
   }
 
   const handleSave = async () => {
-    if (!formData.nome || !formData.cpf_cnpj || !formData.email) {
+    // Se veio de funcionarios, apenas envia funcionario_id
+    const isFuncionarioVinculo = !!formData.funcionario_id
+
+    if (!isFuncionarioVinculo && (!formData.nome || !formData.cpf_cnpj || !formData.email)) {
       toast({
         title: "Erro",
         description: "Preencha os campos obrigatórios (Nome, CPF/CNPJ, Email)",
@@ -135,9 +147,9 @@ export function ResponsavelTecnicoForm({
       return
     }
 
-    // Validação básica de email
+    // Validação básica de email (apenas se não estiver vinculando funcionário)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
+    if (!isFuncionarioVinculo && !emailRegex.test(formData.email)) {
       toast({
         title: "Erro",
         description: "Email inválido",
@@ -155,23 +167,34 @@ export function ResponsavelTecnicoForm({
     // Salvar via API
     setSaving(true)
     try {
-      const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, {
-        nome: formData.nome,
-        cpf_cnpj: formData.cpf_cnpj,
-        crea: formData.crea,
-        email: formData.email,
-        telefone: formData.telefone
-      })
+      const payload = isFuncionarioVinculo
+        ? { funcionario_id: formData.funcionario_id }
+        : {
+            nome: formData.nome,
+            cpf_cnpj: formData.cpf_cnpj,
+            crea: formData.crea,
+            email: formData.email,
+            telefone: formData.telefone
+          }
+      const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
 
       if (response.success && response.data) {
-        const savedData: ResponsavelTecnicoData = {
-          id: response.data.id,
-          nome: response.data.nome,
-          cpf_cnpj: response.data.cpf_cnpj,
-          crea: response.data.crea,
-          email: response.data.email || "",
-          telefone: response.data.telefone || ""
-        }
+        const savedData: ResponsavelTecnicoData = isFuncionarioVinculo
+          ? {
+              funcionario_id: formData.funcionario_id,
+              nome: formData.nome,
+              cpf_cnpj: formData.cpf_cnpj,
+              email: formData.email || "",
+              telefone: formData.telefone || "",
+            }
+          : {
+              id: response.data.id,
+              nome: response.data.nome,
+              cpf_cnpj: response.data.cpf_cnpj,
+              crea: response.data.crea,
+              email: response.data.email || "",
+              telefone: response.data.telefone || ""
+            }
 
         toast({
           title: "Sucesso",

@@ -1503,23 +1503,47 @@ router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), asy
 router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
-    const { nome, cpf_cnpj, crea, email, telefone } = req.body
+    const { nome, cpf_cnpj, crea, email, telefone, funcionario_id } = req.body
 
     // Validar dados
     const schema = Joi.object({
-      nome: Joi.string().min(2).required(),
-      cpf_cnpj: Joi.string().required(),
+      funcionario_id: Joi.number().integer().positive().optional(),
+      nome: Joi.string().min(2).when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.required() }),
+      cpf_cnpj: Joi.string().when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.required() }),
       crea: Joi.string().allow(null, '').optional(),
       email: Joi.string().email().allow(null, '').optional(),
       telefone: Joi.string().allow(null, '').optional()
     })
 
-    const { error: validationError } = schema.validate({ nome, cpf_cnpj, crea, email, telefone })
+    const { error: validationError } = schema.validate({ nome, cpf_cnpj, crea, email, telefone, funcionario_id })
     if (validationError) {
       return res.status(400).json({ error: validationError.details[0].message })
     }
 
-    // Verificar se já existe responsável técnico para esta obra
+    // Se vier funcionario_id, atualiza diretamente os campos na tabela obras
+    if (funcionario_id) {
+      const { data: func, error: errFunc } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id, nome')
+        .eq('id', funcionario_id)
+        .single()
+
+      if (errFunc) throw errFunc
+      if (!func) return res.status(400).json({ error: 'Funcionário não encontrado' })
+
+      const { data: obraAtualizada, error: errUpdateObra } = await supabaseAdmin
+        .from('obras')
+        .update({ responsavel_id: func.id, responsavel_nome: func.nome })
+        .eq('id', id)
+        .select('id, responsavel_id, responsavel_nome')
+        .single()
+
+      if (errUpdateObra) throw errUpdateObra
+
+      return res.json({ success: true, data: obraAtualizada })
+    }
+
+    // Fluxo sem funcionario_id: manter tabela responsaveis_tecnicos e também refletir na tabela obras
     const { data: existing, error: checkError } = await supabaseAdmin
       .from('responsaveis_tecnicos')
       .select('id')
@@ -1528,7 +1552,6 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
 
     let result
     if (existing) {
-      // Atualizar existente
       const { data, error } = await supabaseAdmin
         .from('responsaveis_tecnicos')
         .update({ nome, cpf_cnpj, crea, email, telefone })
@@ -1539,7 +1562,6 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
       if (error) throw error
       result = data
     } else {
-      // Criar novo
       const { data, error } = await supabaseAdmin
         .from('responsaveis_tecnicos')
         .insert({ obra_id: id, nome, cpf_cnpj, crea, email, telefone })
@@ -1549,6 +1571,14 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
       if (error) throw error
       result = data
     }
+
+    // Atualizar também a obra com o nome do responsável informado manualmente
+    const { error: errUpdateObraManual } = await supabaseAdmin
+      .from('obras')
+      .update({ responsavel_id: null, responsavel_nome: nome })
+      .eq('id', id)
+
+    if (errUpdateObraManual) throw errUpdateObraManual
 
     res.json({ success: true, data: result })
   } catch (error) {
@@ -1576,6 +1606,57 @@ router.get('/:id/responsavel-tecnico', authenticateToken, async (req, res) => {
     res.json({ success: true, data: data || null })
   } catch (error) {
     console.error('Erro ao obter responsável técnico:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * PUT /api/obras/:id/documentos
+ * Atualiza parcialmente campos de documentos da obra (CNO, ART, Apólice)
+ */
+router.put('/:id/documentos', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { cno, art_numero, art_arquivo, apolice_numero, apolice_arquivo } = req.body
+
+    // Todos opcionais; valida apenas formato básico
+    const schema = Joi.object({
+      cno: Joi.string().allow('', null).optional(),
+      art_numero: Joi.string().allow('', null).optional(),
+      art_arquivo: Joi.string().allow('', null).optional(),
+      apolice_numero: Joi.string().allow('', null).optional(),
+      apolice_arquivo: Joi.string().allow('', null).optional()
+    })
+
+    const { error: validationError } = schema.validate({ cno, art_numero, art_arquivo, apolice_numero, apolice_arquivo })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    // Monta update apenas com os campos presentes
+    const updateData = {}
+    if (cno !== undefined) updateData.cno = cno
+    if (art_numero !== undefined) updateData.art_numero = art_numero
+    if (art_arquivo !== undefined) updateData.art_arquivo = art_arquivo
+    if (apolice_numero !== undefined) updateData.apolice_numero = apolice_numero
+    if (apolice_arquivo !== undefined) updateData.apolice_arquivo = apolice_arquivo
+
+    if (Object.keys(updateData).length === 0) {
+      return res.json({ success: true, data: null })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('obras')
+      .update(updateData)
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) throw error
+
+    return res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao atualizar documentos da obra:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
   }
 })

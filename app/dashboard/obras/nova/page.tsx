@@ -42,6 +42,8 @@ import { CnoInput } from "@/components/cno-input"
 import { DocumentoUpload } from "@/components/documento-upload"
 import { ResponsavelTecnicoForm, ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
 import { SinaleirosForm } from "@/components/sinaleiros-form"
+import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
+import { sinaleirosApi } from "@/lib/api-sinaleiros"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -459,18 +461,121 @@ export default function NovaObraPage() {
       console.log('  - custos_mensais:', obraData.custos_mensais)
       console.log('  - funcionarios:', obraData.funcionarios)
 
-      // Converter para formato do backend
+      // 1. Fazer upload dos arquivos ART e Apólice (precisamos criar a obra primeiro)
+      // Por enquanto, vamos criar a obra sem os arquivos e depois atualizar
+      
+      // Converter para formato do backend (sem arquivos ainda)
       const obraBackendData = converterObraFrontendParaBackend(obraData)
+      // Remover arquivos do payload inicial (serão enviados depois)
+      delete obraBackendData.art_arquivo
+      delete obraBackendData.apolice_arquivo
+      
+      // 2. Criar a obra
       const response = await obrasApi.criarObra(obraBackendData)
       
-      if (response.success) {
+      if (!response.success || !response.data?.id) {
+        throw new Error('Erro ao criar obra')
+      }
+      
+      const obraId = response.data.id
+      
+      // 3. Fazer upload dos arquivos ART e Apólice
+      let artArquivoUrl = ''
+      let apoliceArquivoUrl = ''
+      
+      try {
+        // Upload ART
+        if (artArquivo) {
+          const formDataArt = new FormData()
+          formDataArt.append('arquivo', artArquivo)
+          formDataArt.append('categoria', 'art')
+          
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+          
+          const uploadArtResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obraId}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataArt
+          })
+          
+          if (uploadArtResponse.ok) {
+            const uploadArtResult = await uploadArtResponse.json()
+            artArquivoUrl = uploadArtResult.data?.caminho || uploadArtResult.data?.arquivo || ''
+          }
+        }
+        
+        // Upload Apólice
+        if (apoliceArquivo) {
+          const formDataApolice = new FormData()
+          formDataApolice.append('arquivo', apoliceArquivo)
+          formDataApolice.append('categoria', 'apolice')
+          
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+          
+          const uploadApoliceResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obraId}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataApolice
+          })
+          
+          if (uploadApoliceResponse.ok) {
+            const uploadApoliceResult = await uploadApoliceResponse.json()
+            apoliceArquivoUrl = uploadApoliceResult.data?.caminho || uploadApoliceResult.data?.arquivo || ''
+          }
+        }
+        
+        // 4. Atualizar documentos da obra (rota parcial, não exige demais campos)
+        await obrasApi.atualizarDocumentos(obraId, {
+          cno,
+          art_numero: artNumero || undefined,
+          art_arquivo: artArquivoUrl || undefined,
+          apolice_numero: apoliceNumero || undefined,
+          apolice_arquivo: apoliceArquivoUrl || undefined
+        })
+        
+        // 5. Salvar responsável técnico
+        if (responsavelTecnico) {
+          await responsavelTecnicoApi.criarOuAtualizar(obraId, {
+            funcionario_id: responsavelTecnico.funcionario_id,
+            nome: responsavelTecnico.nome,
+            cpf_cnpj: responsavelTecnico.cpf_cnpj,
+            crea: responsavelTecnico.crea,
+            email: responsavelTecnico.email,
+            telefone: responsavelTecnico.telefone
+          })
+        }
+        
+        // 6. Salvar sinaleiros
+        if (sinaleiros && sinaleiros.length > 0) {
+          await sinaleirosApi.criarOuAtualizar(obraId, sinaleiros.map(s => ({
+            nome: s.nome,
+            rg_cpf: s.rg_cpf,
+            telefone: s.telefone,
+            email: s.email,
+            tipo: s.tipo
+          })))
+        }
+        
         toast({
           title: "Sucesso",
           description: "Obra criada com sucesso!"
         })
         router.push('/dashboard/obras')
-      } else {
-        throw new Error('Erro ao criar obra')
+      } catch (uploadError) {
+        console.error('Erro ao fazer upload de arquivos ou salvar dados adicionais:', uploadError)
+        // Mesmo com erro no upload, a obra foi criada, então avisar o usuário
+        toast({
+          title: "Atenção",
+          description: "Obra criada, mas houve erro ao fazer upload de alguns arquivos. Você pode editá-la depois.",
+          variant: "default"
+        })
+        router.push(`/dashboard/obras/${obraId}`)
       }
     } catch (err) {
       console.error('Erro ao criar obra:', err)

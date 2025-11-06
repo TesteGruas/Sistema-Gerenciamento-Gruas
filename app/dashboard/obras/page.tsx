@@ -92,6 +92,12 @@ export default function ObrasPage() {
     // Dados do responsável
     responsavelId: '',
     responsavelName: '',
+    // Documentos obrigatórios
+    cno: '',
+    art_numero: '',
+    art_arquivo: '',
+    apolice_numero: '',
+    apolice_arquivo: '',
     // Lista de funcionários
     funcionarios: [] as Array<{
       id: string
@@ -927,6 +933,12 @@ export default function ObrasPage() {
         // Dados do responsável
         responsavelId: obra.responsavelId || '',
         responsavelName: obra.responsavelName || '',
+        // Documentos obrigatórios
+        cno: obra.cno || '',
+        art_numero: obra.art_numero || '',
+        art_arquivo: obra.art_arquivo || '',
+        apolice_numero: obra.apolice_numero || '',
+        apolice_arquivo: obra.apolice_arquivo || '',
         funcionarios: funcionarios
       })
       
@@ -966,6 +978,11 @@ export default function ObrasPage() {
         monthlyFee: '',
         responsavelId: '',
         responsavelName: '',
+        cno: obra.cno || '',
+        art_numero: obra.art_numero || '',
+        art_arquivo: obra.art_arquivo || '',
+        apolice_numero: obra.apolice_numero || '',
+        apolice_arquivo: obra.apolice_arquivo || '',
         funcionarios: []
       })
       
@@ -1004,6 +1021,12 @@ export default function ObrasPage() {
         // Dados do responsável
         responsavelId: obraFormData.responsavelId,
         responsavelName: obraFormData.responsavelName,
+        // Documentos obrigatórios
+        cno: obraFormData.cno,
+        art_numero: obraFormData.art_numero,
+        art_arquivo: obraFormData.art_arquivo,
+        apolice_numero: obraFormData.apolice_numero,
+        apolice_arquivo: obraFormData.apolice_arquivo,
         // MÚLTIPLAS GRUAS - enviar todas as gruas selecionadas
         gruasSelecionadas: gruasSelecionadas.map(grua => {
           const gruaData: any = {
@@ -1085,6 +1108,11 @@ export default function ObrasPage() {
         monthlyFee: '',
         responsavelId: '',
         responsavelName: '',
+        cno: '',
+        art_numero: '',
+        art_arquivo: '',
+        apolice_numero: '',
+        apolice_arquivo: '',
         funcionarios: []
       })
       setClienteSelecionado(null)
@@ -1953,8 +1981,9 @@ export default function ObrasPage() {
           </DialogHeader>
           <form onSubmit={handleUpdateObra} className="space-y-6">
             <Tabs defaultValue="obra" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
+                <TabsTrigger value="documentos">Documentos</TabsTrigger>
                 <TabsTrigger value="grua">Grua</TabsTrigger>
                 <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
                 <TabsTrigger value="custos">Custos Mensais</TabsTrigger>
@@ -2086,6 +2115,66 @@ export default function ObrasPage() {
                     placeholder="Observações adicionais sobre a obra..."
                     rows={3}
                   />
+                </div>
+              </TabsContent>
+
+              {/* Aba: Documentos Obrigatórios */}
+              <TabsContent value="documentos" className="space-y-4">
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-medium text-amber-900">Documentos Obrigatórios</h3>
+                  </div>
+                  <p className="text-sm text-amber-700">
+                    Preencha os documentos obrigatórios da obra (CNO, ART e Apólice de Seguro)
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  {/* CNO */}
+                  <div>
+                    <Label htmlFor="edit-cno">CNO (Cadastro Nacional de Obras)</Label>
+                    <Input
+                      id="edit-cno"
+                      value={obraFormData.cno}
+                      onChange={(e) => setObraFormData({ ...obraFormData, cno: e.target.value })}
+                      placeholder="Ex: 123456789012"
+                    />
+                  </div>
+
+                  {/* ART */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-art-numero">ART (Anotação de Responsabilidade Técnica) - Número</Label>
+                    <Input
+                      id="edit-art-numero"
+                      value={obraFormData.art_numero}
+                      onChange={(e) => setObraFormData({ ...obraFormData, art_numero: e.target.value })}
+                      placeholder="Ex: 123456789012345"
+                    />
+                    {obraFormData.art_arquivo && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <FileText className="w-4 h-4" />
+                        <span>Arquivo: {obraFormData.art_arquivo.split('/').pop()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Apólice */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-apolice-numero">Apólice de Seguro - Número</Label>
+                    <Input
+                      id="edit-apolice-numero"
+                      value={obraFormData.apolice_numero}
+                      onChange={(e) => setObraFormData({ ...obraFormData, apolice_numero: e.target.value })}
+                      placeholder="Ex: 987654321098765"
+                    />
+                    {obraFormData.apolice_arquivo && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <FileText className="w-4 h-4" />
+                        <span>Arquivo: {obraFormData.apolice_arquivo.split('/').pop()}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </TabsContent>
 

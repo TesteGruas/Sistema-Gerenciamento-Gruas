@@ -1787,6 +1787,136 @@ function ObraDetailsPageContent() {
 
             <Card>
               <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Documentos Obrigatórios
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* CNO */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">CNO:</span>
+                    <span className="text-sm">{obra.cno || <span className="text-gray-400 italic">Não informado</span>}</span>
+                  </div>
+                </div>
+
+                {/* ART */}
+                <div className="space-y-1 border-t pt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">ART:</span>
+                    <div className="flex items-center gap-2">
+                      {obra.art_numero ? (
+                        <span className="text-sm">{obra.art_numero}</span>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                      )}
+                    </div>
+                  </div>
+                  {obra.art_arquivo && (
+                    <div className="flex justify-end mt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                            
+                            // Gerar URL assinada usando o endpoint do backend
+                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.art_arquivo)}`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`
+                              }
+                            })
+                            
+                            if (urlResponse.ok) {
+                              const urlData = await urlResponse.json()
+                              if (urlData.success && urlData.data?.url) {
+                                window.open(urlData.data.url, '_blank')
+                              } else {
+                                throw new Error('URL não retornada')
+                              }
+                            } else {
+                              throw new Error('Erro ao gerar URL')
+                            }
+                          } catch (error) {
+                            console.error('Erro ao baixar ART:', error)
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível baixar o arquivo da ART",
+                              variant: "destructive"
+                            })
+                          }
+                        }}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Baixar ART
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Apólice */}
+                <div className="space-y-1 border-t pt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Apólice de Seguro:</span>
+                    <div className="flex items-center gap-2">
+                      {obra.apolice_numero ? (
+                        <span className="text-sm">{obra.apolice_numero}</span>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                      )}
+                    </div>
+                  </div>
+                  {obra.apolice_arquivo && (
+                    <div className="flex justify-end mt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                            
+                            // Gerar URL assinada usando o endpoint do backend
+                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.apolice_arquivo)}`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`
+                              }
+                            })
+                            
+                            if (urlResponse.ok) {
+                              const urlData = await urlResponse.json()
+                              if (urlData.success && urlData.data?.url) {
+                                window.open(urlData.data.url, '_blank')
+                              } else {
+                                throw new Error('URL não retornada')
+                              }
+                            } else {
+                              throw new Error('Erro ao gerar URL')
+                            }
+                          } catch (error) {
+                            console.error('Erro ao baixar Apólice:', error)
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível baixar o arquivo da Apólice",
+                              variant: "destructive"
+                            })
+                          }
+                        }}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Baixar Apólice
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle className="text-sm">Resumo Financeiro</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">

@@ -104,6 +104,7 @@ import colaboradoresDocumentosRoutes from './routes/colaboradores-documentos.js'
 import checklistDiarioRoutes from './routes/checklist-diario.js'
 import manutencoesRoutes from './routes/manutencoes.js'
 import ordemComprasRoutes from './routes/ordem-compras.js'
+import responsaveisTecnicosRoutes from './routes/responsaveis-tecnicos.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -329,6 +330,7 @@ app.use('/api/colaboradores', colaboradoresDocumentosRoutes)
 app.use('/api/checklist-diario', checklistDiarioRoutes)
 app.use('/api/manutencoes', manutencoesRoutes)
 app.use('/api/ordem-compras', ordemComprasRoutes)
+app.use('/api/responsaveis-tecnicos', responsaveisTecnicosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

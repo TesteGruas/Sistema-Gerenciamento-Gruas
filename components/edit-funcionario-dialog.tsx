@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Edit, Loader2, User } from "lucide-react"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
+import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
 
 interface FuncionarioRH {
   id: number
