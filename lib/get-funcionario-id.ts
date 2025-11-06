@@ -45,6 +45,12 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
         }
       )
       
+      // Se receber 403 (Forbidden), não tentar novamente
+      if (response.status === 403) {
+        console.warn('Acesso negado (403) ao buscar funcionário. Retornando null.')
+        return null
+      }
+      
       if (response.ok) {
         const data = await response.json()
         const funcionarios = data.data || []
@@ -63,6 +69,7 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
       
       return null
     } catch (error) {
+      console.warn('Erro ao buscar funcionário:', error)
       return null
     }
   }

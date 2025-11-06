@@ -12,7 +12,7 @@ import {
   ROLES_LEVELS,
   PWA_PERMISSIONS as BASE_PWA_PERMISSIONS
 } from '@/types/permissions'
-import { LucideIcon, Clock, FileText, CheckCircle, Crane, User, Settings, Bell } from 'lucide-react'
+import { LucideIcon, Clock, FileText, CheckCircle, Crane, User, Settings, Bell, Receipt } from 'lucide-react'
 
 // ========================================
 // TIPOS ESPECÍFICOS DO PWA
@@ -91,6 +91,13 @@ export const PWA_MENU_ITEMS: PWAMenuItem[] = [
     icon: Bell,
     permission: 'notificacoes:visualizar',
     description: 'Visualize suas notificações'
+  },
+  {
+    label: 'Holerites',
+    path: '/pwa/holerites',
+    icon: Receipt,
+    permission: 'documentos:visualizar',
+    description: 'Visualize, baixe e assine seus holerites'
   }
 ]
 

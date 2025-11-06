@@ -32,6 +32,8 @@ import { PWAErrorBoundary } from "@/components/pwa-error-boundary"
 import { usePersistentSession } from "@/hooks/use-persistent-session"
 import { useAuthInterceptor } from "@/hooks/use-auth-interceptor"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
+import { PWA_MENU_ITEMS } from "@/app/pwa/lib/permissions"
+import { PageLoader } from "@/components/ui/loader"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -46,6 +48,8 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string; profile?: any } | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [previousPathname, setPreviousPathname] = useState<string | null>(null)
   
   // Hook de sessão persistente
   const {
@@ -71,6 +75,56 @@ export default function PWALayout({ children }: PWALayoutProps) {
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  // Detectar mudanças de rota e ocultar loading quando a página carregar
+  useEffect(() => {
+    // Se é a primeira renderização, não fazer nada
+    if (previousPathname === null) {
+      setPreviousPathname(pathname)
+      return
+    }
+
+    // Se a rota mudou e estamos navegando, ocultar loading após renderizar
+    if (previousPathname !== pathname && isNavigating) {
+      setPreviousPathname(pathname)
+      
+      // Ocultar loading após a página renderizar
+      // Usar múltiplas estratégias para garantir que desaparece
+      const hideLoading = () => {
+        setIsNavigating(false)
+      }
+      
+      // Estratégia 1: Aguardar o próximo frame de renderização (muito rápido)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Estratégia 2: Pequeno delay para garantir transição suave
+          setTimeout(hideLoading, 150)
+        })
+      })
+      
+      // Fallback: timeout máximo para garantir que sempre desaparece (1s)
+      const maxTimer = setTimeout(hideLoading, 1000)
+      
+      return () => {
+        clearTimeout(maxTimer)
+      }
+    } else if (previousPathname !== pathname) {
+      // Se a rota mudou mas não estávamos navegando, atualizar pathname
+      setPreviousPathname(pathname)
+    }
+  }, [pathname, previousPathname, isNavigating])
+
+  // Função wrapper para navegação com loading
+  const handleNavigation = (href: string) => {
+    // Mostrar loading IMEDIATAMENTE ao clicar
+    setIsNavigating(true)
+    setIsMenuOpen(false) // Fechar menu ao navegar
+    
+    // Usar setTimeout para garantir que o estado foi atualizado antes da navegação
+    setTimeout(() => {
+      router.push(href)
+    }, 0)
+  }
 
   // Verificar status de conexão
   useEffect(() => {
@@ -157,25 +211,44 @@ export default function PWALayout({ children }: PWALayoutProps) {
 
   // Mapear TODOS os itens do menu PWA para formato de navegação
   // O hook usePWAPermissions já retorna os itens filtrados por permissões
-  const allNavigationItems = pwaMenuItems.map(item => {
-    // Mapear labels para nomes mais curtos para o menu inferior
-    const labelMap: Record<string, string> = {
-      'Ponto Eletrônico': 'Ponto',
-      'Espelho de Ponto': 'Espelho',
-      'Documentos': 'Docs',
-      'Notificações': 'Notif',
-      'Configurações': 'Config'
-    }
-    
-    return {
-      name: labelMap[item.label] || item.label,
-      href: item.path,
-      icon: item.icon,
-      description: item.description || item.label,
-      permission: Array.isArray(item.permission) ? item.permission[0] : item.permission,
-      label: item.label // Manter label original
-    }
-  })
+  // Se houver poucos itens (apenas Perfil e Config) ou se for admin, usar todos os itens do menu PWA
+  const itemsToUse = (pwaMenuItems.length <= 2 || userRole === 'admin') 
+    ? PWA_MENU_ITEMS 
+    : pwaMenuItems
+  
+  const allNavigationItems = itemsToUse
+    .filter(item => item && item.icon) // Filtrar itens inválidos ou sem ícone
+    .map(item => {
+      // Mapear labels para nomes mais curtos para o menu inferior
+      const labelMap: Record<string, string> = {
+        'Ponto Eletrônico': 'Ponto',
+        'Espelho de Ponto': 'Espelho',
+        'Documentos': 'Docs',
+        'Notificações': 'Notif',
+        'Configurações': 'Config',
+        'Holerites': 'Holerite'
+      }
+      
+      return {
+        name: labelMap[item.label] || item.label,
+        href: item.path,
+        icon: item.icon, // Garantir que o ícone existe
+        description: item.description || item.label,
+        permission: Array.isArray(item.permission) ? item.permission[0] : item.permission,
+        label: item.label // Manter label original
+      }
+    })
+    .filter(item => item.icon) // Filtro adicional para garantir que o ícone existe
+
+  // Debug: Log para verificar quantos itens estão disponíveis
+  if (typeof window !== 'undefined' && allNavigationItems.length <= 2) {
+    console.log('PWA Navigation Debug:', {
+      pwaMenuItemsCount: pwaMenuItems.length,
+      allNavigationItemsCount: allNavigationItems.length,
+      userRole,
+      pwaMenuItems: pwaMenuItems.map(i => i.label)
+    })
+  }
 
   // Adicionar notificações com badge se houver documentos pendentes
   if (canViewNotifications() && documentosPendentes > 0) {
@@ -192,20 +265,60 @@ export default function PWALayout({ children }: PWALayoutProps) {
     }
   }
 
-  // Separar itens principais (para menu inferior) e demais (para menu lateral)
-  // Priorizar: Ponto, Espelho, Documentos, Aprovações, Gruas
-  const priorityItems = ['Ponto Eletrônico', 'Espelho de Ponto', 'Documentos', 'Aprovações', 'Gruas']
-  const mainItems = allNavigationItems.filter(item => 
-    priorityItems.some(priority => item.label.includes(priority) || item.label === priority)
-  ).slice(0, 5)
-  
-  // Demais itens vão para o menu lateral
-  const sideMenuItems = allNavigationItems.filter(item => 
-    !mainItems.find(main => main.href === item.href)
+  // Ordenar itens para a navegação inferior
+  // Prioridade: Itens principais primeiro, depois outros, e Perfil/Config sempre no final
+  const priorityOrder = [
+    'Ponto Eletrônico',
+    'Espelho de Ponto',
+    'Documentos',
+    'Aprovações',
+    'Gruas',
+    'Holerites',
+    'Notificações'
+  ]
+
+  // Separar itens por prioridade
+  const priorityItems = allNavigationItems.filter(item => 
+    priorityOrder.includes(item.label)
+  ).sort((a, b) => {
+    const indexA = priorityOrder.indexOf(a.label)
+    const indexB = priorityOrder.indexOf(b.label)
+    return indexA - indexB
+  })
+
+  // Itens que não estão na lista de prioridade
+  const otherItems = allNavigationItems.filter(item => 
+    !priorityOrder.includes(item.label) && 
+    item.label !== 'Perfil' && 
+    item.label !== 'Configurações'
   )
 
-  // Os itens principais para o menu inferior
-  const filteredNavigationItems = mainItems.length > 0 ? mainItems : allNavigationItems.slice(0, 5)
+  // Itens sempre presentes no final: Perfil e Configurações
+  const alwaysVisibleItems = allNavigationItems.filter(item => 
+    item.label === 'Perfil' || item.label === 'Configurações'
+  ).sort((a, b) => {
+    // Perfil antes de Configurações
+    if (a.label === 'Perfil') return -1
+    if (b.label === 'Perfil') return 1
+    return 0
+  })
+
+  // Combinar todos os itens na ordem correta
+  const bottomNavItems = [
+    ...priorityItems, // Itens prioritários primeiro
+    ...otherItems, // Outros itens
+    ...alwaysVisibleItems // Perfil e Configurações sempre no final
+  ]
+
+  // Usar todos os itens disponíveis na navegação inferior
+  const filteredNavigationItems = bottomNavItems.length > 0 ? bottomNavItems : allNavigationItems
+
+  // Para o menu lateral (drawer), separar em "Principal" e "Mais"
+  // Itens principais para o drawer (mesmos da prioridade)
+  const drawerMainItems = priorityItems
+  
+  // Demais itens para o drawer (outros + sempre visíveis)
+  const drawerSideItems = [...otherItems, ...alwaysVisibleItems]
 
   // Rotas que não precisam do layout
   const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
@@ -326,12 +439,12 @@ export default function PWALayout({ children }: PWALayoutProps) {
                     {/* Todos os Itens do Menu */}
                     <div className="space-y-1">
                       {/* Itens Principais */}
-                      {mainItems.length > 0 && (
+                      {drawerMainItems.length > 0 && (
                         <>
                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">
                             Principal
                           </p>
-                          {mainItems.map((item) => {
+                          {drawerMainItems.map((item) => {
                             const Icon = item.icon
                             const isActive = pathname === item.href
                             
@@ -339,8 +452,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
                               <button
                                 key={item.href}
                                 onClick={() => {
-                                  router.push(item.href)
-                                  setIsMenuOpen(false)
+                                  handleNavigation(item.href)
                                 }}
                                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
                                   isActive
@@ -369,15 +481,15 @@ export default function PWALayout({ children }: PWALayoutProps) {
                       )}
 
                       {/* Demais Itens */}
-                      {sideMenuItems.length > 0 && (
+                      {drawerSideItems.length > 0 && (
                         <>
-                          {mainItems.length > 0 && (
+                          {drawerMainItems.length > 0 && (
                             <div className="my-4 border-t border-gray-200" />
                           )}
                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">
                             Mais
                           </p>
-                          {sideMenuItems.map((item) => {
+                          {drawerSideItems.map((item) => {
                             const Icon = item.icon
                             const isActive = pathname === item.href
                             
@@ -385,8 +497,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
                               <button
                                 key={item.href}
                                 onClick={() => {
-                                  router.push(item.href)
-                                  setIsMenuOpen(false)
+                                  handleNavigation(item.href)
                                 }}
                                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
                                   isActive
@@ -436,8 +547,15 @@ export default function PWALayout({ children }: PWALayoutProps) {
               </>
             )}
 
+            {/* Loading Overlay durante navegação */}
+            {isNavigating && (
+              <div className="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex items-center justify-center">
+                <PageLoader text="Carregando página..." />
+              </div>
+            )}
+
             {/* Conteúdo principal */}
-            <main className="px-4 pt-4 pb-24">
+            <main className={`px-4 pt-4 pb-24 transition-opacity duration-200 ${isNavigating ? 'opacity-50' : 'opacity-100'}`}>
               {children}
             </main>
 
@@ -450,36 +568,47 @@ export default function PWALayout({ children }: PWALayoutProps) {
 
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb">
-              <div className="grid grid-cols-5 h-16">
-                {filteredNavigationItems.length > 0 ? (
-                  filteredNavigationItems.slice(0, 5).map((item) => {
-                    const Icon = item.icon
-                    const isActive = pathname === item.href
-                    return (
-                      <button
-                        key={item.name}
-                        onClick={() => router.push(item.href)}
-                        className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
-                          isActive 
-                            ? "text-blue-600" 
-                            : "text-gray-500 active:bg-gray-100"
-                        }`}
-                      >
-                        <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
-                          <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
-                          {isActive && (
-                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full animate-pulse" />
-                          )}
-                        </div>
-                        <span className="text-xs font-medium">{item.name}</span>
-                      </button>
-                    )
-                  })
-                ) : (
-                  <div className="col-span-5 flex items-center justify-center text-gray-500 text-sm">
-                    Carregando navegação...
-                  </div>
-                )}
+              <div 
+                className="overflow-x-auto h-16 bottom-nav-scroll"
+                style={{
+                  WebkitOverflowScrolling: 'touch'
+                }}
+              >
+                <div className="flex h-full">
+                  {filteredNavigationItems.length > 0 ? (
+                    filteredNavigationItems
+                      .filter(item => item.icon) // Filtrar itens sem ícone
+                      .map((item) => {
+                        const Icon = item.icon
+                        if (!Icon) return null // Proteção adicional
+                        
+                        const isActive = pathname === item.href
+                        return (
+                          <button
+                            key={item.name || item.href}
+                            onClick={() => handleNavigation(item.href)}
+                            className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 flex-shrink-0 min-w-[80px] px-2 ${
+                              isActive 
+                                ? "text-blue-600" 
+                                : "text-gray-500 active:bg-gray-100"
+                            }`}
+                          >
+                            <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
+                              <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
+                              {isActive && (
+                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full animate-pulse" />
+                              )}
+                            </div>
+                            <span className="text-xs font-medium whitespace-nowrap">{item.name}</span>
+                          </button>
+                        )
+                      })
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+                      Carregando navegação...
+                    </div>
+                  )}
+                </div>
               </div>
             </nav>
 

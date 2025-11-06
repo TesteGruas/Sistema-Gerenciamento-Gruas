@@ -39,7 +39,12 @@ export function usePWAUser(): PWAUserData {
         // Carregar dados do usuário do localStorage
         const userData = localStorage.getItem('user_data')
         if (!userData) {
-          throw new Error('Dados do usuário não encontrados')
+          // Não lançar erro, apenas retornar sem dados (situação normal na página de login)
+          if (isMounted) {
+            setUser(null)
+            setLoading(false)
+          }
+          return
         }
 
         const parsedUser = JSON.parse(userData)
@@ -48,7 +53,11 @@ export function usePWAUser(): PWAUserData {
 
         const token = localStorage.getItem('access_token')
         if (!token) {
-          throw new Error('Token não encontrado')
+          // Não lançar erro, apenas retornar sem token (situação normal na página de login)
+          if (isMounted) {
+            setLoading(false)
+          }
+          return
         }
 
         // Carregar ponto de hoje (silenciosamente, sem quebrar a página)
@@ -147,9 +156,20 @@ export function usePWAUser(): PWAUserData {
         }
 
       } catch (err) {
-        console.error('Erro ao carregar dados do usuário:', err)
+        // Não logar erro se for apenas ausência de dados (situação normal na página de login)
+        const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido'
+        if (errorMessage !== 'Dados do usuário não encontrados' && 
+            errorMessage !== 'Token não encontrado') {
+          console.error('Erro ao carregar dados do usuário:', err)
+        }
         if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Erro desconhecido')
+          // Não definir erro para situações normais (login)
+          if (errorMessage !== 'Dados do usuário não encontrados' && 
+              errorMessage !== 'Token não encontrado') {
+            setError(errorMessage)
+          } else {
+            setError(null)
+          }
         }
       } finally {
         if (isMounted) {

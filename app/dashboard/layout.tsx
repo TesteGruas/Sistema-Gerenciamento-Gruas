@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense, useMemo, memo } from "react"
+import dynamic from "next/dynamic"
 import { AuthService } from "@/app/lib/auth"
 import { usePermissions } from "@/hooks/use-permissions"
 import { Button } from "@/components/ui/button"
@@ -35,10 +36,42 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { NotificationsDropdown } from "@/components/notifications-dropdown"
-import { UserDropdown } from "@/components/user-dropdown"
 import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
-import { GlobalSearch } from "@/components/global-search"
+
+// Dynamic imports para componentes pesados - carregam apenas quando necessário
+const NotificationsDropdown = dynamic(
+  () => import("@/components/notifications-dropdown").then(mod => ({ default: mod.NotificationsDropdown })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="w-10 h-10 flex items-center justify-center">
+        <Bell className="w-5 h-5 text-gray-400" />
+      </div>
+    )
+  }
+)
+
+const UserDropdown = dynamic(
+  () => import("@/components/user-dropdown").then(mod => ({ default: mod.UserDropdown })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="w-10 h-10 flex items-center justify-center">
+        <User className="w-5 h-5 text-gray-400" />
+      </div>
+    )
+  }
+)
+
+const GlobalSearch = dynamic(
+  () => import("@/components/global-search").then(mod => ({ default: mod.GlobalSearch })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="w-64 h-10 bg-gray-100 rounded-md animate-pulse" />
+    )
+  }
+)
 
 // Tipos para navegação
 interface NavigationItem {
@@ -131,28 +164,11 @@ export default function DashboardLayout({
     admin: false,
   })
   
-  // Todos os useEffect devem estar no topo também
-  useEffect(() => {
-    setIsClientSide(true)
-  }, [])
-  
-  // Renderizar apenas no cliente para evitar erros de SSR
-  if (!isClientSide) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Building2 className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">Carregando Dashboard...</h1>
-        </div>
-      </div>
-    )
-  }
-
-  // Filtrar navegação baseada em permissões
-  const filterNavigationByPermissions = (navigation: NavigationItemWithPermission[]) => {
-    return navigation.filter(item => {
+  // Todos os hooks devem ser chamados ANTES de qualquer retorno condicional
+  // Filtrar navegação baseada em permissões - memoizado para evitar recálculos
+  const filterNavigationByPermissions = useMemo(() => {
+    return (navigation: NavigationItemWithPermission[]) => {
+      return navigation.filter(item => {
       // Dashboard - apenas Admin e Gerente
       if (item.href === '/dashboard') {
         return canAccessDashboard()
@@ -249,12 +265,32 @@ export default function DashboardLayout({
       }
       
       return true
-    })
-  }
+      })
+    }
+  }, [
+    canAccessDashboard,
+    canAccessClientes,
+    canAccessObras,
+    isAdminFromPermissions,
+    isManager,
+    isSupervisor,
+    canAccessPontoEletronico,
+    canAccessRH,
+    canAccessFinanceiro,
+    canAccessRelatorios,
+    canAccessUsuarios
+  ])
 
-  // Navegação filtrada por permissões
-  const filteredBaseNavigation = filterNavigationByPermissions(baseNavigation)
-  const filteredAdminNavigation = filterNavigationByPermissions(adminNavigation)
+  // Navegação filtrada por permissões - memoizado
+  const filteredBaseNavigation = useMemo(() => 
+    filterNavigationByPermissions(baseNavigation),
+    [filterNavigationByPermissions]
+  )
+  
+  const filteredAdminNavigation = useMemo(() => 
+    filterNavigationByPermissions(adminNavigation),
+    [filterNavigationByPermissions]
+  )
 
   const handleLogout = () => {
     AuthService.logout()
@@ -267,8 +303,31 @@ export default function DashboardLayout({
     }))
   }
 
-  // Combinar navegação base com navegação de admin se necessário
-  const navigation = isAdminFromPermissions() ? [...filteredBaseNavigation, ...filteredAdminNavigation] : filteredBaseNavigation
+  // Combinar navegação base com navegação de admin se necessário - memoizado
+  const navigation = useMemo(() => 
+    isAdminFromPermissions() ? [...filteredBaseNavigation, ...filteredAdminNavigation] : filteredBaseNavigation,
+    [isAdminFromPermissions, filteredBaseNavigation, filteredAdminNavigation]
+  )
+
+  // Todos os useEffect devem estar no topo também
+  useEffect(() => {
+    setIsClientSide(true)
+  }, [])
+  
+  // Renderizar apenas no cliente para evitar erros de SSR
+  // IMPORTANTE: Este check deve vir DEPOIS de todos os hooks
+  if (!isClientSide) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Building2 className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Carregando Dashboard...</h1>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -574,15 +633,21 @@ export default function DashboardLayout({
 
             <div className="flex items-center gap-4 ml-auto">
               <span className="text-sm text-gray-600 hidden md:block">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</span>
-              <GlobalSearch />
-              <NotificationsDropdown />
-              <UserDropdown />
+              <Suspense fallback={<div className="w-64 h-10 bg-gray-100 rounded-md animate-pulse" />}>
+                <GlobalSearch />
+              </Suspense>
+              <Suspense fallback={<div className="w-10 h-10 flex items-center justify-center"><Bell className="w-5 h-5 text-gray-400" /></div>}>
+                <NotificationsDropdown />
+              </Suspense>
+              <Suspense fallback={<div className="w-10 h-10 flex items-center justify-center"><User className="w-5 h-5 text-gray-400" /></div>}>
+                <UserDropdown />
+              </Suspense>
             </div>
           </div>
         </div>
 
         {/* Page content */}
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 overflow-auto">
           {children}
         </main>
       </div>

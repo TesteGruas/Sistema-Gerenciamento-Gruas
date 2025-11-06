@@ -120,7 +120,7 @@ export default function CriarObraFromOrcamentoPage() {
 
   if (!orcamento) {
     return (
-      <div className="p-6">
+      <div>
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-gray-600">Orçamento não encontrado</p>
@@ -134,7 +134,7 @@ export default function CriarObraFromOrcamentoPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" onClick={() => router.back()}>
           <ArrowLeft className="w-4 h-4 mr-2" />

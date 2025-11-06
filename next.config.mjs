@@ -117,6 +117,25 @@ const nextConfig = {
       '@radix-ui/react-tabs',
       '@radix-ui/react-toast',
     ],
+    // Otimizar cache de servidor
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
+    // Otimizar renderização
+    optimizeCss: true,
+  },
+  
+  // ==================================
+  // ⚡ OTIMIZAÇÕES ADICIONAIS
+  // ==================================
+  // Reduzir tamanho do bundle
+  swcMinify: true,
+  
+  // Otimizar compilação
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
   },
 
   // ==================================

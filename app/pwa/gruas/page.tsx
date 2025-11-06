@@ -15,13 +15,17 @@ import {
   WifiOff,
   RefreshCw,
   Truck,
-  Building2
+  Building2,
+  BookOpen,
+  ArrowRight
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { gruasApi, Grua } from "@/lib/api-gruas"
 
 export default function PWAGruasPage() {
+  const router = useRouter()
   const [gruas, setGruas] = useState<Grua[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isOnline, setIsOnline] = useState(true)
@@ -271,6 +275,19 @@ export default function PWAGruasPage() {
                         {formatarData(grua.proxima_manutencao)}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Botão para acessar livro da grua */}
+                  <div className="pt-3 border-t border-gray-100">
+                    <Button
+                      onClick={() => router.push(`/pwa/gruas/${grua.id}`)}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <BookOpen className="w-4 h-4 mr-2" />
+                      Ver Checklist e Manutenções
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
