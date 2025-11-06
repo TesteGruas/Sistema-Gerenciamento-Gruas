@@ -77,7 +77,26 @@ const obraSchema = Joi.object({
   art_numero: Joi.string().allow(null, '').optional(),
   art_arquivo: Joi.string().allow(null, '').optional(),
   apolice_numero: Joi.string().allow(null, '').optional(),
-  apolice_arquivo: Joi.string().allow(null, '').optional()
+  apolice_arquivo: Joi.string().allow(null, '').optional(),
+  // Responsável técnico e sinaleiros (para processamento durante criação)
+  responsavel_tecnico: Joi.object({
+    funcionario_id: Joi.number().integer().positive().optional(),
+    nome: Joi.string().min(2).when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.optional() }),
+    cpf_cnpj: Joi.string().when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.optional() }),
+    crea: Joi.string().allow(null, '').optional(),
+    email: Joi.string().email().allow(null, '').optional(),
+    telefone: Joi.string().allow(null, '').optional()
+  }).allow(null).optional(),
+  sinaleiros: Joi.array().items(
+    Joi.object({
+      id: Joi.string().uuid().allow(null, '').optional(),
+      nome: Joi.string().min(2).required(),
+      rg_cpf: Joi.string().required(),
+      telefone: Joi.string().allow(null, '').optional(),
+      email: Joi.string().email().allow(null, '').optional(),
+      tipo: Joi.string().valid('principal', 'reserva').required()
+    })
+  ).allow(null).optional()
 })
 
 /**
@@ -616,6 +635,17 @@ router.get('/:id', authenticateToken, async (req, res) => {
           quantidade_saldo,
           valor_saldo,
           tipo
+        ),
+        sinaleiros_obra (
+          id,
+          obra_id,
+          nome,
+          rg_cpf,
+          telefone,
+          email,
+          tipo,
+          created_at,
+          updated_at
         )
       `)
       .eq('id', id)
@@ -967,6 +997,103 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     }
 
     console.log('✅ Obra criada com sucesso:', data?.id)
+    console.log('🔍 DEBUG - Responsável técnico recebido:', value.responsavel_tecnico)
+    console.log('🔍 DEBUG - Sinaleiros recebidos:', value.sinaleiros)
+
+    // Processar responsável técnico se fornecido
+    if (value.responsavel_tecnico && (value.responsavel_tecnico.funcionario_id || (value.responsavel_tecnico.nome && value.responsavel_tecnico.cpf_cnpj))) {
+      console.log('🔧 Processando responsável técnico...')
+      try {
+        const { funcionario_id, nome, cpf_cnpj, crea, email, telefone } = value.responsavel_tecnico
+        
+        if (funcionario_id) {
+          // Se vier funcionario_id, atualiza diretamente os campos na tabela obras
+          const { data: func, error: errFunc } = await supabaseAdmin
+            .from('funcionarios')
+            .select('id, nome')
+            .eq('id', funcionario_id)
+            .single()
+
+          if (!errFunc && func) {
+            const { error: errUpdateObra } = await supabaseAdmin
+              .from('obras')
+              .update({ responsavel_id: func.id, responsavel_nome: func.nome })
+              .eq('id', data.id)
+
+            if (errUpdateObra) {
+              console.error('❌ Erro ao atualizar responsável técnico na obra:', errUpdateObra)
+            } else {
+              console.log('✅ Responsável técnico (funcionário) salvo com sucesso')
+            }
+          }
+        } else if (nome && cpf_cnpj) {
+          // Criar na tabela responsaveis_tecnicos
+          const { data: responsavelCriado, error: errResponsavel } = await supabaseAdmin
+            .from('responsaveis_tecnicos')
+            .insert({
+              obra_id: data.id,
+              nome,
+              cpf_cnpj,
+              crea: crea || null,
+              email: email || null,
+              telefone: telefone || null
+            })
+            .select()
+            .single()
+
+          if (errResponsavel) {
+            console.error('❌ Erro ao criar responsável técnico:', errResponsavel)
+          } else {
+            // Atualizar também a obra com o nome do responsável
+            const { error: errUpdateObra } = await supabaseAdmin
+              .from('obras')
+              .update({ responsavel_nome: nome })
+              .eq('id', data.id)
+
+            if (errUpdateObra) {
+              console.error('❌ Erro ao atualizar responsável técnico na obra:', errUpdateObra)
+            } else {
+              console.log('✅ Responsável técnico salvo com sucesso')
+            }
+          }
+        }
+      } catch (responsavelError) {
+        console.error('❌ Erro ao processar responsável técnico:', responsavelError)
+        // Não falhar a criação da obra por causa do responsável técnico
+      }
+    }
+
+    // Processar sinaleiros se fornecidos
+    if (value.sinaleiros && Array.isArray(value.sinaleiros) && value.sinaleiros.length > 0) {
+      console.log('🔧 Processando sinaleiros...')
+      try {
+        const sinaleirosValidos = value.sinaleiros.filter(s => s.nome && s.rg_cpf)
+        
+        if (sinaleirosValidos.length > 0) {
+          for (const sinaleiro of sinaleirosValidos) {
+            const { id: sinaleiroId, ...sinaleiroData } = sinaleiro
+            
+            const { data: sinaleiroCriado, error: errSinaleiro } = await supabaseAdmin
+              .from('sinaleiros_obra')
+              .insert({
+                obra_id: data.id,
+                ...sinaleiroData
+              })
+              .select()
+              .single()
+
+            if (errSinaleiro) {
+              console.error('❌ Erro ao criar sinaleiro:', errSinaleiro)
+            } else {
+              console.log('✅ Sinaleiro criado com sucesso:', sinaleiroCriado)
+            }
+          }
+        }
+      } catch (sinaleirosError) {
+        console.error('❌ Erro ao processar sinaleiros:', sinaleirosError)
+        // Não falhar a criação da obra por causa dos sinaleiros
+      }
+    }
 
     // Processar dados das gruas se fornecidos
     if (value.gruas && value.gruas.length > 0) {
@@ -1766,6 +1893,37 @@ router.post('/sinaleiros/:id/documentos', authenticateToken, requirePermission('
   try {
     const { id } = req.params
     const { tipo, arquivo, data_validade } = req.body
+
+    // Validar se o ID é um UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ 
+        error: 'ID inválido', 
+        message: 'O sinaleiro precisa ser salvo no banco antes de adicionar documentos. O ID fornecido não é um UUID válido.' 
+      })
+    }
+
+    // Verificar se o sinaleiro existe e obter o tipo
+    const { data: sinaleiro, error: sinaleiroError } = await supabaseAdmin
+      .from('sinaleiros_obra')
+      .select('id, tipo')
+      .eq('id', id)
+      .single()
+
+    if (sinaleiroError || !sinaleiro) {
+      return res.status(404).json({ 
+        error: 'Sinaleiro não encontrado', 
+        message: 'O sinaleiro especificado não existe no banco de dados.' 
+      })
+    }
+
+    // Bloquear documentos para sinaleiros internos (tipo='principal')
+    if (sinaleiro.tipo === 'principal') {
+      return res.status(400).json({ 
+        error: 'Documentos não permitidos', 
+        message: 'Sinaleiros internos não precisam de documentos. Eles já possuem documentos cadastrados como funcionários.' 
+      })
+    }
 
     const schema = Joi.object({
       tipo: Joi.string().required(),

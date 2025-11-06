@@ -386,14 +386,8 @@ export default function NovaObraPage() {
       return
     }
 
-    if (!responsavelTecnico) {
-      toast({
-        title: "Erro",
-        description: "Cadastre o responsável técnico da obra",
-        variant: "destructive"
-      })
-      return
-    }
+    // Validação do responsável técnico removida - agora é opcional na criação
+    // O responsável técnico pode ser cadastrado depois de criar a obra
 
     try {
       setCreating(true)
@@ -478,6 +472,10 @@ export default function NovaObraPage() {
       }
       
       const obraId = response.data.id
+      console.log('✅ Obra criada com ID:', obraId)
+      console.log('🔍 DEBUG - Estado antes de salvar responsável e sinaleiros:')
+      console.log('  - responsavelTecnico:', responsavelTecnico)
+      console.log('  - sinaleiros:', sinaleiros)
       
       // 3. Fazer upload dos arquivos ART e Apólice
       let artArquivoUrl = ''
@@ -538,45 +536,98 @@ export default function NovaObraPage() {
           apolice_numero: apoliceNumero || undefined,
           apolice_arquivo: apoliceArquivoUrl || undefined
         })
-        
-        // 5. Salvar responsável técnico
-        if (responsavelTecnico) {
-          await responsavelTecnicoApi.criarOuAtualizar(obraId, {
-            funcionario_id: responsavelTecnico.funcionario_id,
-            nome: responsavelTecnico.nome,
-            cpf_cnpj: responsavelTecnico.cpf_cnpj,
-            crea: responsavelTecnico.crea,
-            email: responsavelTecnico.email,
-            telefone: responsavelTecnico.telefone
-          })
-        }
-        
-        // 6. Salvar sinaleiros
-        if (sinaleiros && sinaleiros.length > 0) {
-          await sinaleirosApi.criarOuAtualizar(obraId, sinaleiros.map(s => ({
-            nome: s.nome,
-            rg_cpf: s.rg_cpf,
-            telefone: s.telefone,
-            email: s.email,
-            tipo: s.tipo
-          })))
-        }
-        
-        toast({
-          title: "Sucesso",
-          description: "Obra criada com sucesso!"
-        })
-        router.push('/dashboard/obras')
       } catch (uploadError) {
-        console.error('Erro ao fazer upload de arquivos ou salvar dados adicionais:', uploadError)
-        // Mesmo com erro no upload, a obra foi criada, então avisar o usuário
-        toast({
-          title: "Atenção",
-          description: "Obra criada, mas houve erro ao fazer upload de alguns arquivos. Você pode editá-la depois.",
-          variant: "default"
-        })
-        router.push(`/dashboard/obras/${obraId}`)
+        console.error('Erro ao fazer upload de arquivos:', uploadError)
+        // Continuar mesmo com erro no upload - a obra já foi criada
       }
+      
+      // 5. Salvar responsável técnico (apenas se houver dados válidos)
+      // IMPORTANTE: Fora do try/catch de upload para garantir que seja executado
+      console.log('🔍 DEBUG - Responsável técnico no estado:', responsavelTecnico)
+      if (responsavelTecnico) {
+        const temFuncionarioId = !!responsavelTecnico.funcionario_id
+        const temDadosCompletos = !!(responsavelTecnico.nome && responsavelTecnico.cpf_cnpj)
+        
+        console.log('🔍 DEBUG - Validação responsável:', { temFuncionarioId, temDadosCompletos })
+        
+        if (temFuncionarioId || temDadosCompletos) {
+          try {
+            // Se tiver funcionario_id, enviar apenas ele. Caso contrário, enviar os dados completos
+            const payload = responsavelTecnico.funcionario_id
+              ? { funcionario_id: responsavelTecnico.funcionario_id }
+              : {
+                  nome: responsavelTecnico.nome,
+                  cpf_cnpj: responsavelTecnico.cpf_cnpj,
+                  crea: responsavelTecnico.crea,
+                  email: responsavelTecnico.email,
+                  telefone: responsavelTecnico.telefone
+                }
+            console.log('📤 Enviando responsável técnico:', payload)
+            const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
+            console.log('✅ Responsável técnico salvo:', response)
+          } catch (error) {
+            console.error('❌ Erro ao salvar responsável técnico:', error)
+            toast({
+              title: "Aviso",
+              description: "Obra criada, mas houve erro ao salvar o responsável técnico. Você pode editá-lo depois.",
+              variant: "destructive"
+            })
+          }
+        } else {
+          console.warn('⚠️ Responsável técnico não tem dados válidos para salvar')
+        }
+      } else {
+        console.log('⚠️ Nenhum responsável técnico no estado')
+      }
+      
+      // 6. Salvar sinaleiros (apenas se houver dados válidos)
+      // IMPORTANTE: Fora do try/catch de upload para garantir que seja executado
+      console.log('🔍 DEBUG - Sinaleiros no estado:', sinaleiros)
+      if (sinaleiros && sinaleiros.length > 0) {
+        // Filtrar apenas sinaleiros com dados válidos (nome e rg_cpf preenchidos)
+        const sinaleirosValidos = sinaleiros.filter(s => {
+          const temNome = !!s.nome
+          const temDocumento = !!(s.rg_cpf || s.cpf || s.rg)
+          return temNome && temDocumento
+        })
+        
+        console.log('🔍 DEBUG - Sinaleiros válidos:', sinaleirosValidos)
+        
+        if (sinaleirosValidos.length > 0) {
+          try {
+            // Converter para o formato esperado pelo backend (remover IDs temporários)
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+            const sinaleirosParaEnviar = sinaleirosValidos.map(s => ({
+              id: s.id && uuidRegex.test(s.id) ? s.id : undefined,
+              nome: s.nome,
+              rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+              telefone: s.telefone || '',
+              email: s.email || '',
+              tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
+            }))
+            console.log('📤 Enviando sinaleiros:', sinaleirosParaEnviar)
+            const response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
+            console.log('✅ Sinaleiros salvos:', response)
+          } catch (error) {
+            console.error('❌ Erro ao salvar sinaleiros:', error)
+            toast({
+              title: "Aviso",
+              description: "Obra criada, mas houve erro ao salvar os sinaleiros. Você pode editá-los depois.",
+              variant: "destructive"
+            })
+          }
+        } else {
+          console.warn('⚠️ Nenhum sinaleiro válido para salvar')
+        }
+      } else {
+        console.log('⚠️ Nenhum sinaleiro no estado')
+      }
+      
+      toast({
+        title: "Sucesso",
+        description: "Obra criada com sucesso!"
+      })
+      router.push('/dashboard/obras')
     } catch (err) {
       console.error('Erro ao criar obra:', err)
       setError(err instanceof Error ? err.message : 'Erro ao criar obra')
@@ -949,7 +1000,9 @@ export default function NovaObraPage() {
               </CardHeader>
               <CardContent>
                 <ResponsavelTecnicoForm
+                  responsavel={responsavelTecnico}
                   onSave={(data) => {
+                    console.log('💾 Salvando responsável técnico no estado:', data)
                     setResponsavelTecnico(data)
                     toast({
                       title: "Sucesso",
@@ -976,6 +1029,7 @@ export default function NovaObraPage() {
               <CardContent>
                 <SinaleirosForm
                   onSave={(data) => {
+                    console.log('💾 Salvando sinaleiros no estado:', data)
                     setSinaleiros(data)
                     toast({
                       title: "Sucesso",

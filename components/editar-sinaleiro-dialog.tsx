@@ -13,6 +13,7 @@ import { Plus, Trash2, Save, Shield, FileText } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { mockSinaleirosAPI, type Sinaleiro } from "@/lib/mocks/sinaleiros-mocks"
 import { DocumentosSinaleiroList } from "./documentos-sinaleiro-list"
+import { sinaleirosApi } from "@/lib/api-sinaleiros"
 
 interface Certificado {
   nome: string
@@ -165,39 +166,85 @@ export function EditarSinaleiroDialog({
       }
     }
 
-    if (!sinaleiro) return
+    if (!sinaleiro || !obraId) return
 
     setLoading(true)
     try {
-      const sinaleiroAtualizado: Sinaleiro = {
-        ...sinaleiro,
-        nome: formData.nome,
-        cpf: formData.cpf,
-        rg: formData.rg,
-        rg_cpf: formData.cpf || formData.rg,
-        telefone: formData.telefone,
-        email: formData.email,
-        certificados: certificados.map(cert => ({
-          nome: cert.nome,
-          tipo: cert.tipo,
-          numero: cert.numero,
-          validade: cert.validade
-        }))
-      }
-
-      await mockSinaleirosAPI.atualizar(sinaleiro.id, sinaleiroAtualizado)
+      // Se o sinaleiro tem ID válido (UUID), atualizar via API real
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const temIdValido = sinaleiro.id && uuidRegex.test(sinaleiro.id)
       
-      toast({
-        title: "Sucesso",
-        description: "Sinaleiro atualizado com sucesso"
-      })
+      if (temIdValido) {
+        // Atualizar sinaleiro existente via API real
+        const sinaleirosParaEnviar = [{
+          id: sinaleiro.id,
+          nome: formData.nome,
+          rg_cpf: formData.cpf || formData.rg || sinaleiro.rg_cpf,
+          telefone: formData.telefone,
+          email: formData.email,
+          tipo: sinaleiro.tipo || (sinaleiro.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
+        }]
+        
+        const response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
+        
+        if (response.success && response.data && response.data.length > 0) {
+          const sinaleiroAtualizado: Sinaleiro = {
+            ...sinaleiro,
+            id: response.data[0].id,
+            nome: formData.nome,
+            cpf: formData.cpf,
+            rg: formData.rg,
+            rg_cpf: formData.cpf || formData.rg,
+            telefone: formData.telefone,
+            email: formData.email,
+            certificados: certificados.map(cert => ({
+              nome: cert.nome,
+              tipo: cert.tipo,
+              numero: cert.numero,
+              validade: cert.validade
+            }))
+          }
+          
+          toast({
+            title: "Sucesso",
+            description: "Sinaleiro atualizado com sucesso"
+          })
+          
+          onSave(sinaleiroAtualizado)
+          onOpenChange(false)
+        }
+      } else {
+        // Se não tem ID válido, usar mock (compatibilidade)
+        const sinaleiroAtualizado: Sinaleiro = {
+          ...sinaleiro,
+          nome: formData.nome,
+          cpf: formData.cpf,
+          rg: formData.rg,
+          rg_cpf: formData.cpf || formData.rg,
+          telefone: formData.telefone,
+          email: formData.email,
+          certificados: certificados.map(cert => ({
+            nome: cert.nome,
+            tipo: cert.tipo,
+            numero: cert.numero,
+            validade: cert.validade
+          }))
+        }
 
-      onSave(sinaleiroAtualizado)
-      onOpenChange(false)
-    } catch (error) {
+        await mockSinaleirosAPI.atualizar(sinaleiro.id, sinaleiroAtualizado)
+        
+        toast({
+          title: "Sucesso",
+          description: "Sinaleiro atualizado com sucesso"
+        })
+
+        onSave(sinaleiroAtualizado)
+        onOpenChange(false)
+      }
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao atualizar sinaleiro",
+        description: error.message || "Erro ao atualizar sinaleiro",
         variant: "destructive"
       })
     } finally {
@@ -238,9 +285,11 @@ export function EditarSinaleiroDialog({
         </DialogHeader>
 
         <Tabs defaultValue="dados" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={`grid w-full ${sinaleiro.tipo_vinculo === 'interno' || sinaleiro.tipo === 'principal' ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <TabsTrigger value="dados">Dados Pessoais</TabsTrigger>
-            <TabsTrigger value="documentos">Documentos</TabsTrigger>
+            {sinaleiro.tipo_vinculo !== 'interno' && sinaleiro.tipo !== 'principal' && (
+              <TabsTrigger value="documentos">Documentos</TabsTrigger>
+            )}
             <TabsTrigger value="certificados">Certificados</TabsTrigger>
           </TabsList>
 
@@ -313,22 +362,36 @@ export function EditarSinaleiroDialog({
             </Card>
           </TabsContent>
 
-          {/* Aba: Documentos */}
-          <TabsContent value="documentos" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Documentos Obrigatórios</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {sinaleiro.id && (
-                  <DocumentosSinaleiroList
-                    sinaleiroId={sinaleiro.id}
-                    readOnly={readOnly}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {/* Aba: Documentos - Apenas para sinaleiros externos (cliente) */}
+          {sinaleiro.tipo_vinculo !== 'interno' && sinaleiro.tipo !== 'principal' && (
+            <TabsContent value="documentos" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Documentos Obrigatórios</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {sinaleiro.id && (() => {
+                    // Validar se o ID é um UUID válido antes de permitir documentos
+                    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+                    if (uuidRegex.test(sinaleiro.id)) {
+                      return (
+                        <DocumentosSinaleiroList
+                          sinaleiroId={sinaleiro.id}
+                          readOnly={readOnly}
+                        />
+                      )
+                    } else {
+                      return (
+                        <div className="text-center py-4 text-sm text-gray-500">
+                          <p>Salve o sinaleiro primeiro para adicionar documentos.</p>
+                        </div>
+                      )
+                    }
+                  })()}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
 
           {/* Aba: Certificados */}
           <TabsContent value="certificados" className="space-y-4">

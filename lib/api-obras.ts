@@ -124,6 +124,17 @@ export interface ObraBackend {
       tipo: string
     }
   }>
+  sinaleiros_obra?: Array<{
+    id: string
+    obra_id: number
+    nome: string
+    rg_cpf: string
+    telefone?: string
+    email?: string
+    tipo: 'principal' | 'reserva'
+    created_at: string
+    updated_at: string
+  }>
 }
 
 export interface ObraCreateData {
@@ -152,6 +163,23 @@ export interface ObraCreateData {
   art_arquivo?: string
   apolice_numero?: string
   apolice_arquivo?: string
+  // Responsável técnico e sinaleiros (para processamento no backend)
+  responsavel_tecnico?: {
+    funcionario_id?: number
+    nome?: string
+    cpf_cnpj?: string
+    crea?: string
+    email?: string
+    telefone?: string
+  }
+  sinaleiros?: Array<{
+    id?: string
+    nome: string
+    rg_cpf: string
+    telefone?: string
+    email?: string
+    tipo: 'principal' | 'reserva'
+  }>
   // Dados da grua (mantido para compatibilidade)
   grua_id?: string
   grua_valor?: number
@@ -755,10 +783,34 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     cliente_nome: obraFrontend.cliente_nome,
     cliente_cnpj: obraFrontend.cliente_cnpj,
     cliente_email: obraFrontend.cliente_email,
-    cliente_telefone: obraFrontend.cliente_telefone
+    cliente_telefone: obraFrontend.cliente_telefone,
+    // Responsável técnico e sinaleiros (para processamento no backend)
+    responsavel_tecnico: obraFrontend.responsavel_tecnico ? {
+      funcionario_id: obraFrontend.responsavel_tecnico.funcionario_id,
+      nome: obraFrontend.responsavel_tecnico.nome,
+      cpf_cnpj: obraFrontend.responsavel_tecnico.cpf_cnpj,
+      crea: obraFrontend.responsavel_tecnico.crea,
+      email: obraFrontend.responsavel_tecnico.email,
+      telefone: obraFrontend.responsavel_tecnico.telefone
+    } : undefined,
+    sinaleiros: obraFrontend.sinaleiros && Array.isArray(obraFrontend.sinaleiros) && obraFrontend.sinaleiros.length > 0 ? obraFrontend.sinaleiros
+      .filter((s: any) => s.nome && (s.rg_cpf || s.cpf || s.rg)) // Filtrar apenas válidos
+      .map((s: any) => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        return {
+          id: s.id && uuidRegex.test(s.id) ? s.id : undefined,
+          nome: s.nome,
+          rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+          telefone: s.telefone || '',
+          email: s.email || '',
+          tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
+        }
+      }) : undefined
   }
   
   console.log('🔍 DEBUG - Resultado da conversão:', result)
+  console.log('🔍 DEBUG - Responsável técnico no payload:', result.responsavel_tecnico)
+  console.log('🔍 DEBUG - Sinaleiros no payload:', result.sinaleiros)
   console.log('🔍 DEBUG - Verificação final dos campos:')
   console.log('  - grua_id:', result.grua_id)
   console.log('  - grua_valor:', result.grua_valor)

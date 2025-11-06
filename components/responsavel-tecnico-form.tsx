@@ -41,6 +41,7 @@ export function ResponsavelTecnicoForm({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<ResponsavelTecnicoData>({
+    funcionario_id: responsavel?.funcionario_id,
     nome: responsavel?.nome || "",
     cpf_cnpj: responsavel?.cpf_cnpj || "",
     crea: responsavel?.crea || "",
@@ -51,12 +52,22 @@ export function ResponsavelTecnicoForm({
   useEffect(() => {
     if (responsavel) {
       setFormData({
-        nome: responsavel.nome,
-        cpf_cnpj: responsavel.cpf_cnpj,
+        funcionario_id: responsavel.funcionario_id,
+        nome: responsavel.nome || "",
+        cpf_cnpj: responsavel.cpf_cnpj || "",
         crea: responsavel.crea || "",
-        email: responsavel.email,
-        telefone: responsavel.telefone
+        email: responsavel.email || "",
+        telefone: responsavel.telefone || ""
       })
+      setIsSearching(false)
+      setSearchResults([])
+    } else {
+      // Se responsavel for null/undefined, limpar apenas se não houver dados no formData
+      // Isso evita limpar quando o componente é montado pela primeira vez
+      if (formData.nome || formData.cpf_cnpj) {
+        // Manter os dados se já houver algo preenchido
+        return
+      }
     }
   }, [responsavel])
 
@@ -134,7 +145,13 @@ export function ResponsavelTecnicoForm({
     setSearchResults([])
   }
 
-  const handleSave = async () => {
+  const handleSave = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevenir submit do formulário pai
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    
     // Se veio de funcionarios, apenas envia funcionario_id
     const isFuncionarioVinculo = !!formData.funcionario_id
 
@@ -158,13 +175,17 @@ export function ResponsavelTecnicoForm({
       return
     }
 
-    // Se não tiver obraId, apenas chamar onSave (para formulários inline)
+    // Se não tiver obraId, apenas chamar onSave (para formulários inline - página de nova obra)
     if (!obraId) {
+      toast({
+        title: "Sucesso",
+        description: "Responsável técnico salvo localmente. Será enviado ao criar a obra."
+      })
       onSave(formData)
       return
     }
 
-    // Salvar via API
+    // Salvar via API (apenas quando já existe obraId - edição de obra existente)
     setSaving(true)
     try {
       const payload = isFuncionarioVinculo
@@ -220,7 +241,7 @@ export function ResponsavelTecnicoForm({
         <CardTitle className="flex items-center justify-between">
           <span>Responsável Técnico da Obra</span>
           {onCancel && (
-            <Button variant="ghost" size="sm" onClick={onCancel}>
+            <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
               <X className="w-4 h-4" />
             </Button>
           )}
@@ -238,7 +259,7 @@ export function ResponsavelTecnicoForm({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               />
-              <Button onClick={handleSearch} variant="outline" disabled={loading || isSearching}>
+              <Button type="button" onClick={handleSearch} variant="outline" disabled={loading || isSearching}>
                 {loading ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
@@ -341,11 +362,11 @@ export function ResponsavelTecnicoForm({
         {!readOnly && (
           <div className="flex justify-end gap-2 pt-4 border-t">
             {onCancel && (
-              <Button variant="outline" onClick={onCancel}>
+              <Button type="button" variant="outline" onClick={onCancel}>
                 Cancelar
               </Button>
             )}
-            <Button onClick={handleSave} disabled={saving}>
+            <Button type="button" onClick={handleSave} disabled={saving}>
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
