@@ -45,11 +45,16 @@ export function DocumentosSinaleiroList({
   const [loading, setLoading] = useState(false)
   const [uploadingTipo, setUploadingTipo] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadDocumentos()
-  }, [sinaleiroId])
-
   const loadDocumentos = async () => {
+    // Validar se o ID é um UUID válido antes de fazer a requisição
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!sinaleiroId || !uuidRegex.test(sinaleiroId)) {
+      console.warn('⚠️ Tentativa de carregar documentos com ID inválido:', sinaleiroId)
+      setDocumentos([])
+      setLoading(false)
+      return
+    }
+    
     setLoading(true)
     try {
       const response = await sinaleirosApi.listarDocumentos(sinaleiroId)
@@ -69,17 +74,48 @@ export function DocumentosSinaleiroList({
         setDocumentos(documentosConvertidos)
       }
     } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao carregar documentos",
-        variant: "destructive"
-      })
+      // Ignorar erros relacionados a IDs inválidos (temporários)
+      if (error.message?.includes('invalid input syntax for type uuid')) {
+        console.warn('⚠️ ID temporário detectado, ignorando erro:', sinaleiroId)
+        setDocumentos([])
+      } else {
+        console.error('Erro ao carregar documentos:', error)
+        toast({
+          title: "Erro",
+          description: error.message || "Erro ao carregar documentos do sinaleiro",
+          variant: "destructive"
+        })
+      }
     } finally {
       setLoading(false)
     }
   }
 
+  useEffect(() => {
+    // Validar se o ID é um UUID válido antes de tentar carregar
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (sinaleiroId && uuidRegex.test(sinaleiroId)) {
+      loadDocumentos()
+    } else {
+      // Se não for UUID válido, limpar documentos e não tentar carregar
+      setDocumentos([])
+      setLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sinaleiroId])
+
   const handleUpload = async (tipo: string, file: File) => {
+    // Validar se o sinaleiroId é um UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(sinaleiroId)) {
+      toast({
+        title: "Erro",
+        description: "O sinaleiro precisa ser salvo no banco antes de adicionar documentos. Salve o sinaleiro primeiro.",
+        variant: "destructive"
+      })
+      return
+    }
+    
     setUploadingTipo(tipo)
     try {
       // Primeiro fazer upload do arquivo

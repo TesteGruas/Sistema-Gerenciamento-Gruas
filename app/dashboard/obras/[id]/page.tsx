@@ -69,6 +69,7 @@ import GruaSearch from "@/components/grua-search"
 import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 import { obraGruasApi } from "@/lib/api-obra-gruas"
 import { useObraStore } from "@/lib/obra-store"
+import { sinaleirosApi } from "@/lib/api-sinaleiros"
 
 function ObraDetailsPageContent() {
 
@@ -96,6 +97,39 @@ function ObraDetailsPageContent() {
   const [errorDocumentos, setErrorDocumentos] = useState<string | null>(null)
   const [errorArquivos, setErrorArquivos] = useState<string | null>(null)
   
+  // Função para carregar sinaleiros reais da API
+  const carregarSinaleiros = async () => {
+    if (!obraId) return
+    
+    setLoadingSinaleiros(true)
+    try {
+      const response = await sinaleirosApi.listarPorObra(parseInt(obraId))
+      if (response.success && response.data) {
+        // Converter para formato esperado pelo componente
+        const sinaleirosConvertidos = response.data.map((s: any) => ({
+          id: s.id, // UUID real do banco
+          obra_id: s.obra_id,
+          nome: s.nome,
+          rg_cpf: s.rg_cpf,
+          cpf: s.rg_cpf, // Assumir que rg_cpf pode ser CPF
+          rg: s.rg_cpf, // Assumir que rg_cpf pode ser RG
+          telefone: s.telefone || '',
+          email: s.email || '',
+          tipo: s.tipo, // 'principal' ou 'reserva'
+          tipo_vinculo: s.tipo === 'principal' ? 'interno' : 'cliente', // Mapear para compatibilidade
+          cliente_informou: s.tipo === 'reserva',
+          documentos: [],
+          certificados: []
+        }))
+        setSinaleirosReais(sinaleirosConvertidos)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar sinaleiros:', error)
+    } finally {
+      setLoadingSinaleiros(false)
+    }
+  }
+
   // Funções para carregar documentos e arquivos
   const carregarDocumentos = async () => {
     if (!obraId) return
@@ -167,6 +201,8 @@ function ObraDetailsPageContent() {
   // Estados para edição de sinaleiro
   const [isEditarSinaleiroOpen, setIsEditarSinaleiroOpen] = useState(false)
   const [sinaleiroSelecionado, setSinaleiroSelecionado] = useState<any>(null)
+  const [sinaleirosReais, setSinaleirosReais] = useState<any[]>([])
+  const [loadingSinaleiros, setLoadingSinaleiros] = useState(false)
 
   // Estado para tab ativa (para exportação PDF)
   const [activeTab, setActiveTab] = useState<string>('geral')
@@ -1416,10 +1452,11 @@ function ObraDetailsPageContent() {
       if (isAuth) {
         await carregarObra(obraId)
         
-        // Carregar documentos e arquivos em paralelo
+        // Carregar documentos, arquivos e sinaleiros em paralelo
         await Promise.all([
           carregarDocumentos(),
-          carregarArquivos()
+          carregarArquivos(),
+          carregarSinaleiros()
         ])
       }
     }
@@ -2026,32 +2063,63 @@ function ObraDetailsPageContent() {
                         <div className="mt-4 pt-4 border-t">
                           <h4 className="font-medium text-sm mb-3">Sinaleiros</h4>
                           {(() => {
-                            // Buscar sinaleiros da obra (sempre devem ser 2: interno e cliente)
-                            const sinaleirosGrua = obra?.sinaleiros || []
+                            // Prioridade: 1) sinaleiros_obra da API /obras/:id, 2) sinaleirosReais carregados separadamente, 3) obra.sinaleiros (fallback)
+                            const sinaleirosDaObra = obra?.sinaleiros_obra ? obra.sinaleiros_obra.map((s: any) => ({
+                              id: s.id,
+                              obra_id: s.obra_id,
+                              nome: s.nome,
+                              rg_cpf: s.rg_cpf,
+                              cpf: s.rg_cpf,
+                              rg: s.rg_cpf,
+                              telefone: s.telefone || '',
+                              email: s.email || '',
+                              tipo: s.tipo,
+                              tipo_vinculo: s.tipo === 'principal' ? 'interno' : 'cliente',
+                              cliente_informou: s.tipo === 'reserva',
+                              documentos: [],
+                              certificados: []
+                            })) : []
                             
-                            // Garantir que sempre existam 2 sinaleiros
-                            const sinaleirosMockados = sinaleirosGrua.length >= 2 ? sinaleirosGrua : [
-                              {
-                                nome: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.nome || 'Não cadastrado',
+                            const sinaleirosDisponiveis = sinaleirosDaObra.length > 0 
+                              ? sinaleirosDaObra 
+                              : (sinaleirosReais.length > 0 ? sinaleirosReais : (obra?.sinaleiros || []))
+                            
+                            // Garantir que sempre existam 2 sinaleiros (principal e reserva)
+                            const sinaleiroPrincipal = sinaleirosDisponiveis.find((s: any) => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
+                            const sinaleiroReserva = sinaleirosDisponiveis.find((s: any) => s.tipo === 'reserva' || s.tipo_vinculo === 'cliente')
+                            
+                            const sinaleirosParaExibir = [
+                              sinaleiroPrincipal || {
+                                id: null, // Sem ID = não salvo no banco
+                                nome: 'Não cadastrado',
                                 tipo_vinculo: 'interno',
-                                cpf: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.cpf || '',
-                                rg: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.rg || '',
-                                documentos: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.documentos || [],
-                                certificados: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'interno')?.certificados || []
+                                tipo: 'principal',
+                                cpf: '',
+                                rg: '',
+                                rg_cpf: '',
+                                telefone: '',
+                                email: '',
+                                documentos: [],
+                                certificados: []
                               },
-                              {
-                                nome: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.nome || 'Não cadastrado',
+                              sinaleiroReserva || {
+                                id: null, // Sem ID = não salvo no banco
+                                nome: 'Não cadastrado',
                                 tipo_vinculo: 'cliente',
-                                cpf: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.cpf || '',
-                                rg: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.rg || '',
-                                documentos: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.documentos || [],
-                                certificados: sinaleirosGrua.find((s: any) => s.tipo_vinculo === 'cliente')?.certificados || []
+                                tipo: 'reserva',
+                                cpf: '',
+                                rg: '',
+                                rg_cpf: '',
+                                telefone: '',
+                                email: '',
+                                documentos: [],
+                                certificados: []
                               }
                             ]
                             
                             return (
                               <div className="space-y-3">
-                                {sinaleirosMockados.map((s: any, idx: number) => (
+                                {sinaleirosParaExibir.map((s: any, idx: number) => (
                                   <div key={idx} className="p-3 bg-gray-50 rounded-md border border-gray-200">
                                     <div className="flex items-center justify-between mb-2">
                                       <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'} className="text-xs">
@@ -2063,19 +2131,29 @@ function ObraDetailsPageContent() {
                                           size="sm"
                                           onClick={() => {
                                             try {
-                                              // Converter o objeto mockado para o formato Sinaleiro
+                                              // Se o sinaleiro não tem ID (não foi salvo), mostrar mensagem
+                                              if (!s.id) {
+                                                toast({
+                                                  title: "Atenção",
+                                                  description: "Este sinaleiro ainda não foi cadastrado. Cadastre-o primeiro antes de editar.",
+                                                  variant: "default"
+                                                })
+                                                return
+                                              }
+                                              
+                                              // Converter para o formato Sinaleiro esperado pelo componente
                                               const sinaleiroFormatado: any = {
-                                                id: s.id || `s_${Date.now()}_${idx}`,
-                                                obra_id: parseInt(obraId) || 0,
+                                                id: s.id, // UUID real do banco
+                                                obra_id: s.obra_id || parseInt(obraId) || 0,
                                                 nome: s.nome || 'Não informado',
-                                                cpf: s.cpf || '',
+                                                cpf: s.cpf || s.rg_cpf || '',
                                                 rg: s.rg || s.rg_cpf || '',
-                                                rg_cpf: s.cpf || s.rg || s.rg_cpf || '',
+                                                rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
                                                 telefone: s.telefone || '',
                                                 email: s.email || '',
-                                                tipo: s.tipo_vinculo === 'interno' ? 'principal' : 'reserva',
-                                                tipo_vinculo: s.tipo_vinculo || 'cliente',
-                                                cliente_informou: s.tipo_vinculo === 'cliente',
+                                                tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
+                                                tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
+                                                cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
                                                 documentos: s.documentos || [],
                                                 certificados: s.certificados || []
                                               }
@@ -5039,7 +5117,7 @@ function ObraDetailsPageContent() {
         onOpenChange={setIsEditarSinaleiroOpen}
         sinaleiro={sinaleiroSelecionado}
         obraId={parseInt(obraId)}
-        onSave={(sinaleiroAtualizado) => {
+        onSave={async (sinaleiroAtualizado) => {
           // Atualizar o sinaleiro na obra
           if (obra) {
             const sinaleirosAtualizados = obra.sinaleiros?.map((s: any) => 
@@ -5055,9 +5133,12 @@ function ObraDetailsPageContent() {
             description: "Sinaleiro atualizado com sucesso"
           })
           
-          // Recarregar a obra para atualizar os dados
+          // Recarregar a obra e sinaleiros para atualizar os dados
           if (obraId) {
-            carregarObra(parseInt(obraId))
+            await Promise.all([
+              carregarObra(parseInt(obraId)),
+              carregarSinaleiros()
+            ])
           }
         }}
         readOnly={false}

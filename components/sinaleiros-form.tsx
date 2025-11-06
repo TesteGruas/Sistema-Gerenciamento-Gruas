@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Save, User, FileText, Shield } from "lucide-react"
+import { Plus, Trash2, Save, User, FileText, Shield, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { sinaleirosApi, type SinaleiroBackend } from "@/lib/api-sinaleiros"
 import { DocumentosSinaleiroList } from "./documentos-sinaleiro-list"
 import { FuncionarioSearch } from "./funcionario-search"
 import { funcionariosApi } from "@/lib/api-funcionarios"
+import { type Sinaleiro } from "@/lib/mocks/sinaleiros-mocks"
 
 interface SinaleirosFormProps {
   obraId?: number
@@ -142,14 +143,25 @@ export function SinaleirosForm({
   }
 
   const handleUpdateSinaleiro = (id: string, field: keyof Sinaleiro, value: any) => {
-    setSinaleiros(sinaleiros.map(s => 
-      s.id === id ? { ...s, [field]: value } : s
-    ))
+    console.log(`🔄 Atualizando sinaleiro ${id}, campo ${field} com valor:`, value)
+    setSinaleiros(prevSinaleiros => {
+      const updated = prevSinaleiros.map(s => 
+        s.id === id ? { ...s, [field]: value } : s
+      )
+      console.log('📋 Sinaleiros atualizados:', updated)
+      return updated
+    })
   }
 
-  const handleSave = async () => {
+  const handleSave = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevenir submit do formulário pai
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    
     // Validar sinaleiro principal obrigatório
-    const principal = sinaleiros.find(s => s.tipo === 'principal')
+    const principal = sinaleiros.find(s => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
     if (!principal || !principal.nome || !principal.rg_cpf) {
       toast({
         title: "Erro",
@@ -159,6 +171,8 @@ export function SinaleirosForm({
       return
     }
     
+    // Validar sinaleiro cliente (reserva)
+    const cliente = sinaleiros.find(s => s.tipo === 'reserva' || s.tipo_vinculo === 'cliente')
     if (!cliente || !cliente.nome || (!cliente.cpf && !cliente.rg && !cliente.rg_cpf)) {
       toast({
         title: "Erro",
@@ -171,15 +185,56 @@ export function SinaleirosForm({
     setLoading(true)
     try {
       // Converter Sinaleiro para formato do backend
-      const sinaleirosParaEnviar = sinaleiros.map(s => ({
-        id: s.id.startsWith('new_') ? undefined : s.id,
-        nome: s.nome,
-        rg_cpf: s.rg_cpf,
-        telefone: s.telefone,
-        email: s.email,
-        tipo: s.tipo
-      }))
+      // Remover IDs temporários (interno_*, cliente_*, new_*) - apenas UUIDs válidos ou undefined
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const sinaleirosParaEnviar = sinaleiros.map(s => {
+        // Se o ID não é um UUID válido, enviar como undefined (criar novo)
+        const idValido = s.id && uuidRegex.test(s.id) ? s.id : undefined
+        
+        return {
+          id: idValido,
+          nome: s.nome,
+          rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+          telefone: s.telefone,
+          email: s.email,
+          tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
+        }
+      })
+      
+      console.log('📤 Enviando sinaleiros para o backend:', sinaleirosParaEnviar)
+      console.log('📤 Obra ID:', obraId)
 
+      // Se não tiver obraId, apenas salvar no estado local (página de nova obra)
+      if (!obraId) {
+        // Converter para formato do componente antes de salvar
+        const sinaleirosSalvos: Sinaleiro[] = sinaleirosParaEnviar.map(s => ({
+          id: s.id || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          obra_id: 0,
+          nome: s.nome,
+          rg_cpf: s.rg_cpf,
+          cpf: s.rg_cpf, // Assumir que rg_cpf pode ser CPF
+          rg: s.rg_cpf, // Assumir que rg_cpf pode ser RG
+          telefone: s.telefone || '',
+          email: s.email || '',
+          tipo: s.tipo,
+          tipo_vinculo: s.tipo === 'principal' ? 'interno' : 'cliente',
+          cliente_informou: s.tipo === 'reserva',
+          documentos: [],
+          certificados: []
+        }))
+
+        toast({
+          title: "Sucesso",
+          description: "Sinaleiros salvos localmente. Serão enviados ao criar a obra."
+        })
+
+        setSinaleiros(sinaleirosSalvos)
+        onSave(sinaleirosSalvos)
+        setLoading(false)
+        return
+      }
+
+      // Salvar via API (apenas quando já existe obraId - edição de obra existente)
       const response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
       
       if (response.success && response.data) {
@@ -245,6 +300,95 @@ export function SinaleirosForm({
               {sinaleiro.tipo_vinculo === 'cliente' && (
                 <div className="mb-3 p-2 bg-blue-50 rounded-md">
                   <p className="text-xs text-blue-700">Este sinaleiro pode ser editado pelo cliente</p>
+                </div>
+              )}
+
+              {/* Busca de funcionário para sinaleiro interno */}
+              {sinaleiro.tipo_vinculo === 'interno' && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
+                  <Label className="text-sm font-medium mb-2 block">
+                    Buscar Funcionário (Sinaleiro)
+                  </Label>
+                  <FuncionarioSearch
+                    onFuncionarioSelect={(funcionario) => {
+                      console.log('🔍 Funcionário selecionado:', funcionario)
+                      console.log('🔍 Sinaleiro ID:', sinaleiro.id)
+                      
+                      if (funcionario) {
+                        console.log('✅ Preenchendo campos com dados do funcionário:', {
+                          name: funcionario.name,
+                          phone: funcionario.phone,
+                          email: funcionario.email,
+                          cpf: funcionario.cpf
+                        })
+                        
+                        // Preencher campos automaticamente com dados do funcionário
+                        handleUpdateSinaleiro(sinaleiro.id, 'nome', funcionario.name || '')
+                        handleUpdateSinaleiro(sinaleiro.id, 'telefone', funcionario.phone || '')
+                        handleUpdateSinaleiro(sinaleiro.id, 'email', funcionario.email || '')
+                        
+                        // Preencher CPF se disponível
+                        if (funcionario.cpf) {
+                          // Remover formatação existente e reaplicar
+                          const cpfLimpo = funcionario.cpf.replace(/\D/g, '')
+                          if (cpfLimpo.length === 11) {
+                            const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+                            console.log('📝 CPF formatado:', cpfFormatado)
+                            handleUpdateSinaleiro(sinaleiro.id, 'cpf', cpfFormatado)
+                            handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', cpfFormatado)
+                          } else {
+                            // Se não tiver 11 dígitos, usar como está
+                            console.log('📝 CPF sem formatação:', funcionario.cpf)
+                            handleUpdateSinaleiro(sinaleiro.id, 'cpf', funcionario.cpf)
+                            handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', funcionario.cpf)
+                          }
+                        }
+                        
+                        // Tentar buscar RG dos documentos do funcionário
+                        if (funcionario.id) {
+                          console.log('🔍 Buscando documentos do funcionário ID:', funcionario.id)
+                          funcionariosApi.listarDocumentosFuncionario(parseInt(funcionario.id))
+                            .then((response) => {
+                              console.log('📄 Documentos recebidos:', response)
+                              if (response.success && response.data) {
+                                // Procurar documento do tipo 'rg'
+                                const docRG = response.data.find((doc: any) => doc.tipo === 'rg')
+                                if (docRG && docRG.numero) {
+                                  console.log('📝 RG encontrado:', docRG.numero)
+                                  const rgLimpo = docRG.numero.replace(/\D/g, '')
+                                  if (rgLimpo.length <= 9) {
+                                    const rgFormatado = rgLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4')
+                                    handleUpdateSinaleiro(sinaleiro.id, 'rg', rgFormatado)
+                                  } else {
+                                    handleUpdateSinaleiro(sinaleiro.id, 'rg', docRG.numero)
+                                  }
+                                } else {
+                                  console.log('⚠️ RG não encontrado nos documentos')
+                                }
+                              }
+                            })
+                            .catch((error) => {
+                              console.error('❌ Erro ao buscar documentos do funcionário:', error)
+                              // Não mostrar erro ao usuário, apenas logar
+                            })
+                        }
+                        
+                        toast({
+                          title: "Funcionário selecionado",
+                          description: `Dados de ${funcionario.name} preenchidos automaticamente`,
+                        })
+                      } else {
+                        console.log('⚠️ Funcionário é null ou undefined')
+                      }
+                    }}
+                    allowedRoles={['Sinaleiro']}
+                    onlyActive={true}
+                    placeholder="Buscar funcionário com cargo Sinaleiro..."
+                    className="w-full"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Selecione um funcionário com cargo "Sinaleiro" para preencher os campos automaticamente
+                  </p>
                 </div>
               )}
 
@@ -377,12 +521,29 @@ export function SinaleirosForm({
                 </div>
               </div>
 
-              {/* Documentos do Sinaleiro - Componente existente */}
-              {sinaleiro.id && !sinaleiro.id.startsWith('new_') && (
-                <DocumentosSinaleiroList
-                  sinaleiroId={sinaleiro.id}
-                  readOnly={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
-                />
+              {/* Documentos do Sinaleiro - Apenas para sinaleiros externos (cliente) com UUID válido */}
+              {(() => {
+                // Validar se o ID é um UUID válido
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+                const temUuidValido = sinaleiro.id && uuidRegex.test(sinaleiro.id)
+                const ehExterno = sinaleiro.tipo_vinculo !== 'interno' && sinaleiro.tipo !== 'principal'
+                
+                return temUuidValido && ehExterno ? (
+                  <DocumentosSinaleiroList
+                    sinaleiroId={sinaleiro.id}
+                    readOnly={!canEdit || clientePodeEditar}
+                  />
+                ) : null
+              })()}
+              
+              {/* Mensagem para sinaleiro interno */}
+              {sinaleiro.tipo_vinculo === 'interno' && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200">
+                  <p className="text-sm text-blue-700">
+                    <strong>Nota:</strong> Os documentos do sinaleiro interno já estão cadastrados no sistema de funcionários. 
+                    Não é necessário anexar documentos aqui.
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -390,7 +551,7 @@ export function SinaleirosForm({
 
         {canEdit && sinaleiros.length > 0 && (
           <div className="flex justify-end pt-4 border-t">
-            <Button onClick={handleSave} disabled={loading}>
+            <Button type="button" onClick={handleSave} disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
