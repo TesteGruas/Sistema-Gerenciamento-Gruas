@@ -200,11 +200,11 @@ export default function OrcamentosPage() {
   })
 
   const getStatusBadge = (status: StatusOrcamento) => {
-    const configs = {
-      rascunho: { label: 'Rascunho', variant: 'secondary' as const, icon: FileText },
-      enviado: { label: 'Enviado', variant: 'default' as const, icon: Clock },
-      aprovado: { label: 'Aprovado', variant: 'default' as const, icon: CheckCircle2, className: 'bg-green-500 text-white' },
-      rejeitado: { label: 'Rejeitado', variant: 'destructive' as const, icon: XCircle }
+    const configs: Record<StatusOrcamento, { label: string; variant: 'default' | 'secondary' | 'destructive'; icon: any; className?: string }> = {
+      rascunho: { label: 'Rascunho', variant: 'secondary', icon: FileText },
+      enviado: { label: 'Enviado', variant: 'default', icon: Clock },
+      aprovado: { label: 'Aprovado', variant: 'default', icon: CheckCircle2, className: 'bg-green-500 text-white' },
+      rejeitado: { label: 'Rejeitado', variant: 'destructive', icon: XCircle }
     }
     
     const config = configs[status]

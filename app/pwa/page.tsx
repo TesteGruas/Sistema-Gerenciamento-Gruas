@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,7 +23,8 @@ import {
   UserCircle,
   Briefcase,
   ChevronRight,
-  Zap
+  Zap,
+  Receipt
 } from "lucide-react"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 
@@ -31,10 +32,32 @@ export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
   const [isClient, setIsClient] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
   
   // Hook de usuário sempre chamado (mas com fallback interno)
   const pwaUserData = usePWAUser()
+
+  // Função de navegação com loading imediato
+  const handleNavigation = (href: string) => {
+    setIsNavigating(true)
+    setTimeout(() => {
+      router.push(href)
+    }, 0)
+  }
+
+  // Ocultar loading quando a navegação terminar (página mudou)
+  useEffect(() => {
+    if (isNavigating) {
+      // Ocultar loading após um pequeno delay para garantir que a página renderizou
+      const timer = setTimeout(() => {
+        setIsNavigating(false)
+      }, 200)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [pathname, isNavigating])
 
   // Verificar se estamos no cliente
   useEffect(() => {
@@ -137,6 +160,15 @@ export default function PWAMainPage() {
       bgColor: "bg-orange-50",
       borderColor: "border-orange-100",
       priority: true
+    },
+    {
+      title: "Holerites",
+      description: "Visualizar e assinar holerites",
+      icon: Receipt,
+      href: "/pwa/holerites",
+      color: "text-green-600",
+      bgColor: "bg-green-50",
+      borderColor: "border-green-100"
     }
   ]
 
@@ -166,8 +198,8 @@ export default function PWAMainPage() {
     })
   }
 
-  // Mostrar loading enquanto carrega dados do usuário
-  if (pwaUserData.loading) {
+  // Mostrar loading enquanto carrega dados do usuário ou durante navegação
+  if (pwaUserData.loading || isNavigating) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -296,13 +328,13 @@ export default function PWAMainPage() {
         <div className="space-y-3">
           {/* Ações principais - Ponto e Espelho */}
           <div className="grid grid-cols-2 gap-3">
-            {quickActions.filter(action => action.priority).map((action, index) => {
+            {quickActions.filter(action => action.priority && action.title !== "Aprovações").map((action, index) => {
               const Icon = action.icon
               
               return (
                 <div
                   key={action.title}
-                  onClick={() => router.push(action.href)}
+                  onClick={() => handleNavigation(action.href)}
                   className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
                   style={{
                     animationDelay: `${index * 50}ms`
@@ -325,6 +357,38 @@ export default function PWAMainPage() {
             })}
           </div>
 
+          {/* Aprovações como card principal */}
+          {quickActions.find(action => action.title === "Aprovações") && (
+            <div className="grid grid-cols-2 gap-3">
+              {quickActions.filter(action => action.title === "Aprovações").map((action) => {
+                const Icon = action.icon
+                
+                return (
+                  <div
+                    key={action.title}
+                    onClick={() => handleNavigation(action.href)}
+                    className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
+                    style={{
+                      animationDelay: `100ms`
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    
+                    <div className="relative z-10">
+                      <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
+                        <Icon className={`w-6 h-6 ${action.color}`} />
+                      </div>
+                      <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
+                      <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
+                        {action.description}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Outras ações */}
           <div className="grid grid-cols-3 gap-2">
             {quickActions.filter(action => !action.priority).map((action, index) => {
@@ -333,7 +397,7 @@ export default function PWAMainPage() {
               return (
                 <div
                   key={action.title}
-                  onClick={() => router.push(action.href)}
+                  onClick={() => handleNavigation(action.href)}
                   className="bg-white rounded-xl p-3 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border border-transparent hover:border-gray-200 relative overflow-hidden group"
                   style={{
                     animationDelay: `${(index + 2) * 50}ms`
@@ -370,7 +434,7 @@ export default function PWAMainPage() {
             </p>
             <Button 
               size="sm" 
-              onClick={() => router.push('/pwa/documentos')}
+              onClick={() => handleNavigation('/pwa/documentos')}
               className="bg-orange-600 hover:bg-orange-700 text-white h-8 text-xs"
             >
               Ver documentos

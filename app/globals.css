@@ -236,6 +236,16 @@ html {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Hide scrollbar for bottom navigation */
+.bottom-nav-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.bottom-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* Remove scrollbar on PWA */
 @media (display-mode: standalone) {
   ::-webkit-scrollbar {
@@ -367,4 +377,9 @@ html {
   color: rgb(156 163 175); /* text-gray-400 */
   opacity: 0.75;
   font-weight: 400;
+}
+
+/* Custom spacing */
+.space-y-6 {
+  padding: 20px;
 }

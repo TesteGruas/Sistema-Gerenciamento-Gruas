@@ -334,7 +334,7 @@ export default function FinanceiroPage() {
 
   return (
     <ProtectedRoute permission="financeiro:visualizar">
-      <div className="space-y-6 w-full">
+      <div className="space-y-6 w-full" style={{ padding: '10px' }}>
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
