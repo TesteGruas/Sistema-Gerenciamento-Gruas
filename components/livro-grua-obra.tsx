@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend } from "@/lib/api-obras"
 import { obrasDocumentosApi } from "@/lib/api-obras-documentos"
+import { obraGruasApi } from "@/lib/api-obra-gruas"
 import { CardLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 
@@ -45,12 +46,18 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
   const carregarDados = async () => {
     try {
       setLoading(true)
-      const response = await obrasApi.obterObra(parseInt(obraId))
-      const obraData = response.data || response
+      
+      // Carregar obra e gruas em paralelo
+      const [obraResponse, gruasResponse] = await Promise.all([
+        obrasApi.obterObra(parseInt(obraId)),
+        obraGruasApi.listarGruasObra(parseInt(obraId))
+      ])
+      
+      const obraData = obraResponse.data || obraResponse
       
       // Converter para formato frontend
       const obraConvertida = converterObraBackendParaFrontend(obraData, {
-        gruasVinculadas: obraData.grua_obra || [],
+        gruasVinculadas: [],
         funcionariosVinculados: obraData.grua_funcionario || []
       })
       setObra(obraConvertida)
@@ -61,29 +68,32 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
         setDocumentos(Array.isArray(docsResponse.data) ? docsResponse.data : [docsResponse.data])
       }
 
-      // Selecionar primeira grua se houver
-      // Pode vir como grua_obra ou gruasVinculadas
-      const gruasDisponiveis = obraConvertida.gruasVinculadas || obraData.grua_obra || []
+      // Processar gruas da API obra-gruas (mesma fonte que Checklists Diários)
+      let gruasDisponiveis: any[] = []
+      if (gruasResponse.success && gruasResponse.data) {
+        gruasDisponiveis = gruasResponse.data.map((config: any) => {
+          const grua = config.grua || {}
+          return {
+            id: grua.id || config.grua_id,
+            name: grua.modelo || grua.name || `Grua ${grua.id || config.grua_id}`,
+            modelo: grua.modelo,
+            fabricante: grua.fabricante,
+            tipo: grua.tipo,
+            capacidade: grua.capacidade,
+            relacao: config
+          }
+        })
+      }
+      
+      // Atualizar obra com as gruas encontradas
       if (gruasDisponiveis.length > 0) {
-        // Se for da relação grua_obra, pegar a grua dentro
-        const primeiraRelacao = gruasDisponiveis[0]
-        if (primeiraRelacao.grua) {
-          // É uma relação grua_obra com grua aninhada
-          setGruaSelecionada({
-            ...primeiraRelacao.grua,
-            relacao: primeiraRelacao,
-            name: primeiraRelacao.grua.modelo || primeiraRelacao.grua.name || `Grua ${primeiraRelacao.grua.id}`,
-            modelo: primeiraRelacao.grua.modelo,
-            fabricante: primeiraRelacao.grua.fabricante,
-            tipo: primeiraRelacao.grua.tipo
-          })
-        } else if (primeiraRelacao.id) {
-          // É uma grua direta
-          setGruaSelecionada({
-            ...primeiraRelacao,
-            relacao: primeiraRelacao
-          })
-        }
+        setObra({
+          ...obraConvertida,
+          gruasVinculadas: gruasDisponiveis
+        })
+        
+        // Selecionar primeira grua
+        setGruaSelecionada(gruasDisponiveis[0])
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
