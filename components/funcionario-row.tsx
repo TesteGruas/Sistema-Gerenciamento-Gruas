@@ -13,6 +13,7 @@ import {
   UserCheck, 
   UserX 
 } from "lucide-react"
+import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 
 interface FuncionarioRH {
   id: number
@@ -124,7 +125,7 @@ const FuncionarioRow = memo(function FuncionarioRow({
       </TableCell>
       <TableCell className="w-[20%]">
         <div>
-          <p className="font-medium text-sm">{funcionario.cargo}</p>
+          <p className="font-medium text-sm">{formatarCargo(funcionario.cargo || '')}</p>
           {funcionario.turno && (
             <p className="text-xs text-gray-500">{funcionario.turno}</p>
           )}

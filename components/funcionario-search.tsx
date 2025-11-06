@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Search, User, X, CheckCircle, AlertCircle, Clock } from "lucide-react"
 import { funcionariosApi, converterFuncionarioBackendParaFrontend, FuncionarioBackend } from "@/lib/api-funcionarios"
 import { InlineLoader } from "@/components/ui/loader"
+import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 
 // Array padrão de cargos permitidos (fora do componente para evitar recriação)
 const DEFAULT_ALLOWED_ROLES = ['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']
@@ -214,7 +215,7 @@ export function FuncionarioSearch({
                   <div>
                     <p className="font-medium text-green-900">{selectedFuncionario.name}</p>
                     <p className="text-sm text-green-700">
-                      {selectedFuncionario.role}
+                      {formatarCargo(selectedFuncionario.role || '')}
                     </p>
                     {selectedFuncionario.phone && (
                       <p className="text-xs text-green-600">Tel: {selectedFuncionario.phone}</p>
@@ -264,7 +265,7 @@ export function FuncionarioSearch({
                         <p className="font-medium text-gray-900">{funcionario.name}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className={`text-xs ${getRoleColor(funcionario.role)}`}>
-                            {funcionario.role}
+                            {formatarCargo(funcionario.role || '')}
                           </Badge>
                           <Badge variant="outline" className={`text-xs ${getStatusColor(funcionario.status)}`}>
                             {getStatusIcon(funcionario.status)}

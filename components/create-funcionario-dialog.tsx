@@ -11,7 +11,7 @@ import { Plus, Loader2, User } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
-import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
+import { CARGOS_PREDEFINIDOS, formatarCargo } from "@/lib/utils/cargos-predefinidos"
 
 interface CreateFuncionarioDialogProps {
   open: boolean
@@ -86,9 +86,12 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     // Converte o salário de centavos para reais (API espera em reais)
     const salarioNumerico = form.salary ? parseFloat(form.salary) / 100 : 0
     
+    // Formatar cargo com iniciais maiúsculas
+    const cargoFormatado = form.role ? formatarCargo(form.role) : ''
+    
     await onSubmit({
       nome: form.name,
-      cargo: form.role,
+      cargo: cargoFormatado,
       telefone: form.phone,
       email: form.email,
       cpf: form.cpf,
@@ -221,7 +224,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                       if (e.key === 'Enter') {
                         e.preventDefault()
                         if (novoCargo.trim()) {
-                          handleChange('role', novoCargo.trim())
+                          handleChange('role', formatarCargo(novoCargo.trim()))
                           setMostrarInputNovoCargo(false)
                         }
                       }
@@ -234,7 +237,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                       size="sm"
                       onClick={() => {
                         if (novoCargo.trim()) {
-                          handleChange('role', novoCargo.trim())
+                          handleChange('role', formatarCargo(novoCargo.trim()))
                         }
                         setMostrarInputNovoCargo(false)
                       }}

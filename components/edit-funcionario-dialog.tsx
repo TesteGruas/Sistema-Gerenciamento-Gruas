@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Edit, Loader2, User } from "lucide-react"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
-import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
+import { CARGOS_PREDEFINIDOS, formatarCargo } from "@/lib/utils/cargos-predefinidos"
 
 interface FuncionarioRH {
   id: number
@@ -120,9 +120,12 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
     // Converte o salário de centavos para reais (API espera em reais)
     const salarioNumerico = form.salary ? parseFloat(form.salary) / 100 : 0
     
+    // Formatar cargo com iniciais maiúsculas
+    const cargoFormatado = form.role ? formatarCargo(form.role) : ''
+    
     await onSubmit({
       nome: form.name,
-      cargo: form.role,
+      cargo: cargoFormatado,
       telefone: form.phone,
       email: form.email,
       cpf: form.cpf,

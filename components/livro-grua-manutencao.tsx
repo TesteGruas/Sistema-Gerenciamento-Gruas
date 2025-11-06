@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   Save, 
@@ -14,7 +15,8 @@ import {
   Calendar,
   User,
   Wrench,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2
 } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
@@ -31,6 +33,13 @@ interface Manutencao {
   descricao?: string
   observacoes?: string
   created_at?: string
+  checklist?: Record<string, boolean>
+}
+
+interface ChecklistItem {
+  key: string
+  label: string
+  section: string
 }
 
 interface LivroGruaManutencaoProps {
@@ -53,13 +62,71 @@ export function LivroGruaManutencao({
   const [error, setError] = useState<string | null>(null)
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<any>(null)
   
+  // Definir itens do checklist organizados por seções
+  const checklistItems: ChecklistItem[] = [
+    // Seção Eletricidade
+    { key: 'tensao_maxima_alimentacao', label: 'Tensão máxima de alimentação', section: 'Eletricidade' },
+    { key: 'conexoes_terras_restantes', label: 'Conexões terras restantes', section: 'Eletricidade' },
+    { key: 'isolamento_cabos', label: 'Isolamento dos cabos', section: 'Eletricidade' },
+    { key: 'isolamento_equipamentos_eletricos', label: 'Isolamento equipamentos elétricos', section: 'Eletricidade' },
+    { key: 'reles_circuito', label: 'Relés em circuito', section: 'Eletricidade' },
+    { key: 'isolamento_motores', label: 'Isolamento motores', section: 'Eletricidade' },
+    { key: 'contatos_circuito', label: 'Contatos de circuito', section: 'Eletricidade' },
+    { key: 'terminal_conexao_painel_parafuso', label: 'Terminal conexão onde painel e parafuso interno', section: 'Eletricidade' },
+    { key: 'fixacao_geral', label: 'Fixação em geral', section: 'Eletricidade' },
+    { key: 'limitador_elevacao', label: 'Limitador elevação', section: 'Eletricidade' },
+    { key: 'limitador_carro', label: 'Limitador carro', section: 'Eletricidade' },
+    { key: 'limitador_giro', label: 'Limitador giro', section: 'Eletricidade' },
+    { key: 'limitador_carga', label: 'Limitador de carga', section: 'Eletricidade' },
+    { key: 'limitador_momento', label: 'Limitador de momento', section: 'Eletricidade' },
+    
+    // Seção Maquinaria
+    { key: 'nivel_saia_torre', label: 'Nível/saia da torre', section: 'Maquinaria' },
+    { key: 'pinos_parafusos', label: 'Pinos e parafusos', section: 'Maquinaria' },
+    { key: 'cuplites', label: 'Cuplites', section: 'Maquinaria' },
+    { key: 'fissuras_estruturas', label: 'Fissuras em estruturas', section: 'Maquinaria' },
+    { key: 'freio_elevacao', label: 'Freio elevação', section: 'Maquinaria' },
+    { key: 'freio_giro', label: 'Freio giro', section: 'Maquinaria' },
+    { key: 'freio_carro', label: 'Freio carro', section: 'Maquinaria' },
+    { key: 'maquinaria', label: 'Maquinaria', section: 'Maquinaria' },
+    { key: 'niveis_oleo_redutores', label: 'Níveis óleo redutores', section: 'Maquinaria' },
+    { key: 'terminal_trava_gancho', label: 'Terminal trava gancho', section: 'Maquinaria' },
+    { key: 'verificar_tensao_cabos', label: 'Verificar tensão cabos', section: 'Maquinaria' },
+    { key: 'travoes_cabos', label: 'Travões de cabos', section: 'Maquinaria' },
+    { key: 'ponto_rotativo_final_cabo_painel', label: 'Ponto rotativo final de cabo painel', section: 'Maquinaria' },
+    { key: 'ventilador_bloqueio_dispositivo_24_cabos', label: 'Ventilador bloqueio dispositivo 24 cabos', section: 'Maquinaria' },
+    
+    // Seção Estrutura
+    { key: 'porticos', label: 'Pórticos', section: 'Estrutura' },
+    { key: 'contrapeso', label: 'Contrapeso', section: 'Estrutura' },
+    
+    // Seção Outros / Cabos / Componentes
+    { key: 'cabos', label: 'Cabos', section: 'Outros / Cabos / Componentes' },
+    { key: 'carro_giro', label: 'Carro de giro', section: 'Outros / Cabos / Componentes' },
+    { key: 'engrenagem_giro', label: 'Engrenagem de giro', section: 'Outros / Cabos / Componentes' },
+    { key: 'rodas_carro', label: 'Rodas do carro', section: 'Outros / Cabos / Componentes' },
+    { key: 'sapatas_pivotantes', label: 'Sapatas pivotantes', section: 'Outros / Cabos / Componentes' },
+  ]
+
+  // Agrupar itens por seção
+  const checklistPorSecao = checklistItems.reduce((acc, item) => {
+    if (!acc[item.section]) {
+      acc[item.section] = []
+    }
+    acc[item.section].push(item)
+    return acc
+  }, {} as Record<string, ChecklistItem[]>)
+
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({})
+  
   const [formData, setFormData] = useState<Manutencao>({
     grua_id: gruaId,
     data: new Date().toISOString().split('T')[0],
     realizado_por_id: 0,
     cargo: '',
     descricao: '',
-    observacoes: ''
+    observacoes: '',
+    checklist: {}
   })
 
   // Carregar dados da manutenção se estiver editando
@@ -74,8 +141,14 @@ export function LivroGruaManutencao({
         cargo: manutencao.cargo || '',
         descricao: manutencao.descricao || '',
         observacoes: manutencao.observacoes || '',
-        created_at: manutencao.created_at
+        created_at: manutencao.created_at,
+        checklist: manutencao.checklist || {}
       })
+
+      // Carregar checklist se existir
+      if (manutencao.checklist) {
+        setChecklist(manutencao.checklist)
+      }
 
       // Se houver funcionário na manutenção, selecionar
       if (manutencao.realizado_por_id) {
@@ -95,6 +168,18 @@ export function LivroGruaManutencao({
       realizado_por_id: funcionario?.id || funcionario?.userId || 0,
       realizado_por_nome: funcionario?.name || '',
       cargo: funcionario?.role || ''
+    })
+  }
+
+  const toggleChecklistItem = (key: string) => {
+    const newChecklist = {
+      ...checklist,
+      [key]: !checklist[key]
+    }
+    setChecklist(newChecklist)
+    setFormData({
+      ...formData,
+      checklist: newChecklist
     })
   }
 
@@ -131,7 +216,8 @@ export function LivroGruaManutencao({
         tipo_entrada: 'manutencao' as const,
         status_entrada: 'ok' as const,
         funcionario_id: formData.realizado_por_id,
-        descricao: formData.descricao || `Manutenção realizada em ${formData.data}`
+        descricao: formData.descricao || `Manutenção realizada em ${formData.data}`,
+        checklist: checklist
       }
 
       if (modoEdicao && formData.id) {
@@ -236,6 +322,50 @@ export function LivroGruaManutencao({
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Checklist de Manutenção */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            Checklist de Manutenção
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Marque os itens que foram verificados durante a manutenção
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {Object.entries(checklistPorSecao).map(([secao, itens]) => (
+              <div key={secao} className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-700 border-b pb-2">
+                  {secao}
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {itens.map((item) => (
+                    <div
+                      key={item.key}
+                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      <Checkbox
+                        id={item.key}
+                        checked={checklist[item.key] || false}
+                        onCheckedChange={() => toggleChecklistItem(item.key)}
+                      />
+                      <Label
+                        htmlFor={item.key}
+                        className="text-sm font-medium leading-none cursor-pointer flex-1"
+                      >
+                        {item.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
