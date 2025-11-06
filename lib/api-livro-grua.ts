@@ -363,6 +363,14 @@ export const livroGruaApi = {
   },
 
   /**
+   * Buscar grua diretamente pelo ID da grua
+   */
+  async buscarGruaPorId(gruaId: string): Promise<any> {
+    const response = await httpRequest(`/gruas/${gruaId}`)
+    return response.data
+  },
+
+  /**
    * Listar todas as relações grua-obra para funcionários
    */
   async listarRelacoesGruaObra(funcionarioId?: number): Promise<{success: boolean, data: any[]}> {

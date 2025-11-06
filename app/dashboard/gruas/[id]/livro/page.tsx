@@ -61,17 +61,11 @@ export default function LivroGruaPage() {
         throw new Error('Usuário não autenticado. Faça login para acessar esta página.')
       }
 
-      // Buscar grua pela relação grua_obra
-      const { relacao, grua, obra } = await livroGruaApi.buscarGruaPorRelacao(parseInt(gruaId))
+      // Buscar grua diretamente pelo ID (gruaId é o ID da grua, ex: "G0062")
+      const gruaData = await livroGruaApi.buscarGruaPorId(gruaId)
       
-      if (grua) {
-        // Adicionar informações da obra à grua
-        const gruaCompleta = {
-          ...grua,
-          obraAtual: obra,
-          relacaoAtual: relacao
-        }
-        setGrua(gruaCompleta)
+      if (gruaData) {
+        setGrua(gruaData)
       } else {
         throw new Error('Grua não encontrada')
       }
@@ -265,7 +259,7 @@ export default function LivroGruaPage() {
             Livro da Grua
           </h1>
           <p className="text-gray-600">
-            {grua.name} - {grua.model} ({grua.capacity})
+            {grua.name || grua.id} - {grua.model || grua.modelo} ({grua.capacity || grua.capacidade})
           </p>
         </div>
       </div>
@@ -310,7 +304,7 @@ export default function LivroGruaPage() {
             <div>
               <p className="text-sm text-gray-600">Criada em</p>
               <p className="font-medium">
-                {grua.createdAt ? new Date(grua.createdAt).toLocaleDateString('pt-BR') : 'N/A'}
+                {grua.createdAt || grua.created_at ? new Date(grua.createdAt || grua.created_at).toLocaleDateString('pt-BR') : 'N/A'}
               </p>
             </div>
           </div>

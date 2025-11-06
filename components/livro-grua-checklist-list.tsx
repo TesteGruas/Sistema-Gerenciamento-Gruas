@@ -76,23 +76,38 @@ export function LivroGruaChecklistList({
       })
 
       // Converter entradas para formato de checklist
-      const checklistsData = response.data.map((entrada: any) => ({
-        id: entrada.id,
-        grua_id: entrada.grua_id,
-        funcionario_id: entrada.funcionario_id,
-        funcionario_nome: entrada.funcionario_nome || entrada.funcionarioName,
-        data: entrada.data_entrada || entrada.data,
-        cabos: entrada.cabos === true || entrada.cabos === 1 || entrada.cabos === '1',
-        polias: entrada.polias === true || entrada.polias === 1 || entrada.polias === '1',
-        estrutura: entrada.estrutura === true || entrada.estrutura === 1 || entrada.estrutura === '1',
-        movimentos: entrada.movimentos === true || entrada.movimentos === 1 || entrada.movimentos === '1',
-        freios: entrada.freios === true || entrada.freios === 1 || entrada.freios === '1',
-        limitadores: entrada.limitadores === true || entrada.limitadores === 1 || entrada.limitadores === '1',
-        indicadores: entrada.indicadores === true || entrada.indicadores === 1 || entrada.indicadores === '1',
-        aterramento: entrada.aterramento === true || entrada.aterramento === 1 || entrada.aterramento === '1',
-        observacoes: entrada.observacoes,
-        created_at: entrada.created_at
-      }))
+      const checklistsData = response.data.map((entrada: any) => {
+        // Debug: log para verificar se os campos estão chegando
+        console.log('🔍 Checklist entrada recebida:', {
+          id: entrada.id,
+          cabos: entrada.cabos,
+          polias: entrada.polias,
+          estrutura: entrada.estrutura,
+          movimentos: entrada.movimentos,
+          freios: entrada.freios,
+          limitadores: entrada.limitadores,
+          indicadores: entrada.indicadores,
+          aterramento: entrada.aterramento
+        })
+        
+        return {
+          id: entrada.id,
+          grua_id: entrada.grua_id,
+          funcionario_id: entrada.funcionario_id,
+          funcionario_nome: entrada.funcionario_nome || entrada.funcionarioName,
+          data: entrada.data_entrada || entrada.data,
+          cabos: entrada.cabos === true || entrada.cabos === 1 || entrada.cabos === '1',
+          polias: entrada.polias === true || entrada.polias === 1 || entrada.polias === '1',
+          estrutura: entrada.estrutura === true || entrada.estrutura === 1 || entrada.estrutura === '1',
+          movimentos: entrada.movimentos === true || entrada.movimentos === 1 || entrada.movimentos === '1',
+          freios: entrada.freios === true || entrada.freios === 1 || entrada.freios === '1',
+          limitadores: entrada.limitadores === true || entrada.limitadores === 1 || entrada.limitadores === '1',
+          indicadores: entrada.indicadores === true || entrada.indicadores === 1 || entrada.indicadores === '1',
+          aterramento: entrada.aterramento === true || entrada.aterramento === 1 || entrada.aterramento === '1',
+          observacoes: entrada.observacoes,
+          created_at: entrada.created_at
+        }
+      })
 
       setChecklists(checklistsData)
 

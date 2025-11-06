@@ -294,7 +294,17 @@ const entradaLivroSchema = Joi.object({
     tipo: Joi.string().required(),
     tamanho: Joi.number().positive().required(),
     url: Joi.string().uri().required()
-  })).optional()
+  })).optional(),
+  
+  // Campos específicos do checklist diário (opcionais)
+  cabos: Joi.boolean().optional(),
+  polias: Joi.boolean().optional(),
+  estrutura: Joi.boolean().optional(),
+  movimentos: Joi.boolean().optional(),
+  freios: Joi.boolean().optional(),
+  limitadores: Joi.boolean().optional(),
+  indicadores: Joi.boolean().optional(),
+  aterramento: Joi.boolean().optional()
 })
 
 const filtrosSchema = Joi.object({
