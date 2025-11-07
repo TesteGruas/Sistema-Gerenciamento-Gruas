@@ -1028,6 +1028,7 @@ export default function NovaObraPage() {
               </CardHeader>
               <CardContent>
                 <SinaleirosForm
+                  sinaleiros={sinaleiros}
                   onSave={(data) => {
                     console.log('💾 Salvando sinaleiros no estado:', data)
                     setSinaleiros(data)

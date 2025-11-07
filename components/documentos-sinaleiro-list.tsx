@@ -44,6 +44,17 @@ export function DocumentosSinaleiroList({
   const [documentos, setDocumentos] = useState<DocumentoSinaleiro[]>([])
   const [loading, setLoading] = useState(false)
   const [uploadingTipo, setUploadingTipo] = useState<string | null>(null)
+  
+  // Validar se o ID é um UUID válido (não temporário)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const idValido = sinaleiroId && typeof sinaleiroId === 'string'
+  const naoTemporario = idValido && !sinaleiroId.startsWith('cliente_') && !sinaleiroId.startsWith('interno_') && !sinaleiroId.startsWith('temp_') && !sinaleiroId.startsWith('new_')
+  const temUuidValido = naoTemporario && uuidRegex.test(sinaleiroId)
+  
+  // Se não tiver UUID válido, não renderizar nada
+  if (!temUuidValido) {
+    return null
+  }
 
   const loadDocumentos = async () => {
     // Validar se o ID é um UUID válido antes de fazer a requisição
