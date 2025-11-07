@@ -33,6 +33,7 @@ import {
   ChevronRight,
   Lock,
   Layers,
+  MessageSquare,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -92,6 +93,7 @@ const baseNavigation: NavigationItemWithPermission[] = [
   // SEÇÃO PRINCIPAL
   { name: "Dashboard", href: "/dashboard", icon: Home, category: "principal", permission: "dashboard:visualizar" },
   { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "principal", permission: "notificacoes:visualizar" },
+  { name: "WhatsApp Aprovações", href: "/dashboard/aprovacoes-horas-extras/whatsapp", icon: MessageSquare, category: "principal", permission: "aprovacoes:visualizar" },
   
   // SEÇÃO OPERACIONAL
   { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional", permission: "clientes:visualizar" },
@@ -176,6 +178,11 @@ export default function DashboardLayout({
       
       // Notificações - apenas Admin e Gerente
       if (item.href === '/dashboard/notificacoes') {
+        return canAccessDashboard()
+      }
+      
+      // WhatsApp Aprovações - apenas Admin e Gerente
+      if (item.href === '/dashboard/aprovacoes-horas-extras/whatsapp') {
         return canAccessDashboard()
       }
       

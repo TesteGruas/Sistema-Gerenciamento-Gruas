@@ -26,10 +26,8 @@ import {
   Building2,
   Shield,
   DollarSign,
-  Clock,
   FileText,
   Briefcase,
-  History,
   Award,
   AlertCircle,
   Loader2,
@@ -51,10 +49,10 @@ import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { rhApi } from "@/lib/api-rh-completo"
-import { apiRegistrosPonto } from "@/lib/api-ponto-eletronico"
 import { ColaboradorCertificados } from "@/components/colaborador-certificados"
 import { ColaboradorDocumentosAdmissionais } from "@/components/colaborador-documentos-admissionais"
 import { ColaboradorHolerites } from "@/components/colaborador-holerites"
+import { DocumentoUpload } from "@/components/documento-upload"
 import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
 
 interface FuncionarioRH {
@@ -138,47 +136,8 @@ interface DocumentoFuncionario {
   dataEmissao: string
   dataVencimento?: string
   arquivo?: string
+  arquivoUrl?: string
   observacoes?: string
-}
-
-interface PontoDetalhado {
-  id: string
-  funcionario_id: number
-  data: string
-  entrada?: string
-  saida?: string
-  saida_almoco?: string
-  volta_almoco?: string
-  horas_trabalhadas: number
-  horas_extras: number
-  status: string
-  aprovado_por?: number
-  data_aprovacao?: string
-  observacoes?: string
-  localizacao?: string
-  created_at: string
-  updated_at: string
-  funcionario?: {
-    nome: string
-    cargo?: string
-  }
-}
-
-interface HistoricoEvento {
-  id: number
-  funcionario_id: number
-  tipo: string
-  titulo: string
-  descricao: string
-  obra_id?: number
-  valor?: number
-  status?: string
-  dados_adicionais?: any
-  created_at: string
-  funcionario?: {
-    nome: string
-    cargo?: string
-  }
 }
 
 export default function FuncionarioDetalhesPage() {
@@ -227,14 +186,13 @@ export default function FuncionarioDetalhesPage() {
     orgaoEmissor: '',
     dataEmissao: '',
     dataVencimento: '',
-    observacoes: ''
+    observacoes: '',
+    arquivo: null as File | null
   })
 
   // Estados para dados das tabs
   const [salarios, setSalarios] = useState<SalarioDetalhado[]>([])
   const [beneficios, setBeneficios] = useState<BeneficioFuncionario[]>([])
-  const [pontos, setPontos] = useState<PontoDetalhado[]>([])
-  const [historico, setHistorico] = useState<HistoricoEvento[]>([])
   const [tiposBeneficios, setTiposBeneficios] = useState<any[]>([])
   const [obrasFuncionario, setObrasFuncionario] = useState<any[]>([])
 
@@ -255,22 +213,6 @@ export default function FuncionarioDetalhesPage() {
         funcionario_id: funcionarioId
       })
       setBeneficios(beneficiosResponse.data || [])
-
-      // Carregar registros de ponto (últimos 30 dias)
-      const hoje = new Date()
-      const dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
-      const pontosResponse = await apiRegistrosPonto.listar({
-        funcionario_id: funcionarioId,
-        data_inicio: format(dataInicio, 'yyyy-MM-dd'),
-        data_fim: format(hoje, 'yyyy-MM-dd')
-      })
-      setPontos(pontosResponse.data || [])
-
-      // Carregar histórico
-      const historicoResponse = await rhApi.listarHistoricoRH({ 
-        funcionario_id: funcionarioId
-      })
-      setHistorico(historicoResponse.data || [])
 
       // Carregar documentos
       const documentosResponse = await funcionariosApi.listarDocumentosFuncionario(funcionarioId)
@@ -548,7 +490,8 @@ export default function FuncionarioDetalhesPage() {
       orgaoEmissor: '',
       dataEmissao: '',
       dataVencimento: '',
-      observacoes: ''
+      observacoes: '',
+      arquivo: null
     })
   }
   
@@ -702,6 +645,47 @@ export default function FuncionarioDetalhesPage() {
       }
       
       const funcionarioId = parseInt(params.id as string)
+      let arquivoUrl: string | undefined = undefined
+      
+      // Se tiver arquivo, fazer upload primeiro
+      if (documentoForm.arquivo) {
+        try {
+          const formDataUpload = new FormData()
+          formDataUpload.append('arquivo', documentoForm.arquivo)
+          
+          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+          
+          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataUpload
+          })
+          
+          if (uploadResponse.ok) {
+            const uploadResult = await uploadResponse.json()
+            arquivoUrl = uploadResult.data?.caminho || uploadResult.data?.arquivo || uploadResult.caminho || uploadResult.arquivo
+          } else {
+            // Se falhar, usar URL temporária
+            arquivoUrl = URL.createObjectURL(documentoForm.arquivo)
+            toast({
+              title: "Aviso",
+              description: "Upload do arquivo falhou, mas o documento será salvo",
+              variant: "default"
+            })
+          }
+        } catch (uploadError) {
+          // Se falhar completamente, usar URL temporária
+          arquivoUrl = URL.createObjectURL(documentoForm.arquivo)
+          toast({
+            title: "Aviso",
+            description: "Upload do arquivo falhou, mas o documento será salvo",
+            variant: "default"
+          })
+        }
+      }
       
       // Chamar API para adicionar documento
       const response = await funcionariosApi.criarDocumento({
@@ -712,7 +696,8 @@ export default function FuncionarioDetalhesPage() {
         orgao_emissor: documentoForm.orgaoEmissor || undefined,
         data_emissao: documentoForm.dataEmissao || undefined,
         data_vencimento: documentoForm.dataVencimento || undefined,
-        observacoes: documentoForm.observacoes || undefined
+        observacoes: documentoForm.observacoes || undefined,
+        arquivo_url: arquivoUrl
       })
       
       if (response.success) {
@@ -889,7 +874,7 @@ export default function FuncionarioDetalhesPage() {
 
       {/* Tabs de Detalhes */}
       <Tabs defaultValue="informacoes" className="w-full">
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="informacoes">Informações</TabsTrigger>
           <TabsTrigger value="salarios">Salários</TabsTrigger>
           <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
@@ -897,8 +882,6 @@ export default function FuncionarioDetalhesPage() {
           <TabsTrigger value="documentos-admissionais">Admissionais</TabsTrigger>
           <TabsTrigger value="holerites">Holerites</TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
-          <TabsTrigger value="pontos">Pontos</TabsTrigger>
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
 
         {/* Tab Informações */}
@@ -1631,6 +1614,17 @@ export default function FuncionarioDetalhesPage() {
                         </div>
                       </div>
                       <div>
+                        <DocumentoUpload
+                          accept="application/pdf,image/*"
+                          maxSize={5 * 1024 * 1024}
+                          onUpload={(file) => setDocumentoForm({ ...documentoForm, arquivo: file })}
+                          onRemove={() => setDocumentoForm({ ...documentoForm, arquivo: null })}
+                          label="Upload do Documento"
+                          required={false}
+                          currentFile={documentoForm.arquivo}
+                        />
+                      </div>
+                      <div>
                         <Label htmlFor="observacoes-documento">Observações</Label>
                         <Textarea
                           id="observacoes-documento"
@@ -1717,131 +1711,6 @@ export default function FuncionarioDetalhesPage() {
                   <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>Nenhum documento cadastrado</p>
                   <p className="text-sm">Adicione documentos usando o botão acima</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab Pontos */}
-        <TabsContent value="pontos" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Registros de Ponto</CardTitle>
-              <CardDescription>Controle de frequência e horas trabalhadas</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {pontos.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Entrada</TableHead>
-                      <TableHead>Saída</TableHead>
-                      <TableHead>Almoço</TableHead>
-                      <TableHead>Horas</TableHead>
-                      <TableHead>Obra</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pontos.map((ponto) => (
-                      <TableRow key={ponto.id}>
-                        <TableCell>
-                          <span className="text-sm">
-                            {format(new Date(ponto.data), 'dd/MM/yyyy', { locale: ptBR })}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">{ponto.entrada || '-'}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">{ponto.saida || '-'}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">
-                            {ponto.saida_almoco && ponto.volta_almoco 
-                              ? `${ponto.saida_almoco} - ${ponto.volta_almoco}`
-                              : '-'
-                            }
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            <div>{ponto.horas_trabalhadas.toFixed(1)}h</div>
-                            {ponto.horas_extras > 0 && (
-                              <div className="text-orange-600">+{ponto.horas_extras.toFixed(1)}h extra</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <Building2 className="w-3 h-3" />
-                            <span>{ponto.localizacao || '-'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${getStatusColor(ponto.status)} border`}>
-                            {getStatusIcon(ponto.status)}
-                            <span className="ml-1">{ponto.status}</span>
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Clock className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p>Nenhum registro de ponto encontrado</p>
-                  <p className="text-sm">Os registros de ponto serão implementados em breve</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab Histórico */}
-        <TabsContent value="historico" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Histórico de Eventos</CardTitle>
-              <CardDescription>Timeline de eventos e mudanças</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {historico.length > 0 ? (
-                <div className="space-y-4">
-                  {historico.map((evento) => (
-                    <div key={evento.id} className="flex gap-4 p-4 border rounded-lg">
-                      <div className="flex-shrink-0">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <History className="w-5 h-5 text-blue-600" />
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="font-semibold text-gray-900">{evento.titulo}</h4>
-                            <Badge className="bg-purple-100 text-purple-800 mb-2">
-                              {evento.tipo}
-                            </Badge>
-                            <p className="text-sm text-gray-600 mt-1">{evento.descricao}</p>
-                          </div>
-                          <Badge className="bg-gray-100 text-gray-800">
-                            {format(new Date(evento.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-2">
-                          Registrado em {format(new Date(evento.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <History className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p>Nenhum evento registrado no histórico</p>
                 </div>
               )}
             </CardContent>
