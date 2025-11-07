@@ -45,8 +45,17 @@ import {
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { apiRelatorios, RelatorioUtilizacao, RelatorioFinanceiro, RelatorioManutencao, DashboardRelatorios } from "@/lib/api-relatorios"
+import { performanceGruasApi, type PerformanceGruasFiltros } from "@/lib/api-relatorios-performance"
+import { PerformanceGruasFiltros as FiltrosComponent } from "@/components/relatorios/performance-gruas-filtros"
+import { PerformanceGruasResumo } from "@/components/relatorios/performance-gruas-resumo"
+import { PerformanceGruasTabela } from "@/components/relatorios/performance-gruas-tabela"
+import { PerformanceGruasGraficos } from "@/components/relatorios/performance-gruas-graficos"
+import { useToast } from "@/hooks/use-toast"
+import { gruasApi } from "@/lib/api-gruas"
+import { obrasApi } from "@/lib/api-obras"
 
 export default function RelatoriosPage() {
+  const { toast } = useToast()
   const [selectedObra, setSelectedObra] = useState("all")
   const [selectedPeriod, setSelectedPeriod] = useState("month")
   const [startDate, setStartDate] = useState<Date | undefined>(new Date())
@@ -65,10 +74,121 @@ export default function RelatoriosPage() {
   const [paginaFinanceiro, setPaginaFinanceiro] = useState(1)
   const [limitePorPagina, setLimitePorPagina] = useState(10)
 
+  // Estados para Performance de Gruas
+  const [loadingPerformance, setLoadingPerformance] = useState(false)
+  const [dadosPerformance, setDadosPerformance] = useState<any>(null)
+  const [gruas, setGruas] = useState<Array<{ id: number; nome: string; modelo: string }>>([])
+  const [obras, setObras] = useState<Array<{ id: number; nome: string }>>([])
+  const [paginaPerformance, setPaginaPerformance] = useState(1)
+  const [filtrosPerformance, setFiltrosPerformance] = useState<PerformanceGruasFiltros>({
+    data_inicio: format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd'),
+    data_fim: format(new Date(), 'yyyy-MM-dd'),
+    ordenar_por: 'taxa_utilizacao',
+    ordem: 'desc'
+  })
+
   // Carregar dados iniciais
   useEffect(() => {
     carregarDados()
+    carregarGruasEObras()
+    carregarDadosPerformance()
   }, [])
+
+  // Carregar gruas e obras para filtros
+  const carregarGruasEObras = async () => {
+    try {
+      const [gruasResponse, obrasResponse] = await Promise.all([
+        gruasApi.listarGruas({ limit: 100 }),
+        obrasApi.listarObras({ limit: 100 })
+      ])
+      
+      setGruas((gruasResponse.data || []).map((g: any) => ({
+        id: g.id,
+        nome: g.nome || `${g.fabricante} ${g.modelo}`,
+        modelo: g.modelo || ''
+      })))
+      
+      setObras((obrasResponse.data || []).map((o: any) => ({
+        id: o.id,
+        nome: o.nome || 'Obra sem nome'
+      })))
+    } catch (error) {
+      console.error('Erro ao carregar gruas e obras:', error)
+    }
+  }
+
+  // Carregar dados de performance
+  const carregarDadosPerformance = async () => {
+    try {
+      setLoadingPerformance(true)
+      const response = await performanceGruasApi.obterRelatorio(filtrosPerformance)
+      
+      if (response.success) {
+        setDadosPerformance(response.data)
+      } else {
+        throw new Error('Erro ao carregar dados')
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de performance:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de performance",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingPerformance(false)
+    }
+  }
+
+  const handleAplicarFiltrosPerformance = () => {
+    setPaginaPerformance(1)
+    carregarDadosPerformance()
+  }
+
+  const handleLimparFiltrosPerformance = () => {
+    setFiltrosPerformance({
+      data_inicio: format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd'),
+      data_fim: format(new Date(), 'yyyy-MM-dd'),
+      ordenar_por: 'taxa_utilizacao',
+      ordem: 'desc'
+    })
+    setPaginaPerformance(1)
+  }
+
+  const handleExportPerformance = async (formato: 'pdf' | 'excel' | 'csv') => {
+    try {
+      let blob: Blob
+      
+      if (formato === 'pdf') {
+        blob = await performanceGruasApi.exportarPDF(filtrosPerformance)
+      } else if (formato === 'excel') {
+        blob = await performanceGruasApi.exportarExcel(filtrosPerformance)
+      } else {
+        blob = await performanceGruasApi.exportarCSV(filtrosPerformance)
+      }
+
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `performance-gruas-${format(new Date(), 'yyyy-MM-dd')}.${formato === 'pdf' ? 'pdf' : formato === 'excel' ? 'xlsx' : 'csv'}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Sucesso",
+        description: `Relatório exportado em formato ${formato.toUpperCase()}`,
+      })
+    } catch (error: any) {
+      console.error('Erro ao exportar:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao exportar relatório",
+        variant: "destructive"
+      })
+    }
+  }
 
   // Atualizar relatórios quando o período mudar
   useEffect(() => {
@@ -583,206 +703,195 @@ export default function RelatoriosPage() {
         </TabsContent>
 
         <TabsContent value="gruas" className="space-y-6">
-          {/* Botão para carregar relatório de utilização */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                Relatório de Utilização de Gruas
-              </CardTitle>
-              <CardDescription>
-                Análise de performance e utilização das gruas no período selecionado
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-4 mb-6">
-                <Button onClick={() => carregarRelatorioUtilizacao(1)} disabled={loading}>
+          {/* Header do Relatório de Performance */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Performance de Gruas</h2>
+              <p className="text-gray-600">Análise detalhada da performance operacional e financeira</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => handleExportPerformance('pdf')} disabled={loadingPerformance}>
+                <Download className="w-4 h-4 mr-2" />
+                PDF
+              </Button>
+              <Button variant="outline" onClick={() => handleExportPerformance('excel')} disabled={loadingPerformance}>
+                <Download className="w-4 h-4 mr-2" />
+                Excel
+              </Button>
+              <Button variant="outline" onClick={() => handleExportPerformance('csv')} disabled={loadingPerformance}>
+                <Download className="w-4 h-4 mr-2" />
+                CSV
+              </Button>
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <FiltrosComponent
+            filtros={filtrosPerformance}
+            onFiltrosChange={setFiltrosPerformance}
+            onAplicar={handleAplicarFiltrosPerformance}
+            onLimpar={handleLimparFiltrosPerformance}
+            loading={loadingPerformance}
+            gruas={gruas}
+            obras={obras}
+          />
+
+          {/* Loading State */}
+          {loadingPerformance && !dadosPerformance && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <p className="ml-3 text-gray-600">Carregando relatório...</p>
+            </div>
+          )}
+
+          {/* Conteúdo do Relatório */}
+          {!loadingPerformance && dadosPerformance && (
+            <Tabs defaultValue="resumo" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="resumo">
                   <BarChart3 className="w-4 h-4 mr-2" />
-                  Carregar Relatório
-                </Button>
-                <Button variant="outline" onClick={() => handleExport('utilizacao')}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Exportar
-                </Button>
-              </div>
-              
-              {relatorioUtilizacao ? (
-                <div className="space-y-6">
-                  {/* Resumo do relatório */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-blue-600">{relatorioUtilizacao.totais.total_gruas}</p>
-                          <p className="text-sm text-gray-600">Total de Gruas</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-600">{(relatorioUtilizacao.totais.taxa_utilizacao_media || 0).toFixed(1)}%</p>
-                          <p className="text-sm text-gray-600">Taxa Média</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-purple-600">R$ {relatorioUtilizacao.totais.receita_total_periodo.toLocaleString('pt-BR')}</p>
-                          <p className="text-sm text-gray-600">Receita Total</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-orange-600">{relatorioUtilizacao.totais.dias_total_locacao}</p>
-                          <p className="text-sm text-gray-600">Dias de Locação</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                  Resumo
+                </TabsTrigger>
+                <TabsTrigger value="detalhado">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Detalhado
+                </TabsTrigger>
+                <TabsTrigger value="graficos">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Gráficos
+                </TabsTrigger>
+                <TabsTrigger value="comparativo">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Comparativo
+                </TabsTrigger>
+              </TabsList>
 
-                  {/* Tabela de performance */}
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Grua</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Locações</TableHead>
-                        <TableHead>Dias Total</TableHead>
-                        <TableHead>Receita</TableHead>
-                        <TableHead>Obras</TableHead>
-                        <TableHead>Taxa Utilização</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {relatorioUtilizacao.relatorio.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">
-                            {item.grua.modelo} - {item.grua.fabricante}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{item.grua.tipo}</Badge>
-                          </TableCell>
-                          <TableCell>{item.total_locacoes}</TableCell>
-                          <TableCell>{item.dias_total_locacao}</TableCell>
-                          <TableCell>R$ {item.receita_total.toLocaleString('pt-BR')}</TableCell>
-                          <TableCell>{item.obras_visitadas}</TableCell>
-                          <TableCell>
-                            <Badge className={item.taxa_utilizacao >= 80 ? 'bg-green-100 text-green-800' : 
-                                             item.taxa_utilizacao >= 60 ? 'bg-yellow-100 text-yellow-800' : 
-                                             'bg-red-100 text-red-800'}>
-                              {(item.taxa_utilizacao || 0).toFixed(1)}%
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-
-                  {/* Controles de paginação */}
-                  {relatorioUtilizacao.paginacao && (
-                    <div className="flex items-center justify-between mt-4">
-                      <div className="text-sm text-gray-600">
-                        Mostrando {((paginaUtilizacao - 1) * limitePorPagina) + 1} a {Math.min(paginaUtilizacao * limitePorPagina, relatorioUtilizacao.paginacao.total)} de {relatorioUtilizacao.paginacao.total} resultados
+              {/* Tab: Resumo */}
+              <TabsContent value="resumo" className="space-y-6">
+                <PerformanceGruasResumo resumo={dadosPerformance.resumo_geral} />
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Informações do Período</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-600">Data Início</p>
+                        <p className="font-medium">
+                          {new Date(dadosPerformance.periodo.data_inicio).toLocaleDateString('pt-BR')}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={irParaPaginaAnteriorUtilizacao}
-                          disabled={paginaUtilizacao <= 1}
-                        >
-                          Anterior
-                        </Button>
-                        <span className="text-sm text-gray-600">
-                          Página {paginaUtilizacao} de {relatorioUtilizacao.paginacao.pages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={irParaProximaPaginaUtilizacao}
-                          disabled={paginaUtilizacao >= relatorioUtilizacao.paginacao.pages}
-                        >
-                          Próxima
-                        </Button>
+                      <div>
+                        <p className="text-sm text-gray-600">Data Fim</p>
+                        <p className="font-medium">
+                          {new Date(dadosPerformance.periodo.data_fim).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Dias Totais</p>
+                        <p className="font-medium">{dadosPerformance.periodo.dias_totais} dias</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Dias Úteis</p>
+                        <p className="font-medium">{dadosPerformance.periodo.dias_uteis} dias</p>
                       </div>
                     </div>
-                  )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-                  {/* Gráficos de Análise de Utilização */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                    {/* Gráfico de Barras - Taxa de Utilização Top 10 */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>📊 Taxa de Utilização - Top 10</CardTitle>
-                        <CardDescription>
-                          Gruas com maior taxa de utilização
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
-                          <RechartsBarChart 
-                            data={relatorioUtilizacao.relatorio
-                              .sort((a, b) => (b.taxa_utilizacao || 0) - (a.taxa_utilizacao || 0))
-                              .slice(0, 10)
-                              .map(item => ({
-                                grua: item.grua.modelo.substring(0, 15),
-                                taxa: Number((item.taxa_utilizacao || 0).toFixed(1))
-                              }))}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="grua" angle={-45} textAnchor="end" height={100} />
-                            <YAxis />
-                            <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Taxa de Utilização']} />
-                            <Legend />
-                            <Bar dataKey="taxa" fill="#10b981" name="Taxa de Utilização (%)" />
-                          </RechartsBarChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
+              {/* Tab: Detalhado */}
+              <TabsContent value="detalhado" className="space-y-6">
+                <PerformanceGruasTabela
+                  dados={dadosPerformance.performance_por_grua}
+                  pagina={paginaPerformance}
+                  totalPaginas={dadosPerformance.paginacao?.total_paginas || 1}
+                  limite={10}
+                  onPaginaChange={setPaginaPerformance}
+                />
+              </TabsContent>
 
-                    {/* Gráfico de Barras - Receita por Grua Top 10 */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>💰 Receita por Grua - Top 10</CardTitle>
-                        <CardDescription>
-                          Gruas que mais geraram receita
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
-                          <RechartsBarChart 
-                            data={relatorioUtilizacao.relatorio
-                              .sort((a, b) => b.receita_total - a.receita_total)
-                              .slice(0, 10)
-                              .map(item => ({
-                                grua: item.grua.modelo.substring(0, 15),
-                                receita: Number((item.receita_total / 1000).toFixed(1))
-                              }))}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="grua" angle={-45} textAnchor="end" height={100} />
-                            <YAxis />
-                            <RechartsTooltip formatter={(value: number) => [`R$ ${(value * 1000).toLocaleString('pt-BR')}`, 'Receita']} />
-                            <Legend />
-                            <Bar dataKey="receita" fill="#3b82f6" name="Receita (R$ mil)" />
-                          </RechartsBarChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
+              {/* Tab: Gráficos */}
+              <TabsContent value="graficos" className="space-y-6">
+                <PerformanceGruasGraficos dados={dadosPerformance.performance_por_grua} />
+              </TabsContent>
+
+              {/* Tab: Comparativo */}
+              <TabsContent value="comparativo" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Comparativo com Período Anterior</CardTitle>
+                    <CardDescription>
+                      Análise de variação entre o período atual e o período anterior equivalente
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {dadosPerformance.performance_por_grua
+                        .filter(item => item.comparativo_periodo_anterior)
+                        .map((item, index) => (
+                          <Card key={index}>
+                            <CardHeader>
+                              <CardTitle className="text-base">{item.grua.nome}</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              {item.comparativo_periodo_anterior && (
+                                <div className="space-y-2 text-sm">
+                                  <div>
+                                    <p className="text-gray-600">Variação Horas Trabalhadas</p>
+                                    <p className={`font-bold ${item.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {item.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? '+' : ''}
+                                      {item.comparativo_periodo_anterior.horas_trabalhadas_variacao.toFixed(1)}%
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600">Variação Receita</p>
+                                    <p className={`font-bold ${item.comparativo_periodo_anterior.receita_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {item.comparativo_periodo_anterior.receita_variacao >= 0 ? '+' : ''}
+                                      {item.comparativo_periodo_anterior.receita_variacao.toFixed(1)}%
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600">Variação Utilização</p>
+                                    <p className={`font-bold ${item.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {item.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? '+' : ''}
+                                      {item.comparativo_periodo_anterior.utilizacao_variacao.toFixed(1)}%
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          )}
+
+          {/* Erro State */}
+          {!loadingPerformance && !dadosPerformance && (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <div>
+                    <p className="font-medium text-red-800">Erro ao carregar relatório</p>
+                    <p className="text-sm text-red-700">Não foi possível carregar os dados do relatório</p>
+                    <Button 
+                      onClick={carregarDadosPerformance}
+                      className="mt-2"
+                      variant="outline"
+                    >
+                      Tentar novamente
+                    </Button>
                   </div>
                 </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Clique em "Carregar Relatório" para ver a análise de utilização das gruas</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="financeiro" className="space-y-6">
