@@ -1981,6 +1981,169 @@ function ObraDetailsPageContent() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Card de Sinaleiros */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Sinaleiros
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  // Debug: verificar o que está chegando
+                  console.log('🔍 [SINALEIROS] Debug - obra?.sinaleiros_obra:', obra?.sinaleiros_obra)
+                  console.log('🔍 [SINALEIROS] Debug - sinaleirosReais:', sinaleirosReais)
+                  console.log('🔍 [SINALEIROS] Debug - obra?.sinaleiros:', obra?.sinaleiros)
+                  
+                  // Prioridade: 1) sinaleiros_obra da API /obras/:id, 2) sinaleirosReais carregados separadamente, 3) obra.sinaleiros (fallback)
+                  const sinaleirosDaObra = obra?.sinaleiros_obra ? obra.sinaleiros_obra.map((s: any) => ({
+                    id: s.id,
+                    obra_id: s.obra_id,
+                    nome: s.nome,
+                    rg_cpf: s.rg_cpf,
+                    cpf: s.rg_cpf,
+                    rg: s.rg_cpf,
+                    telefone: s.telefone || '',
+                    email: s.email || '',
+                    tipo: s.tipo,
+                    tipo_vinculo: s.tipo === 'principal' ? 'interno' : 'cliente',
+                    cliente_informou: s.tipo === 'reserva',
+                    documentos: [],
+                    certificados: []
+                  })) : []
+                  
+                  console.log('🔍 [SINALEIROS] Debug - sinaleirosDaObra convertidos:', sinaleirosDaObra)
+                  
+                  const sinaleirosDisponiveis = sinaleirosDaObra.length > 0 
+                    ? sinaleirosDaObra 
+                    : (sinaleirosReais.length > 0 ? sinaleirosReais : (obra?.sinaleiros || []))
+                  
+                  console.log('🔍 [SINALEIROS] Debug - sinaleirosDisponiveis:', sinaleirosDisponiveis)
+                  
+                  // Garantir que sempre existam 2 sinaleiros (principal e reserva)
+                  const sinaleiroPrincipal = sinaleirosDisponiveis.find((s: any) => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
+                  const sinaleiroReserva = sinaleirosDisponiveis.find((s: any) => s.tipo === 'reserva' || s.tipo_vinculo === 'cliente')
+                  
+                  const sinaleirosParaExibir = [
+                    sinaleiroPrincipal || {
+                      id: null,
+                      nome: 'Não cadastrado',
+                      tipo_vinculo: 'interno',
+                      tipo: 'principal',
+                      cpf: '',
+                      rg: '',
+                      rg_cpf: '',
+                      telefone: '',
+                      email: '',
+                      documentos: [],
+                      certificados: []
+                    },
+                    sinaleiroReserva || {
+                      id: null,
+                      nome: 'Não cadastrado',
+                      tipo_vinculo: 'cliente',
+                      tipo: 'reserva',
+                      cpf: '',
+                      rg: '',
+                      rg_cpf: '',
+                      telefone: '',
+                      email: '',
+                      documentos: [],
+                      certificados: []
+                    }
+                  ]
+                  
+                  return (
+                    <div className="space-y-3">
+                      {sinaleirosParaExibir.map((s: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-gray-50 rounded-md border border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'} className="text-xs">
+                              {s.tipo_vinculo === 'interno' ? 'Interno' : 'Indicado pelo Cliente'}
+                            </Badge>
+                            {s.id && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  try {
+                                    if (!s.id) {
+                                      toast({
+                                        title: "Atenção",
+                                        description: "Este sinaleiro ainda não foi cadastrado. Cadastre-o primeiro antes de editar.",
+                                        variant: "default"
+                                      })
+                                      return
+                                    }
+                                    
+                                    const sinaleiroFormatado: any = {
+                                      id: s.id,
+                                      obra_id: s.obra_id || parseInt(obraId) || 0,
+                                      nome: s.nome || 'Não informado',
+                                      cpf: s.cpf || s.rg_cpf || '',
+                                      rg: s.rg || s.rg_cpf || '',
+                                      rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+                                      telefone: s.telefone || '',
+                                      email: s.email || '',
+                                      tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
+                                      tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
+                                      cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
+                                      documentos: s.documentos || [],
+                                      certificados: s.certificados || []
+                                    }
+                                    
+                                    setSinaleiroSelecionado(sinaleiroFormatado)
+                                    setIsEditarSinaleiroOpen(true)
+                                  } catch (error) {
+                                    console.error('Erro ao abrir modal de edição:', error)
+                                    toast({
+                                      title: "Erro",
+                                      description: "Erro ao abrir modal de edição",
+                                      variant: "destructive"
+                                    })
+                                  }
+                                }}
+                              >
+                                <Edit className="w-3 h-3 mr-1" />
+                                Editar
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Nome</p>
+                              <p className="font-medium text-sm">{s.nome || 'Não informado'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">CPF</p>
+                              <p className="font-medium text-sm">{s.cpf || 'Não informado'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">RG</p>
+                              <p className="font-medium text-sm">{s.rg || s.rg_cpf || 'Não informado'}</p>
+                            </div>
+                            {s.telefone && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Telefone</p>
+                                <p className="font-medium text-sm">{s.telefone}</p>
+                              </div>
+                            )}
+                            {s.email && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Email</p>
+                                <p className="font-medium text-sm">{s.email}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 

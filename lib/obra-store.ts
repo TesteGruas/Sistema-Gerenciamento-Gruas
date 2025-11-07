@@ -28,6 +28,18 @@ interface ObraStore {
   custosIniciais?: number
   custosAdicionais?: number
   totalCustos?: number
+  // Preservar sinaleiros_obra do backend
+  sinaleiros_obra?: Array<{
+    id: string
+    obra_id: number
+    nome: string
+    rg_cpf: string
+    telefone?: string
+    email?: string
+    tipo: 'principal' | 'reserva'
+    created_at: string
+    updated_at: string
+  }>
 }
 
 interface CustoMensalStore {

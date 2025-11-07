@@ -649,7 +649,9 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     apolice_arquivo: obraBackend.apolice_arquivo,
     // Relacionamentos - usar os que vêm do backend ou fallback para os passados como parâmetro
     gruasVinculadas: gruasVinculadas.length > 0 ? gruasVinculadas : (relacionamentos?.gruasVinculadas || []),
-    funcionariosVinculados: funcionariosVinculados.length > 0 ? funcionariosVinculados : (relacionamentos?.funcionariosVinculados || [])
+    funcionariosVinculados: funcionariosVinculados.length > 0 ? funcionariosVinculados : (relacionamentos?.funcionariosVinculados || []),
+    // Preservar sinaleiros_obra do backend
+    sinaleiros_obra: obraBackend.sinaleiros_obra || []
   }
 }
 

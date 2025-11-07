@@ -39,6 +39,32 @@ export function SinaleirosForm({
     }
   }, [obraId])
 
+  // Atualizar estado quando initialSinaleiros mudar (dados salvos)
+  useEffect(() => {
+    // Só atualizar se initialSinaleiros for fornecido e tiver dados
+    if (initialSinaleiros && initialSinaleiros.length > 0) {
+      // Converter para o formato esperado pelo componente
+      const sinaleirosConvertidos = initialSinaleiros.map(s => ({
+        id: s.id,
+        obra_id: s.obra_id || 0,
+        nome: s.nome || '',
+        rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+        cpf: s.cpf || s.rg_cpf || '',
+        rg: s.rg || s.rg_cpf || '',
+        telefone: s.telefone || '',
+        email: s.email || '',
+        tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
+        tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
+        cliente_informou: s.cliente_informou || (s.tipo === 'reserva'),
+        documentos: s.documentos || [],
+        certificados: s.certificados || []
+      }))
+      setSinaleiros(sinaleirosConvertidos)
+    }
+    // Se initialSinaleiros for undefined, null ou array vazio, não fazer nada (manter estado atual)
+    // Isso evita limpar quando o componente é re-renderizado
+  }, [initialSinaleiros])
+
   const loadSinaleiros = async () => {
     if (!obraId) return
     setLoading(true)
@@ -71,7 +97,13 @@ export function SinaleirosForm({
   }
 
   // Garantir que sempre existam 2 sinaleiros: interno e cliente
+  // IMPORTANTE: Só executar se não houver initialSinaleiros (para não sobrescrever dados salvos)
   useEffect(() => {
+    // Se houver initialSinaleiros, não criar sinaleiros vazios (eles já vêm do estado salvo)
+    if (initialSinaleiros && initialSinaleiros.length > 0) {
+      return
+    }
+    
     const temInterno = sinaleiros.some(s => s.tipo_vinculo === 'interno')
     const temCliente = sinaleiros.some(s => s.tipo_vinculo === 'cliente')
     
@@ -119,7 +151,7 @@ export function SinaleirosForm({
     
     setSinaleiros(novos)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [obraId])
+  }, [obraId, initialSinaleiros])
 
   const handleAddSinaleiro = () => {
     if (sinaleiros.length >= 2) {
@@ -523,17 +555,24 @@ export function SinaleirosForm({
 
               {/* Documentos do Sinaleiro - Apenas para sinaleiros externos (cliente) com UUID válido */}
               {(() => {
-                // Validar se o ID é um UUID válido
+                // Validar se o ID é um UUID válido (não pode ser temporário)
                 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-                const temUuidValido = sinaleiro.id && uuidRegex.test(sinaleiro.id)
+                const idValido = sinaleiro.id && typeof sinaleiro.id === 'string'
+                const naoTemporario = idValido && !sinaleiro.id.startsWith('cliente_') && !sinaleiro.id.startsWith('interno_') && !sinaleiro.id.startsWith('temp_') && !sinaleiro.id.startsWith('new_')
+                const temUuidValido = naoTemporario && uuidRegex.test(sinaleiro.id)
                 const ehExterno = sinaleiro.tipo_vinculo !== 'interno' && sinaleiro.tipo !== 'principal'
                 
-                return temUuidValido && ehExterno ? (
+                // Só renderizar se tiver UUID válido E for externo
+                if (!temUuidValido || !ehExterno) {
+                  return null
+                }
+                
+                return (
                   <DocumentosSinaleiroList
                     sinaleiroId={sinaleiro.id}
                     readOnly={!canEdit || clientePodeEditar}
                   />
-                ) : null
+                )
               })()}
               
               {/* Mensagem para sinaleiro interno */}
