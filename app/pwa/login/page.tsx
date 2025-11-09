@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,11 +23,12 @@ import {
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import { usePersistentSession } from "@/hooks/use-persistent-session"
 import { loadUserPermissions } from "@/lib/auth-permissions"
-import { useEmpresa, EmpresaProvider } from "@/hooks/use-empresa"
+import { useEmpresa } from "@/hooks/use-empresa"
+import { EmpresaProvider } from "@/hooks/use-empresa"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import Image from "next/image"
 
-function PWALoginPageContent() {
+function PWALoginPageContent(): JSX.Element {
   const [formData, setFormData] = useState({
     usuario: "",
     senha: ""
@@ -211,8 +212,11 @@ function PWALoginPageContent() {
       // Verificar se é erro de rede
       if (error.name === 'TypeError' && error.message?.includes('fetch')) {
         showNetworkError(() => {
-          // Tentar novamente
-          handleSubmit(e)
+          // Tentar novamente - criar um evento sintético
+          const syntheticEvent = {
+            preventDefault: () => {},
+          } as React.FormEvent
+          handleSubmit(syntheticEvent)
         })
       } else {
         showAuthError(error)
@@ -440,6 +444,7 @@ function PWALoginPageContent() {
             🔧 Problemas com login? Clique aqui para diagnóstico
           </a>
         </div>
+      </div>
       </div>
       
       {/* Footer com informações da empresa */}
