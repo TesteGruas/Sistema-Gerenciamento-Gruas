@@ -24,17 +24,23 @@ import {
   Briefcase,
   ChevronRight,
   Zap,
-  Receipt
+  Receipt,
+  Play
 } from "lucide-react"
 import { usePWAUser } from "@/hooks/use-pwa-user"
+import { useToast } from "@/hooks/use-toast"
+import * as pontoApi from "@/lib/api-ponto-eletronico"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
   const [isClient, setIsClient] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
+  const [isRegistrandoPonto, setIsRegistrandoPonto] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  const { toast } = useToast()
   
   // Hook de usuário sempre chamado (mas com fallback interno)
   const pwaUserData = usePWAUser()
@@ -93,6 +99,97 @@ export default function PWAMainPage() {
       }
     }
   }, [])
+
+  // Sistema de notificações de ponto
+  useEffect(() => {
+    if (!currentTime || !pwaUserData.user) return
+
+    const verificarNotificacao = () => {
+      const proximoRegistro = getProximoRegistro()
+      if (!proximoRegistro) return
+
+      const agora = new Date()
+      const horaAtual = agora.getHours() * 60 + agora.getMinutes() // Minutos desde meia-noite
+      
+      // Horários esperados para cada tipo de registro (em minutos desde meia-noite)
+      const horariosEsperados = {
+        entrada: 8 * 60, // 08:00
+        saida_almoco: 12 * 60, // 12:00
+        volta_almoco: 13 * 60, // 13:00
+        saida: 17 * 60 // 17:00
+      }
+
+      const horarioEsperado = horariosEsperados[proximoRegistro.tipo as keyof typeof horariosEsperados]
+      if (!horarioEsperado) return
+
+      // Verificar se está próximo do horário esperado (±15 minutos)
+      const diferenca = Math.abs(horaAtual - horarioEsperado)
+      const jaPassou = horaAtual > horarioEsperado
+      
+      // Mostrar notificação se:
+      // 1. Está dentro de 15 minutos antes do horário esperado
+      // 2. Já passou do horário esperado (atraso)
+      if (diferenca <= 15 || (jaPassou && diferenca <= 60)) {
+        const ultimaNotificacao = localStorage.getItem(`notificacao_ponto_${proximoRegistro.tipo}_${agora.toDateString()}`)
+        
+        // Só mostrar notificação uma vez por dia para cada tipo
+        if (!ultimaNotificacao) {
+          const mensagens = {
+            entrada: {
+              titulo: "⏰ Hora de registrar entrada!",
+              descricao: "Não esqueça de registrar seu ponto de entrada"
+            },
+            saida_almoco: {
+              titulo: "🍽️ Hora do almoço!",
+              descricao: "Registre sua saída para almoço"
+            },
+            volta_almoco: {
+              titulo: "⏰ Volta do almoço!",
+              descricao: "Registre sua volta do intervalo de almoço"
+            },
+            saida: {
+              titulo: "🏠 Hora de encerrar!",
+              descricao: "Registre sua saída para finalizar o dia"
+            }
+          }
+
+          const mensagem = mensagens[proximoRegistro.tipo as keyof typeof mensagens]
+          
+          if (mensagem) {
+            toast({
+              title: mensagem.titulo,
+              description: mensagem.descricao,
+              variant: jaPassou ? "destructive" : "default",
+              duration: 10000,
+              action: (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegistrarPonto}
+                  className="h-8 px-2 text-xs"
+                >
+                  <Play className="w-3 h-3 mr-1" />
+                  Registrar Agora
+                </Button>
+              )
+            })
+
+            // Marcar que já mostrou a notificação hoje
+            localStorage.setItem(`notificacao_ponto_${proximoRegistro.tipo}_${agora.toDateString()}`, 'true')
+          }
+        }
+      }
+    }
+
+    // Verificar imediatamente
+    verificarNotificacao()
+
+    // Verificar a cada minuto
+    const intervalId = setInterval(verificarNotificacao, 60 * 1000)
+
+    return () => clearInterval(intervalId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTime, pwaUserData.pontoHoje])
 
   const quickActions = [
     {
@@ -172,6 +269,267 @@ export default function PWAMainPage() {
     }
   ]
 
+  // Função auxiliar para formatar hora do ponto
+  const formatarHoraPonto = (hora: string | Date | null | undefined): string => {
+    if (!hora) return '--:--'
+    
+    // Se já é uma string no formato HH:MM, retornar diretamente
+    if (typeof hora === 'string' && /^\d{2}:\d{2}$/.test(hora)) {
+      return hora
+    }
+    
+    // Se é uma data ISO, converter
+    if (typeof hora === 'string' && hora.includes('T')) {
+      try {
+        return new Date(hora).toLocaleTimeString('pt-BR', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })
+      } catch {
+        return hora
+      }
+    }
+    
+    // Se é um objeto Date
+    if (hora instanceof Date) {
+      return hora.toLocaleTimeString('pt-BR', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    }
+    
+    return String(hora)
+  }
+
+  // Determinar qual é o próximo registro necessário
+  const getProximoRegistro = () => {
+    const registrosHoje = pwaUserData.pontoHoje || {}
+    
+    if (!registrosHoje.entrada) {
+      return {
+        tipo: 'entrada',
+        label: 'Entrada',
+        descricao: 'Iniciar jornada de trabalho'
+      }
+    }
+    
+    if (registrosHoje.entrada && !registrosHoje.saida_almoco && !registrosHoje.saida) {
+      return {
+        tipo: 'saida_almoco',
+        label: 'Saída Almoço',
+        descricao: 'Iniciar intervalo de almoço'
+      }
+    }
+    
+    if (registrosHoje.saida_almoco && !registrosHoje.volta_almoco && !registrosHoje.saida) {
+      return {
+        tipo: 'volta_almoco',
+        label: 'Volta Almoço',
+        descricao: 'Retornar do intervalo de almoço'
+      }
+    }
+    
+    if (registrosHoje.entrada && !registrosHoje.saida) {
+      return {
+        tipo: 'saida',
+        label: 'Saída',
+        descricao: 'Finalizar jornada de trabalho'
+      }
+    }
+    
+    return null // Jornada completa
+  }
+
+  // Função para registrar ponto
+  const handleRegistrarPonto = async () => {
+    const proximoRegistro = getProximoRegistro()
+    
+    if (!proximoRegistro) {
+      toast({
+        title: "Jornada completa",
+        description: "Você já registrou todos os pontos do dia",
+        variant: "default"
+      })
+      return
+    }
+
+    setIsRegistrandoPonto(true)
+    
+    try {
+      // Obter dados do usuário
+      const userData = localStorage.getItem('user_data')
+      if (!userData) {
+        throw new Error('Dados do usuário não encontrados')
+      }
+      
+      const user = JSON.parse(userData)
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        throw new Error('Token não encontrado')
+      }
+      
+      console.log('[PWA Ponto] Dados do usuário:', {
+        id: user.id,
+        email: user.email,
+        profile: user.profile,
+        funcionario_id: user.funcionario_id
+      })
+      
+      // Obter funcionarioId - tentar múltiplas abordagens
+      let funcionarioId: number | null = null
+      
+      // Tentar 1: profile.funcionario_id
+      if (user.profile?.funcionario_id) {
+        funcionarioId = Number(user.profile.funcionario_id)
+        console.log('[PWA Ponto] Funcionário ID encontrado em profile.funcionario_id:', funcionarioId)
+      }
+      
+      // Tentar 2: funcionario_id direto
+      if (!funcionarioId && user.funcionario_id) {
+        funcionarioId = Number(user.funcionario_id)
+        console.log('[PWA Ponto] Funcionário ID encontrado em funcionario_id:', funcionarioId)
+      }
+      
+      // Tentar 3: user.id se for numérico
+      if (!funcionarioId && user.id && !isNaN(Number(user.id)) && !user.id.toString().includes('-')) {
+        funcionarioId = Number(user.id)
+        console.log('[PWA Ponto] Funcionário ID encontrado em user.id:', funcionarioId)
+      }
+      
+      // Tentar 4: usar a função utilitária
+      if (!funcionarioId) {
+        try {
+          funcionarioId = await getFuncionarioIdWithFallback(
+            user, 
+            token, 
+            'ID do funcionário não encontrado'
+          )
+          console.log('[PWA Ponto] Funcionário ID encontrado via getFuncionarioIdWithFallback:', funcionarioId)
+        } catch (error) {
+          console.warn('[PWA Ponto] Erro ao buscar ID via getFuncionarioIdWithFallback:', error)
+          // Se falhar, tentar buscar na API
+          console.warn('[PWA Ponto] Tentando buscar funcionário na API...')
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          try {
+            const response = await fetch(
+              `${apiUrl}/api/funcionarios?search=${encodeURIComponent(user.email || user.nome || '')}&limit=10`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            )
+            
+            if (response.ok) {
+              const data = await response.json()
+              const funcionarios = data.data || []
+              console.log('[PWA Ponto] Funcionários encontrados:', funcionarios.length)
+              
+              const funcionario = funcionarios.find((f: any) => 
+                f.usuario?.id === user.id || 
+                f.usuario?.email === user.email ||
+                f.email === user.email ||
+                (f.nome && user.nome && f.nome.toLowerCase() === user.nome.toLowerCase())
+              )
+              
+              if (funcionario && funcionario.id) {
+                funcionarioId = Number(funcionario.id)
+                console.log('[PWA Ponto] Funcionário ID encontrado via API:', funcionarioId)
+              }
+            } else {
+              console.error('[PWA Ponto] Erro na resposta da API:', response.status, response.statusText)
+            }
+          } catch (apiError) {
+            console.error('[PWA Ponto] Erro ao buscar funcionário na API:', apiError)
+          }
+        }
+      }
+      
+      if (!funcionarioId) {
+        console.error('[PWA Ponto] Não foi possível encontrar o ID do funcionário após todas as tentativas')
+        throw new Error('Não foi possível identificar o ID do funcionário. Verifique se seu perfil está vinculado a um funcionário no sistema.')
+      }
+      
+      console.log('[PWA Ponto] Usando funcionário ID:', funcionarioId)
+      
+      const agora = new Date()
+      const horaAtual = agora.toTimeString().slice(0, 5)
+      const hoje = agora.toISOString().split('T')[0]
+      
+      // Preparar dados para envio
+      const campoTipo = proximoRegistro.tipo.toLowerCase().replace(' ', '_')
+      const dadosRegistro: any = {
+        funcionario_id: funcionarioId,
+        data: hoje,
+        [campoTipo]: horaAtual
+      }
+
+      // Se offline, adicionar à fila de sincronização
+      if (!isOnline) {
+        const filaRegistros = JSON.parse(localStorage.getItem('fila_registros_ponto') || '[]')
+        filaRegistros.push({
+          dados: dadosRegistro,
+          timestamp: new Date().toISOString()
+        })
+        localStorage.setItem('fila_registros_ponto', JSON.stringify(filaRegistros))
+        
+        toast({
+          title: "Ponto registrado offline",
+          description: `${proximoRegistro.label} será sincronizada quando você estiver online`,
+          variant: "default"
+        })
+        
+        // Recarregar página após 1 segundo para atualizar dados
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
+        
+        return
+      }
+
+      // Verificar se já existe registro para hoje
+      const registrosExistentes = await pontoApi.getRegistros({
+        funcionario_id: funcionarioId,
+        data_inicio: hoje,
+        data_fim: hoje
+      })
+
+      if (registrosExistentes && registrosExistentes.length > 0) {
+        // Atualizar registro existente
+        const registroId = registrosExistentes[0].id!
+        await pontoApi.atualizarRegistro(registroId, {
+          ...dadosRegistro,
+          justificativa_alteracao: `Registro ${proximoRegistro.label} via PWA`
+        })
+      } else {
+        // Criar novo registro
+        await pontoApi.criarRegistro(dadosRegistro)
+      }
+
+      toast({
+        title: "Ponto registrado!",
+        description: `${proximoRegistro.label} registrada às ${horaAtual}`,
+        variant: "default"
+      })
+      
+      // Recarregar página após 1 segundo para atualizar dados
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+      
+    } catch (error: any) {
+      console.error('Erro ao registrar ponto:', error)
+      toast({
+        title: "Erro ao registrar ponto",
+        description: error.message || "Tente novamente em alguns instantes",
+        variant: "destructive"
+      })
+    } finally {
+      setIsRegistrandoPonto(false)
+    }
+  }
+
   // Adicionar ação de encarregador se aplicável
   const userData = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
   let isEncarregador = false
@@ -226,8 +584,26 @@ export default function PWAMainPage() {
               <p className="text-sm font-medium text-red-100 mb-1">Bem-vindo(a),</p>
               <h2 className="text-2xl font-bold">{pwaUserData.user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
             </div>
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center ring-2 ring-white/30 shadow-lg">
-              <Zap className="w-6 h-6" />
+            <div className="flex items-center gap-2">
+              {getProximoRegistro() && (
+                <button
+                  onClick={handleRegistrarPonto}
+                  disabled={isRegistrandoPonto}
+                  className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isRegistrandoPonto ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Registrando...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Registrar Ponto
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
           
@@ -252,12 +628,7 @@ export default function PWAMainPage() {
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
               <p className="text-sm font-bold">
-                {pwaUserData.pontoHoje?.entrada 
-                  ? new Date(pwaUserData.pontoHoje.entrada).toLocaleTimeString('pt-BR', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })
-                  : '--:--'}
+                {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
               </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
@@ -284,7 +655,7 @@ export default function PWAMainPage() {
               }`} />
             </div>
             <p className="text-base font-bold text-gray-900">
-              {pwaUserData.pontoHoje?.entrada ? '✓' : '−'}
+              {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
             </p>
             <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
           </div>
@@ -309,59 +680,27 @@ export default function PWAMainPage() {
             <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
               <Clock className="w-6 h-6 text-[#871b0b]" />
             </div>
-            <p className="text-base font-bold text-gray-900">{pwaUserData.horasTrabalhadas.split('h')[0]}</p>
-            <p className="text-[10px] text-gray-500 font-medium">Horas</p>
+            <p className="text-base font-bold text-gray-900">
+              {pwaUserData.pontoHoje?.saida
+                ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
+                : pwaUserData.pontoHoje?.volta_almoco
+                ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
+                : pwaUserData.pontoHoje?.saida_almoco
+                ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
+                : '--:--'}
+            </p>
+            <p className="text-[10px] text-gray-500 font-medium">
+              {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
+               pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
+               pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
+               'Saída'}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Ações Rápidas */}
+      {/* Todas as Funcionalidades */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-gray-900">Acesso Rápido</h2>
-          <Button variant="ghost" size="sm" className="text-xs text-[#871b0b] h-auto p-0">
-            Ver tudo
-            <ChevronRight className="w-3 h-3 ml-1" />
-          </Button>
-        </div>
-        
-        <div className="space-y-3">
-          {/* Todos os cards com mesmo tamanho, dois por linha */}
-          <div className="grid grid-cols-2 gap-3">
-            {quickActions.map((action, index) => {
-              const Icon = action.icon
-              
-              return (
-                <div
-                  key={action.title}
-                  onClick={() => handleNavigation(action.href)}
-                  className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-red-100 relative overflow-hidden group"
-                  style={{
-                    animationDelay: `${index * 50}ms`
-                  }}
-                >
-                  {/* Efeito de hover */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-red-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  <div className="relative z-10">
-                    <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
-                      <Icon className={`w-6 h-6 ${action.color}`} />
-                    </div>
-                    <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
-                    <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
-                      {action.description}
-                    </p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Informações de Funcionalidades */}
-      <div>
-        <h2 className="text-base font-bold text-gray-900 mb-3">Funcionalidades</h2>
         <div className="grid grid-cols-2 gap-3">
           {/* Card de Assinatura de Documentos */}
           <div 
@@ -449,6 +788,39 @@ export default function PWAMainPage() {
               <ChevronRight className="w-3 h-3 ml-1" />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Ações Rápidas - Todos os itens */}
+      <div>
+        <div className="grid grid-cols-2 gap-3">
+          {quickActions.map((action, index) => {
+            const Icon = action.icon
+            
+            return (
+              <div
+                key={action.title}
+                onClick={() => handleNavigation(action.href)}
+                className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-red-100 relative overflow-hidden group"
+                style={{
+                  animationDelay: `${index * 50}ms`
+                }}
+              >
+                {/* Efeito de hover */}
+                <div className="absolute inset-0 bg-gradient-to-br from-red-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                
+                <div className="relative z-10">
+                  <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
+                    <Icon className={`w-6 h-6 ${action.color}`} />
+                  </div>
+                  <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
+                  <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
+                    {action.description}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 

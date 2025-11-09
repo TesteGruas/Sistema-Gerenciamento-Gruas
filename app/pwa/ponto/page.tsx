@@ -699,6 +699,53 @@ export default function PWAPontoPage() {
         </CardContent>
       </Card>
 
+      {/* Botões de registro */}
+      <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-blue-600" />
+            Registrar Ponto
+          </CardTitle>
+          <CardDescription>
+            {proximoRegistro 
+              ? `Próximo: ${proximoRegistro.label} - ${proximoRegistro.descricao}`
+              : "Jornada completa - Todos os registros foram feitos hoje"
+            }
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+
+            {/* Botão único baseado no próximo registro */}
+            {proximoRegistro ? (
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => registrarPonto(proximoRegistro.tipo)}
+                  disabled={isLoading}
+                  className={`h-24 w-full max-w-sm flex flex-col gap-3 text-white font-semibold transition-all duration-200 bg-gradient-to-br ${proximoRegistro.cor} shadow-lg hover:shadow-xl active:scale-95`}
+                >
+                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shadow-md">
+                    <proximoRegistro.icone className="w-6 h-6" />
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xl font-bold">{proximoRegistro.label}</div>
+                    <div className="text-sm opacity-90">{proximoRegistro.descricao}</div>
+                  </div>
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Jornada Completa</h3>
+                <p className="text-gray-600">Você já registrou todos os pontos do dia</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Status dos registros */}
       <Card className="shadow-lg">
         <CardHeader>
@@ -757,53 +804,6 @@ export default function PWAPontoPage() {
                 </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Botões de registro */}
-      <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-blue-600" />
-            Registrar Ponto
-          </CardTitle>
-          <CardDescription>
-            {proximoRegistro 
-              ? `Próximo: ${proximoRegistro.label} - ${proximoRegistro.descricao}`
-              : "Jornada completa - Todos os registros foram feitos hoje"
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-
-            {/* Botão único baseado no próximo registro */}
-            {proximoRegistro ? (
-              <div className="flex justify-center">
-                <Button
-                  onClick={() => registrarPonto(proximoRegistro.tipo)}
-                  disabled={isLoading}
-                  className={`h-24 w-full max-w-sm flex flex-col gap-3 text-white font-semibold transition-all duration-200 bg-gradient-to-br ${proximoRegistro.cor} shadow-lg hover:shadow-xl active:scale-95`}
-                >
-                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shadow-md">
-                    <proximoRegistro.icone className="w-6 h-6" />
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xl font-bold">{proximoRegistro.label}</div>
-                    <div className="text-sm opacity-90">{proximoRegistro.descricao}</div>
-                  </div>
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Jornada Completa</h3>
-                <p className="text-gray-600">Você já registrou todos os pontos do dia</p>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>

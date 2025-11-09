@@ -101,7 +101,14 @@ function PWALoginPageContent(): JSX.Element {
 
     try {
       // Construir URL da API
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Se NEXT_PUBLIC_API_URL já inclui /api, usar diretamente, senão adicionar /api
+      let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      
+      // Remover /api do final se existir para evitar duplicação
+      if (apiUrl.endsWith('/api')) {
+        apiUrl = apiUrl.replace(/\/api$/, '')
+      }
+      
       const loginUrl = `${apiUrl}/api/auth/login`
       
       console.log('[PWA Login] Tentando login em:', loginUrl)
@@ -209,14 +216,32 @@ function PWALoginPageContent(): JSX.Element {
     } catch (error: any) {
       console.error('[PWA Login] Erro no login:', error)
       
-      // Verificar se é erro de rede
-      if (error.name === 'TypeError' && error.message?.includes('fetch')) {
+      // Verificar se é erro de conexão
+      if (error.name === 'TypeError' && (
+        error.message?.includes('fetch') || 
+        error.message?.includes('Failed to fetch') ||
+        error.message?.includes('NetworkError') ||
+        error.message?.includes('ERR_CONNECTION_REFUSED') ||
+        error.message?.includes('ERR_NETWORK_CHANGED')
+      )) {
+        let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        if (apiUrl.endsWith('/api')) {
+          apiUrl = apiUrl.replace(/\/api$/, '')
+        }
         showNetworkError(() => {
           // Tentar novamente - criar um evento sintético
           const syntheticEvent = {
             preventDefault: () => {},
           } as React.FormEvent
           handleSubmit(syntheticEvent)
+        }, apiUrl)
+        
+        // Mostrar mensagem adicional no console
+        console.error('[PWA Login] Erro de conexão:', {
+          message: error.message,
+          apiUrl: apiUrl,
+          loginUrl: `${apiUrl}/api/auth/login`,
+          suggestion: 'Verifique se o backend está rodando e acessível'
         })
       } else {
         showAuthError(error)

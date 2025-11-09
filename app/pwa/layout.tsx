@@ -33,15 +33,17 @@ import { useAuthInterceptor } from "@/hooks/use-auth-interceptor"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { PWA_MENU_ITEMS } from "@/app/pwa/lib/permissions"
 import { PageLoader } from "@/components/ui/loader"
-import { EmpresaProvider } from "@/hooks/use-empresa"
+import { EmpresaProvider, useEmpresa } from "@/hooks/use-empresa"
+import Image from "next/image"
 
 interface PWALayoutProps {
   children: React.ReactNode
 }
 
-export default function PWALayout({ children }: PWALayoutProps) {
+function PWALayoutContent({ children }: PWALayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
+  const { empresa } = useEmpresa()
   const [isOnline, setIsOnline] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
@@ -212,7 +214,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
   // Mapear TODOS os itens do menu PWA para formato de navegação
   // O hook usePWAPermissions já retorna os itens filtrados por permissões
   // Se houver poucos itens (apenas Perfil e Config) ou se for admin, usar todos os itens do menu PWA
-  const itemsToUse = (pwaMenuItems.length <= 2 || userRole === 'admin') 
+  const itemsToUse = (pwaMenuItems.length <= 2 || userRole === 'Admin') 
     ? PWA_MENU_ITEMS 
     : pwaMenuItems
   
@@ -362,42 +364,32 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
 
   return (
-    <EmpresaProvider>
-      <PWAErrorBoundary>
-        <PWAAuthGuard>
+    <PWAErrorBoundary>
+      <PWAAuthGuard>
         {shouldShowLayout ? (
           <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 pb-20">
             {/* Header */}
             <header className="bg-gradient-to-r from-[#871b0b] to-[#6b1509] text-white sticky top-0 z-40 shadow-lg safe-area-pt">
-              <div className="px-4 py-4">
+              <div className="px-4 py-3">
                 <div className="flex items-center justify-between">
+                  {/* Logo */}
                   <div className="flex items-center gap-3">
-                    {/* Botão Menu Hambúrguer */}
-                    <button
-                      onClick={() => setIsMenuOpen(!isMenuOpen)}
-                      className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
-                    >
-                      {isMenuOpen ? (
-                        <X className="w-5 h-5 text-white" />
-                      ) : (
-                        <Menu className="w-5 h-5 text-white" />
-                      )}
-                    </button>
-                    
-                    {/* Botão Home */}
-                    <button
-                      onClick={() => handleNavigation('/pwa')}
-                      className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
-                      title="Ir para Home"
-                    >
-                      <Home className="w-5 h-5 text-white" />
-                    </button>
-                    
-                    <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg">
-                      <Smartphone className="w-6 h-6 text-white" />
-                    </div>
+                    {empresa.logo ? (
+                      <div className="w-12 h-12 relative">
+                        <Image
+                          src={empresa.logo}
+                          alt={empresa.nome}
+                          fill
+                          className="object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg">
+                        <Smartphone className="w-6 h-6 text-white" />
+                      </div>
+                    )}
                     <div>
-                      <h1 className="font-bold text-lg">IRBANA</h1>
+                      <h1 className="font-bold text-lg">{empresa.nome || "IRBANA"}</h1>
                       <div className="flex items-center gap-2 text-xs text-red-100">
                         {isOnline ? (
                           <>
@@ -414,44 +406,92 @@ export default function PWALayout({ children }: PWALayoutProps) {
                     </div>
                   </div>
 
-                   <div className="flex items-center gap-2">
-                     {user && (
+                  {/* Menu do Usuário */}
+                  <div className="flex items-center gap-2">
+                    {user && (
                       <div className="relative" data-user-menu>
                         <button
                           onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                           className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
+                          aria-label="Menu do usuário"
                         >
-                          <div className="w-8 h-8 bg-white/30 rounded-full flex items-center justify-center">
-                            <User className="w-4 h-4 text-white" />
+                          <div className="w-10 h-10 bg-white/30 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-white" />
                           </div>
                         </button>
 
                         {isUserMenuOpen && (
-                          <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 z-50">
-                            <div className="p-2">
-                              <div className="px-3 py-2 border-b border-gray-100">
-                                <p className="text-sm font-medium text-gray-900">{user.nome}</p>
-                                <p className="text-xs text-gray-500">{user.cargo}</p>
-                              </div>
-                              
-                              <button
-                                onClick={handleLogout}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                              >
-                                <LogOut className="w-4 h-4" />
-                                Sair
-                              </button>
-                              
-                              <div className="border-t border-gray-100 my-1"></div>
-                              
-                              <div className="px-3 py-2">
-                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                                  <span>PWA Ativo</span>
+                          <>
+                            {/* Overlay para fechar ao clicar fora */}
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setIsUserMenuOpen(false)}
+                            />
+                            <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50">
+                              <div className="p-2">
+                                {/* Informações do usuário */}
+                                <div className="px-3 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                                  <p className="text-sm font-semibold text-gray-900">{user.nome}</p>
+                                  {user.cargo && (
+                                    <p className="text-xs text-gray-500 mt-0.5">{user.cargo}</p>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                    <span className="text-xs text-gray-500">PWA Ativo</span>
+                                  </div>
+                                </div>
+                                
+                                {/* Opções do menu */}
+                                <div className="py-1">
+                                  <button
+                                    onClick={() => {
+                                      setIsUserMenuOpen(false)
+                                      handleNavigation('/pwa/perfil')
+                                    }}
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                  >
+                                    <UserCircle className="w-4 h-4" />
+                                    Meu Perfil
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => {
+                                      setIsUserMenuOpen(false)
+                                      handleNavigation('/pwa')
+                                    }}
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                  >
+                                    <Home className="w-4 h-4" />
+                                    Início
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => {
+                                      setIsUserMenuOpen(false)
+                                      setIsMenuOpen(true)
+                                    }}
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                  >
+                                    <Menu className="w-4 h-4" />
+                                    Menu
+                                  </button>
+                                  
+                                  <div className="border-t border-gray-100 my-1"></div>
+                                  
+                                  <button
+                                    onClick={() => {
+                                      setIsUserMenuOpen(false)
+                                      handleLogout()
+                                    }}
+                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  >
+                                    <LogOut className="w-4 h-4" />
+                                    Sair
+                                  </button>
                                 </div>
                               </div>
                             </div>
-                          </div>
+                          </>
                         )}
                       </div>
                     )}
@@ -678,7 +718,14 @@ export default function PWALayout({ children }: PWALayoutProps) {
           </div>
         )}
       </PWAAuthGuard>
-      </PWAErrorBoundary>
+    </PWAErrorBoundary>
+  )
+}
+
+export default function PWALayout({ children }: PWALayoutProps) {
+  return (
+    <EmpresaProvider>
+      <PWALayoutContent>{children}</PWALayoutContent>
     </EmpresaProvider>
   )
 }

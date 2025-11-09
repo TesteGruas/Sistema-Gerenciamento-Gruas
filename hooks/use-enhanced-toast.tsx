@@ -99,12 +99,13 @@ export function useEnhancedToast() {
     })
   }
 
-  const showNetworkError = (retryCallback?: () => void) => {
+  const showNetworkError = (retryCallback?: () => void, apiUrl?: string) => {
+    const apiUrlDisplay = apiUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
     return toast({
       title: "Erro de conexão",
-      description: "Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.",
+      description: `Não foi possível conectar ao servidor (${apiUrlDisplay}). Verifique se o backend está rodando e acessível.`,
       variant: "destructive",
-      duration: 6000,
+      duration: 8000,
       action: retryCallback ? (
         <Button
           variant="outline"
