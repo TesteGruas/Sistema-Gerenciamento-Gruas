@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast"
 import { ordemComprasApi, type OrdemCompraBackend } from "@/lib/api-ordem-compras"
 import { CardLoader } from "@/components/ui/loader"
 import { FluxoAprovacaoCompra } from "@/components/fluxo-aprovacao-compra"
+import { OrdemCompraForm } from "@/components/ordem-compra-form"
 import { useCurrentUser } from "@/hooks/use-current-user"
 
 export default function OrdemComprasPage() {
@@ -35,6 +36,8 @@ export default function OrdemComprasPage() {
   const [ordensPendentes, setOrdensPendentes] = useState<any[]>([])
   const [selectedOrdem, setSelectedOrdem] = useState<OrdemCompraBackend | null>(null)
   const [showDialog, setShowDialog] = useState(false)
+  const [showFormDialog, setShowFormDialog] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
   const [activeTab, setActiveTab] = useState("todas")
 
   useEffect(() => {
@@ -114,10 +117,20 @@ export default function OrdemComprasPage() {
           <h1 className="text-3xl font-bold">Ordem de Compras</h1>
           <p className="text-muted-foreground">Gerencie o fluxo de aprovação de compras</p>
         </div>
-        <Button onClick={loadData} variant="outline">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Atualizar
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={loadData} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Atualizar
+          </Button>
+          <Button onClick={() => {
+            setSelectedOrdem(null)
+            setIsEditing(false)
+            setShowFormDialog(true)
+          }}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Ordem
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -268,7 +281,7 @@ export default function OrdemComprasPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog */}
+      {/* Dialog de Visualização/Aprovação */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -281,6 +294,29 @@ export default function OrdemComprasPage() {
               onCancel={() => setShowDialog(false)}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Criar/Editar */}
+      <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {isEditing ? "Editar Ordem de Compra" : "Nova Ordem de Compra"}
+            </DialogTitle>
+          </DialogHeader>
+          <OrdemCompraForm
+            ordem={selectedOrdem || undefined}
+            onSave={async () => {
+              setShowFormDialog(false)
+              await loadData()
+            }}
+            onCancel={() => {
+              setShowFormDialog(false)
+              setSelectedOrdem(null)
+              setIsEditing(false)
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>

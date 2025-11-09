@@ -23,7 +23,9 @@ import {
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import { usePersistentSession } from "@/hooks/use-persistent-session"
 import { loadUserPermissions } from "@/lib/auth-permissions"
+import { useEmpresa } from "@/hooks/use-empresa"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
+import Image from "next/image"
 
 export default function PWALoginPage() {
   const [formData, setFormData] = useState({
@@ -39,6 +41,7 @@ export default function PWALoginPage() {
   const [showBiometricOption, setShowBiometricOption] = useState(false)
   const router = useRouter()
   const { showAuthError, showSuccess, showNetworkError } = useEnhancedToast()
+  const { empresa, getEnderecoCompleto, getContatoCompleto } = useEmpresa()
   
   // Hook de sessão persistente
   const {
@@ -278,16 +281,28 @@ export default function PWALoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Smartphone className="w-8 h-8 text-white" />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 relative mx-auto mb-4">
+              {empresa.logo ? (
+                <Image
+                  src={empresa.logo}
+                  alt={empresa.nome}
+                  fill
+                  className="object-contain"
+                />
+              ) : (
+                <div className="w-full h-full bg-blue-600 rounded-2xl flex items-center justify-center">
+                  <Smartphone className="w-10 h-10 text-white" />
+                </div>
+              )}
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{empresa.nome || "IRBANA PWA"}</h1>
+            <p className="text-gray-600">Sistema de Ponto e Assinatura</p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">IRBANA PWA</h1>
-          <p className="text-gray-600">Sistema de Ponto e Assinatura</p>
-        </div>
 
         {/* Status de conexão */}
         <div className="mb-6">
@@ -426,6 +441,18 @@ export default function PWALoginPage() {
           </a>
         </div>
       </div>
+      
+      {/* Footer com informações da empresa */}
+      <footer className="bg-white/80 backdrop-blur-sm border-t border-gray-200 py-3 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center space-y-1">
+            <p className="text-xs font-semibold text-gray-900">{empresa.razao_social || empresa.nome}</p>
+            <p className="text-xs text-gray-600">{getEnderecoCompleto()}</p>
+            <p className="text-xs text-gray-600">{getContatoCompleto()}</p>
+            <p className="text-xs text-gray-500 mt-1">© {new Date().getFullYear()} - Todos os direitos reservados</p>
+          </div>
+        </div>
+      </footer>
 
       {/* Modal de configuração de biometria */}
       {showBiometricOption && (

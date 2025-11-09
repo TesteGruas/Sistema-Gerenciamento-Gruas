@@ -8,7 +8,8 @@ import {
   View,
   StyleSheet,
   Font,
-  PDFDownloadLink
+  PDFDownloadLink,
+  Image
 } from "@react-pdf/renderer"
 import { format } from "date-fns"
 
@@ -45,7 +46,19 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end"
+    alignItems: "flex-start"
+  },
+  headerLeft: {
+    flexDirection: "row",
+    gap: 12,
+    flex: 1
+  },
+  logoContainer: {
+    width: 60,
+    height: 60
+  },
+  headerInfo: {
+    flex: 1
   },
   brand: { fontSize: 12, fontWeight: "bold" },
   subBrand: { fontSize: 9, color: "#6B7280" },
@@ -142,6 +155,7 @@ interface OrcamentoPDFData {
     cnpj: string
     endereco: string
     contato: string
+    logo?: string
   }
   documento: {
     titulo: string
@@ -190,11 +204,27 @@ export const OrcamentoPDFDocument = ({ data }: { data: OrcamentoPDFData }) => {
       <Page size="A4" style={styles.page}>
         {/* Cabeçalho */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.brand}>{data.empresa.nome}</Text>
-            <Text style={styles.subBrand}>CNPJ: {data.empresa.cnpj}</Text>
-            <Text style={styles.subBrand}>{data.empresa.endereco}</Text>
-            <Text style={styles.subBrand}>{data.empresa.contato}</Text>
+          <View style={styles.headerLeft}>
+            {data.empresa.logo && (
+              <View style={styles.logoContainer}>
+                <Image
+                  src={
+                    data.empresa.logo.startsWith('data:')
+                      ? data.empresa.logo
+                      : data.empresa.logo.startsWith('/')
+                        ? data.empresa.logo
+                        : `/${data.empresa.logo}`
+                  }
+                  style={{ width: 60, height: 60 }}
+                />
+              </View>
+            )}
+            <View style={styles.headerInfo}>
+              <Text style={styles.brand}>{data.empresa.nome}</Text>
+              <Text style={styles.subBrand}>CNPJ: {data.empresa.cnpj}</Text>
+              <Text style={styles.subBrand}>{data.empresa.endereco}</Text>
+              <Text style={styles.subBrand}>{data.empresa.contato}</Text>
+            </View>
           </View>
           <View>
             <Text style={styles.docTitle}>{data.documento.titulo}</Text>

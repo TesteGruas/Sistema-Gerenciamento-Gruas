@@ -100,9 +100,9 @@ export default function PWAMainPage() {
       description: "Registrar entrada e saída",
       icon: Clock,
       href: "/pwa/ponto",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      borderColor: "border-blue-100",
+      color: "text-[#871b0b]",
+      bgColor: "bg-red-50",
+      borderColor: "border-red-100",
       priority: true
     },
     {
@@ -203,7 +203,7 @@ export default function PWAMainPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-16 h-16 border-4 border-[#871b0b] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-600 font-medium">Carregando...</p>
         </div>
       </div>
@@ -214,7 +214,7 @@ export default function PWAMainPage() {
     <ProtectedRoute permission="dashboard:visualizar">
       <div className="space-y-4 animate-in fade-in duration-500">
       {/* Card de Boas-vindas com Relógio */}
-      <div className="relative bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 text-white rounded-3xl p-6 shadow-xl overflow-hidden">
+      <div className="relative bg-gradient-to-br from-[#871b0b] via-[#6b1509] to-[#4d0f06] text-white rounded-3xl p-6 shadow-xl overflow-hidden">
         {/* Padrão decorativo */}
         <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20" />
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -ml-16 -mb-16" />
@@ -223,7 +223,7 @@ export default function PWAMainPage() {
         <div className="relative z-10">
           <div className="flex items-start justify-between mb-6">
             <div>
-              <p className="text-sm font-medium text-blue-100 mb-1">Bem-vindo(a),</p>
+              <p className="text-sm font-medium text-red-100 mb-1">Bem-vindo(a),</p>
               <h2 className="text-2xl font-bold">{pwaUserData.user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
             </div>
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center ring-2 ring-white/30 shadow-lg">
@@ -238,7 +238,7 @@ export default function PWAMainPage() {
                 minute: '2-digit' 
               }) : '--:--'}
             </p>
-            <p className="text-sm text-blue-100 capitalize">
+            <p className="text-sm text-red-100 capitalize">
               {currentTime ? currentTime.toLocaleDateString('pt-BR', { 
                 weekday: 'long', 
                 day: '2-digit', 
@@ -250,7 +250,7 @@ export default function PWAMainPage() {
           {/* Mini stats */}
           <div className="grid grid-cols-3 gap-2 mt-6">
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-blue-100 font-medium mb-1">Ponto</p>
+              <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
               <p className="text-sm font-bold">
                 {pwaUserData.pontoHoje?.entrada 
                   ? new Date(pwaUserData.pontoHoje.entrada).toLocaleTimeString('pt-BR', { 
@@ -261,11 +261,11 @@ export default function PWAMainPage() {
               </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-blue-100 font-medium mb-1">Horas</p>
+              <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
               <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-blue-100 font-medium mb-1">Docs</p>
+              <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
               <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
             </div>
           </div>
@@ -306,8 +306,8 @@ export default function PWAMainPage() {
         
         <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
           <div className="flex flex-col items-center text-center">
-            <div className="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
-              <Clock className="w-6 h-6 text-blue-600" />
+            <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
+              <Clock className="w-6 h-6 text-[#871b0b]" />
             </div>
             <p className="text-base font-bold text-gray-900">{pwaUserData.horasTrabalhadas.split('h')[0]}</p>
             <p className="text-[10px] text-gray-500 font-medium">Horas</p>
@@ -319,29 +319,29 @@ export default function PWAMainPage() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-gray-900">Acesso Rápido</h2>
-          <Button variant="ghost" size="sm" className="text-xs text-blue-600 h-auto p-0">
+          <Button variant="ghost" size="sm" className="text-xs text-[#871b0b] h-auto p-0">
             Ver tudo
             <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
         </div>
         
         <div className="space-y-3">
-          {/* Ações principais - Ponto e Espelho */}
+          {/* Todos os cards com mesmo tamanho, dois por linha */}
           <div className="grid grid-cols-2 gap-3">
-            {quickActions.filter(action => action.priority && action.title !== "Aprovações").map((action, index) => {
+            {quickActions.map((action, index) => {
               const Icon = action.icon
               
               return (
                 <div
                   key={action.title}
                   onClick={() => handleNavigation(action.href)}
-                  className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
+                  className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-red-100 relative overflow-hidden group"
                   style={{
                     animationDelay: `${index * 50}ms`
                   }}
                 >
                   {/* Efeito de hover */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-red-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   
                   <div className="relative z-10">
                     <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
@@ -356,65 +356,98 @@ export default function PWAMainPage() {
               )
             })}
           </div>
+        </div>
+      </div>
 
-          {/* Aprovações como card principal */}
-          {quickActions.find(action => action.title === "Aprovações") && (
-            <div className="grid grid-cols-2 gap-3">
-              {quickActions.filter(action => action.title === "Aprovações").map((action) => {
-                const Icon = action.icon
-                
-                return (
-                  <div
-                    key={action.title}
-                    onClick={() => handleNavigation(action.href)}
-                    className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-blue-100 relative overflow-hidden group"
-                    style={{
-                      animationDelay: `100ms`
-                    }}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    
-                    <div className="relative z-10">
-                      <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
-                        <Icon className={`w-6 h-6 ${action.color}`} />
-                      </div>
-                      <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
-                      <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
-                        {action.description}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
+      {/* Informações de Funcionalidades */}
+      <div>
+        <h2 className="text-base font-bold text-gray-900 mb-3">Funcionalidades</h2>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Card de Assinatura de Documentos */}
+          <div 
+            onClick={() => handleNavigation('/pwa/documentos')}
+            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                <FileSignature className="w-5 h-5 text-orange-600" />
+              </div>
+              {pwaUserData.documentosPendentes > 0 && (
+                <Badge className="bg-orange-100 text-orange-800 text-xs">
+                  {pwaUserData.documentosPendentes}
+                </Badge>
+              )}
             </div>
-          )}
+            <h3 className="font-semibold text-sm text-gray-900 mb-1">Assinatura Digital</h3>
+            <p className="text-xs text-gray-500 mb-2">
+              {pwaUserData.documentosPendentes > 0 
+                ? `${pwaUserData.documentosPendentes} documento${pwaUserData.documentosPendentes > 1 ? 's' : ''} aguardando`
+                : 'Nenhum documento pendente'}
+            </p>
+            <div className="flex items-center text-xs text-[#871b0b] font-medium">
+              Ver documentos
+              <ChevronRight className="w-3 h-3 ml-1" />
+            </div>
+          </div>
 
-          {/* Outras ações */}
-          <div className="grid grid-cols-3 gap-2">
-            {quickActions.filter(action => !action.priority).map((action, index) => {
-              const Icon = action.icon
-              
-              return (
-                <div
-                  key={action.title}
-                  onClick={() => handleNavigation(action.href)}
-                  className="bg-white rounded-xl p-3 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border border-transparent hover:border-gray-200 relative overflow-hidden group"
-                  style={{
-                    animationDelay: `${(index + 2) * 50}ms`
-                  }}
-                >
-                  <div className="relative z-10">
-                    <div className={`${action.bgColor} w-8 h-8 rounded-lg flex items-center justify-center mb-2 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
-                      <Icon className={`w-4 h-4 ${action.color}`} />
-                    </div>
-                    <h3 className="font-medium text-xs text-gray-900 mb-0.5">{action.title}</h3>
-                    <p className="text-[10px] text-gray-500 leading-tight line-clamp-1">
-                      {action.description}
-                    </p>
-                  </div>
-                </div>
-              )
-            })}
+          {/* Card de Aprovações */}
+          <div 
+            onClick={() => handleNavigation('/pwa/aprovacoes')}
+            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+              </div>
+            </div>
+            <h3 className="font-semibold text-sm text-gray-900 mb-1">Aprovações</h3>
+            <p className="text-xs text-gray-500 mb-2">
+              Horas extras e solicitações
+            </p>
+            <div className="flex items-center text-xs text-[#871b0b] font-medium">
+              Ver aprovações
+              <ChevronRight className="w-3 h-3 ml-1" />
+            </div>
+          </div>
+
+          {/* Card de Holerites */}
+          <div 
+            onClick={() => handleNavigation('/pwa/holerites')}
+            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                <Receipt className="w-5 h-5 text-blue-600" />
+              </div>
+            </div>
+            <h3 className="font-semibold text-sm text-gray-900 mb-1">Holerites</h3>
+            <p className="text-xs text-gray-500 mb-2">
+              Visualizar e assinar holerites
+            </p>
+            <div className="flex items-center text-xs text-[#871b0b] font-medium">
+              Ver holerites
+              <ChevronRight className="w-3 h-3 ml-1" />
+            </div>
+          </div>
+
+          {/* Card de Espelho de Ponto */}
+          <div 
+            onClick={() => handleNavigation('/pwa/espelho-ponto')}
+            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                <FileText className="w-5 h-5 text-purple-600" />
+              </div>
+            </div>
+            <h3 className="font-semibold text-sm text-gray-900 mb-1">Espelho de Ponto</h3>
+            <p className="text-xs text-gray-500 mb-2">
+              Consultar registros de ponto
+            </p>
+            <div className="flex items-center text-xs text-[#871b0b] font-medium">
+              Ver espelho
+              <ChevronRight className="w-3 h-3 ml-1" />
+            </div>
           </div>
         </div>
       </div>

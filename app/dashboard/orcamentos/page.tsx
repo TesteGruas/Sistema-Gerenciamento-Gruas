@@ -29,6 +29,7 @@ import {
   Save
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useEmpresa } from "@/hooks/use-empresa"
 import { ExportButton } from "@/components/export-button"
 import { CardLoader } from "@/components/ui/loader"
 import { OrcamentoPDFDocument } from "@/components/orcamento-pdf"
@@ -349,37 +350,25 @@ export default function OrcamentosPage() {
     return parseFloat(cleanValue) || 0
   }
 
-  // Informações da empresa (será criada depois, por enquanto valores padrão)
-  const empresaInfo = {
-    nome: "IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA",
-    cnpj: "00.000.000/0001-00", // Será preenchido quando empresa for criada
-    endereco: "Endereço da empresa",
-    cidade: "Cidade",
-    estado: "SP",
-    cep: "00000-000",
-    telefone: "(00) 0000-0000",
-    email: "contato@empresa.com.br",
-    site: "www.empresa.com.br"
-  }
+  // Informações da empresa do hook
+  const { empresa, getEnderecoCompleto, getContatoCompleto } = useEmpresa()
 
   const handleExportPDF = async (orcamento: Orcamento | null) => {
     if (!orcamento) return
     
     try {
       // Preparar dados no formato esperado pelo componente PDF
-      const enderecoCompleto = `${empresaInfo.endereco}, ${empresaInfo.cidade}/${empresaInfo.estado} - CEP: ${empresaInfo.cep}`
-      const contatoCompleto = `Tel: ${empresaInfo.telefone} | Email: ${empresaInfo.email}`
-      
       const enderecoObra = orcamento.obra_endereco 
         ? `${orcamento.obra_endereco}${orcamento.obra_cidade ? `, ${orcamento.obra_cidade}` : ''}${orcamento.obra_estado ? `/${orcamento.obra_estado.toUpperCase()}` : ''}`
         : undefined
 
       const pdfData = {
         empresa: {
-          nome: empresaInfo.nome,
-          cnpj: empresaInfo.cnpj,
-          endereco: enderecoCompleto,
-          contato: contatoCompleto
+          nome: empresa.razao_social || empresa.nome,
+          cnpj: empresa.cnpj,
+          endereco: getEnderecoCompleto(),
+          contato: getContatoCompleto(),
+          logo: empresa.logo
         },
         documento: {
           titulo: "ORÇAMENTO DE LOCAÇÃO DE GRUA",

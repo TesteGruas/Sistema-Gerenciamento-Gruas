@@ -38,6 +38,8 @@ import {
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
+import { EmpresaProvider, useEmpresa } from "@/hooks/use-empresa"
+import Image from "next/image"
 
 // Dynamic imports para componentes pesados - carregam apenas quando necessário
 const NotificationsDropdown = dynamic(
@@ -124,9 +126,10 @@ const adminNavigation: NavigationItemWithPermission[] = [
   { name: "Perfis de Acesso", href: "/dashboard/perfis", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
   { name: "Permissões", href: "/dashboard/permissoes", icon: Lock, category: "admin", permission: "usuarios:gerenciar_permissoes" },
   { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail, category: "admin", permission: "email:configurar" },
+  { name: "Configuração da Empresa", href: "/dashboard/configuracoes/empresa", icon: Building2, category: "admin", permission: "admin:configurar" },
 ]
 
-export default function DashboardLayout({
+function DashboardLayoutContent({
   children,
 }: {
   children: React.ReactNode
@@ -153,6 +156,7 @@ export default function DashboardLayout({
     perfil, 
     loading: permissionsLoading 
   } = usePermissions()
+  const { empresa } = useEmpresa()
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -387,10 +391,21 @@ export default function DashboardLayout({
       >
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-gray-900">IRBANA</span>
+            {empresa.logo ? (
+              <div className="relative w-8 h-8">
+                <Image
+                  src={empresa.logo}
+                  alt={empresa.nome}
+                  fill
+                  className="object-contain"
+                />
+              </div>
+            ) : (
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-white" />
+              </div>
+            )}
+            <span className="font-bold text-gray-900">{empresa.nome || "IRBANA"}</span>
           </div>
           <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
             <X className="w-4 h-4" />
@@ -680,7 +695,7 @@ export default function DashboardLayout({
             </Button>
 
             <div className="flex items-center gap-4 ml-auto">
-              <span className="text-sm text-gray-600 hidden md:block">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</span>
+              <span className="text-sm text-gray-600 hidden md:block">{empresa.razao_social || empresa.nome}</span>
               <Suspense fallback={<div className="w-64 h-10 bg-gray-100 rounded-md animate-pulse" />}>
                 <GlobalSearch />
               </Suspense>
@@ -702,6 +717,20 @@ export default function DashboardLayout({
       
       {/* Global Loading */}
       <GlobalLoading show={isLoading} message={message} />
-    </div>
+      </div>
+  )
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <EmpresaProvider>
+      <DashboardLayoutContent>
+        {children}
+      </DashboardLayoutContent>
+    </EmpresaProvider>
   )
 }

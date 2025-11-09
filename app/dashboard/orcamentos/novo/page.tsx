@@ -22,6 +22,7 @@ import {
   FileText as FileTextIcon
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useEmpresa } from "@/hooks/use-empresa"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -131,18 +132,7 @@ export default function NovoOrcamentoPage() {
     return locacao + operador + sinaleiro + manutencao
   }
 
-  // Informações da empresa (será criada depois, por enquanto valores padrão)
-  const empresaInfo = {
-    nome: "IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA",
-    cnpj: "00.000.000/0001-00", // Será preenchido quando empresa for criada
-    endereco: "Endereço da empresa",
-    cidade: "Cidade",
-    estado: "SP",
-    cep: "00000-000",
-    telefone: "(00) 0000-0000",
-    email: "contato@empresa.com.br",
-    site: "www.empresa.com.br"
-  }
+  // Informações da empresa do hook (não precisa mais definir aqui)
 
   const handleSave = async (isDraft: boolean = false) => {
     try {

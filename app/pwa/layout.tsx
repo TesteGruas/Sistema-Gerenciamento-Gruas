@@ -27,13 +27,13 @@ import {
 } from "lucide-react"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import { PWAAuthGuard } from "@/components/pwa-auth-guard"
-import { OfflineSyncIndicator } from "@/components/offline-sync-indicator"
 import { PWAErrorBoundary } from "@/components/pwa-error-boundary"
 import { usePersistentSession } from "@/hooks/use-persistent-session"
 import { useAuthInterceptor } from "@/hooks/use-auth-interceptor"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { PWA_MENU_ITEMS } from "@/app/pwa/lib/permissions"
 import { PageLoader } from "@/components/ui/loader"
+import { EmpresaProvider } from "@/hooks/use-empresa"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -198,9 +198,9 @@ export default function PWALayout({ children }: PWALayoutProps) {
   // Renderizar apenas no cliente
   if (!isClient) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-[#871b0b] rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Smartphone className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-xl font-bold text-gray-900">Carregando...</h1>
@@ -303,15 +303,52 @@ export default function PWALayout({ children }: PWALayoutProps) {
     return 0
   })
 
-  // Combinar todos os itens na ordem correta
-  const bottomNavItems = [
-    ...priorityItems, // Itens prioritários primeiro
-    ...otherItems, // Outros itens
-    ...alwaysVisibleItems // Perfil e Configurações sempre no final
-  ]
+  // Itens essenciais da navbar inferior (5 itens: Ponto, Espelho, Home, Docs, Perfil)
+  const essentialNavItems = [
+    // Ponto
+    allNavigationItems.find(item => item.href === '/pwa/ponto') || {
+      name: 'Ponto',
+      href: '/pwa/ponto',
+      icon: Clock,
+      label: 'Ponto',
+      description: 'Registrar ponto'
+    },
+    // Espelho
+    allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
+      name: 'Espelho',
+      href: '/pwa/espelho-ponto',
+      icon: FileText,
+      label: 'Espelho',
+      description: 'Ver espelho de ponto'
+    },
+    // Home (no meio)
+    {
+      name: 'Home',
+      href: '/pwa',
+      icon: Home,
+      label: 'Home',
+      description: 'Página inicial'
+    },
+    // Docs
+    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
+      name: 'Docs',
+      href: '/pwa/documentos',
+      icon: FileSignature,
+      label: 'Docs',
+      description: 'Documentos'
+    },
+    // Perfil
+    allNavigationItems.find(item => item.href === '/pwa/perfil') || {
+      name: 'Perfil',
+      href: '/pwa/perfil',
+      icon: UserCircle,
+      label: 'Perfil',
+      description: 'Meu perfil'
+    }
+  ].filter(Boolean) // Remove itens undefined
 
-  // Usar todos os itens disponíveis na navegação inferior
-  const filteredNavigationItems = bottomNavItems.length > 0 ? bottomNavItems : allNavigationItems
+  // Usar apenas os 5 itens essenciais na navegação inferior
+  const filteredNavigationItems = essentialNavItems.slice(0, 5)
 
   // Para o menu lateral (drawer), separar em "Principal" e "Mais"
   // Itens principais para o drawer (mesmos da prioridade)
@@ -325,12 +362,13 @@ export default function PWALayout({ children }: PWALayoutProps) {
   const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
 
   return (
-    <PWAErrorBoundary>
-      <PWAAuthGuard>
+    <EmpresaProvider>
+      <PWAErrorBoundary>
+        <PWAAuthGuard>
         {shouldShowLayout ? (
           <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 pb-20">
             {/* Header */}
-            <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white sticky top-0 z-40 shadow-lg safe-area-pt">
+            <header className="bg-gradient-to-r from-[#871b0b] to-[#6b1509] text-white sticky top-0 z-40 shadow-lg safe-area-pt">
               <div className="px-4 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -346,12 +384,21 @@ export default function PWALayout({ children }: PWALayoutProps) {
                       )}
                     </button>
                     
+                    {/* Botão Home */}
+                    <button
+                      onClick={() => handleNavigation('/pwa')}
+                      className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
+                      title="Ir para Home"
+                    >
+                      <Home className="w-5 h-5 text-white" />
+                    </button>
+                    
                     <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg">
                       <Smartphone className="w-6 h-6 text-white" />
                     </div>
                     <div>
                       <h1 className="font-bold text-lg">IRBANA</h1>
-                      <div className="flex items-center gap-2 text-xs text-blue-100">
+                      <div className="flex items-center gap-2 text-xs text-red-100">
                         {isOnline ? (
                           <>
                             <Wifi className="w-3 h-3" />
@@ -456,14 +503,14 @@ export default function PWALayout({ children }: PWALayoutProps) {
                                 }}
                                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
                                   isActive
-                                    ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                                    ? 'bg-red-50 text-[#871b0b] border border-red-200'
                                     : 'text-gray-700 hover:bg-gray-50'
                                 }`}
                               >
                                 <div className={`p-2 rounded-lg ${
-                                  isActive ? 'bg-blue-100' : 'bg-gray-100'
+                                  isActive ? 'bg-red-100' : 'bg-gray-100'
                                 }`}>
-                                  <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-gray-600'}`} />
+                                  <Icon className={`w-5 h-5 ${isActive ? 'text-[#871b0b]' : 'text-gray-600'}`} />
                                 </div>
                                 <div className="flex-1 text-left">
                                   <p className="font-medium text-sm">{item.label}</p>
@@ -472,7 +519,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
                                   )}
                                 </div>
                                 {isActive && (
-                                  <div className="w-2 h-2 bg-blue-600 rounded-full" />
+                                  <div className="w-2 h-2 bg-[#871b0b] rounded-full" />
                                 )}
                               </button>
                             )
@@ -501,14 +548,14 @@ export default function PWALayout({ children }: PWALayoutProps) {
                                 }}
                                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
                                   isActive
-                                    ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                                    ? 'bg-red-50 text-[#871b0b] border border-red-200'
                                     : 'text-gray-700 hover:bg-gray-50'
                                 }`}
                               >
                                 <div className={`p-2 rounded-lg ${
-                                  isActive ? 'bg-blue-100' : 'bg-gray-100'
+                                  isActive ? 'bg-red-100' : 'bg-gray-100'
                                 }`}>
-                                  <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-gray-600'}`} />
+                                  <Icon className={`w-5 h-5 ${isActive ? 'text-[#871b0b]' : 'text-gray-600'}`} />
                                 </div>
                                 <div className="flex-1 text-left">
                                   <p className="font-medium text-sm">{item.label}</p>
@@ -517,7 +564,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
                                   )}
                                 </div>
                                 {isActive && (
-                                  <div className="w-2 h-2 bg-blue-600 rounded-full" />
+                                  <div className="w-2 h-2 bg-[#871b0b] rounded-full" />
                                 )}
                               </button>
                             )
@@ -559,56 +606,53 @@ export default function PWALayout({ children }: PWALayoutProps) {
               {children}
             </main>
 
-            {/* Indicador de sincronização */}
-            <div className="fixed bottom-16 left-0 right-0 z-40 px-4">
-              <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200/50">
-                <OfflineSyncIndicator />
-              </div>
-            </div>
-
             {/* Bottom Navigation */}
-            <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb">
-              <div 
-                className="overflow-x-auto h-16 bottom-nav-scroll"
-                style={{
-                  WebkitOverflowScrolling: 'touch'
-                }}
-              >
-                <div className="flex h-full">
-                  {filteredNavigationItems.length > 0 ? (
-                    filteredNavigationItems
-                      .filter(item => item.icon) // Filtrar itens sem ícone
-                      .map((item) => {
-                        const Icon = item.icon
-                        if (!Icon) return null // Proteção adicional
-                        
-                        const isActive = pathname === item.href
-                        return (
-                          <button
-                            key={item.name || item.href}
-                            onClick={() => handleNavigation(item.href)}
-                            className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 flex-shrink-0 min-w-[80px] px-2 ${
-                              isActive 
-                                ? "text-blue-600" 
-                                : "text-gray-500 active:bg-gray-100"
-                            }`}
-                          >
-                            <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
-                              <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
-                              {isActive && (
-                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full animate-pulse" />
-                              )}
-                            </div>
-                            <span className="text-xs font-medium whitespace-nowrap">{item.name}</span>
-                          </button>
-                        )
-                      })
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-                      Carregando navegação...
-                    </div>
-                  )}
-                </div>
+            <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb overflow-visible">
+              <div className="grid grid-cols-5 h-16 relative">
+                {filteredNavigationItems.length > 0 ? (
+                  filteredNavigationItems
+                    .filter(item => item && item.icon) // Filtrar itens sem ícone
+                    .map((item, index) => {
+                      const Icon = item.icon
+                      if (!Icon) return null // Proteção adicional
+                      
+                      const isActive = pathname === item.href || (item.href === '/pwa' && pathname === '/pwa')
+                      
+                      return (
+                        <button
+                          key={item.name || item.href || index}
+                          onClick={() => handleNavigation(item.href)}
+                          className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-200 overflow-visible ${
+                            isActive 
+                              ? "text-[#871b0b]" 
+                              : "text-gray-500 active:bg-gray-100"
+                          }`}
+                        >
+                          {/* Meio círculo por cima quando item está ativo */}
+                          {isActive && (
+                            <div 
+                              className="absolute -top-5 left-1/2 -translate-x-1/2 w-20 h-10 bg-white rounded-t-full border-t-2 border-l-2 border-r-2 border-[#871b0b] shadow-2xl transition-all duration-200"
+                              style={{ 
+                                zIndex: 0,
+                                boxShadow: '0 -4px 12px rgba(135, 27, 11, 0.25)'
+                              }}
+                            />
+                          )}
+                          
+                          <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`} style={{ zIndex: isActive ? 10 : 1 }}>
+                            <Icon className={`w-6 h-6 relative ${isActive ? 'stroke-[2.5]' : ''} ${isActive ? 'text-[#871b0b]' : ''}`} />
+                          </div>
+                          <span className={`text-xs font-medium whitespace-nowrap relative ${isActive ? 'font-semibold' : ''}`} style={{ zIndex: isActive ? 10 : 1 }}>
+                            {item.name}
+                          </span>
+                        </button>
+                      )
+                    })
+                ) : (
+                  <div className="col-span-5 flex items-center justify-center text-gray-500 text-sm">
+                    Carregando navegação...
+                  </div>
+                )}
               </div>
             </nav>
 
@@ -634,6 +678,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
           </div>
         )}
       </PWAAuthGuard>
-    </PWAErrorBoundary>
+      </PWAErrorBoundary>
+    </EmpresaProvider>
   )
 }

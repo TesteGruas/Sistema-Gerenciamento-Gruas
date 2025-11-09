@@ -11,14 +11,25 @@ import { Label } from "@/components/ui/label"
 import { Building2, Lock, User } from "lucide-react"
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import { loadUserPermissions } from "@/lib/auth-permissions"
+import { useEmpresa, EmpresaProvider } from "@/hooks/use-empresa"
 import Link from "next/link"
+import Image from "next/image"
 
 export default function LoginPage() {
+  return (
+    <EmpresaProvider>
+      <LoginPageContent />
+    </EmpresaProvider>
+  )
+}
+
+function LoginPageContent() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
   const { showAuthError, showSuccess } = useEnhancedToast()
+  const { empresa, getEnderecoCompleto, getContatoCompleto } = useEmpresa()
 
   // Verificar se já está logado
   useEffect(() => {
@@ -100,19 +111,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
-            <Building2 className="w-8 h-8 text-white" />
-          </div>
-          <CardTitle className="text-2xl font-bold text-gray-900">Sistema IRBANA</CardTitle>
-          <CardDescription>
-            Sistema de Gestão Empresarial
-            <br />
-            <span className="text-xs text-gray-500">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</span>
-          </CardDescription>
-        </CardHeader>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-20 h-20 relative">
+              {empresa.logo ? (
+                <Image
+                  src={empresa.logo}
+                  alt={empresa.nome}
+                  fill
+                  className="object-contain"
+                />
+              ) : (
+                <div className="w-full h-full bg-blue-600 rounded-full flex items-center justify-center">
+                  <Building2 className="w-10 h-10 text-white" />
+                </div>
+              )}
+            </div>
+            <CardTitle className="text-2xl font-bold text-gray-900">{empresa.nome || "Sistema IRBANA"}</CardTitle>
+            <CardDescription>
+              Sistema de Gestão Empresarial
+              <br />
+              <span className="text-xs text-gray-500">{empresa.razao_social || empresa.nome}</span>
+            </CardDescription>
+          </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
@@ -161,11 +184,21 @@ export default function LoginPage() {
               {loading ? "Entrando..." : "Entrar no Sistema"}
             </Button>
           </form>
-          <div className="mt-6 text-center text-xs text-gray-500">
-            @Copyright 2025 - IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA 
-          </div>
         </CardContent>
       </Card>
+      </div>
+      
+      {/* Footer com informações da empresa */}
+      <footer className="bg-white/80 backdrop-blur-sm border-t border-gray-200 py-4 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center space-y-2">
+            <p className="text-sm font-semibold text-gray-900">{empresa.razao_social || empresa.nome}</p>
+            <p className="text-xs text-gray-600">{getEnderecoCompleto()}</p>
+            <p className="text-xs text-gray-600">{getContatoCompleto()}</p>
+            <p className="text-xs text-gray-500 mt-2">© {new Date().getFullYear()} - Todos os direitos reservados</p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

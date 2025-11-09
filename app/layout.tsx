@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   description: 'Sistema de Gestão Empresarial',
   generator: 'IRBANA',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -34,6 +39,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <link rel="icon" href="/logo.png" type="image/png" />
+        <link rel="shortcut icon" href="/logo.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/logo.png" />
         <style>{`
 html {
   font-family: ${GeistSans.style.fontFamily};
