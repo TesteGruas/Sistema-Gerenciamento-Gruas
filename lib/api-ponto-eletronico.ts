@@ -413,6 +413,20 @@ export const apiHorasExtras = {
       data: response.data.data || [],
       message: response.data.message || 'Registros rejeitados com sucesso'
     };
+  },
+
+  async notificarSupervisor(registro_id: string | number): Promise<{
+    success: boolean;
+    message: string;
+    data?: {
+      aprovacao_id: string;
+      supervisor: { id: number; nome: string };
+      link_aprovacao: string;
+      telefone: string;
+    };
+  }> {
+    const response = await api.post(`ponto-eletronico/horas-extras/${registro_id}/notificar`);
+    return response.data;
   }
 };
 

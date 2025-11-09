@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X } from "lucide-react"
+import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
 import { AuthService } from "@/app/lib/auth"
 import { 
@@ -39,6 +39,7 @@ import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 import { ProtectedRoute } from "@/components/protected-route"
+import { WhatsAppTestButton } from "@/components/whatsapp-test-button"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -1296,6 +1297,7 @@ export default function PontoPage() {
           <p className="text-gray-600">Sistema de controle de frequência dos funcionários</p>
         </div>
         <div className="flex gap-2">
+          <WhatsAppTestButton variant="outline" size="default" />
           <ExportButton
             dados={sortedRegistros}
             tipo="ponto"
@@ -2264,6 +2266,41 @@ export default function PontoPage() {
                                         <X className="w-4 h-4" />
                                       </Button>
                                     </>
+                                  )}
+                                  {(registro.horas_extras || 0) > 0 && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={async () => {
+                                        try {
+                                          setLoadingHorasExtras(true)
+                                          const resultado = await apiHorasExtras.notificarSupervisor(registro.id!)
+                                          if (resultado.success) {
+                                            toast({
+                                              title: "Sucesso",
+                                              description: resultado.message || "Notificação enviada com sucesso!",
+                                            })
+                                            carregarHorasExtras()
+                                          } else {
+                                            throw new Error(resultado.message || 'Erro ao enviar notificação')
+                                          }
+                                        } catch (error: any) {
+                                          console.error('Erro ao notificar supervisor:', error)
+                                          toast({
+                                            title: "Erro",
+                                            description: error.message || "Erro ao enviar notificação WhatsApp",
+                                            variant: "destructive"
+                                          })
+                                        } finally {
+                                          setLoadingHorasExtras(false)
+                                        }
+                                      }}
+                                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
+                                      disabled={loadingHorasExtras}
+                                    >
+                                      <MessageSquare className="w-4 h-4 mr-1" />
+                                      Notificar
+                                    </Button>
                                   )}
                                 </div>
                               </TableCell>

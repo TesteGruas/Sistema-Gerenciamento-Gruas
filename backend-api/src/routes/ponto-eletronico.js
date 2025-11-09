@@ -2,6 +2,7 @@ import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
+import crypto from 'crypto';
 import { 
   calcularHorasTrabalhadas, 
   calcularHorasExtras, 
@@ -19,6 +20,7 @@ import {
 } from '../utils/ponto-eletronico.js';
 import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
+import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 
 const router = express.Router();
 
@@ -1548,6 +1550,17 @@ router.post('/registros', async (req, res) => {
               } catch (notifError) {
                 console.error('[ponto-eletronico] Erro ao criar notificação:', notifError);
               }
+              // Enviar mensagem WhatsApp (não bloqueia a resposta)
+              try {
+                const resultadoWhatsApp = await enviarMensagemAprovacao(aprovacaoCriada);
+                if (resultadoWhatsApp.sucesso) {
+                  console.log(`[ponto-eletronico] WhatsApp enviado com sucesso para aprovação ${aprovacaoCriada.id}`);
+                } else {
+                  console.warn(`[ponto-eletronico] Falha ao enviar WhatsApp: ${resultadoWhatsApp.erro}`);
+                }
+              } catch (whatsappError) {
+                console.error('[ponto-eletronico] Erro ao enviar WhatsApp:', whatsappError);
+              }
             }
           }
         } catch (errorHorasExtras) {
@@ -1630,6 +1643,17 @@ router.post('/registros', async (req, res) => {
               await criarNotificacaoNovaAprovacao(aprovacaoCriada, { id: registro.funcionario_id, nome: registro.funcionario?.nome || 'Funcionário' });
             } catch (notifError) {
               console.error('[ponto-eletronico] Erro ao criar notificação:', notifError);
+            }
+            // Enviar mensagem WhatsApp (não bloqueia a resposta)
+            try {
+              const resultadoWhatsApp = await enviarMensagemAprovacao(aprovacaoCriada);
+              if (resultadoWhatsApp.sucesso) {
+                console.log(`[ponto-eletronico] WhatsApp enviado com sucesso para aprovação ${aprovacaoCriada.id}`);
+              } else {
+                console.warn(`[ponto-eletronico] Falha ao enviar WhatsApp: ${resultadoWhatsApp.erro}`);
+              }
+            } catch (whatsappError) {
+              console.error('[ponto-eletronico] Erro ao enviar WhatsApp:', whatsappError);
             }
           }
         }
@@ -1897,6 +1921,17 @@ router.put('/registros/:id', async (req, res) => {
               console.log('[ponto-eletronico] Notificação criada para supervisor');
             } catch (notifError) {
               console.error('[ponto-eletronico] Erro ao criar notificação:', notifError);
+            }
+            // Enviar mensagem WhatsApp (não bloqueia a resposta)
+            try {
+              const resultadoWhatsApp = await enviarMensagemAprovacao(aprovacaoCriada);
+              if (resultadoWhatsApp.sucesso) {
+                console.log(`[ponto-eletronico] WhatsApp enviado com sucesso para aprovação ${aprovacaoCriada.id}`);
+              } else {
+                console.warn(`[ponto-eletronico] Falha ao enviar WhatsApp: ${resultadoWhatsApp.erro}`);
+              }
+            } catch (whatsappError) {
+              console.error('[ponto-eletronico] Erro ao enviar WhatsApp:', whatsappError);
             }
           }
         } else {
@@ -4447,6 +4482,241 @@ router.get('/horas-extras', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Erro interno do servidor' 
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/horas-extras/{id}/notificar:
+ *   post:
+ *     summary: Notifica supervisor via WhatsApp para aprovação de horas extras
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do registro de ponto
+ *     responses:
+ *       200:
+ *         description: Notificação enviada com sucesso
+ *       400:
+ *         description: Registro não possui horas extras ou supervisor não encontrado
+ *       404:
+ *         description: Registro não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/horas-extras/:id/notificar', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('[ponto-eletronico] Buscando registro com ID:', id);
+
+    // Buscar registro de ponto (query simples primeiro)
+    const { data: registro, error: registroError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (registroError || !registro) {
+      console.error('[ponto-eletronico] Erro ao buscar registro:', registroError);
+      console.error('[ponto-eletronico] ID buscado:', id);
+      console.error('[ponto-eletronico] Tipo do ID:', typeof id);
+      
+      // Tentar buscar sem .single() para ver se existe
+      const { data: registros, error: buscaError } = await supabaseAdmin
+        .from('registros_ponto')
+        .select('id')
+        .eq('id', id)
+        .limit(5);
+      
+      console.log('[ponto-eletronico] Registros encontrados na busca alternativa:', registros);
+      
+      return res.status(404).json({
+        success: false,
+        message: 'Registro de ponto não encontrado',
+        error: registroError?.message || 'Registro não encontrado',
+        debug: {
+          id_buscado: id,
+          id_type: typeof id,
+          registros_encontrados: registros?.length || 0
+        }
+      });
+    }
+    
+    console.log('[ponto-eletronico] Registro encontrado:', registro.id, 'Horas extras:', registro.horas_extras);
+
+    // Buscar dados do funcionário e obra separadamente
+    let obraId = registro.obra_id;
+    if (!obraId && registro.funcionario_id) {
+      const { data: funcionario, error: funcError } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id, nome, obra_atual_id')
+        .eq('id', registro.funcionario_id)
+        .single();
+      
+      if (!funcError && funcionario) {
+        obraId = funcionario.obra_atual_id;
+        registro.funcionario = funcionario; // Adicionar ao objeto registro para uso posterior
+      }
+    }
+
+    // Verificar se tem horas extras
+    if (!registro.horas_extras || registro.horas_extras <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este registro não possui horas extras para aprovar'
+      });
+    }
+
+    // Buscar supervisor responsável
+    let supervisor = null;
+    
+    if (obraId) {
+      supervisor = await buscarSupervisorPorObra(obraId);
+    }
+
+    // Se não encontrou supervisor pela obra, buscar primeiro usuário disponível
+    // (a tabela usuarios não tem coluna role, então buscamos qualquer usuário ativo)
+    if (!supervisor) {
+      console.log('[ponto-eletronico] Supervisor não encontrado pela obra, buscando qualquer usuário disponível...');
+      
+      // Tentar buscar por cargo (se houver campo cargo com valores como Supervisor, Gestor, Admin)
+      const { data: supervisorPorCargo, error: cargoError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, nome, email, cargo')
+        .or('cargo.ilike.%Supervisor%,cargo.ilike.%Gestor%,cargo.ilike.%Admin%')
+        .eq('status', 'Ativo')
+        .limit(1)
+        .maybeSingle();
+
+      if (!cargoError && supervisorPorCargo) {
+        supervisor = supervisorPorCargo;
+        console.log('[ponto-eletronico] Supervisor encontrado por cargo:', supervisor.nome);
+      } else {
+        // Se não encontrou por cargo, buscar qualquer usuário ativo
+        const { data: supervisorData, error: supervisorError } = await supabaseAdmin
+          .from('usuarios')
+          .select('id, nome, email, cargo')
+          .eq('status', 'Ativo')
+          .limit(1)
+          .maybeSingle();
+
+        if (!supervisorError && supervisorData) {
+          supervisor = supervisorData;
+          console.log('[ponto-eletronico] Usuário encontrado como supervisor (fallback):', supervisor.nome);
+        }
+      }
+    }
+
+    if (!supervisor) {
+      console.error('[ponto-eletronico] Nenhum supervisor ou usuário disponível encontrado');
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum supervisor encontrado para enviar a notificação. Verifique se há usuários cadastrados no sistema.'
+      });
+    }
+    
+    console.log('[ponto-eletronico] Supervisor selecionado:', supervisor.id, supervisor.nome);
+
+    // Verificar se já existe aprovação para este registro
+    // Nota: registro_ponto_id é UUID, mas registros_ponto.id é VARCHAR
+    // Vamos tentar buscar diretamente primeiro (Supabase pode fazer conversão automática)
+    let aprovacao = null;
+    
+    // Buscar aprovação existente
+    const { data: aprovacaoExistente, error: aprovacaoError } = await supabaseAdmin
+      .from('aprovacoes_horas_extras')
+      .select('*')
+      .eq('registro_ponto_id', id)
+      .maybeSingle();
+
+    if (!aprovacaoError && aprovacaoExistente) {
+      aprovacao = aprovacaoExistente;
+      console.log('[ponto-eletronico] Aprovação existente encontrada:', aprovacao.id);
+    } else {
+      // Criar nova aprovação
+      const dataLimite = calcularDataLimite();
+      console.log('[ponto-eletronico] Criando nova aprovação para registro:', id);
+      
+      // Como registro_ponto_id é UUID mas registros_ponto.id é VARCHAR,
+      // precisamos gerar um UUID e armazenar o ID VARCHAR nas observações
+      // Gerar UUID usando crypto nativo do Node.js
+      const uuidGerado = crypto.randomUUID();
+      console.log('[ponto-eletronico] UUID gerado para registro_ponto_id:', uuidGerado);
+      
+      const { data: aprovacaoCriada, error: criarAprovacaoError } = await supabaseAdmin
+        .from('aprovacoes_horas_extras')
+        .insert({
+          registro_ponto_id: uuidGerado, // Usar UUID gerado
+          funcionario_id: registro.funcionario_id,
+          supervisor_id: supervisor.id,
+          horas_extras: registro.horas_extras,
+          data_trabalho: registro.data,
+          data_limite: dataLimite.toISOString(),
+          status: 'pendente',
+          observacoes: `Notificação enviada manualmente para aprovação de ${registro.horas_extras}h extras. Registro original: ${id}`
+        })
+        .select()
+        .single();
+
+      if (criarAprovacaoError) {
+        console.error('[ponto-eletronico] Erro ao criar aprovação:', criarAprovacaoError);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao criar aprovação de horas extras',
+          error: criarAprovacaoError.message || criarAprovacaoError.details || 'Erro desconhecido',
+          details: criarAprovacaoError
+        });
+      }
+
+      aprovacao = aprovacaoCriada;
+      console.log('[ponto-eletronico] Aprovação criada com sucesso:', aprovacao.id);
+    }
+
+    // Enviar notificação WhatsApp
+    const resultadoWhatsApp = await enviarMensagemAprovacao(aprovacao, supervisor);
+
+    if (!resultadoWhatsApp.sucesso) {
+      return res.status(400).json({
+        success: false,
+        message: resultadoWhatsApp.erro || 'Erro ao enviar notificação WhatsApp',
+        aprovacao_id: aprovacao.id
+      });
+    }
+
+    // Atualizar status do registro para "Pendente Aprovação" se ainda não estiver
+    if (registro.status !== 'Pendente Aprovação') {
+      await supabaseAdmin
+        .from('registros_ponto')
+        .update({ status: 'Pendente Aprovação' })
+        .eq('id', id);
+    }
+
+    res.json({
+      success: true,
+      message: 'Notificação enviada com sucesso para o supervisor',
+      data: {
+        aprovacao_id: aprovacao.id,
+        supervisor: {
+          id: supervisor.id,
+          nome: supervisor.nome
+        },
+        link_aprovacao: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/aprovacaop/${aprovacao.id}?token=${resultadoWhatsApp.token}`,
+        telefone: resultadoWhatsApp.telefone
+      }
+    });
+
+  } catch (error) {
+    console.error('[ponto-eletronico] Erro ao notificar supervisor:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
     });
   }
 });

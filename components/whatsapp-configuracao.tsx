@@ -1,146 +1,96 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
-  Save, 
   TestTube, 
   MessageSquare, 
-  Clock, 
-  Bell,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  Send,
+  ExternalLink
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { whatsappApi } from "@/lib/api-whatsapp"
-
-interface WhatsAppConfig {
-  api_provider: string
-  api_key: string
-  api_secret?: string
-  api_url?: string
-  webhook_url?: string
-  enabled: boolean
-  mensagem_template: string
-  lembrete_enabled: boolean
-  lembrete_intervalo_horas: number
-  lembrete_max_tentativas: number
-  mensagem_lembrete_template: string
-}
+import { fetchWithAuth } from "@/lib/api"
 
 export function WhatsAppConfiguracao() {
   const { toast } = useToast()
-  const [loading, setLoading] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [config, setConfig] = useState<WhatsAppConfig>({
-    api_provider: "evolution",
-    api_key: "",
-    api_secret: "",
-    api_url: "",
-    webhook_url: "",
-    enabled: false,
-    mensagem_template: `Olá {nome_gestor}!
+  const [testingCompleto, setTestingCompleto] = useState(false)
+  const [numeroDestinatario, setNumeroDestinatario] = useState("")
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [testCompletoResult, setTestCompletoResult] = useState<{
+    success: boolean
+    message: string
+    link_aprovacao?: string
+    aprovacao_id?: string
+  } | null>(null)
 
-Você tem uma solicitação de aprovação de horas extras pendente:
-
-👤 Funcionário: {nome_funcionario}
-📅 Data: {data}
-⏰ Horas Extras: {horas_extras}h
-🏗️ Obra: {nome_obra}
-
-Clique no link abaixo para aprovar ou rejeitar:
-{link_aprovacao}
-
-Este link expira em 48 horas.`,
-    lembrete_enabled: true,
-    lembrete_intervalo_horas: 24,
-    lembrete_max_tentativas: 3,
-    mensagem_lembrete_template: `Olá {nome_gestor}!
-
-Lembrete: Você ainda tem uma solicitação de aprovação de horas extras pendente:
-
-👤 Funcionário: {nome_funcionario}
-📅 Data: {data}
-⏰ Horas Extras: {horas_extras}h
-
-Por favor, acesse o link para aprovar ou rejeitar:
-{link_aprovacao}`
-  })
-
-  useEffect(() => {
-    carregarConfiguracao()
-  }, [])
-
-  const carregarConfiguracao = async () => {
-    try {
-      setLoading(true)
-      const response = await whatsappApi.obterConfiguracao()
-      if (response.success && response.data) {
-        setConfig(response.data)
-      }
-    } catch (error) {
-      console.error('Erro ao carregar configuração:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSave = async () => {
-    try {
-      setSaving(true)
-      const response = await whatsappApi.salvarConfiguracao(config)
-      if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: "Configurações salvas com sucesso!",
-        })
-      } else {
-        throw new Error(response.message || 'Erro ao salvar configurações')
-      }
-    } catch (error: any) {
-      console.error('Erro ao salvar configuração:', error)
+  const handleTest = async () => {
+    if (!numeroDestinatario.trim()) {
       toast({
         title: "Erro",
-        description: error.message || "Erro ao salvar configurações",
+        description: "Por favor, informe o número destinatário",
         variant: "destructive"
       })
-    } finally {
-      setSaving(false)
+      return
     }
-  }
 
-  const handleTestConnection = async () => {
+    // Validar formato do número (deve conter apenas dígitos)
+    const numeroLimpo = numeroDestinatario.replace(/\D/g, '')
+    if (numeroLimpo.length < 10) {
+      toast({
+        title: "Erro",
+        description: "Número inválido. Informe um número válido com DDD",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
       setTesting(true)
-      const response = await whatsappApi.testarConexao({
-        api_provider: config.api_provider,
-        api_key: config.api_key,
-        api_secret: config.api_secret,
-        api_url: config.api_url
+      setTestResult(null)
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetchWithAuth(`${apiUrl}/api/whatsapp/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          number: numeroLimpo,
+          text: "🔔 Mensagem de teste do sistema de aprovações WhatsApp\n\nSe você recebeu esta mensagem, a integração está funcionando corretamente!"
+        }),
       })
-      
-      if (response.success) {
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setTestResult({
+          success: true,
+          message: "Mensagem de teste enviada com sucesso!"
+        })
         toast({
-          title: "Conexão Testada",
-          description: "Conexão com a API WhatsApp estabelecida com sucesso!",
+          title: "Sucesso",
+          description: "Mensagem de teste enviada com sucesso!",
         })
       } else {
-        throw new Error(response.message || 'Erro ao testar conexão')
+        throw new Error(data.message || 'Erro ao enviar mensagem de teste')
       }
     } catch (error: any) {
-      console.error('Erro ao testar conexão:', error)
+      console.error('Erro ao testar WhatsApp:', error)
+      setTestResult({
+        success: false,
+        message: error.message || "Erro ao enviar mensagem de teste"
+      })
       toast({
         title: "Erro no Teste",
-        description: error.message || "Erro ao testar conexão com a API WhatsApp",
+        description: error.message || "Erro ao enviar mensagem de teste",
         variant: "destructive"
       })
     } finally {
@@ -148,253 +98,256 @@ Por favor, acesse o link para aprovar ou rejeitar:
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
-      </div>
-    )
+  const handleTestCompleto = async () => {
+    if (!numeroDestinatario.trim()) {
+      toast({
+        title: "Erro",
+        description: "Por favor, informe o número destinatário",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Validar formato do número
+    const numeroLimpo = numeroDestinatario.replace(/\D/g, '')
+    if (numeroLimpo.length < 10) {
+      toast({
+        title: "Erro",
+        description: "Número inválido. Informe um número válido com DDD",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setTestingCompleto(true)
+      setTestCompletoResult(null)
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetchWithAuth(`${apiUrl}/api/whatsapp/test-completo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          numero_destinatario: numeroLimpo
+        }),
+      })
+
+      // Verificar se o token expirou
+      if (response.status === 403 || response.status === 401) {
+        const errorData = await response.json().catch(() => ({}))
+        if (errorData.code === 'INVALID_TOKEN' || errorData.code === 'MISSING_TOKEN') {
+          // Tentar renovar o token automaticamente
+          try {
+            const { refreshAuthToken } = await import('@/lib/api')
+            const newToken = await refreshAuthToken()
+            
+            if (newToken) {
+              // Tentar novamente com o novo token
+              const retryResponse = await fetchWithAuth(`${apiUrl}/api/whatsapp/test-completo`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  numero_destinatario: numeroLimpo
+                }),
+              })
+              
+              const retryData = await retryResponse.json()
+              if (retryResponse.ok && retryData.success) {
+                setTestCompletoResult({
+                  success: true,
+                  message: retryData.message || "Notificação de teste completa enviada com sucesso!",
+                  link_aprovacao: retryData.data?.link_aprovacao,
+                  aprovacao_id: retryData.data?.aprovacao_id
+                })
+                toast({
+                  title: "Sucesso",
+                  description: "Aprovação de teste criada e WhatsApp enviado!",
+                })
+                return
+              }
+            }
+          } catch (refreshError) {
+            console.error('Erro ao renovar token:', refreshError)
+          }
+          
+          // Se não conseguiu renovar, mostrar erro e redirecionar
+          toast({
+            title: "Sessão Expirada",
+            description: "Sua sessão expirou. Você será redirecionado para fazer login novamente.",
+            variant: "destructive"
+          })
+          
+          // Aguardar um pouco antes de redirecionar
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.location.href = '/'
+            }
+          }, 2000)
+          
+          throw new Error('Token expirado. Por favor, faça login novamente.')
+        }
+      }
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setTestCompletoResult({
+          success: true,
+          message: data.message || "Notificação de teste completa enviada com sucesso!",
+          link_aprovacao: data.data?.link_aprovacao,
+          aprovacao_id: data.data?.aprovacao_id
+        })
+        toast({
+          title: "Sucesso",
+          description: "Aprovação de teste criada e WhatsApp enviado!",
+        })
+      } else {
+        throw new Error(data.message || data.error || 'Erro ao criar teste completo')
+      }
+    } catch (error: any) {
+      console.error('Erro ao testar completo:', error)
+      setTestCompletoResult({
+        success: false,
+        message: error.message || "Erro ao criar teste completo"
+      })
+      toast({
+        title: "Erro no Teste",
+        description: error.message || "Erro ao criar teste completo",
+        variant: "destructive"
+      })
+    } finally {
+      setTestingCompleto(false)
+    }
   }
 
   return (
     <div className="space-y-6">
-      {/* Configurações da API */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5" />
-            Configurações da API WhatsApp
+            Teste de Envio WhatsApp
           </CardTitle>
           <CardDescription>
-            Configure a conexão com o provedor de API WhatsApp
+            Teste o envio de mensagens WhatsApp através do n8n. Configure a Evolution API no n8n.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="enabled">Habilitar Envio via WhatsApp</Label>
-              <p className="text-sm text-gray-500">
-                Ative ou desative o envio automático de mensagens
-              </p>
-            </div>
-            <Switch
-              id="enabled"
-              checked={config.enabled}
-              onCheckedChange={(checked) => setConfig({ ...config, enabled: checked })}
-            />
-          </div>
-
           <div>
-            <Label htmlFor="api_provider">Provedor da API</Label>
-            <Select
-              value={config.api_provider}
-              onValueChange={(value) => setConfig({ ...config, api_provider: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="evolution">Evolution API</SelectItem>
-                <SelectItem value="twilio">Twilio</SelectItem>
-                <SelectItem value="business">WhatsApp Business API</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="api_key">API Key / Token</Label>
+            <Label htmlFor="numero_destinatario">Número Destinatário</Label>
             <Input
-              id="api_key"
-              type="password"
-              value={config.api_key}
-              onChange={(e) => setConfig({ ...config, api_key: e.target.value })}
-              placeholder="Digite a chave da API"
-            />
-          </div>
-
-          {config.api_provider === 'twilio' && (
-            <div>
-              <Label htmlFor="api_secret">API Secret</Label>
-              <Input
-                id="api_secret"
-                type="password"
-                value={config.api_secret || ''}
-                onChange={(e) => setConfig({ ...config, api_secret: e.target.value })}
-                placeholder="Digite o secret da API"
-              />
-            </div>
-          )}
-
-          {config.api_provider === 'evolution' && (
-            <div>
-              <Label htmlFor="api_url">URL da API</Label>
-              <Input
-                id="api_url"
-                value={config.api_url || ''}
-                onChange={(e) => setConfig({ ...config, api_url: e.target.value })}
-                placeholder="https://api.evolution.com.br"
-              />
-            </div>
-          )}
-
-          <div>
-            <Label htmlFor="webhook_url">Webhook URL (Opcional)</Label>
-            <Input
-              id="webhook_url"
-              value={config.webhook_url || ''}
-              onChange={(e) => setConfig({ ...config, webhook_url: e.target.value })}
-              placeholder="https://seu-dominio.com/api/webhook/whatsapp"
+              id="numero_destinatario"
+              type="tel"
+              value={numeroDestinatario}
+              onChange={(e) => setNumeroDestinatario(e.target.value)}
+              placeholder="5511999999999 (com código do país e DDD)"
+              className="mt-1"
             />
             <p className="text-xs text-gray-500 mt-1">
-              URL para receber atualizações de status das mensagens
+              Informe o número no formato internacional: código do país + DDD + número (ex: 5511999999999)
             </p>
           </div>
 
+          {testResult && (
+            <Alert variant={testResult.success ? "default" : "destructive"}>
+              {testResult.success ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <AlertCircle className="h-4 w-4" />
+              )}
+              <AlertDescription>{testResult.message}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex gap-2">
             <Button
+              onClick={handleTest}
+              disabled={testing || testingCompleto || !numeroDestinatario.trim()}
               variant="outline"
-              onClick={handleTestConnection}
-              disabled={testing || !config.api_key}
+              className="flex-1"
             >
               {testing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Testando...
+                  Enviando...
                 </>
               ) : (
                 <>
                   <TestTube className="w-4 h-4 mr-2" />
-                  Testar Conexão
+                  Teste Simples
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={handleTestCompleto}
+              disabled={testing || testingCompleto || !numeroDestinatario.trim()}
+              className="flex-1"
+            >
+              {testingCompleto ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Disparar Notificação Completa
                 </>
               )}
             </Button>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Configurações de Mensagem */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5" />
-            Template de Mensagem
-          </CardTitle>
-          <CardDescription>
-            Personalize a mensagem enviada para os gestores
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="mensagem_template">Mensagem de Aprovação</Label>
-            <Textarea
-              id="mensagem_template"
-              value={config.mensagem_template}
-              onChange={(e) => setConfig({ ...config, mensagem_template: e.target.value })}
-              rows={12}
-              className="font-mono text-sm"
-              placeholder="Digite o template da mensagem..."
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Variáveis disponíveis: {'{nome_gestor}'}, {'{nome_funcionario}'}, {'{data}'}, {'{horas_extras}'}, {'{nome_obra}'}, {'{link_aprovacao}'}
+          {testCompletoResult && (
+            <Alert variant={testCompletoResult.success ? "default" : "destructive"}>
+              {testCompletoResult.success ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <AlertCircle className="h-4 w-4" />
+              )}
+              <AlertDescription className="space-y-2">
+                <p>{testCompletoResult.message}</p>
+                {testCompletoResult.link_aprovacao && (
+                  <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-sm font-medium text-green-900 mb-2">
+                      ✅ Link de Aprovação Gerado:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs bg-white p-2 rounded border break-all">
+                        {testCompletoResult.link_aprovacao}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          window.open(testCompletoResult.link_aprovacao, '_blank')
+                        }}
+                      >
+                        <ExternalLink className="w-3 h-3 mr-1" />
+                        Abrir
+                      </Button>
+                    </div>
+                    <p className="text-xs text-green-700 mt-2">
+                      📱 Verifique se a mensagem chegou no WhatsApp e teste a aprovação pelo link acima.
+                    </p>
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-900 font-medium mb-2">ℹ️ Configuração no n8n</p>
+            <p className="text-xs text-blue-700">
+              Todas as configurações da Evolution API (API Key, URL da API, Webhook URL) devem ser feitas no n8n. 
+              Este sistema apenas envia mensagens através do webhook configurado no n8n.
             </p>
           </div>
         </CardContent>
       </Card>
-
-      {/* Configurações de Lembretes */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="w-5 h-5" />
-            Configurações de Lembretes
-          </CardTitle>
-          <CardDescription>
-            Configure o envio automático de lembretes para aprovações pendentes
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="lembrete_enabled">Habilitar Lembretes Automáticos</Label>
-              <p className="text-sm text-gray-500">
-                Enviar lembretes para aprovações pendentes
-              </p>
-            </div>
-            <Switch
-              id="lembrete_enabled"
-              checked={config.lembrete_enabled}
-              onCheckedChange={(checked) => setConfig({ ...config, lembrete_enabled: checked })}
-            />
-          </div>
-
-          {config.lembrete_enabled && (
-            <>
-              <div>
-                <Label htmlFor="lembrete_intervalo_horas">Intervalo entre Lembretes (horas)</Label>
-                <Input
-                  id="lembrete_intervalo_horas"
-                  type="number"
-                  min="1"
-                  max="168"
-                  value={config.lembrete_intervalo_horas}
-                  onChange={(e) => setConfig({ ...config, lembrete_intervalo_horas: parseInt(e.target.value) || 24 })}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Intervalo mínimo entre cada lembrete enviado
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="lembrete_max_tentativas">Máximo de Tentativas</Label>
-                <Input
-                  id="lembrete_max_tentativas"
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={config.lembrete_max_tentativas}
-                  onChange={(e) => setConfig({ ...config, lembrete_max_tentativas: parseInt(e.target.value) || 3 })}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Número máximo de lembretes a serem enviados por aprovação
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="mensagem_lembrete_template">Template de Lembrete</Label>
-                <Textarea
-                  id="mensagem_lembrete_template"
-                  value={config.mensagem_lembrete_template}
-                  onChange={(e) => setConfig({ ...config, mensagem_lembrete_template: e.target.value })}
-                  rows={8}
-                  className="font-mono text-sm"
-                  placeholder="Digite o template da mensagem de lembrete..."
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Variáveis disponíveis: {'{nome_gestor}'}, {'{nome_funcionario}'}, {'{data}'}, {'{horas_extras}'}, {'{link_aprovacao}'}
-                </p>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Botão Salvar */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Salvando...
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              Salvar Configurações
-            </>
-          )}
-        </Button>
-      </div>
     </div>
   )
 }
-

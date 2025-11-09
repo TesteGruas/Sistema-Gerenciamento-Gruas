@@ -22,6 +22,8 @@ import {
   RefreshCw
 } from "lucide-react"
 import AdminGuard from "@/components/admin-guard"
+import { WhatsAppTestButton } from "@/components/whatsapp-test-button"
+import api from "@/lib/api"
 
 interface Aprovacao {
   id: string
@@ -84,36 +86,26 @@ export default function AprovacoesDashboard() {
     try {
       setLoading(true)
       
-      const params = new URLSearchParams({
-        page: paginacao.page.toString(),
-        limit: paginacao.limit.toString()
-      })
+      const params: any = {
+        page: paginacao.page,
+        limit: paginacao.limit
+      }
 
       if (filtros.status !== 'todas') {
-        params.append('status', filtros.status)
+        params.status = filtros.status
       }
       if (filtros.data_inicio) {
-        params.append('data_inicio', filtros.data_inicio)
+        params.data_inicio = filtros.data_inicio
       }
       if (filtros.data_fim) {
-        params.append('data_fim', filtros.data_fim)
+        params.data_fim = filtros.data_fim
       }
       if (filtros.funcionario) {
-        params.append('funcionario', filtros.funcionario)
+        params.funcionario = filtros.funcionario
       }
 
-      const response = await fetch(`/api/ponto-eletronico/registros?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Erro ao carregar aprovações')
-      }
-
-      const result = await response.json()
+      const response = await api.get('ponto-eletronico/registros', { params })
+      const result = response.data
       
       if (result.success) {
         // Filtrar apenas registros com horas extras
@@ -144,17 +136,16 @@ export default function AprovacoesDashboard() {
 
   const carregarEstatisticas = async () => {
     try {
-      const response = await fetch('/api/ponto-eletronico/relatorios/horas-extras?data_inicio=2024-01-01&data_fim=2024-12-31', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
+      const response = await api.get('ponto-eletronico/relatorios/horas-extras', {
+        params: {
+          data_inicio: '2024-01-01',
+          data_fim: '2024-12-31'
         }
       })
-
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          // Calcular estatísticas básicas
+      const result = response.data
+      
+      if (result.success) {
+        // Calcular estatísticas básicas
           const totalRegistros = result.data.registros.length
           const aprovados = result.data.registros.filter((r: Aprovacao) => r.status === 'Aprovado').length
           const rejeitados = result.data.registros.filter((r: Aprovacao) => r.status === 'Rejeitado').length
@@ -168,7 +159,6 @@ export default function AprovacoesDashboard() {
             taxa_aprovacao: totalRegistros > 0 ? (aprovados / totalRegistros) * 100 : 0
           })
         }
-      }
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error)
     }
@@ -197,28 +187,22 @@ export default function AprovacoesDashboard() {
 
   const exportarRelatorio = async () => {
     try {
-      const params = new URLSearchParams()
+      const params: any = {}
       
       if (filtros.status !== 'todas') {
-        params.append('status', filtros.status)
+        params.status = filtros.status
       }
       if (filtros.data_inicio) {
-        params.append('data_inicio', filtros.data_inicio)
+        params.data_inicio = filtros.data_inicio
       }
       if (filtros.data_fim) {
-        params.append('data_fim', filtros.data_fim)
+        params.data_fim = filtros.data_fim
       }
 
-      const response = await fetch(`/api/ponto-eletronico/relatorios/horas-extras?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
+      const response = await api.get('ponto-eletronico/relatorios/horas-extras', { params })
+      const result = response.data
+      
+      if (result.success) {
           // Aqui você implementaria a lógica de exportação
           toast({
             title: "Sucesso",
@@ -226,7 +210,6 @@ export default function AprovacoesDashboard() {
             variant: "default"
           })
         }
-      }
     } catch (error) {
       console.error("Erro ao exportar relatório:", error)
       toast({
@@ -257,6 +240,7 @@ export default function AprovacoesDashboard() {
             <p className="text-gray-600">Gerencie aprovações de horas extras</p>
           </div>
           <div className="flex gap-2">
+            <WhatsAppTestButton variant="outline" size="default" />
             <Button
               variant="outline"
               onClick={carregarAprovacoes}

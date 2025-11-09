@@ -18,6 +18,7 @@ import {
   criarNotificacaoResultado,
   criarNotificacoesLote
 } from '../services/notificacoes-horas-extras.js';
+import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 
 const router = express.Router();
 
@@ -52,7 +53,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const dataLimite = calcularDataLimite();
 
     // Criar aprovação
-    const { data: aprovacao, error } = await supabaseAdminAdmin
+    const { data: aprovacao, error } = await supabaseAdmin
       .from('aprovacoes_horas_extras')
       .insert({
         registro_ponto_id,
@@ -77,6 +78,19 @@ router.post('/', authenticateToken, async (req, res) => {
       await criarNotificacaoNovaAprovacao(aprovacao, funcionario);
     } catch (notifError) {
       console.error('[aprovacoes-horas-extras] Erro ao criar notificação:', notifError);
+    }
+
+    // Enviar mensagem WhatsApp (não bloqueia a resposta)
+    try {
+      const resultadoWhatsApp = await enviarMensagemAprovacao(aprovacao);
+      if (resultadoWhatsApp.sucesso) {
+        console.log(`[aprovacoes-horas-extras] WhatsApp enviado com sucesso para aprovação ${aprovacao.id}`);
+      } else {
+        console.warn(`[aprovacoes-horas-extras] Falha ao enviar WhatsApp: ${resultadoWhatsApp.erro}`);
+      }
+    } catch (whatsappError) {
+      // Não falhar a criação da aprovação se WhatsApp falhar
+      console.error('[aprovacoes-horas-extras] Erro ao enviar WhatsApp:', whatsappError);
     }
 
     res.status(201).json({

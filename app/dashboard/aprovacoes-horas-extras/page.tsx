@@ -21,6 +21,7 @@ import { FiltrosAprovacoes } from '@/components/filtros-aprovacoes'
 import { EstatisticasAprovacoes } from '@/components/estatisticas-aprovacoes'
 import { useAprovacoesHorasExtras } from '@/hooks/useAprovacoesHorasExtras'
 import { formatarTempoRelativo } from '@/lib/utils-aprovacoes'
+import { WhatsAppTestButton } from '@/components/whatsapp-test-button'
 
 export default function AprovacoesHorasExtrasPage() {
   // Listar TODAS as aprovações pendentes (sem filtro de gestor)
@@ -113,6 +114,7 @@ export default function AprovacoesHorasExtrasPage() {
           <p className="text-gray-600">Gerencie as aprovações de horas extras dos funcionários</p>
         </div>
         <div className="flex gap-2">
+          <WhatsAppTestButton variant="outline" size="sm" />
           <Button
             variant="outline"
             size="sm"

@@ -7,17 +7,17 @@ import { supabaseAdmin } from '../config/supabase.js';
  */
 async function buscarSupervisorPorObra(obra_id) {
   try {
-    // Buscar supervisor da obra (baseado no campo responsavel_id ou gestor_id)
+    // Buscar supervisor da obra (baseado no campo responsavel_id)
     const { data: obra, error } = await supabaseAdmin
       .from('obras')
-      .select('responsavel_id, gestor_id, id, nome')
+      .select('responsavel_id, id, nome')
       .eq('id', obra_id)
       .single();
 
     if (error) throw error;
 
-    // Priorizar responsavel_id, senão usar gestor_id
-    const supervisor_id = obra.responsavel_id || obra.gestor_id;
+    // Usar responsavel_id como supervisor
+    const supervisor_id = obra.responsavel_id;
 
     if (!supervisor_id) {
       console.warn(`[aprovacoes-helpers] Obra ${obra_id} não possui supervisor definido`);
@@ -27,7 +27,7 @@ async function buscarSupervisorPorObra(obra_id) {
     // Buscar dados do supervisor
     const { data: supervisor, error: supervisorError } = await supabaseAdmin
       .from('usuarios')
-      .select('id, nome, email, role')
+      .select('id, nome, email, cargo')
       .eq('id', supervisor_id)
       .single();
 

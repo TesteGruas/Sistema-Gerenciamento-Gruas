@@ -122,7 +122,7 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
     // Otimizar renderização
-    optimizeCss: true,
+    // optimizeCss: true, // Desabilitado temporariamente para evitar erro com critters
   },
   
   // ==================================
@@ -142,10 +142,16 @@ const nextConfig = {
   // 🔀 REWRITES (Proxy da API)
   // ==================================
   async rewrites() {
+    // Usar variável de ambiente ou fallback para localhost em desenvolvimento
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
+                   (process.env.NODE_ENV === 'production' 
+                     ? 'http://72.60.60.118:3001' 
+                     : 'http://localhost:3001');
+    
     return [
       {
         source: '/api/:path*',
-        destination: 'http://72.60.60.118:3001/api/:path*',
+        destination: `${apiUrl}/api/:path*`,
       },
     ];
   },

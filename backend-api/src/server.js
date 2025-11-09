@@ -99,12 +99,14 @@ import exportarRelatoriosRoutes from './routes/exportar-relatorios.js'
 import relatoriosFaturamentoRoutes from './routes/relatorios-faturamento.js'
 import relatoriosImpostosRoutes from './routes/relatorios-impostos.js'
 import aprovacoesHorasExtrasRoutes from './routes/aprovacoes-horas-extras.js'
+import aprovacaoPublicaRoutes from './routes/aprovacao-publica.js'
 import buscaGlobalRoutes from './routes/busca-global.js'
 import colaboradoresDocumentosRoutes from './routes/colaboradores-documentos.js'
 import checklistDiarioRoutes from './routes/checklist-diario.js'
 import manutencoesRoutes from './routes/manutencoes.js'
 import ordemComprasRoutes from './routes/ordem-compras.js'
 import responsaveisTecnicosRoutes from './routes/responsaveis-tecnicos.js'
+import whatsappTestRoutes from './routes/whatsapp-test.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -255,6 +257,9 @@ app.use('/api/auth', authRoutes)
 
 // Rotas de compatibilidade - redirecionamento para /auth/login
 app.use('/auth', authRoutes)
+
+// Rotas públicas (sem autenticação)
+app.use('/api/aprovacao', aprovacaoPublicaRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/gruas', gruasRoutes)
 app.use('/api/estoque', estoqueRoutes)
@@ -331,6 +336,7 @@ app.use('/api/checklist-diario', checklistDiarioRoutes)
 app.use('/api/manutencoes', manutencoesRoutes)
 app.use('/api/ordem-compras', ordemComprasRoutes)
 app.use('/api/responsaveis-tecnicos', responsaveisTecnicosRoutes)
+app.use('/api/whatsapp', whatsappTestRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {
