@@ -201,6 +201,20 @@ export const usePermissions = () => {
   }
 
   /**
+   * Verifica se tem acesso global a todas as obras (sem filtro)
+   * Nota: Esta verificação deve ser feita no backend também
+   */
+  const hasGlobalAccessToObras = (): boolean => {
+    // Admin, Gestores e Supervisores têm acesso global por padrão
+    if (hasMinLevel(6 as AccessLevel)) return true
+    
+    // Verificar se o cargo do usuário tem acesso_global_obras
+    // Nota: Esta informação deve vir do backend no objeto do usuário
+    // Por enquanto, retorna false e deixa o backend fazer a verificação
+    return false
+  }
+
+  /**
    * Verifica se tem acesso aos clientes
    */
   const canAccessClientes = (): boolean => {
@@ -314,6 +328,7 @@ export const usePermissions = () => {
     canAccessFinanceiro,
     canAccessRH,
     canAccessObras,
+    hasGlobalAccessToObras,
     canAccessClientes,
     canAccessRelatorios,
     canAccessUsuarios,

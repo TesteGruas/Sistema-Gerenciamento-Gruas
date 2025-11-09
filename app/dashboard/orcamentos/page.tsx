@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { 
   FileText, 
@@ -23,11 +24,15 @@ import {
   Building2,
   ArrowRight,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Download,
+  Save
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
 import { CardLoader } from "@/components/ui/loader"
+import { OrcamentoPDFDocument } from "@/components/orcamento-pdf"
+import { pdf } from "@react-pdf/renderer"
 
 type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado'
 
@@ -78,6 +83,7 @@ export default function OrcamentosPage() {
   const [loading, setLoading] = useState(true)
   const [selectedOrcamento, setSelectedOrcamento] = useState<Orcamento | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [editedOrcamento, setEditedOrcamento] = useState<Orcamento | null>(null)
 
   useEffect(() => {
     loadOrcamentos()
@@ -220,11 +226,39 @@ export default function OrcamentosPage() {
 
   const handleView = (orcamento: Orcamento) => {
     setSelectedOrcamento(orcamento)
+    setEditedOrcamento({ ...orcamento })
     setIsViewDialogOpen(true)
   }
 
+  const handleSaveEdit = () => {
+    if (!editedOrcamento) return
+    
+    // Atualizar na lista
+    setOrcamentos(orcamentos.map(item => 
+      item.id === editedOrcamento.id ? editedOrcamento : item
+    ))
+    
+    setSelectedOrcamento(editedOrcamento)
+    setIsViewDialogOpen(false)
+    setEditedOrcamento(null)
+    
+    toast({
+      title: "Sucesso",
+      description: "Orçamento atualizado com sucesso",
+    })
+  }
+
+  const handleCancelEdit = () => {
+    setEditedOrcamento(null)
+    setIsViewDialogOpen(false)
+    setSelectedOrcamento(null)
+  }
+
   const handleEdit = (id: string) => {
-    router.push(`/dashboard/orcamentos/${id}/editar`)
+    const orcamento = orcamentos.find(item => item.id === id)
+    if (orcamento) {
+      handleView(orcamento)
+    }
   }
 
   const handleCreateObra = (orcamento: Orcamento) => {
@@ -251,6 +285,165 @@ export default function OrcamentosPage() {
 
   const handleCreate = () => {
     router.push('/dashboard/orcamentos/novo')
+  }
+
+  // Função para formatar texto em Title Case (primeira letra maiúscula)
+  const formatTitleCase = (text: string | undefined | null): string => {
+    if (!text) return '-'
+    
+    const palavrasMinusculas = ['de', 'da', 'do', 'das', 'dos', 'em', 'e', 'a', 'o', 'para', 'com', 'por']
+    
+    return text
+      .toLowerCase()
+      .split(' ')
+      .map((palavra, index) => {
+        if (index === 0) {
+          return palavra.charAt(0).toUpperCase() + palavra.slice(1)
+        }
+        if (palavrasMinusculas.includes(palavra)) {
+          return palavra
+        }
+        return palavra.charAt(0).toUpperCase() + palavra.slice(1)
+      })
+      .join(' ')
+  }
+
+  // Função para formatar valores monetários (para exibição)
+  const formatCurrencyDisplay = (value: number): string => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2
+    }).format(value)
+  }
+
+  // Função para formatar input de moeda (máscara)
+  const formatCurrency = (value: string | number): string => {
+    // Se for número, converte para string formatada diretamente
+    if (typeof value === 'number') {
+      return new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value)
+    }
+    
+    // Remove tudo que não é dígito
+    const numbers = value.replace(/\D/g, '')
+    
+    // Se não há números, retorna vazio
+    if (!numbers || numbers === '0') return ''
+    
+    // Converte para número e divide por 100 para ter centavos
+    const amount = parseInt(numbers) / 100
+    
+    // Formata como moeda brasileira (sem símbolo R$)
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount)
+  }
+
+  // Função para converter valor formatado para número
+  const parseCurrency = (value: string): number => {
+    const cleanValue = value.replace(/[^\d,]/g, '').replace(',', '.')
+    return parseFloat(cleanValue) || 0
+  }
+
+  // Informações da empresa (será criada depois, por enquanto valores padrão)
+  const empresaInfo = {
+    nome: "IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA",
+    cnpj: "00.000.000/0001-00", // Será preenchido quando empresa for criada
+    endereco: "Endereço da empresa",
+    cidade: "Cidade",
+    estado: "SP",
+    cep: "00000-000",
+    telefone: "(00) 0000-0000",
+    email: "contato@empresa.com.br",
+    site: "www.empresa.com.br"
+  }
+
+  const handleExportPDF = async (orcamento: Orcamento | null) => {
+    if (!orcamento) return
+    
+    try {
+      // Preparar dados no formato esperado pelo componente PDF
+      const enderecoCompleto = `${empresaInfo.endereco}, ${empresaInfo.cidade}/${empresaInfo.estado} - CEP: ${empresaInfo.cep}`
+      const contatoCompleto = `Tel: ${empresaInfo.telefone} | Email: ${empresaInfo.email}`
+      
+      const enderecoObra = orcamento.obra_endereco 
+        ? `${orcamento.obra_endereco}${orcamento.obra_cidade ? `, ${orcamento.obra_cidade}` : ''}${orcamento.obra_estado ? `/${orcamento.obra_estado.toUpperCase()}` : ''}`
+        : undefined
+
+      const pdfData = {
+        empresa: {
+          nome: empresaInfo.nome,
+          cnpj: empresaInfo.cnpj,
+          endereco: enderecoCompleto,
+          contato: contatoCompleto
+        },
+        documento: {
+          titulo: "ORÇAMENTO DE LOCAÇÃO DE GRUA",
+          numero: orcamento.numero,
+          geradoEm: new Date().toISOString()
+        },
+        cliente: {
+          nome: orcamento.cliente_nome || '',
+          obra: orcamento.obra_nome,
+          endereco: enderecoObra,
+          tipo: orcamento.tipo_obra,
+          equipamento: orcamento.equipamento
+        },
+        especificacoes: {
+          alturaInicial: orcamento.altura_inicial ? `${orcamento.altura_inicial} m` : undefined,
+          alturaFinal: orcamento.altura_final ? `${orcamento.altura_final} m` : undefined,
+          lanca: orcamento.comprimento_lanca ? `${orcamento.comprimento_lanca} m` : undefined,
+          cargaMax: orcamento.carga_maxima ? `${orcamento.carga_maxima.toLocaleString('pt-BR')} kg` : undefined,
+          cargaPonta: orcamento.carga_ponta ? `${orcamento.carga_ponta.toLocaleString('pt-BR')} kg` : undefined,
+          potencia: orcamento.potencia_eletrica,
+          energia: orcamento.energia_necessaria
+        },
+        custosMensais: [
+          { nome: "Locação da Grua", valor: orcamento.valor_locacao_mensal },
+          { nome: "Operador", valor: orcamento.valor_operador },
+          { nome: "Sinaleiro", valor: orcamento.valor_sinaleiro },
+          { nome: "Manutenção Preventiva", valor: orcamento.valor_manutencao }
+        ],
+        prazo: {
+          meses: orcamento.prazo_locacao_meses,
+          inicioEstimado: orcamento.data_inicio_estimada,
+          tolerancia: orcamento.tolerancia_dias ? `±${orcamento.tolerancia_dias} dias` : undefined
+        },
+        escopoIncluso: orcamento.escopo_incluso,
+        responsabilidadesCliente: orcamento.responsabilidades_cliente,
+        condicoesComerciais: orcamento.condicoes_comerciais
+      }
+
+      // Gerar PDF usando @react-pdf/renderer
+      // @ts-ignore - @react-pdf/renderer aceita componentes React
+      const blob = await pdf(<OrcamentoPDFDocument data={pdfData} />).toBlob()
+      
+      // Criar link de download
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Orcamento-${orcamento.numero}-${orcamento.obra_nome?.replace(/\s+/g, '-') || 'obra'}-${new Date().toISOString().split('T')[0]}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: "Sucesso",
+        description: "Orçamento exportado em PDF com sucesso!",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar orçamento. Tente novamente.",
+        variant: "destructive"
+      })
+    }
   }
 
   return (
@@ -367,7 +560,17 @@ export default function OrcamentosPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => handleExportPDF(item)}
+                            title="Exportar PDF"
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleView(item)}
+                            title="Visualizar/Editar"
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
@@ -376,6 +579,7 @@ export default function OrcamentosPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleEdit(item.id)}
+                              title="Editar"
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
@@ -386,6 +590,7 @@ export default function OrcamentosPage() {
                               size="sm"
                               onClick={() => handleCreateObra(item)}
                               className="text-green-600 hover:text-green-700"
+                              title="Criar Obra"
                             >
                               <Building2 className="w-4 h-4 mr-1" />
                               Criar Obra
@@ -397,6 +602,7 @@ export default function OrcamentosPage() {
                               size="sm"
                               onClick={() => handleDelete(item.id)}
                               className="text-red-600 hover:text-red-700"
+                              title="Excluir"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -413,162 +619,385 @@ export default function OrcamentosPage() {
       </Card>
 
       {/* Dialog de Visualização */}
-      {selectedOrcamento && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+      {isViewDialogOpen && selectedOrcamento && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsViewDialogOpen(false)
+              setSelectedOrcamento(null)
+            }
+          }}
+        >
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Orçamento {selectedOrcamento.numero}</CardTitle>
                   <CardDescription>{selectedOrcamento.obra_nome}</CardDescription>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setIsViewDialogOpen(false)}>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    setIsViewDialogOpen(false)
+                    setSelectedOrcamento(null)
+                  }}
+                >
                   <X className="w-4 h-4" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Cliente</label>
-                  <p className="font-medium">{selectedOrcamento.cliente_nome || '-'}</p>
+              {/* Identificação Básica */}
+              <div className="space-y-5">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Identificação</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Cliente</label>
+                    <Input
+                      value={editedOrcamento?.cliente_nome || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, cliente_nome: e.target.value } : null)}
+                      className="text-gray-900 font-medium"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Status</label>
+                    <div className="h-9 flex items-center">
+                      {editedOrcamento && getStatusBadge(editedOrcamento.status)}
+                    </div>
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Obra</label>
+                    <Input
+                      value={editedOrcamento?.obra_nome || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_nome: e.target.value } : null)}
+                      className="text-gray-900 font-medium"
+                    />
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      <Input
+                        placeholder="Endereço"
+                        value={editedOrcamento?.obra_endereco || ''}
+                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_endereco: e.target.value } : null)}
+                        className="text-gray-600 text-sm"
+                      />
+                      <Input
+                        placeholder="Cidade"
+                        value={editedOrcamento?.obra_cidade || ''}
+                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_cidade: e.target.value } : null)}
+                        className="text-gray-600 text-sm"
+                      />
+                      <Input
+                        placeholder="Estado"
+                        value={editedOrcamento?.obra_estado || ''}
+                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_estado: e.target.value.toUpperCase() } : null)}
+                        className="text-gray-600 text-sm"
+                        maxLength={2}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Equipamento</label>
+                    <Input
+                      value={editedOrcamento?.equipamento || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, equipamento: e.target.value } : null)}
+                      className="text-gray-900 font-medium"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
+                    <Input
+                      value={editedOrcamento?.tipo_obra || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, tipo_obra: e.target.value } : null)}
+                      className="text-gray-900 font-medium"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Status</label>
-                  <div>{getStatusBadge(selectedOrcamento.status)}</div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Especificações Técnicas</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Altura Inicial (m)</label>
+                    <Input
+                      type="number"
+                      value={editedOrcamento?.altura_inicial || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, altura_inicial: parseFloat(e.target.value) || undefined } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 21"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Altura Final (m)</label>
+                    <Input
+                      type="number"
+                      value={editedOrcamento?.altura_final || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, altura_final: parseFloat(e.target.value) || undefined } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 95"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Comprimento da Lança (m)</label>
+                    <Input
+                      type="number"
+                      value={editedOrcamento?.comprimento_lanca || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, comprimento_lanca: parseFloat(e.target.value) || undefined } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 30"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Carga Máxima (kg)</label>
+                    <Input
+                      type="number"
+                      value={editedOrcamento?.carga_maxima || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, carga_maxima: parseFloat(e.target.value) || undefined } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 2000"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Carga na Ponta (kg)</label>
+                    <Input
+                      type="number"
+                      value={editedOrcamento?.carga_ponta || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, carga_ponta: parseFloat(e.target.value) || undefined } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 1300"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Potência Elétrica</label>
+                    <Input
+                      value={editedOrcamento?.potencia_eletrica || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, potencia_eletrica: e.target.value } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 42 KVA"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Energia Necessária</label>
+                    <Input
+                      value={editedOrcamento?.energia_necessaria || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, energia_necessaria: e.target.value } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 380V"
+                    />
+                  </div>
                 </div>
-                <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-500">Obra</label>
-                  <p className="font-medium">{selectedOrcamento.obra_nome}</p>
-                  {selectedOrcamento.obra_endereco && (
-                    <p className="text-sm text-gray-600">
-                      {selectedOrcamento.obra_endereco}, {selectedOrcamento.obra_cidade} - {selectedOrcamento.obra_estado}
-                    </p>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Custos Mensais</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Locação da Grua (R$)</label>
+                    <Input
+                      type="text"
+                      value={editedOrcamento?.valor_locacao_mensal 
+                        ? formatCurrency(editedOrcamento.valor_locacao_mensal)
+                        : ''}
+                      onChange={(e) => {
+                        const formatted = formatCurrency(e.target.value)
+                        const valor = parseCurrency(formatted)
+                        setEditedOrcamento(prev => {
+                          if (!prev) return null
+                          const total = valor + (prev.valor_operador || 0) + (prev.valor_sinaleiro || 0) + (prev.valor_manutencao || 0)
+                          return { ...prev, valor_locacao_mensal: valor, total_mensal: total }
+                        })
+                      }}
+                      className="text-gray-900 font-semibold"
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Operador (R$)</label>
+                    <Input
+                      type="text"
+                      value={editedOrcamento?.valor_operador 
+                        ? formatCurrency(editedOrcamento.valor_operador)
+                        : ''}
+                      onChange={(e) => {
+                        const formatted = formatCurrency(e.target.value)
+                        const valor = parseCurrency(formatted)
+                        setEditedOrcamento(prev => {
+                          if (!prev) return null
+                          const total = (prev.valor_locacao_mensal || 0) + valor + (prev.valor_sinaleiro || 0) + (prev.valor_manutencao || 0)
+                          return { ...prev, valor_operador: valor, total_mensal: total }
+                        })
+                      }}
+                      className="text-gray-900 font-semibold"
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Sinaleiro (R$)</label>
+                    <Input
+                      type="text"
+                      value={editedOrcamento?.valor_sinaleiro 
+                        ? formatCurrency(editedOrcamento.valor_sinaleiro)
+                        : ''}
+                      onChange={(e) => {
+                        const formatted = formatCurrency(e.target.value)
+                        const valor = parseCurrency(formatted)
+                        setEditedOrcamento(prev => {
+                          if (!prev) return null
+                          const total = (prev.valor_locacao_mensal || 0) + (prev.valor_operador || 0) + valor + (prev.valor_manutencao || 0)
+                          return { ...prev, valor_sinaleiro: valor, total_mensal: total }
+                        })
+                      }}
+                      className="text-gray-900 font-semibold"
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Manutenção Preventiva (R$)</label>
+                    <Input
+                      type="text"
+                      value={editedOrcamento?.valor_manutencao 
+                        ? formatCurrency(editedOrcamento.valor_manutencao)
+                        : ''}
+                      onChange={(e) => {
+                        const formatted = formatCurrency(e.target.value)
+                        const valor = parseCurrency(formatted)
+                        setEditedOrcamento(prev => {
+                          if (!prev) return null
+                          const total = (prev.valor_locacao_mensal || 0) + (prev.valor_operador || 0) + (prev.valor_sinaleiro || 0) + valor
+                          return { ...prev, valor_manutencao: valor, total_mensal: total }
+                        })
+                      }}
+                      className="text-gray-900 font-semibold"
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-2 pt-2 border-t-2 border-gray-300">
+                    <label className="text-base font-bold text-gray-900">Total Mensal</label>
+                    <Input
+                      readOnly
+                      value={formatCurrencyDisplay(editedOrcamento?.total_mensal || 0)}
+                      className="bg-blue-50 border-blue-200 text-blue-700 text-lg font-bold cursor-default"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Prazos e Datas</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Prazo de Locação (meses)</label>
+                    <Input
+                      type="number"
+                      value={editedOrcamento?.prazo_locacao_meses || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, prazo_locacao_meses: parseInt(e.target.value) || 0 } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 13"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Data de Início Estimada</label>
+                    <Input
+                      type="date"
+                      value={editedOrcamento?.data_inicio_estimada ? editedOrcamento.data_inicio_estimada.split('T')[0] : ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, data_inicio_estimada: e.target.value } : null)}
+                      className="text-gray-900 font-medium"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Tolerância (± dias)</label>
+                    <Input
+                      type="number"
+                      value={editedOrcamento?.tolerancia_dias || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, tolerancia_dias: parseInt(e.target.value) || undefined } : null)}
+                      className="text-gray-900 font-medium"
+                      placeholder="Ex: 15"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Escopo Básico Incluso</h3>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Descrição</label>
+                  <Textarea
+                    value={editedOrcamento?.escopo_incluso || ''}
+                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, escopo_incluso: e.target.value } : null)}
+                    className="bg-blue-50 border-blue-200 text-gray-700 min-h-[100px] resize-none"
+                    rows={4}
+                    placeholder="Descreva o escopo básico incluso no orçamento..."
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Responsabilidades do Cliente</h3>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Descrição</label>
+                  <Textarea
+                    value={editedOrcamento?.responsabilidades_cliente || ''}
+                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, responsabilidades_cliente: e.target.value } : null)}
+                    className="bg-amber-50 border-amber-200 text-gray-700 min-h-[100px] resize-none"
+                    rows={4}
+                    placeholder="Descreva as responsabilidades do cliente..."
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Condições Comerciais</h3>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Descrição</label>
+                  <Textarea
+                    value={editedOrcamento?.condicoes_comerciais || ''}
+                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, condicoes_comerciais: e.target.value } : null)}
+                    className="bg-green-50 border-green-200 text-gray-700 min-h-[100px] resize-none"
+                    rows={4}
+                    placeholder="Descreva as condições comerciais..."
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6 flex justify-between items-center">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={() => editedOrcamento && handleExportPDF(editedOrcamento)}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Exportar PDF
+                  </Button>
+                  {editedOrcamento && editedOrcamento.status === 'aprovado' && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        handleCancelEdit()
+                        handleCreateObra(editedOrcamento)
+                      }}
+                    >
+                      <Building2 className="w-4 h-4 mr-2" />
+                      Criar Obra
+                    </Button>
                   )}
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Equipamento</label>
-                  <p className="font-medium">{selectedOrcamento.equipamento}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Tipo de Obra</label>
-                  <p className="font-medium">{selectedOrcamento.tipo_obra || '-'}</p>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-3">Especificações Técnicas</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Altura Inicial → Final</label>
-                    <p className="font-medium">
-                      {selectedOrcamento.altura_inicial || '-'} m → {selectedOrcamento.altura_final || '-'} m
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Comprimento da Lança</label>
-                    <p className="font-medium">{selectedOrcamento.comprimento_lanca || '-'} m</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Carga Máxima</label>
-                    <p className="font-medium">{selectedOrcamento.carga_maxima || '-'} kg</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Carga na Ponta</label>
-                    <p className="font-medium">{selectedOrcamento.carga_ponta || '-'} kg</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Potência Elétrica</label>
-                    <p className="font-medium">{selectedOrcamento.potencia_eletrica || '-'}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Energia Necessária</label>
-                    <p className="font-medium">{selectedOrcamento.energia_necessaria || '-'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-3">Custos Mensais</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Locacao da grua</span>
-                    <span className="font-medium">R$ {selectedOrcamento.valor_locacao_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Operador</span>
-                    <span className="font-medium">R$ {selectedOrcamento.valor_operador.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Sinaleiro</span>
-                    <span className="font-medium">R$ {selectedOrcamento.valor_sinaleiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Manutenção preventiva</span>
-                    <span className="font-medium">R$ {selectedOrcamento.valor_manutencao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="border-t pt-2 flex justify-between font-bold text-lg">
-                    <span>Total Mensal</span>
-                    <span>R$ {selectedOrcamento.total_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-3">Prazos e Datas</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Prazo de Locação</label>
-                    <p className="font-medium">{selectedOrcamento.prazo_locacao_meses} meses</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Data de Início Estimada</label>
-                    <p className="font-medium">
-                      {selectedOrcamento.data_inicio_estimada 
-                        ? new Date(selectedOrcamento.data_inicio_estimada).toLocaleDateString('pt-BR')
-                        : '-'}
-                      {selectedOrcamento.tolerancia_dias && (
-                        <span className="text-sm text-gray-500 ml-2">
-                          (±{selectedOrcamento.tolerancia_dias} dias)
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {selectedOrcamento.escopo_incluso && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-2">Escopo Básico Incluso</h3>
-                  <p className="text-sm whitespace-pre-line">{selectedOrcamento.escopo_incluso}</p>
-                </div>
-              )}
-
-              {selectedOrcamento.responsabilidades_cliente && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-2">Responsabilidades do Cliente</h3>
-                  <p className="text-sm whitespace-pre-line">{selectedOrcamento.responsabilidades_cliente}</p>
-                </div>
-              )}
-
-              {selectedOrcamento.condicoes_comerciais && (
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-2">Condições Comerciais</h3>
-                  <p className="text-sm whitespace-pre-line">{selectedOrcamento.condicoes_comerciais}</p>
-                </div>
-              )}
-
-              {selectedOrcamento.status === 'aprovado' && (
-                <div className="border-t pt-4 flex justify-end gap-2">
-                  <Button onClick={() => {
-                    setIsViewDialogOpen(false)
-                    handleCreateObra(selectedOrcamento)
-                  }}>
-                    <Building2 className="w-4 h-4 mr-2" />
-                    Criar Obra a partir deste Orçamento
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={handleCancelEdit}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    onClick={handleSaveEdit}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Salvar Alterações
                   </Button>
                 </div>
-              )}
+              </div>
             </CardContent>
           </Card>
         </div>

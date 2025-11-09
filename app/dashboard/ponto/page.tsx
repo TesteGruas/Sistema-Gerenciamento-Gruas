@@ -1,8 +1,6 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,7 +19,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare } from "lucide-react"
+import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
 import { AuthService } from "@/app/lib/auth"
 import { 
@@ -111,6 +109,12 @@ export default function PontoPage() {
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  
+  // Estado para controlar justificativas expandidas
+  const [justificativasExpandidas, setJustificativasExpandidas] = useState<Set<string | number>>(new Set())
+  
+  // Estado para filtro de busca por nome nas justificativas
+  const [filtroNomeJustificativa, setFiltroNomeJustificativa] = useState("")
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -980,6 +984,66 @@ export default function PontoPage() {
         title: "Informação",
         description: "Erro ao rejeitar justificativa. Tente novamente.",
         variant: "default"
+      })
+    }
+  }
+
+  // Função para alternar expansão de justificativa
+  const toggleJustificativa = (id: string | number) => {
+    setJustificativasExpandidas(prev => {
+      const novo = new Set(prev)
+      if (novo.has(id)) {
+        novo.delete(id)
+      } else {
+        novo.add(id)
+      }
+      return novo
+    })
+  }
+
+  // Função para fazer download de arquivo de justificativa
+  const handleDownloadArquivo = async (url: string, nomeArquivo: string) => {
+    try {
+      // Se a URL é relativa, construir a URL completa
+      let urlCompleta = url
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+        urlCompleta = `${API_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`
+      }
+
+      // Fazer download usando a API para incluir autenticação
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      const response = await fetch(urlCompleta, {
+        headers: token ? {
+          'Authorization': `Bearer ${token}`
+        } : {}
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao baixar arquivo')
+      }
+
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = nomeArquivo
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+      
+      toast({
+        title: "Sucesso",
+        description: "Arquivo baixado com sucesso!",
+        variant: "default"
+      })
+    } catch (error) {
+      console.error('Erro ao fazer download:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível fazer o download do arquivo.",
+        variant: "destructive"
       })
     }
   }
@@ -2323,64 +2387,216 @@ export default function PontoPage() {
               <CardDescription>Gerencie justificativas de atrasos, faltas e saídas antecipadas</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {data.justificativas.map((just) => {
-                  const statusBadge = utilsPonto.obterBadgeStatus(just.status)
-                  return (
-                    <Card key={just.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                              <FileText className="w-5 h-5 text-orange-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium">{just.funcionario?.nome || 'Funcionário não encontrado'}</p>
-                              <p className="text-sm text-gray-500">{utilsPonto.formatarData(just.data)} - {just.tipo}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge className={statusBadge.className}>
-                              {statusBadge.text}
-                            </Badge>
-                            {just.status === 'Pendente' && (
-                              <div className="flex gap-1">
-                                <Button 
-                                  size="sm" 
-                                  variant="outline" 
-                                  className="h-8"
-                                  onClick={() => handleAprovarJustificativa(String(just.id || ''))}
-                                >
-                                  <Check className="w-4 h-4" />
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline" 
-                                  className="h-8"
-                                  onClick={() => handleRejeitarJustificativa(String(just.id || ''))}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
+              {/* Filtro por nome */}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Filtrar por nome do funcionário..."
+                    value={filtroNomeJustificativa}
+                    onChange={(e) => setFiltroNomeJustificativa(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Tabela de justificativas */}
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Funcionário</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Motivo</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Aprovador</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.justificativas
+                      .filter((just) => {
+                        if (!filtroNomeJustificativa) return true
+                        const nomeFuncionario = just.funcionario?.nome || ''
+                        return nomeFuncionario.toLowerCase().includes(filtroNomeJustificativa.toLowerCase())
+                      })
+                      .map((just) => {
+                        const statusBadge = utilsPonto.obterBadgeStatus(just.status)
+                        const isExpanded = justificativasExpandidas.has(just.id)
+                        
+                        return (
+                          <React.Fragment key={just.id}>
+                            <TableRow
+                              className="cursor-pointer hover:bg-gray-50"
+                              onClick={() => toggleJustificativa(just.id)}
+                            >
+                              <TableCell>
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4 text-gray-400" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                                )}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {just.funcionario?.nome || 'Funcionário não encontrado'}
+                                {just.funcionario?.cargo && (
+                                  <p className="text-xs text-gray-500 mt-1">{just.funcionario.cargo}</p>
+                                )}
+                              </TableCell>
+                              <TableCell>{utilsPonto.formatarData(just.data)}</TableCell>
+                              <TableCell>{just.tipo}</TableCell>
+                              <TableCell className="max-w-xs">
+                                <p className="truncate" title={just.motivo}>
+                                  {just.motivo}
+                                </p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={statusBadge.className}>
+                                  {statusBadge.text}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {just.aprovador ? (
+                                  <div>
+                                    <p className="text-sm">{just.aprovador.nome}</p>
+                                    {just.data_aprovacao && (
+                                      <p className="text-xs text-gray-500">
+                                        {utilsPonto.formatarData(just.data_aprovacao)}
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {just.status === 'Pendente' && (
+                                  <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      onClick={() => handleAprovarJustificativa(String(just.id || ''))}
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      onClick={() => handleRejeitarJustificativa(String(just.id || ''))}
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                            
+                            {/* Linha expandida com detalhes */}
+                            {isExpanded && (
+                              <TableRow>
+                                <TableCell colSpan={8} className="bg-gray-50 p-4">
+                                  <div className="space-y-4">
+                                    {/* Motivo completo */}
+                                    <div>
+                                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Motivo Completo</h4>
+                                      <p className="text-sm text-gray-600 bg-white p-3 rounded-md border border-gray-200">
+                                        {just.motivo}
+                                      </p>
+                                    </div>
+
+                                    {/* Observações */}
+                                    {just.observacoes && (
+                                      <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Observações</h4>
+                                        <p className="text-sm text-gray-600 bg-white p-3 rounded-md border border-gray-200">
+                                          {just.observacoes}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Anexos/Arquivos */}
+                                    {just.anexos && just.anexos.length > 0 && (
+                                      <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Arquivos Anexados</h4>
+                                        <div className="space-y-2">
+                                          {just.anexos.map((anexo, index) => {
+                                            const nomeArquivo = typeof anexo === 'string' 
+                                              ? anexo.split('/').pop() || `arquivo-${index + 1}` 
+                                              : `arquivo-${index + 1}`
+                                            return (
+                                              <div
+                                                key={index}
+                                                className="flex items-center justify-between bg-white p-3 rounded-md border border-gray-200"
+                                              >
+                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                  <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                                  <span className="text-sm text-gray-600 truncate">{nomeArquivo}</span>
+                                                </div>
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className="h-8 flex-shrink-0"
+                                                  onClick={() => handleDownloadArquivo(
+                                                    typeof anexo === 'string' ? anexo : '',
+                                                    nomeArquivo
+                                                  )}
+                                                >
+                                                  <Download className="w-4 h-4 mr-1" />
+                                                  Download
+                                                </Button>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Ações (apenas para pendentes) */}
+                                    {just.status === 'Pendente' && (
+                                      <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+                                        <Button
+                                          size="sm"
+                                          variant="default"
+                                          onClick={() => handleAprovarJustificativa(String(just.id || ''))}
+                                        >
+                                          <Check className="w-4 h-4 mr-2" />
+                                          Aprovar
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="destructive"
+                                          onClick={() => handleRejeitarJustificativa(String(just.id || ''))}
+                                        >
+                                          <X className="w-4 h-4 mr-2" />
+                                          Rejeitar
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
                             )}
-                          </div>
-                        </div>
-                        <p className="mt-3 text-sm text-gray-600">{just.motivo}</p>
-                        {just.aprovador && (
-                          <p className="mt-2 text-xs text-gray-500">
-                            {just.status === 'Aprovada' ? 'Aprovada' : 'Rejeitada'} por: {just.aprovador.nome} em {utilsPonto.formatarData(just.data_aprovacao || '')}
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-                {data.justificativas.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p>Nenhuma justificativa encontrada</p>
-                  </div>
-                )}
+                          </React.Fragment>
+                        )
+                      })}
+                    {data.justificativas.filter((just) => {
+                      if (!filtroNomeJustificativa) return true
+                      const nomeFuncionario = just.funcionario?.nome || ''
+                      return nomeFuncionario.toLowerCase().includes(filtroNomeJustificativa.toLowerCase())
+                    }).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                          <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                          <p>Nenhuma justificativa encontrada</p>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>

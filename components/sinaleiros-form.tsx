@@ -12,7 +12,23 @@ import { sinaleirosApi, type SinaleiroBackend } from "@/lib/api-sinaleiros"
 import { DocumentosSinaleiroList } from "./documentos-sinaleiro-list"
 import { FuncionarioSearch } from "./funcionario-search"
 import { funcionariosApi } from "@/lib/api-funcionarios"
-import { type Sinaleiro } from "@/lib/mocks/sinaleiros-mocks"
+
+// Interface local compatível com backend
+export interface Sinaleiro {
+  id: string
+  obra_id: number
+  nome: string
+  rg_cpf: string
+  cpf?: string
+  rg?: string
+  telefone?: string
+  email?: string
+  tipo: 'principal' | 'reserva'
+  tipo_vinculo?: 'interno' | 'cliente'
+  cliente_informou?: boolean
+  documentos?: any[]
+  certificados?: any[]
+}
 
 interface SinaleirosFormProps {
   obraId?: number

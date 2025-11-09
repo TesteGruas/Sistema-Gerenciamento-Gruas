@@ -12,9 +12,13 @@ export function GlobalLoading({ show, message = "Carregando..." }: GlobalLoading
   if (!show) return null
 
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-xl p-8 border">
+    <div 
+      className="fixed inset-0 bg-white/95 backdrop-blur-md z-[9999] flex items-center justify-center"
+      style={{ pointerEvents: 'none' }}
+    >
+      <div className="flex flex-col items-center gap-4" style={{ pointerEvents: 'auto' }}>
         <Loading size="lg" text={message} />
+        <p className="text-gray-600 text-sm font-medium">{message}</p>
       </div>
     </div>
   )

@@ -11,17 +11,46 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ArrowLeft,
-  Save,
-  Send,
   Building2,
   Wrench,
   DollarSign,
   Calendar,
-  FileText
+  FileText,
+  Plus,
+  Loader2,
+  Save,
+  FileText as FileTextIcon
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
+import { orcamentosLocacaoApi } from "@/lib/api-orcamentos-locacao"
+
+// Funções de máscara de moeda
+const formatCurrency = (value: string) => {
+  // Remove tudo que não é dígito
+  const numbers = value.replace(/\D/g, '')
+  
+  // Se não há números, retorna vazio
+  if (!numbers || numbers === '0') return ''
+  
+  // Converte para número e divide por 100 para ter centavos
+  const amount = parseInt(numbers) / 100
+  
+  // Formata como moeda brasileira (sem símbolo R$)
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount)
+}
+
+// Função para converter valor formatado para número
+const parseCurrency = (value: string) => {
+  const cleanValue = value.replace(/[^\d,]/g, '').replace(',', '.')
+  return parseFloat(cleanValue) || 0
+}
 
 export default function NovoOrcamentoPage() {
   const router = useRouter()
@@ -73,44 +102,258 @@ export default function NovoOrcamentoPage() {
 
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null)
   const [gruaSelecionada, setGruaSelecionada] = useState<any>(null)
+  const [isClienteModalOpen, setIsClienteModalOpen] = useState(false)
+  const [isCreatingCliente, setIsCreatingCliente] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [clienteFormData, setClienteFormData] = useState({
+    nome: '',
+    email: '',
+    telefone: '',
+    cnpj: '',
+    endereco: '',
+    cidade: '',
+    estado: '',
+    cep: '',
+    contato: '',
+    contato_email: '',
+    contato_cpf: '',
+    contato_telefone: '',
+    status: 'ativo',
+    criar_usuario: false,
+    usuario_senha: ''
+  })
 
   const calcularTotalMensal = () => {
-    const locacao = parseFloat(formData.valor_locacao_mensal) || 0
-    const operador = parseFloat(formData.valor_operador) || 0
-    const sinaleiro = parseFloat(formData.valor_sinaleiro) || 0
-    const manutencao = parseFloat(formData.valor_manutencao) || 0
+    const locacao = parseCurrency(formData.valor_locacao_mensal) || 0
+    const operador = parseCurrency(formData.valor_operador) || 0
+    const sinaleiro = parseCurrency(formData.valor_sinaleiro) || 0
+    const manutencao = parseCurrency(formData.valor_manutencao) || 0
     return locacao + operador + sinaleiro + manutencao
   }
 
-  const handleSave = (status: 'rascunho' | 'enviado' = 'rascunho') => {
-    // Validações básicas
-    if (!formData.obra_nome || !formData.equipamento) {
+  // Informações da empresa (será criada depois, por enquanto valores padrão)
+  const empresaInfo = {
+    nome: "IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA",
+    cnpj: "00.000.000/0001-00", // Será preenchido quando empresa for criada
+    endereco: "Endereço da empresa",
+    cidade: "Cidade",
+    estado: "SP",
+    cep: "00000-000",
+    telefone: "(00) 0000-0000",
+    email: "contato@empresa.com.br",
+    site: "www.empresa.com.br"
+  }
+
+  const handleSave = async (isDraft: boolean = false) => {
+    try {
+      setIsSaving(true)
+
+      // Validações básicas
+      if (!isDraft) {
+        if (!formData.obra_nome || !formData.equipamento || !clienteSelecionado) {
+          toast({
+            title: "Erro",
+            description: "Preencha os campos obrigatórios (Obra, Equipamento e Cliente)",
+            variant: "destructive"
+          })
+          setIsSaving(false)
+          return
+        }
+      } else {
+        // Para rascunho, apenas cliente é obrigatório
+        if (!clienteSelecionado && !formData.cliente_id) {
+          toast({
+            title: "Erro",
+            description: "Selecione um cliente para salvar o rascunho",
+            variant: "destructive"
+          })
+          setIsSaving(false)
+          return
+        }
+      }
+
+      // Converter valores monetários
+      const valorLocacao = parseCurrency(formData.valor_locacao_mensal) || 0
+      const valorOperador = parseCurrency(formData.valor_operador) || 0
+      const valorSinaleiro = parseCurrency(formData.valor_sinaleiro) || 0
+      const valorManutencao = parseCurrency(formData.valor_manutencao) || 0
+      const totalMensal = valorLocacao + valorOperador + valorSinaleiro + valorManutencao
+
+      // Gerar número do orçamento (formato: ORC-YYYYMMDD-XXX)
+      const hoje = new Date()
+      const numero = `ORC-${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, '0')}${String(hoje.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`
+
+      // Preparar dados para a API
+      const clienteId = clienteSelecionado?.id || formData.cliente_id
+      if (!clienteId) {
+        toast({
+          title: "Erro",
+          description: "Cliente é obrigatório",
+          variant: "destructive"
+        })
+        setIsSaving(false)
+        return
+      }
+
+      const prazoMeses = parseInt(formData.prazo_locacao_meses || '1')
+      const orcamentoData = {
+        numero,
+        cliente_id: parseInt(clienteId.toString()),
+        data_orcamento: hoje.toISOString().split('T')[0],
+        data_validade: formData.data_inicio_estimada 
+          ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
+          : new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        valor_total: totalMensal * prazoMeses,
+        desconto: 0,
+        status: isDraft ? 'rascunho' : 'enviado',
+        tipo_orcamento: 'locacao_grua',
+        condicoes_pagamento: formData.condicoes_comerciais || '',
+        prazo_entrega: formData.prazo_locacao_meses ? `${formData.prazo_locacao_meses} meses` : '',
+        observacoes: formData.observacoes || '',
+        itens: [
+          {
+            produto_servico: 'Locação da Grua',
+            descricao: formData.equipamento || 'Grua Torre',
+            quantidade: prazoMeses,
+            valor_unitario: valorLocacao,
+            valor_total: valorLocacao * prazoMeses,
+            tipo: 'equipamento',
+            unidade: 'mês',
+            observacoes: ''
+          },
+          {
+            produto_servico: 'Operador',
+            descricao: 'Serviço de operador de grua',
+            quantidade: prazoMeses,
+            valor_unitario: valorOperador,
+            valor_total: valorOperador * prazoMeses,
+            tipo: 'servico',
+            unidade: 'mês',
+            observacoes: ''
+          },
+          {
+            produto_servico: 'Sinaleiro',
+            descricao: 'Serviço de sinaleiro',
+            quantidade: prazoMeses,
+            valor_unitario: valorSinaleiro,
+            valor_total: valorSinaleiro * prazoMeses,
+            tipo: 'servico',
+            unidade: 'mês',
+            observacoes: ''
+          },
+          {
+            produto_servico: 'Manutenção Preventiva',
+            descricao: 'Manutenção preventiva do equipamento',
+            quantidade: prazoMeses,
+            valor_unitario: valorManutencao,
+            valor_total: valorManutencao * prazoMeses,
+            tipo: 'servico',
+            unidade: 'mês',
+            observacoes: ''
+          }
+        ]
+      }
+
+      const response = await orcamentosLocacaoApi.create(orcamentoData)
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: isDraft 
+            ? "Orçamento salvo como rascunho com sucesso!" 
+            : "Orçamento salvo e enviado com sucesso!",
+        })
+        
+        // Redirecionar para a lista de orçamentos
+        setTimeout(() => {
+          router.push('/dashboard/orcamentos')
+        }, 1500)
+      }
+    } catch (error: any) {
+      console.error('Erro ao salvar orçamento:', error)
       toast({
         title: "Erro",
-        description: "Preencha os campos obrigatórios",
+        description: error.response?.data?.message || "Erro ao salvar orçamento. Tente novamente.",
         variant: "destructive"
       })
-      return
+    } finally {
+      setIsSaving(false)
     }
-
-    // TODO: Salvar no backend
-    toast({
-      title: "Sucesso",
-      description: status === 'rascunho' ? "Orçamento salvo como rascunho" : "Orçamento enviado com sucesso",
-    })
-    
-    router.push('/dashboard/orcamentos')
   }
 
   const handleClienteSelect = (cliente: any) => {
     setClienteSelecionado(cliente)
-    setFormData({ ...formData, cliente_id: cliente.id.toString(), cliente_nome: cliente.nome })
+    setFormData({ ...formData, cliente_id: cliente.id.toString(), cliente_nome: cliente.name || cliente.nome })
   }
 
   const handleGruaSelect = (grua: any) => {
     setGruaSelecionada(grua)
     const equipamento = `${grua.tipo || 'Grua Torre'} / ${grua.fabricante} ${grua.modelo}`
     setFormData({ ...formData, equipamento })
+  }
+
+  const handleCreateCliente = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      setIsCreatingCliente(true)
+      
+      // Remover máscaras antes de enviar
+      const dadosFormatados = {
+        ...clienteFormData,
+        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
+        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
+        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
+        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
+        criar_usuario: clienteFormData.criar_usuario || false,
+        usuario_senha: clienteFormData.criar_usuario ? clienteFormData.usuario_senha : undefined
+      }
+      
+      const response = await clientesApi.criarCliente(dadosFormatados)
+      
+      if (response.success && response.data) {
+        // Converter o cliente criado para o formato esperado
+        const novoCliente = converterClienteBackendParaFrontend(response.data)
+        
+        // Selecionar automaticamente o cliente criado
+        handleClienteSelect(novoCliente)
+        
+        // Resetar formulário e fechar modal
+        setClienteFormData({
+          nome: '',
+          email: '',
+          telefone: '',
+          cnpj: '',
+          endereco: '',
+          cidade: '',
+          estado: '',
+          cep: '',
+          contato: '',
+          contato_email: '',
+          contato_cpf: '',
+          contato_telefone: '',
+          status: 'ativo',
+          criar_usuario: false,
+          usuario_senha: ''
+        })
+        setIsClienteModalOpen(false)
+        
+        toast({
+          title: "Sucesso",
+          description: "Cliente criado e selecionado com sucesso!",
+        })
+      }
+    } catch (err: any) {
+      console.error('Erro ao criar cliente:', err)
+      toast({
+        title: "Erro",
+        description: err.response?.data?.message || "Erro ao criar cliente. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsCreatingCliente(false)
+    }
   }
 
   return (
@@ -124,18 +367,34 @@ export default function NovoOrcamentoPage() {
           <div>
             <h1 className="text-3xl font-bold">Novo Orçamento de Obra</h1>
             <p className="text-gray-600 mt-1">
-              Preencha os dados essenciais para aprovação da locação
+              Preencha os dados essenciais do orçamento de locação
             </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleSave('rascunho')}>
-            <Save className="w-4 h-4 mr-2" />
-            Salvar Rascunho
+          <Button 
+            variant="outline" 
+            onClick={() => handleSave(true)}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <FileTextIcon className="w-4 h-4 mr-2" />
+            )}
+            Salvar como Rascunho
           </Button>
-          <Button onClick={() => handleSave('enviado')}>
-            <Send className="w-4 h-4 mr-2" />
-            Enviar para Aprovação
+          <Button 
+            onClick={() => handleSave(false)}
+            disabled={isSaving}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            Salvar
           </Button>
         </div>
       </div>
@@ -172,14 +431,28 @@ export default function NovoOrcamentoPage() {
                 Dados da empresa fornecedora, construtora e obra
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Cliente *</Label>
-                <ClienteSearch
-                  onSelect={handleClienteSelect}
-                  selectedCliente={clienteSelecionado}
-                />
-              </div>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Cliente *</Label>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <ClienteSearch
+                        onClienteSelect={handleClienteSelect}
+                        selectedCliente={clienteSelecionado}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setIsClienteModalOpen(true)}
+                      className="flex-shrink-0"
+                      title="Adicionar novo cliente"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -240,7 +513,7 @@ export default function NovoOrcamentoPage() {
               <div>
                 <Label>Equipamento Ofertado *</Label>
                 <GruaSearch
-                  onSelect={handleGruaSelect}
+                  onGruaSelect={handleGruaSelect}
                   selectedGrua={gruaSelecionada}
                 />
                 {formData.equipamento && (
@@ -345,41 +618,49 @@ export default function NovoOrcamentoPage() {
                 <div>
                   <Label>Locacao da grua (R$/mês) *</Label>
                   <Input
-                    type="number"
-                    step="0.01"
+                    type="text"
                     value={formData.valor_locacao_mensal}
-                    onChange={(e) => setFormData({ ...formData, valor_locacao_mensal: e.target.value })}
-                    placeholder="0.00"
+                    onChange={(e) => {
+                      const formatted = formatCurrency(e.target.value)
+                      setFormData({ ...formData, valor_locacao_mensal: formatted })
+                    }}
+                    placeholder="0,00"
                   />
                 </div>
                 <div>
                   <Label>Operador (R$/mês) *</Label>
                   <Input
-                    type="number"
-                    step="0.01"
+                    type="text"
                     value={formData.valor_operador}
-                    onChange={(e) => setFormData({ ...formData, valor_operador: e.target.value })}
-                    placeholder="0.00"
+                    onChange={(e) => {
+                      const formatted = formatCurrency(e.target.value)
+                      setFormData({ ...formData, valor_operador: formatted })
+                    }}
+                    placeholder="0,00"
                   />
                 </div>
                 <div>
                   <Label>Sinaleiro (R$/mês) *</Label>
                   <Input
-                    type="number"
-                    step="0.01"
+                    type="text"
                     value={formData.valor_sinaleiro}
-                    onChange={(e) => setFormData({ ...formData, valor_sinaleiro: e.target.value })}
-                    placeholder="0.00"
+                    onChange={(e) => {
+                      const formatted = formatCurrency(e.target.value)
+                      setFormData({ ...formData, valor_sinaleiro: formatted })
+                    }}
+                    placeholder="0,00"
                   />
                 </div>
                 <div>
                   <Label>Manutenção preventiva (R$/mês) *</Label>
                   <Input
-                    type="number"
-                    step="0.01"
+                    type="text"
                     value={formData.valor_manutencao}
-                    onChange={(e) => setFormData({ ...formData, valor_manutencao: e.target.value })}
-                    placeholder="0.00"
+                    onChange={(e) => {
+                      const formatted = formatCurrency(e.target.value)
+                      setFormData({ ...formData, valor_manutencao: formatted })
+                    }}
+                    placeholder="0,00"
                   />
                 </div>
               </div>
@@ -509,18 +790,288 @@ export default function NovoOrcamentoPage() {
       </Tabs>
 
       <div className="flex justify-end gap-2 sticky bottom-0 bg-white p-4 border-t -mx-6 px-6">
-        <Button variant="outline" onClick={() => router.back()}>
-          Cancelar
+        <Button variant="outline" onClick={() => router.back()} disabled={isSaving}>
+          Voltar
         </Button>
-        <Button variant="outline" onClick={() => handleSave('rascunho')}>
-          <Save className="w-4 h-4 mr-2" />
-          Salvar Rascunho
+        <Button 
+          variant="outline" 
+          onClick={() => handleSave(true)}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <FileTextIcon className="w-4 h-4 mr-2" />
+          )}
+          Salvar como Rascunho
         </Button>
-        <Button onClick={() => handleSave('enviado')}>
-          <Send className="w-4 h-4 mr-2" />
-          Enviar para Aprovação
+        <Button 
+          onClick={() => handleSave(false)}
+          disabled={isSaving}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          {isSaving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4 mr-2" />
+          )}
+          Salvar
         </Button>
       </div>
+
+      {/* Modal de Criação de Cliente */}
+      <Dialog open={isClienteModalOpen} onOpenChange={setIsClienteModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Novo Cliente</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateCliente} className="space-y-6">
+            {/* Informações Básicas */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Informações Básicas</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="nome">Nome da Empresa *</Label>
+                  <Input
+                    id="nome"
+                    value={clienteFormData.nome}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, nome: e.target.value })}
+                    placeholder="Ex: Construtora ABC Ltda"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cnpj">CNPJ *</Label>
+                  <Input
+                    id="cnpj"
+                    value={clienteFormData.cnpj}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) {
+                        value = value.substring(0, 2) + '.' + value.substring(2)
+                      }
+                      if (value.length >= 6) {
+                        value = value.substring(0, 6) + '.' + value.substring(6)
+                      }
+                      if (value.length >= 10) {
+                        value = value.substring(0, 10) + '/' + value.substring(10)
+                      }
+                      if (value.length >= 15) {
+                        value = value.substring(0, 15) + '-' + value.substring(15, 17)
+                      }
+                      setClienteFormData({ ...clienteFormData, cnpj: value })
+                    }}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={clienteFormData.email || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, email: e.target.value })}
+                    placeholder="contato@empresa.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="telefone">Telefone</Label>
+                  <Input
+                    id="telefone"
+                    value={clienteFormData.telefone || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) {
+                        value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
+                      }
+                      if (value.length >= 10) {
+                        value = value.substring(0, 10) + '-' + value.substring(10, 14)
+                      }
+                      setClienteFormData({ ...clienteFormData, telefone: value })
+                    }}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Endereço */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Endereço</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="endereco">Endereço</Label>
+                  <Input
+                    id="endereco"
+                    value={clienteFormData.endereco || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco: e.target.value })}
+                    placeholder="Rua, número, bairro"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cep">CEP</Label>
+                  <Input
+                    id="cep"
+                    value={clienteFormData.cep || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 5) {
+                        value = value.substring(0, 5) + '-' + value.substring(5, 8)
+                      }
+                      setClienteFormData({ ...clienteFormData, cep: value })
+                    }}
+                    placeholder="01234-567"
+                    maxLength={9}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cidade">Cidade</Label>
+                  <Input
+                    id="cidade"
+                    value={clienteFormData.cidade || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, cidade: e.target.value })}
+                    placeholder="São Paulo"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="estado">Estado</Label>
+                  <Select
+                    value={clienteFormData.estado || undefined}
+                    onValueChange={(value) => setClienteFormData({ ...clienteFormData, estado: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AC">Acre (AC)</SelectItem>
+                      <SelectItem value="AL">Alagoas (AL)</SelectItem>
+                      <SelectItem value="AP">Amapá (AP)</SelectItem>
+                      <SelectItem value="AM">Amazonas (AM)</SelectItem>
+                      <SelectItem value="BA">Bahia (BA)</SelectItem>
+                      <SelectItem value="CE">Ceará (CE)</SelectItem>
+                      <SelectItem value="DF">Distrito Federal (DF)</SelectItem>
+                      <SelectItem value="ES">Espírito Santo (ES)</SelectItem>
+                      <SelectItem value="GO">Goiás (GO)</SelectItem>
+                      <SelectItem value="MA">Maranhão (MA)</SelectItem>
+                      <SelectItem value="MT">Mato Grosso (MT)</SelectItem>
+                      <SelectItem value="MS">Mato Grosso do Sul (MS)</SelectItem>
+                      <SelectItem value="MG">Minas Gerais (MG)</SelectItem>
+                      <SelectItem value="PA">Pará (PA)</SelectItem>
+                      <SelectItem value="PB">Paraíba (PB)</SelectItem>
+                      <SelectItem value="PR">Paraná (PR)</SelectItem>
+                      <SelectItem value="PE">Pernambuco (PE)</SelectItem>
+                      <SelectItem value="PI">Piauí (PI)</SelectItem>
+                      <SelectItem value="RJ">Rio de Janeiro (RJ)</SelectItem>
+                      <SelectItem value="RN">Rio Grande do Norte (RN)</SelectItem>
+                      <SelectItem value="RS">Rio Grande do Sul (RS)</SelectItem>
+                      <SelectItem value="RO">Rondônia (RO)</SelectItem>
+                      <SelectItem value="RR">Roraima (RR)</SelectItem>
+                      <SelectItem value="SC">Santa Catarina (SC)</SelectItem>
+                      <SelectItem value="SP">São Paulo (SP)</SelectItem>
+                      <SelectItem value="SE">Sergipe (SE)</SelectItem>
+                      <SelectItem value="TO">Tocantins (TO)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Contato */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Pessoa de Contato (Representante)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="contato">Nome do Representante</Label>
+                  <Input
+                    id="contato"
+                    value={clienteFormData.contato || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato: e.target.value })}
+                    placeholder="João Silva"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="contato_cpf">CPF do Representante</Label>
+                  <Input
+                    id="contato_cpf"
+                    value={clienteFormData.contato_cpf || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 3) {
+                        value = value.substring(0, 3) + '.' + value.substring(3)
+                      }
+                      if (value.length >= 7) {
+                        value = value.substring(0, 7) + '.' + value.substring(7)
+                      }
+                      if (value.length >= 11) {
+                        value = value.substring(0, 11) + '-' + value.substring(11, 13)
+                      }
+                      setClienteFormData({ ...clienteFormData, contato_cpf: value })
+                    }}
+                    placeholder="000.000.000-00"
+                    maxLength={14}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="contato_email">Email do Representante</Label>
+                  <Input
+                    id="contato_email"
+                    type="email"
+                    value={clienteFormData.contato_email || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato_email: e.target.value })}
+                    placeholder="joao.silva@empresa.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="contato_telefone">Telefone do Representante</Label>
+                  <Input
+                    id="contato_telefone"
+                    value={clienteFormData.contato_telefone || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) {
+                        value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
+                      }
+                      if (value.length >= 10) {
+                        value = value.substring(0, 10) + '-' + value.substring(10, 14)
+                      }
+                      setClienteFormData({ ...clienteFormData, contato_telefone: value })
+                    }}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsClienteModalOpen(false)} 
+                disabled={isCreatingCliente}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isCreatingCliente}>
+                {isCreatingCliente && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Criar Cliente
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

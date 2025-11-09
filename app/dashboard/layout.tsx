@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, Suspense, useMemo, memo } from "react"
+import { useState, useEffect, useRef, Suspense, useMemo, memo } from "react"
 import dynamic from "next/dynamic"
 import { AuthService } from "@/app/lib/auth"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -36,7 +36,7 @@ import {
   MessageSquare,
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
 
 // Dynamic imports para componentes pesados - carregam apenas quando necessário
@@ -154,8 +154,11 @@ export default function DashboardLayout({
     loading: permissionsLoading 
   } = usePermissions()
   const pathname = usePathname()
+  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isClientSide, setIsClientSide] = useState(false)
+  const { isLoading, showLoading, hideLoading, message } = useGlobalLoading()
+  const [isNavigating, setIsNavigating] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     principal: false,
     operacional: false,
@@ -316,6 +319,37 @@ export default function DashboardLayout({
     [isAdminFromPermissions, filteredBaseNavigation, filteredAdminNavigation]
   )
 
+  // Detectar mudanças no pathname para desativar loading
+  const previousPathname = useRef(pathname)
+  
+  useEffect(() => {
+    // Se o pathname mudou e estávamos navegando, desativar loading
+    if (previousPathname.current !== pathname && isNavigating) {
+      previousPathname.current = pathname
+      // Aguardar um pouco para garantir que a página carregou
+      const timer = setTimeout(() => {
+        setIsNavigating(false)
+        hideLoading()
+      }, 500)
+      return () => clearTimeout(timer)
+    } else if (previousPathname.current !== pathname) {
+      previousPathname.current = pathname
+    }
+  }, [pathname, isNavigating, hideLoading])
+
+  // Função para lidar com clique em links da sidebar
+  // Não interfere na navegação - apenas adiciona feedback visual
+  const handleLinkClick = (href: string, itemName: string) => {
+    if (pathname !== href) {
+      // Usar um delay muito pequeno para não interferir com o Link do Next.js
+      const timer = setTimeout(() => {
+        setIsNavigating(true)
+        showLoading(`Carregando ${itemName}...`)
+      }, 10)
+      // Não precisamos limpar o timer pois é muito rápido
+    }
+  }
+
   // Todos os useEffect devem estar no topo também
   useEffect(() => {
     setIsClientSide(true)
@@ -385,6 +419,7 @@ export default function DashboardLayout({
                     <Link
                       key={item.name}
                       href={item.href}
+                      onClick={() => handleLinkClick(item.href, item.name)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                         isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -419,6 +454,7 @@ export default function DashboardLayout({
                     <Link
                       key={item.name}
                       href={item.href}
+                      onClick={() => handleLinkClick(item.href, item.name)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                         isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -453,6 +489,7 @@ export default function DashboardLayout({
                     <Link
                       key={item.name}
                       href={item.href}
+                      onClick={() => handleLinkClick(item.href, item.name)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                         isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -487,6 +524,7 @@ export default function DashboardLayout({
                     <Link
                       key={item.name}
                       href={item.href}
+                      onClick={() => handleLinkClick(item.href, item.name)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                         isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -521,6 +559,7 @@ export default function DashboardLayout({
                     <Link
                       key={item.name}
                       href={item.href}
+                      onClick={() => handleLinkClick(item.href, item.name)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                         isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -555,6 +594,7 @@ export default function DashboardLayout({
                     <Link
                       key={item.name}
                       href={item.href}
+                      onClick={() => handleLinkClick(item.href, item.name)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                         isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -590,6 +630,7 @@ export default function DashboardLayout({
                       <Link
                         key={item.name}
                         href={item.href}
+                        onClick={() => handleLinkClick(item.href, item.name)}
                         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                           isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
                         }`}
@@ -660,7 +701,7 @@ export default function DashboardLayout({
       </div>
       
       {/* Global Loading */}
-      <GlobalLoading show={false} />
+      <GlobalLoading show={isLoading} message={message} />
     </div>
   )
 }

@@ -321,7 +321,7 @@ export default function NotificacoesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-5">
       {/* Header Compacto */}
       <div className="flex items-center justify-between">
         <div>

@@ -1,39 +1,34 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { useParams, useRouter } from "next/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SignaturePad } from "./signature-pad"
-import { Download, Eye, FileText, CheckCircle2, Clock, AlertCircle } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SignaturePad } from "@/components/signature-pad"
+import { Download, CheckCircle2, Clock, Loader2, ArrowLeft, FileText } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { colaboradoresDocumentosApi, type HoleriteBackend } from "@/lib/api-colaboradores-documentos"
 
+// Interface compatível com o componente
 export interface Holerite {
-  id?: number
+  id: string | number
   colaborador_id: number
-  mes: string
-  ano: number
-  arquivo_url?: string
-  assinado: boolean
-  data_assinatura?: string
+  mes_referencia: string // formato YYYY-MM
+  arquivo: string
   assinatura_digital?: string
-  created_at?: string
+  assinado_por?: number
+  assinado_em?: string
 }
 
-interface ColaboradorHoleritesProps {
-  colaboradorId: number
-  readOnly?: boolean
-  isCliente?: boolean
-  isFuncionario?: boolean
-}
-
-export function ColaboradorHolerites({ colaboradorId, readOnly = false, isCliente = false, isFuncionario = false }: ColaboradorHoleritesProps) {
+export default function HoleritesPage() {
+  const params = useParams()
+  const router = useRouter()
   const { toast } = useToast()
+  const colaboradorId = parseInt(params.id as string)
+
   const [holerites, setHolerites] = useState<Holerite[]>([])
   const [loading, setLoading] = useState(true)
   const [isAssinaturaDialogOpen, setIsAssinaturaDialogOpen] = useState(false)
@@ -47,18 +42,17 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   const loadHolerites = async () => {
     setLoading(true)
     try {
-      const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
       const response = await colaboradoresDocumentosApi.holerites.listar(colaboradorId)
       if (response.success && response.data) {
-        const holeritesConvertidos: Holerite[] = response.data.map((h: any) => ({
+        // Converter HoleriteBackend para Holerite
+        const holeritesConvertidos: Holerite[] = response.data.map((h: HoleriteBackend) => ({
           id: h.id,
           colaborador_id: h.funcionario_id,
-          mes: h.mes_referencia ? new Date(h.mes_referencia + '-01').toLocaleString('pt-BR', { month: 'long' }) : '',
-          ano: h.mes_referencia ? parseInt(h.mes_referencia.split('-')[0]) : new Date().getFullYear(),
-          arquivo_url: h.arquivo,
-          assinado: !!h.assinatura_digital && !!h.assinado_em,
-          data_assinatura: h.assinado_em,
-          assinatura_digital: h.assinatura_digital
+          mes_referencia: h.mes_referencia,
+          arquivo: h.arquivo,
+          assinatura_digital: h.assinatura_digital,
+          assinado_por: h.assinado_por,
+          assinado_em: h.assinado_em
         }))
         setHolerites(holeritesConvertidos)
       }
@@ -84,20 +78,20 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
     }
 
     try {
-      const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
-      await colaboradoresDocumentosApi.holerites.assinar(
-        holerite.id?.toString() || '',
+      const response = await colaboradoresDocumentosApi.holerites.assinar(
+        holerite.id.toString(),
         { assinatura_digital: assinaturaDataUrl }
       )
       
-      toast({
-        title: "Sucesso",
-        description: "Holerite assinado com sucesso"
-      })
-
-      setIsAssinaturaDialogOpen(false)
-      setAssinaturaDataUrl('')
-      loadHolerites()
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Holerite assinado com sucesso"
+        })
+        setIsAssinaturaDialogOpen(false)
+        setAssinaturaDataUrl('')
+        loadHolerites()
+      }
     } catch (error: any) {
       toast({
         title: "Erro",
@@ -109,14 +103,14 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
 
   const handleDownload = async (holerite: Holerite) => {
     try {
-      if (holerite.arquivo_url) {
+      if (holerite.arquivo) {
         const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
         const token = localStorage.getItem('access_token') || localStorage.getItem('token')
         
         // Tentar obter URL assinada do arquivo
         try {
           const urlResponse = await fetch(
-            `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo_url)}`,
+            `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo)}`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -126,12 +120,12 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
           
           if (urlResponse.ok) {
             const urlData = await urlResponse.json()
-            window.open(urlData.url || urlData.data?.url || holerite.arquivo_url, '_blank')
+            window.open(urlData.url || urlData.data?.url || holerite.arquivo, '_blank')
           } else {
-            window.open(holerite.arquivo_url, '_blank')
+            window.open(holerite.arquivo, '_blank')
           }
         } catch {
-          window.open(holerite.arquivo_url, '_blank')
+          window.open(holerite.arquivo, '_blank')
         }
       } else {
         toast({
@@ -149,25 +143,46 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
     }
   }
 
-  // Verificar se o usuário pode assinar (apenas funcionário pode assinar seu próprio holerite)
-  const podeAssinar = isFuncionario && !readOnly
+  const formatarMesReferencia = (mesReferencia: string): string => {
+    const [ano, mes] = mesReferencia.split('-')
+    const data = new Date(parseInt(ano), parseInt(mes) - 1, 1)
+    return data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+
+  const isAssinado = (holerite: Holerite): boolean => {
+    return !!holerite.assinatura_digital && !!holerite.assinado_em
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={() => router.push(`/dashboard/rh/colaboradores/${colaboradorId}`)}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Holerites Mensais</h1>
+            <p className="text-gray-600 mt-1">
+              Gerencie holerites do colaborador
+            </p>
+          </div>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Holerites Mensais</CardTitle>
-              <CardDescription>
-                {holerites.length} holerite(s) disponível(is)
-              </CardDescription>
-            </div>
-          </div>
+          <CardTitle>Lista de Holerites</CardTitle>
+          <CardDescription>
+            {holerites.length} holerite(s) disponível(is)
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8">Carregando...</div>
+            <div className="text-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+              Carregando...
+            </div>
           ) : holerites.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               Nenhum holerite disponível
@@ -186,10 +201,10 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                 {holerites.map((holerite) => (
                   <TableRow key={holerite.id}>
                     <TableCell className="font-medium capitalize">
-                      {holerite.mes} / {holerite.ano}
+                      {formatarMesReferencia(holerite.mes_referencia)}
                     </TableCell>
                     <TableCell>
-                      {holerite.assinado ? (
+                      {isAssinado(holerite) ? (
                         <Badge className="bg-green-500">
                           <CheckCircle2 className="w-3 h-3 mr-1" />
                           Assinado
@@ -202,8 +217,8 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                       )}
                     </TableCell>
                     <TableCell>
-                      {holerite.data_assinatura ? (
-                        new Date(holerite.data_assinatura).toLocaleDateString('pt-BR')
+                      {holerite.assinado_em ? (
+                        new Date(holerite.assinado_em).toLocaleDateString('pt-BR')
                       ) : (
                         <span className="text-gray-400">Não assinado</span>
                       )}
@@ -218,7 +233,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                           <Download className="w-4 h-4 mr-1" />
                           Baixar
                         </Button>
-                        {!holerite.assinado && podeAssinar && (
+                        {!isAssinado(holerite) && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -230,12 +245,6 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                             <FileText className="w-4 h-4 mr-1" />
                             Assinar
                           </Button>
-                        )}
-                        {holerite.assinado && (
-                          <Badge variant="outline" className="text-xs">
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                            Assinado
-                          </Badge>
                         )}
                       </div>
                     </TableCell>
@@ -253,7 +262,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
           <DialogHeader>
             <DialogTitle>Assinar Holerite</DialogTitle>
             <DialogDescription>
-              Assine digitalmente o holerite de {holeriteSelecionado?.mes} / {holeriteSelecionado?.ano}
+              Assine digitalmente o holerite de {holeriteSelecionado && formatarMesReferencia(holeriteSelecionado.mes_referencia)}
             </DialogDescription>
           </DialogHeader>
 
@@ -270,7 +279,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                 setAssinaturaDataUrl('')
               }}
               title="Assinar Holerite"
-              description={`Assine digitalmente o holerite de ${holeriteSelecionado?.mes} / ${holeriteSelecionado?.ano}`}
+              description={`Assine digitalmente o holerite de ${holeriteSelecionado && formatarMesReferencia(holeriteSelecionado.mes_referencia)}`}
             />
           </div>
         </DialogContent>
