@@ -23,11 +23,11 @@ import {
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import { usePersistentSession } from "@/hooks/use-persistent-session"
 import { loadUserPermissions } from "@/lib/auth-permissions"
-import { useEmpresa } from "@/hooks/use-empresa"
+import { useEmpresa, EmpresaProvider } from "@/hooks/use-empresa"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import Image from "next/image"
 
-export default function PWALoginPage() {
+function PWALoginPageContent() {
   const [formData, setFormData] = useState({
     usuario: "",
     senha: ""
@@ -536,5 +536,13 @@ export default function PWALoginPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function PWALoginPage() {
+  return (
+    <EmpresaProvider>
+      <PWALoginPageContent />
+    </EmpresaProvider>
   )
 }
