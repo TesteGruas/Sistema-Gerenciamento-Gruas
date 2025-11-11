@@ -722,15 +722,29 @@ router.post('/', async (req, res) => {
           .eq('id', novoFuncionario.id)
           .single()
 
+        // Enviar mensagem WhatsApp com instruções de acesso (não bloquear criação se falhar)
+        try {
+          const { enviarMensagemNovoUsuarioFuncionario } = await import('../services/whatsapp-service.js');
+          await enviarMensagemNovoUsuarioFuncionario(
+            funcionarioCompleto || novoFuncionario,
+            value.email,
+            senhaTemporaria
+          ).catch(whatsappError => {
+            console.error('❌ Erro ao enviar mensagem WhatsApp (não bloqueia criação):', whatsappError);
+          });
+        } catch (importError) {
+          console.error('❌ Erro ao importar serviço WhatsApp (não bloqueia criação):', importError);
+        }
+
         res.status(201).json({
           success: true,
           data: {
             ...(funcionarioCompleto || novoFuncionario),
             usuario_criado: true,
             usuario_id: usuarioId
-            // Por segurança, NÃO retornar senha_temporaria - foi enviada por email
+            // Por segurança, NÃO retornar senha_temporaria - foi enviada por email e WhatsApp
           },
-          message: 'Funcionário e usuário criados com sucesso. Email com senha temporária enviado.'
+          message: 'Funcionário e usuário criados com sucesso. Email e WhatsApp com senha temporária enviados.'
         })
 
       } catch (usuarioError) {

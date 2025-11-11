@@ -1276,6 +1276,16 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       }
     }
 
+    // Enviar notificações WhatsApp para cliente e gestores (não bloquear criação se falhar)
+    try {
+      const { enviarMensagemNovaObra } = await import('../services/whatsapp-service.js');
+      await enviarMensagemNovaObra(data).catch(whatsappError => {
+        console.error('❌ Erro ao enviar mensagens WhatsApp (não bloqueia criação):', whatsappError);
+      });
+    } catch (importError) {
+      console.error('❌ Erro ao importar serviço WhatsApp (não bloqueia criação):', importError);
+    }
+
     res.status(201).json({
       success: true,
       data,
