@@ -107,6 +107,8 @@ import manutencoesRoutes from './routes/manutencoes.js'
 import ordemComprasRoutes from './routes/ordem-compras.js'
 import responsaveisTecnicosRoutes from './routes/responsaveis-tecnicos.js'
 import whatsappTestRoutes from './routes/whatsapp-test.js'
+import whatsappLogsRoutes from './routes/whatsapp-logs.js'
+import whatsappEvolutionRoutes from './routes/whatsapp-evolution.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -337,6 +339,8 @@ app.use('/api/manutencoes', manutencoesRoutes)
 app.use('/api/ordem-compras', ordemComprasRoutes)
 app.use('/api/responsaveis-tecnicos', responsaveisTecnicosRoutes)
 app.use('/api/whatsapp', whatsappTestRoutes)
+app.use('/api/whatsapp-logs', whatsappLogsRoutes)
+app.use('/api/whatsapp-evolution', whatsappEvolutionRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

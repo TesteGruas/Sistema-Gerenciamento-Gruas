@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,7 +26,8 @@ interface AprovacaoData {
   } | null
 }
 
-export default function AprovacaoPublicaPage({ params }: { params: { id: string } }) {
+export default function AprovacaoPublicaPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params)
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
   
@@ -47,12 +48,12 @@ export default function AprovacaoPublicaPage({ params }: { params: { id: string 
     }
 
     carregarAprovacao()
-  }, [token, params.id])
+  }, [token, resolvedParams.id])
 
   const carregarAprovacao = async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${apiUrl}/api/aprovacao/${params.id}?token=${token}`, {
+      const response = await fetch(`${apiUrl}/api/aprovacao/${resolvedParams.id}?token=${token}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -91,8 +92,8 @@ export default function AprovacaoPublicaPage({ params }: { params: { id: string 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const endpoint = tipo === 'aprovar' 
-        ? `${apiUrl}/api/aprovacao/${params.id}/aprovar?token=${token}`
-        : `${apiUrl}/api/aprovacao/${params.id}/rejeitar?token=${token}`
+        ? `${apiUrl}/api/aprovacao/${resolvedParams.id}/aprovar?token=${token}`
+        : `${apiUrl}/api/aprovacao/${resolvedParams.id}/rejeitar?token=${token}`
 
       const body = tipo === 'aprovar'
         ? { observacoes: observacoes || null }

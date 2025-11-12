@@ -56,6 +56,8 @@ export async function validarToken(token, aprovacao_id) {
       };
     }
     
+    console.log(`[approval-tokens] Validando token: id=${aprovacao_id}, token=${token?.substring(0, 20)}...`);
+    
     // Buscar aprovação com o token
     const { data: aprovacao, error } = await supabaseAdmin
       .from('aprovacoes_horas_extras')
@@ -64,13 +66,25 @@ export async function validarToken(token, aprovacao_id) {
       .eq('token_aprovacao', token)
       .single();
     
-    if (error || !aprovacao) {
+    if (error) {
+      console.error('[approval-tokens] Erro ao buscar aprovação na validação:', error);
+      return {
+        valido: false,
+        aprovacao: null,
+        motivo: `Token inválido ou não encontrado: ${error.message || 'Erro desconhecido'}`
+      };
+    }
+    
+    if (!aprovacao) {
+      console.error('[approval-tokens] Aprovação não encontrada na validação');
       return {
         valido: false,
         aprovacao: null,
         motivo: 'Token inválido ou não encontrado'
       };
     }
+    
+    console.log(`[approval-tokens] Aprovação encontrada na validação: ${aprovacao.id}, status: ${aprovacao.status}`);
     
     // Verificar se a aprovação está pendente
     if (aprovacao.status !== 'pendente') {
@@ -129,6 +143,9 @@ export async function validarToken(token, aprovacao_id) {
  */
 export async function buscarAprovacaoPorToken(token, aprovacao_id) {
   try {
+    console.log(`[approval-tokens] Buscando aprovação por token: id=${aprovacao_id}`);
+    
+    // Buscar aprovação sem join com registros_ponto primeiro (porque registro_ponto_id é UUID mas registros_ponto.id é VARCHAR)
     const { data, error } = await supabaseAdmin
       .from('aprovacoes_horas_extras')
       .select(`
@@ -137,24 +154,36 @@ export async function buscarAprovacaoPorToken(token, aprovacao_id) {
           id,
           nome,
           cpf
-        ),
-        registros_ponto:registro_ponto_id (
-          entrada,
-          saida,
-          obra_id
         )
       `)
       .eq('id', aprovacao_id)
       .eq('token_aprovacao', token)
       .single();
     
-    if (error || !data) {
+    if (error) {
+      console.error('[approval-tokens] Erro ao buscar aprovação:', error);
+      console.error('[approval-tokens] Detalhes do erro:', JSON.stringify(error, null, 2));
       return null;
     }
     
-    return data;
+    if (!data) {
+      console.error('[approval-tokens] Aprovação não encontrada (data é null)');
+      return null;
+    }
+    
+    console.log(`[approval-tokens] Aprovação encontrada: ${data.id}, funcionario: ${data.funcionarios?.nome || 'não encontrado'}`);
+    
+    // Buscar registro de ponto separadamente se necessário
+    // Como registro_ponto_id é UUID mas registros_ponto.id é VARCHAR,
+    // não podemos fazer join direto. Vamos buscar pelo ID que está nas observações ou pular
+    // Por enquanto, retornar sem registro_ponto já que não é crítico para a aprovação
+    return {
+      ...data,
+      registros_ponto: null // Não podemos fazer join devido à incompatibilidade de tipos
+    };
   } catch (error) {
     console.error('[approval-tokens] Erro ao buscar aprovação por token:', error);
+    console.error('[approval-tokens] Stack:', error.stack);
     return null;
   }
 }

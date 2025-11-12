@@ -72,10 +72,13 @@ router.get('/:id', validarTokenMiddleware, async (req, res) => {
   try {
     const { token, aprovacao_id } = req;
     
+    console.log(`[aprovacao-publica] Buscando aprovação: id=${aprovacao_id}, token=${token?.substring(0, 20)}...`);
+    
     // Validar token
     const validacao = await validarToken(token, aprovacao_id);
     
     if (!validacao.valido) {
+      console.log(`[aprovacao-publica] Token inválido: ${validacao.motivo}`);
       return res.status(400).json({
         success: false,
         message: validacao.motivo,
@@ -87,11 +90,14 @@ router.get('/:id', validarTokenMiddleware, async (req, res) => {
     const aprovacao = await buscarAprovacaoPorToken(token, aprovacao_id);
     
     if (!aprovacao) {
+      console.log(`[aprovacao-publica] Aprovação não encontrada após validação`);
       return res.status(404).json({
         success: false,
         message: 'Aprovação não encontrada'
       });
     }
+    
+    console.log(`[aprovacao-publica] Aprovação encontrada: ${aprovacao.id}`);
     
     // Formatar dados para resposta
     const dataTrabalho = new Date(aprovacao.data_trabalho).toLocaleDateString('pt-BR');

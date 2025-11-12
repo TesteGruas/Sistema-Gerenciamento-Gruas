@@ -3,6 +3,19 @@ import { authenticateToken } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { gerarTokenAprovacao } from '../utils/approval-tokens.js';
+import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
+import crypto from 'crypto';
+
+/**
+ * Gera um ID único para registros de ponto
+ * @param {string} prefix - Prefixo do ID (padrão: 'REG')
+ * @returns {string} ID único
+ */
+function gerarIdRegistro(prefix = 'REG') {
+  const timestamp = Date.now().toString();
+  const random = Math.random().toString(36).substr(2, 4).toUpperCase();
+  return `${prefix}${timestamp.slice(-6)}${random}`;
+}
 
 const router = express.Router();
 
@@ -37,42 +50,19 @@ router.post('/test', authenticateToken, async (req, res) => {
 
     const mensagem = text || '🔔 Mensagem de teste do sistema de aprovações WhatsApp\n\nSe você recebeu esta mensagem, a integração está funcionando corretamente!';
 
-    // Preparar payload para webhook n8n
-    const payload = {
-      number: numeroLimpo,
-      text: mensagem
-    };
-
-    // Enviar webhook para n8n
-    let tentativas = 0;
-    const maxTentativas = 3;
-    let ultimoErro = null;
-
-    while (tentativas < maxTentativas) {
-      try {
-        // Criar AbortController para timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
-
-        const response = await fetch(WHATSAPP_WEBHOOK_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // Usar a função enviarMensagemWebhook do whatsapp-service que já inclui instance_name e apikey
+    try {
+      const { enviarMensagemWebhook } = await import('../services/whatsapp-service.js');
+      const resultado = await enviarMensagemWebhook(
+        numeroLimpo,
+        mensagem,
+        null,
+        {
+          tipo: 'teste'
         }
+      );
 
-        const responseData = await response.json().catch(() => ({}));
-
-        console.log(`[whatsapp-test] Mensagem de teste enviada com sucesso para ${numeroLimpo}`);
-
+      if (resultado.sucesso) {
         return res.json({
           success: true,
           message: 'Mensagem de teste enviada com sucesso!',
@@ -81,24 +71,19 @@ router.post('/test', authenticateToken, async (req, res) => {
             sent_at: new Date().toISOString()
           }
         });
-      } catch (error) {
-        tentativas++;
-        ultimoErro = error;
-        console.error(`[whatsapp-test] Tentativa ${tentativas}/${maxTentativas} falhou:`, error.message);
-
-        // Aguardar antes de tentar novamente (exponential backoff)
-        if (tentativas < maxTentativas) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * tentativas));
-        }
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: resultado.erro || 'Erro ao enviar mensagem de teste'
+        });
       }
+    } catch (error) {
+      console.error('[whatsapp-test] Erro ao enviar teste:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Erro ao enviar mensagem de teste'
+      });
     }
-
-    // Se todas as tentativas falharam
-    console.error('[whatsapp-test] Falha ao enviar mensagem de teste após', maxTentativas, 'tentativas');
-    return res.status(500).json({
-      success: false,
-      message: `Erro ao enviar mensagem: ${ultimoErro?.message || 'Erro desconhecido'}`
-    });
   } catch (error) {
     console.error('[whatsapp-test] Erro ao enviar mensagem de teste:', error);
     return res.status(500).json({
@@ -191,16 +176,18 @@ router.post('/test-completo', authenticateToken, async (req, res) => {
       console.log('[whatsapp-test] Usando registro de ponto existente:', registroPonto.id);
     } else {
       // Criar novo registro
+      const registroId = gerarIdRegistro('TEST');
       const { data: novoRegistro, error: registroError } = await supabaseAdmin
         .from('registros_ponto')
         .insert({
+          id: registroId,
           funcionario_id: funcionarioId,
           data: hoje,
           entrada: '08:00',
           saida: '19:00',
           horas_trabalhadas: 11,
           horas_extras: 3,
-          status: 'pendente',
+          status: 'Pendente Aprovação',
           observacoes: 'Registro de teste criado automaticamente para validação do sistema WhatsApp'
         })
         .select()
@@ -219,18 +206,21 @@ router.post('/test-completo', authenticateToken, async (req, res) => {
     }
 
     // Criar aprovação de teste
+    // Nota: registro_ponto_id precisa ser UUID, mas registros_ponto.id é VARCHAR
+    // Gerar UUID e armazenar o ID real do registro nas observações
+    const uuidRegistroPonto = crypto.randomUUID();
     const dataLimite = calcularDataLimite();
     const { data: aprovacao, error: aprovacaoError } = await supabaseAdmin
       .from('aprovacoes_horas_extras')
       .insert({
-        registro_ponto_id: registroPonto.id,
+        registro_ponto_id: uuidRegistroPonto, // Usar UUID gerado
         funcionario_id: funcionarioId,
         supervisor_id: supervisorId,
         horas_extras: 3,
         data_trabalho: hoje,
         data_limite: dataLimite.toISOString(),
         status: 'pendente',
-        observacoes: 'Aprovação de teste criada automaticamente para validação do sistema WhatsApp'
+        observacoes: `Aprovação de teste criada automaticamente para validação do sistema WhatsApp. Registro original: ${registroPonto.id}`
       })
       .select()
       .single();
@@ -263,8 +253,17 @@ router.post('/test-completo', authenticateToken, async (req, res) => {
         .eq('id', funcionarioId)
         .single();
 
-      // Formatar mensagem
+      // Enviar WhatsApp usando o serviço (que registra logs automaticamente)
+      // Criar objeto de aprovação com telefone de teste
+      const aprovacaoComTelefone = {
+        ...aprovacao,
+        supervisor_id: supervisorId
+      };
+
+      // Enviar mensagem usando o número fornecido (não o do supervisor)
       const linkAprovacao = `${FRONTEND_URL}/aprovacaop/${aprovacao.id}?token=${token}`;
+      
+      // Buscar dados do funcionário para a mensagem
       const mensagem = `🔔 *Nova Solicitação de Aprovação de Horas Extras*
 
 👤 *Funcionário:* ${funcionarioData?.nome || 'Funcionário de Teste'}
@@ -281,30 +280,38 @@ ${linkAprovacao}
 ---
 _Sistema de Gestão de Gruas - Teste_`;
 
-      // Enviar webhook
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      // Usar a função enviarMensagemWebhook do whatsapp-service que já inclui instance_name e apikey
+      let envioSucesso = false;
+      let erroEnvio = null;
 
-      const response = await fetch(WHATSAPP_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          number: numeroLimpo,
-          text: mensagem,
-          link: linkAprovacao
-        }),
-        signal: controller.signal
-      });
+      try {
+        const { enviarMensagemWebhook } = await import('../services/whatsapp-service.js');
+        const resultado = await enviarMensagemWebhook(
+          numeroLimpo,
+          mensagem,
+          linkAprovacao,
+          {
+            tipo: 'aprovacao',
+            aprovacao_id: aprovacao.id
+          }
+        );
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (resultado.sucesso) {
+          envioSucesso = true;
+          console.log(`[whatsapp-test] Notificação de teste completa enviada para ${numeroLimpo}`);
+        } else {
+          throw new Error(resultado.erro || 'Erro ao enviar mensagem');
+        }
+      } catch (error) {
+        erroEnvio = error;
+        console.error('[whatsapp-test] Erro ao enviar WhatsApp:', error);
       }
 
-      console.log(`[whatsapp-test] Notificação de teste completa enviada para ${numeroLimpo}`);
+      // Nota: enviarMensagemWebhook() já registra o log automaticamente, não é necessário registrar novamente
+
+      if (!envioSucesso) {
+        throw erroEnvio;
+      }
 
       return res.json({
         success: true,
@@ -462,9 +469,11 @@ router.post('/seed-horas-extras', authenticateToken, async (req, res) => {
         if (registroExistente) {
           registro = registroExistente;
         } else {
+          const registroId = gerarIdRegistro('SEED');
           const { data: novoRegistro, error: registroError } = await supabaseAdmin
             .from('registros_ponto')
             .insert({
+              id: registroId,
               funcionario_id: funcionario.id,
               data: data,
               entrada: horario.entrada,
