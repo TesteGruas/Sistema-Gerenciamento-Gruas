@@ -264,7 +264,7 @@ export default function PermissoesPage() {
 
   return (
     <ProtectedRoute permission="usuarios:gerenciar_permissoes">
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="w-full h-full p-6 space-y-6 overflow-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -411,7 +411,7 @@ export default function PermissoesPage() {
         )}
 
         {loading && (
-          <div className="flex items-center justify-center py-12">
+          <div className="w-full h-full flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         )}

@@ -353,14 +353,14 @@ export default function EmailConfigPage() {
 
   if (loadingConfig) {
     return (
-      <div className="flex items-center justify-center h-96">
+      <div className="w-full h-full flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="w-full h-full p-6 space-y-6 overflow-auto">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Configuração de Emails</h1>

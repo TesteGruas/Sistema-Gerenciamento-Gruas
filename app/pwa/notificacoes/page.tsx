@@ -77,6 +77,7 @@ export default function PWANotificacoesPage() {
     } finally {
       setLoading(false)
     }
+
   }
 
   const marcarComoLida = (id: string) => {
