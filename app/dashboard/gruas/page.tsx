@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -108,6 +108,10 @@ export default function GruasPage() {
   const [gruas, setGruas] = useState<GruaFrontend[]>([])
   const { loading, startLoading, stopLoading } = useLoading(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
   const { loading: creating, startLoading: startCreating, stopLoading: stopCreating, setLoading: setCreating } = useLoading()
   const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating, setLoading: setUpdating } = useLoading()
   const [deleting, setDeleting] = useState(false)
@@ -194,22 +198,52 @@ export default function GruasPage() {
   }
 
   
-  // Carregar gruas quando o componente montar ou filtros mudarem
+  // Carregar gruas quando o componente montar - apenas uma vez
   useEffect(() => {
-    carregarGruas()
-  }, [selectedStatus, selectedTipo, currentPage, itemsPerPage])
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      carregarGruas().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
 
-  // Debounce para pesquisa
+  // Carregar gruas quando filtros mudarem (com debounce)
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchTerm !== undefined) {
-        setCurrentPage(1) // Reset para primeira página ao pesquisar
-        carregarGruas()
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        carregarGruas().finally(() => {
+          loadingRef.current = false
+        })
       }
-    }, 500) // 500ms de delay
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStatus, selectedTipo, currentPage, itemsPerPage, dadosIniciaisCarregados])
+
+  // Debounce para pesquisa (otimizado)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timeoutId = setTimeout(() => {
+      if (searchTerm !== undefined && !loadingRef.current) {
+        setCurrentPage(1) // Reset para primeira página ao pesquisar
+        loadingRef.current = true
+        carregarGruas().finally(() => {
+          loadingRef.current = false
+        })
+      }
+    }, 300) // Reduzido para 300ms
 
     return () => clearTimeout(timeoutId)
-  }, [searchTerm])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, dadosIniciaisCarregados])
 
   // Aplicar filtros da URL
   useEffect(() => {

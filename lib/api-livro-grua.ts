@@ -384,7 +384,6 @@ export const livroGruaApi = {
    */
   async obterFuncionarioLogado(): Promise<{ id: number; nome: string; cargo: string; role?: string; email?: string; funcionario_id?: number }> {
     const response = await httpRequest('/auth/me')
-    console.log('Resposta completa do /auth/me:', response)
     
     // O endpoint retorna: { success: true, data: { user: {...}, profile: {...}, perfil: {...} } }
     const userData = response.data.user || response.data.profile
@@ -392,8 +391,6 @@ export const livroGruaApi = {
     if (!userData) {
       throw new Error('Dados do usuário não encontrados na resposta')
     }
-    
-    console.log('🔍 obterFuncionarioLogado - userData.funcionario_id:', userData.funcionario_id)
     
     return {
       id: userData.id,

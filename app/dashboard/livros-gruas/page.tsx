@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -80,15 +80,16 @@ export default function LivrosGruasPage() {
       }
 
       // Buscar relações grua-obra (filtradas por perfil do usuário)
-      console.log('=== Buscando relações grua-obra ===')
+      console.log('⏳ [Preload] Buscando relações grua-obra...')
+      const startTime = performance.now()
       const response = await livroGruaApi.listarRelacoesGruaObra()
-      console.log('Resposta da API:', response)
+      const duration = Math.round(performance.now() - startTime)
       
       if (response.success && response.data) {
-        console.log('Relações recebidas:', response.data)
+        console.log(`✅ [Preload] Relações grua-obra carregadas (${duration}ms) - ${response.data.length} registros`)
         setRelacoes(response.data)
       } else {
-        console.log('Nenhuma relação encontrada ou erro na resposta')
+        console.log('⚠️ [Preload] Nenhuma relação encontrada')
         setError('Nenhuma relação grua-obra encontrada para este usuário.')
       }
 
@@ -128,10 +129,22 @@ export default function LivrosGruasPage() {
   // Obter status únicos para filtro
   const statusUnicos = [...new Set(relacoes.map(r => r.status))]
 
-  // Carregar dados na inicialização
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRelacoesRef = useRef(false)
+
+  // Carregar dados na inicialização - apenas uma vez
   useEffect(() => {
-    carregarRelacoes()
-  }, [user, userLoading, isAdmin])
+    if (userLoading || loadingRelacoesRef.current || dadosIniciaisCarregados) return
+    if (!user) return
+    
+    loadingRelacoesRef.current = true
+    carregarRelacoes().finally(() => {
+      setDadosIniciaisCarregados(true)
+      loadingRelacoesRef.current = false
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userLoading, isAdmin, dadosIniciaisCarregados])
 
   // Tratamento de loading e erro
   if (loading) {

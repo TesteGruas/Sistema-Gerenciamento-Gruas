@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -106,15 +106,56 @@ export default function EstoquePage() {
     status: "Ativa" as "Ativa" | "Inativa",
   })
 
-  // Carregar dados iniciais
-  useEffect(() => {
-    carregarDados()
-  }, [filtros])
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
+  const movimentacoesLoadingRef = useRef(false)
 
-  // Carregar movimentações separadamente
+  // Carregar dados iniciais - apenas uma vez
   useEffect(() => {
-    carregarMovimentacoes()
-  }, [filtrosMovimentacoes])
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      carregarDados().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
+
+  // Recarregar quando filtros mudarem (com debounce)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        carregarDados().finally(() => {
+          loadingRef.current = false
+        })
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros, dadosIniciaisCarregados])
+
+  // Carregar movimentações separadamente (com debounce)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!movimentacoesLoadingRef.current) {
+        movimentacoesLoadingRef.current = true
+        carregarMovimentacoes().finally(() => {
+          movimentacoesLoadingRef.current = false
+        })
+      }
+    }, 400)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtrosMovimentacoes, dadosIniciaisCarregados])
 
   const carregarDados = async () => {
     try {

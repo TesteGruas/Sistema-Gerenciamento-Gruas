@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { livroGruaApi } from '@/lib/api-livro-grua'
 
 interface CurrentUser {
@@ -17,15 +17,24 @@ export function useCurrentUser() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
+  
   useEffect(() => {
     const fetchUser = async () => {
+      if (loadingRef.current || dadosIniciaisCarregados) return
+      
       try {
+        loadingRef.current = true
         setLoading(true)
         setError(null)
         
-        console.log('Buscando dados do usuário logado...')
+        console.log('⏳ [Preload] Buscando dados do funcionário logado...')
+        const startTime = performance.now()
         const userData = await livroGruaApi.obterFuncionarioLogado()
-        console.log('Dados do usuário recebidos:', userData)
+        const duration = Math.round(performance.now() - startTime)
+        console.log(`✅ [Preload] Dados do funcionário recebidos (${duration}ms)`)
         
         const userWithFlags = {
           ...userData,
@@ -33,18 +42,20 @@ export function useCurrentUser() {
           isGestor: userData.role === 'gestor' || userData.cargo?.toLowerCase().includes('gestor')
         }
         
-        console.log('Usuário processado:', userWithFlags)
         setUser(userWithFlags)
+        setDadosIniciaisCarregados(true)
       } catch (error) {
         console.error('Erro ao obter usuário:', error)
         setError('Erro ao carregar dados do usuário')
         setUser(null)
       } finally {
         setLoading(false)
+        loadingRef.current = false
       }
     }
     
     fetchUser()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   
   return { 

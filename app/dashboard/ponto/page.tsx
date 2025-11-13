@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -144,15 +144,38 @@ export default function PontoPage() {
     return () => clearInterval(timer)
   }, [])
 
-  // Carregar dados iniciais
-  useEffect(() => {
-    carregarDados()
-  }, [])
+  // Flag para controlar se já carregou dados iniciais
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
-  // Recarregar dados quando filtros ou paginação mudarem
+  // Carregar dados iniciais apenas uma vez
   useEffect(() => {
-    carregarDadosComFiltros()
-  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, currentPage, pageSize])
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      carregarDados().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
+    }
+  }, [dadosIniciaisCarregados])
+
+  // Recarregar dados quando filtros ou paginação mudarem (com debounce)
+  useEffect(() => {
+    // Só recarregar se os dados iniciais já foram carregados
+    if (!dadosIniciaisCarregados) return
+    
+    // Debounce para evitar múltiplas chamadas rápidas
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        carregarDadosComFiltros().finally(() => {
+          loadingRef.current = false
+        })
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, currentPage, pageSize, dadosIniciaisCarregados])
 
   // Debug dos registros e filtros (apenas uma vez após carregar)
   useEffect(() => {
@@ -173,12 +196,13 @@ export default function PontoPage() {
       const usuarioId = currentUser.id
       
       // Carregar funcionários com verificação de admin e outros dados em paralelo
+      // Recalcular apenas na primeira carga para melhor performance
       const [funcionariosResponse, registrosResponse, justificativasResponse] = await Promise.all([
         apiFuncionarios.listarParaPonto(usuarioId),
         apiRegistrosPonto.listar({ 
           page: currentPage, 
           limit: pageSize,
-          recalcular: true // ✨ Recalcular automaticamente
+          recalcular: true // ✨ Recalcular apenas na primeira carga (sempre true aqui pois é a primeira)
         }),
         apiJustificativas.listar({})
       ])
@@ -262,7 +286,7 @@ export default function PontoPage() {
       console.log('📡 Chamando API...')
       const registrosResponse = await apiRegistrosPonto.listar({
         ...filtros,
-        recalcular: true, // ✨ Recalcular automaticamente
+        recalcular: false, // ✨ Não recalcular em filtros para melhor performance
         // 🆕 NOVOS FILTROS DISPONÍVEIS:
         // search: 'termo de busca', // Busca textual em nome, data, status, observações
         // order_by: 'horas_extras', // Ordenar por: data, funcionario, horas_trabalhadas, horas_extras, status, created_at
@@ -666,10 +690,20 @@ export default function PontoPage() {
     }
   }
 
-  // useEffect para carregar horas extras quando filtros mudarem
+  // useEffect para carregar horas extras quando filtros mudarem (com debounce)
   useEffect(() => {
-    carregarHorasExtras()
-  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, ordenacaoHorasExtras])
+    // Só carregar se os dados iniciais já foram carregados
+    if (!dadosIniciaisCarregados) return
+    
+    // Debounce para evitar múltiplas chamadas rápidas
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        carregarHorasExtras()
+      }
+    }, 400)
+    
+    return () => clearTimeout(timer)
+  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, ordenacaoHorasExtras, dadosIniciaisCarregados])
 
 
   // Debug: mostrar total de registros antes do filtro

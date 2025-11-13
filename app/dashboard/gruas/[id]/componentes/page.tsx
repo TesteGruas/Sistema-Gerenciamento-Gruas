@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -102,17 +102,38 @@ export default function ComponentesGruaPage() {
   })
 
 
-  // Carregar dados
-  useEffect(() => {
-    carregarDados()
-  }, [gruaId])
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
-  // Recarregar dados quando filtros mudarem
+  // Carregar dados - apenas uma vez
   useEffect(() => {
-    if (!loading) {
-      carregarDados()
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      carregarDados().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
     }
-  }, [searchTerm, filterStatus, filterTipo])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gruaId, dadosIniciaisCarregados])
+
+  // Recarregar dados quando filtros mudarem (com debounce)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        carregarDados().finally(() => {
+          loadingRef.current = false
+        })
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, filterStatus, filterTipo, dadosIniciaisCarregados])
 
   const carregarDados = async () => {
     try {

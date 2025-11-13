@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useDeferredValue } from "react"
+import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -74,10 +74,21 @@ export default function FuncionariosPage() {
     usuario_senha: ''
   })
 
-  // Carregar funcionários do backend
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
+
+  // Carregar funcionários do backend - apenas uma vez
   useEffect(() => {
-    carregarFuncionarios()
-  }, [])
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      carregarFuncionarios().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
 
   const carregarFuncionarios = async (page: number = pagination.page) => {
     try {
@@ -108,12 +119,22 @@ export default function FuncionariosPage() {
     }
   }
 
-  // Recarregar quando filtros mudarem
+  // Recarregar quando filtros mudarem (com debounce)
   useEffect(() => {
-    if (!loading) {
-      carregarFuncionarios(1) // Reset para primeira página quando filtros mudarem
-    }
-  }, [selectedRole, selectedStatus, selectedTurno])
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        carregarFuncionarios(1).finally(() => {
+          loadingRef.current = false
+        })
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRole, selectedStatus, selectedTurno, dadosIniciaisCarregados])
 
   // Handlers otimizados para evitar re-renders desnecessários
   const handleFormDataChange = useCallback((field: string, value: string) => {
@@ -126,13 +147,23 @@ export default function FuncionariosPage() {
 
   // Função para mudar de página
   const handlePageChange = (newPage: number) => {
-    carregarFuncionarios(newPage)
+    if (!loadingRef.current) {
+      loadingRef.current = true
+      carregarFuncionarios(newPage).finally(() => {
+        loadingRef.current = false
+      })
+    }
   }
 
   // Função para mudar limite por página
   const handleLimitChange = (newLimit: number) => {
-    setPagination(prev => ({ ...prev, limit: newLimit }))
-    carregarFuncionarios(1) // Reset para primeira página
+    if (!loadingRef.current) {
+      setPagination(prev => ({ ...prev, limit: newLimit }))
+      loadingRef.current = true
+      carregarFuncionarios(1).finally(() => {
+        loadingRef.current = false
+      })
+    }
   }
 
   // Suavizar digitação com useDeferredValue

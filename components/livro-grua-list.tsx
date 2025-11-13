@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -81,22 +81,52 @@ export default function LivroGruaList({
     }
   }
 
-  // Carregar entradas na inicialização e quando filtros mudarem
-  useEffect(() => {
-    carregarEntradas()
-  }, [filtros])
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
-  // Atualizar filtros quando searchTerm mudar
+  // Carregar entradas na inicialização - apenas uma vez
   useEffect(() => {
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      carregarEntradas().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
+
+  // Recarregar quando filtros mudarem (com debounce)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        carregarEntradas().finally(() => {
+          loadingRef.current = false
+        })
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros, dadosIniciaisCarregados])
+
+  // Atualizar filtros quando searchTerm mudar (com debounce otimizado)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
     const timeoutId = setTimeout(() => {
       setFiltros(prev => ({
         ...prev,
         page: 1 // Reset para primeira página
       }))
-    }, 500) // Debounce de 500ms
+    }, 300) // Reduzido para 300ms
 
     return () => clearTimeout(timeoutId)
-  }, [searchTerm])
+  }, [searchTerm, dadosIniciaisCarregados])
 
   const handleFiltroChange = (campo: keyof FiltrosLivroGrua, valor: any) => {
     setFiltros(prev => ({

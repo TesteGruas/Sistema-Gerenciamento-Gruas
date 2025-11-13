@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -24,50 +24,92 @@ export default function WhatsAppAprovacoesPage() {
   const [deletandoInstancia, setDeletandoInstancia] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Carregar instância ao montar componente (única do sistema)
+  // Carregar instância ao montar componente (única do sistema) - apenas uma vez
   useEffect(() => {
-    console.log('[WhatsApp] Carregando instância do sistema')
-    carregarInstanciaWhatsApp()
-  }, [])
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      console.log('[WhatsApp] Carregando instância do sistema')
+      carregarInstanciaWhatsApp().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
 
-  // Polling para status de conexão (sempre verificar, não só quando connecting)
+  // Polling para status de conexão (otimizado para evitar múltiplas chamadas)
   useEffect(() => {
-    if (!whatsappInstance) {
+    if (!whatsappInstance || !dadosIniciaisCarregados) {
       return
     }
     
-    // Se já está conectado, verificar uma vez para garantir que está atualizado
+    // Limpar timer anterior se existir
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current)
+      syncTimerRef.current = null
+    }
+    
+    // Se já está conectado, verificar uma vez com debounce
     if (whatsappInstance.status === 'connected') {
-      syncInstanceStatus().then(updated => {
-        if (updated) {
-          setWhatsappInstance(updated)
+      syncTimerRef.current = setTimeout(() => {
+        if (!loadingRef.current) {
+          loadingRef.current = true
+          syncInstanceStatus().then(updated => {
+            if (updated) {
+              setWhatsappInstance(updated)
+            }
+          }).catch(err => console.error('Erro ao sincronizar status conectado:', err))
+          .finally(() => {
+            loadingRef.current = false
+          })
         }
-      }).catch(err => console.error('Erro ao sincronizar status conectado:', err))
-      return
+      }, 1000) // Debounce de 1 segundo
+      return () => {
+        if (syncTimerRef.current) {
+          clearTimeout(syncTimerRef.current)
+          syncTimerRef.current = null
+        }
+      }
     }
     
-    // Se está conectando, fazer polling
+    // Se está conectando, fazer polling (mas com controle)
     if (whatsappInstance.status === 'connecting') {
       const interval = setInterval(async () => {
-        try {
-          const updated = await syncInstanceStatus()
-          if (updated) {
-            console.log('[WhatsApp] Status atualizado:', updated.status)
-            setWhatsappInstance(updated)
-            if (updated.status !== 'connecting') {
-              console.log('[WhatsApp] Conexão concluída, parando polling')
-              clearInterval(interval)
+        if (!loadingRef.current) {
+          loadingRef.current = true
+          try {
+            const updated = await syncInstanceStatus()
+            if (updated) {
+              console.log('[WhatsApp] Status atualizado:', updated.status)
+              setWhatsappInstance(updated)
+              if (updated.status !== 'connecting') {
+                console.log('[WhatsApp] Conexão concluída, parando polling')
+                clearInterval(interval)
+              }
             }
+          } catch (error) {
+            console.error('Erro ao sincronizar status:', error)
+          } finally {
+            loadingRef.current = false
           }
-        } catch (error) {
-          console.error('Erro ao sincronizar status:', error)
         }
       }, 5000) // Polling a cada 5 segundos
       
-      return () => clearInterval(interval)
+      return () => {
+        clearInterval(interval)
+        if (syncTimerRef.current) {
+          clearTimeout(syncTimerRef.current)
+          syncTimerRef.current = null
+        }
+      }
     }
-  }, [whatsappInstance?.status, whatsappInstance?.id])
+  }, [whatsappInstance?.status, whatsappInstance?.id, dadosIniciaisCarregados])
 
   const carregarInstanciaWhatsApp = async () => {
     setLoading(true)
@@ -85,26 +127,40 @@ export default function WhatsAppAprovacoesPage() {
       console.log('[WhatsApp] Instância encontrada:', instance)
       
       if (instance) {
-        // Sempre sincronizar status ao carregar para garantir que está atualizado
-        try {
-          const syncedInstance = await syncInstanceStatus()
-          if (syncedInstance) {
-            console.log('[WhatsApp] Status sincronizado:', syncedInstance.status)
-            setWhatsappInstance(syncedInstance)
-            
-            if (syncedInstance.status === 'connecting' && syncedInstance.qr_code) {
-              // Limpar vírgulas do QR code se vier nesse formato
-              const cleanQrCode = syncedInstance.qr_code.includes(',') 
-                ? syncedInstance.qr_code.split(',')[0] 
-                : syncedInstance.qr_code
-              setQrCode(cleanQrCode)
+        // Sincronizar status ao carregar apenas se não estiver em loading
+        if (!loadingRef.current) {
+          loadingRef.current = true
+          try {
+            const syncedInstance = await syncInstanceStatus()
+            if (syncedInstance) {
+              console.log('[WhatsApp] Status sincronizado:', syncedInstance.status)
+              setWhatsappInstance(syncedInstance)
+              
+              if (syncedInstance.status === 'connecting' && syncedInstance.qr_code) {
+                // Limpar vírgulas do QR code se vier nesse formato
+                const cleanQrCode = syncedInstance.qr_code.includes(',') 
+                  ? syncedInstance.qr_code.split(',')[0] 
+                  : syncedInstance.qr_code
+                setQrCode(cleanQrCode)
+              }
+              
+              if (syncedInstance.status === 'connected') {
+                console.log('[WhatsApp] Instância conectada:', syncedInstance.phone_number)
+              }
+            } else {
+              // Se não retornou sincronizado, usar a instância original
+              setWhatsappInstance(instance)
+              if (instance.status === 'connecting' && instance.qr_code) {
+                // Limpar vírgulas do QR code se vier nesse formato
+                const cleanQrCode = instance.qr_code.includes(',') 
+                  ? instance.qr_code.split(',')[0] 
+                  : instance.qr_code
+                setQrCode(cleanQrCode)
+              }
             }
-            
-            if (syncedInstance.status === 'connected') {
-              console.log('[WhatsApp] Instância conectada:', syncedInstance.phone_number)
-            }
-          } else {
-            // Se não retornou sincronizado, usar a instância original
+            loadingRef.current = false
+          } catch (syncError) {
+            console.error('[WhatsApp] Erro ao sincronizar, usando instância original:', syncError)
             setWhatsappInstance(instance)
             if (instance.status === 'connecting' && instance.qr_code) {
               // Limpar vírgulas do QR code se vier nesse formato
@@ -113,12 +169,12 @@ export default function WhatsAppAprovacoesPage() {
                 : instance.qr_code
               setQrCode(cleanQrCode)
             }
+            loadingRef.current = false
           }
-        } catch (syncError) {
-          console.error('[WhatsApp] Erro ao sincronizar, usando instância original:', syncError)
+        } else {
+          // Se já está em loading, apenas usar a instância sem sincronizar
           setWhatsappInstance(instance)
           if (instance.status === 'connecting' && instance.qr_code) {
-            // Limpar vírgulas do QR code se vier nesse formato
             const cleanQrCode = instance.qr_code.includes(',') 
               ? instance.qr_code.split(',')[0] 
               : instance.qr_code

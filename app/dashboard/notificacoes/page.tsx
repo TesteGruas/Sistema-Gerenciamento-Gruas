@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { 
   Bell, 
   Check, 
@@ -31,8 +32,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NotificacoesAPI, Notificacao, formatarTempoRelativo, NotificationType, ListarNotificacoesResponse } from '@/lib/api-notificacoes'
 import { useToast } from '@/hooks/use-toast'
-import { NovaNotificacaoDialog } from '@/components/nova-notificacao-dialog'
-import { NotificacaoDetailModal } from '@/components/notificacao-detail-modal'
+
+// Lazy load de componentes pesados para melhorar performance inicial
+const NovaNotificacaoDialog = dynamic(
+  () => import('@/components/nova-notificacao-dialog').then(mod => ({ default: mod.NovaNotificacaoDialog })),
+  { ssr: false, loading: () => null }
+)
+
+const NotificacaoDetailModal = dynamic(
+  () => import('@/components/notificacao-detail-modal').then(mod => ({ default: mod.NotificacaoDetailModal })),
+  { ssr: false, loading: () => null }
+)
 
 // Configuração de ícones e cores
 const tipoConfig: Record<NotificationType, { 
@@ -126,11 +136,18 @@ export default function NotificacoesPage() {
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false)
   const [notificacaoParaDeletar, setNotificacaoParaDeletar] = useState<string | null>(null)
   const { toast } = useToast()
+  
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
   // Carregar notificações com paginação e filtros
   const carregarNotificacoes = async (novaPagina?: number, novoLimite?: number) => {
     setLoading(true)
     try {
+      console.log('⏳ [Preload] Carregando notificações...')
+      const startTime = performance.now()
+      
       const params = {
         page: novaPagina || pagina,
         limit: novoLimite || limite,
@@ -140,9 +157,14 @@ export default function NotificacoesPage() {
       }
 
       const response = await NotificacoesAPI.listar(params)
+      const duration = Math.round(performance.now() - startTime)
+      
+      console.log(`✅ [Preload] Notificações carregadas (${duration}ms) - ${response.data.length} registros`)
+      
       setNotificacoes(response.data)
       setPaginacao(response.pagination)
     } catch (error) {
+      console.error('❌ [Preload] Erro ao carregar notificações:', error)
       toast({
         title: 'Erro ao carregar notificações',
         description: 'Não foi possível carregar as notificações.',
@@ -153,30 +175,67 @@ export default function NotificacoesPage() {
     }
   }
 
+  // Carregar dados iniciais apenas uma vez (otimizado para carregar mais rápido)
   useEffect(() => {
-    carregarNotificacoes()
-  }, [])
-
-  // Recarregar quando filtros mudarem
-  useEffect(() => {
-    if (pagina > 1) {
-      setPagina(1) // Reset para primeira página
-    } else {
-      carregarNotificacoes()
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      console.log('⏳ [Preload] Iniciando carregamento da página de notificações...')
+      const pageStartTime = performance.now()
+      
+      loadingRef.current = true
+      carregarNotificacoes().finally(() => {
+        const pageDuration = Math.round(performance.now() - pageStartTime)
+        console.log(`✅ [Preload] Página de notificações pronta (${pageDuration}ms total)`)
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
     }
-  }, [busca, filtroTipo, filtroTipoNotificacao, limite])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
+
+  // Recarregar quando filtros mudarem (com debounce)
+  useEffect(() => {
+    // Só recarregar se os dados iniciais já foram carregados
+    if (!dadosIniciaisCarregados) return
+    
+    // Debounce para evitar múltiplas chamadas rápidas
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        if (pagina > 1) {
+          setPagina(1) // Reset para primeira página
+        } else {
+          carregarNotificacoes().finally(() => {
+            loadingRef.current = false
+          })
+        }
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, filtroTipo, filtroTipoNotificacao, limite, dadosIniciaisCarregados])
 
   // Mudar página
   const mudarPagina = (novaPagina: number) => {
-    setPagina(novaPagina)
-    carregarNotificacoes(novaPagina)
+    if (!loadingRef.current) {
+      setPagina(novaPagina)
+      loadingRef.current = true
+      carregarNotificacoes(novaPagina).finally(() => {
+        loadingRef.current = false
+      })
+    }
   }
 
   // Mudar limite por página
   const mudarLimite = (novoLimite: number) => {
-    setLimite(novoLimite)
-    setPagina(1)
-    carregarNotificacoes(1, novoLimite)
+    if (!loadingRef.current) {
+      setLimite(novoLimite)
+      setPagina(1)
+      loadingRef.current = true
+      carregarNotificacoes(1, novoLimite).finally(() => {
+        loadingRef.current = false
+      })
+    }
   }
 
   // Abrir modal de detalhes
@@ -306,7 +365,8 @@ export default function NotificacoesPage() {
       
       const resumo = Object.entries(tipos).map(([tipo, count]) => {
         const tipoFormatado = tipo.charAt(0).toUpperCase() + tipo.slice(1)
-        return `${count} ${tipoFormatado}${count > 1 ? 's' : ''}`
+        const countNum = typeof count === 'number' ? count : 0
+        return `${countNum} ${tipoFormatado}${countNum > 1 ? 's' : ''}`
       }).join(', ')
       
       return `${notificacao.destinatarios.length} destinatários (${resumo})`

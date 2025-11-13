@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -126,6 +126,10 @@ export default function ObrasPage() {
     totalOrcamento: 0,
     mes: new Date().toISOString().slice(0, 7)
   })
+
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
   // Carregar obras do backend com paginação
   const carregarObras = async () => {
@@ -376,23 +380,39 @@ export default function ObrasPage() {
     }
   }
 
-  // Verificar autenticação e carregar dados na inicialização
+  // Verificar autenticação e carregar dados na inicialização - apenas uma vez
   useEffect(() => {
     const init = async () => {
       const isAuth = await ensureAuthenticated()
-      if (isAuth) {
-        carregarObras()
+      if (isAuth && !dadosIniciaisCarregados && !loadingRef.current) {
+        loadingRef.current = true
+        carregarObras().finally(() => {
+          setDadosIniciaisCarregados(true)
+          loadingRef.current = false
+        })
       }
     }
     init()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
 
-  // Recarregar obras quando página ou itens por página mudarem
+  // Recarregar obras quando página ou itens por página mudarem (com debounce)
   useEffect(() => {
-    if (currentPage > 0 && itemsPerPage > 0) {
-      carregarObras()
-    }
-  }, [currentPage, itemsPerPage])
+    if (!dadosIniciaisCarregados) return
+    if (currentPage <= 0 || itemsPerPage <= 0) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        loadingRef.current = true
+        carregarObras().finally(() => {
+          loadingRef.current = false
+        })
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, itemsPerPage, dadosIniciaisCarregados])
 
   // Função de busca via API
   const buscarObras = async () => {
@@ -449,15 +469,29 @@ export default function ObrasPage() {
   const endIndex = Math.min(currentPage * itemsPerPage, pagination.total || obras.length)
   const paginatedObras = filteredObras
 
-  // Função para resetar página quando termo de busca muda e buscar obras
+  // Função para resetar página quando termo de busca muda e buscar obras (com debounce)
   useEffect(() => {
-    setCurrentPage(1)
-    if (searchTerm.trim()) {
-      buscarObras()
-    } else {
-      carregarObras()
-    }
-  }, [searchTerm])
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRef.current) {
+        setCurrentPage(1)
+        loadingRef.current = true
+        if (searchTerm.trim()) {
+          buscarObras().finally(() => {
+            loadingRef.current = false
+          })
+        } else {
+          carregarObras().finally(() => {
+            loadingRef.current = false
+          })
+        }
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, dadosIniciaisCarregados])
 
   // Funções de paginação completas
   const goToPage = (page: number) => {

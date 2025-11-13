@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -85,10 +85,21 @@ export default function OrcamentosPage() {
   const [selectedOrcamento, setSelectedOrcamento] = useState<Orcamento | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [editedOrcamento, setEditedOrcamento] = useState<Orcamento | null>(null)
+  
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
   useEffect(() => {
-    loadOrcamentos()
-  }, [])
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      loadingRef.current = true
+      loadOrcamentos().finally(() => {
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
 
   const loadOrcamentos = async () => {
     setLoading(true)
