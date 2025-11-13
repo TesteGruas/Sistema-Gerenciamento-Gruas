@@ -96,6 +96,7 @@ function ObraDetailsPageContent() {
   const [loadingArquivos, setLoadingArquivos] = useState(false)
   const [errorDocumentos, setErrorDocumentos] = useState<string | null>(null)
   const [errorArquivos, setErrorArquivos] = useState<string | null>(null)
+  const [notificandoEnvolvidos, setNotificandoEnvolvidos] = useState(false)
   
   // Função para carregar sinaleiros reais da API
   const carregarSinaleiros = async () => {
@@ -1654,86 +1655,150 @@ function ObraDetailsPageContent() {
             <p className="text-gray-600">{obra.description}</p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            try {
-              // Aguardar um pouco para garantir que o DOM está atualizado
-              await new Promise(resolve => setTimeout(resolve, 200))
-
-              // Encontrar o conteúdo da tab ativa usando múltiplas estratégias
-              let tabElement: HTMLElement | null = null
-
-              // Estratégia 1: Buscar pelo TabsContent do Radix UI (mais confiável)
-              // O Radix UI usa data-state e data-value nos TabsContent
-              const allTabsContent = document.querySelectorAll('[role="tabpanel"], [data-radix-tabs-content]')
-              allTabsContent.forEach((el) => {
-                const value = el.getAttribute('data-value') || el.getAttribute('value')
-                const state = el.getAttribute('data-state')
-                
-                if (value === activeTab || (state === 'active' && value === activeTab)) {
-                  tabElement = el as HTMLElement
-                }
-              })
-
-              // Estratégia 2: Buscar diretamente pelo seletor de classe que contém o value
-              if (!tabElement) {
-                // Tentar encontrar pelo seletor CSS que o Radix UI usa
-                const radixContent = document.querySelector(`[data-radix-tabs-content][value="${activeTab}"]`) as HTMLElement
-                if (radixContent) {
-                  tabElement = radixContent
-                }
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              if (!obra?.id) {
+                toast({
+                  title: "Erro",
+                  description: "Obra não encontrada",
+                  variant: "destructive"
+                })
+                return
               }
 
-              // Estratégia 3: Buscar pelo TabsContent com value
-              if (!tabElement) {
-                const contentByValue = document.querySelector(`[data-value="${activeTab}"]`) as HTMLElement
-                if (contentByValue && contentByValue.classList.contains('space-y-4')) {
-                  tabElement = contentByValue
-                }
-              }
+              setNotificandoEnvolvidos(true)
+              try {
+                const resultado = await obrasApi.notificarEnvolvidos(obra.id)
 
-              // Estratégia 4: Buscar todos os TabsContent e verificar qual está visível
-              if (!tabElement) {
-                const allContent = document.querySelectorAll('[class*="TabsContent"], [class*="space-y-4"]')
-                allContent.forEach((el) => {
-                  const computedStyle = window.getComputedStyle(el)
-                  if (computedStyle.display !== 'none' && el.getAttribute('data-value') === activeTab) {
+                if (resultado.success) {
+                  if (resultado.enviados > 0) {
+                    toast({
+                      title: "Sucesso",
+                      description: `Notificações enviadas: ${resultado.enviados} enviada(s)${resultado.erros && resultado.erros.length > 0 ? `, ${resultado.erros.length} erro(s)` : ''}`
+                    })
+                  } else {
+                    toast({
+                      title: "Atenção",
+                      description: resultado.erros?.join(', ') || "Nenhum destinatário com WhatsApp cadastrado",
+                      variant: "default"
+                    })
+                  }
+                } else {
+                  toast({
+                    title: "Erro",
+                    description: resultado.message || resultado.erros?.join(', ') || "Erro ao enviar notificações",
+                    variant: "destructive"
+                  })
+                }
+              } catch (error: any) {
+                console.error('Erro ao notificar envolvidos:', error)
+                toast({
+                  title: "Erro",
+                  description: error.message || "Erro ao enviar notificações",
+                  variant: "destructive"
+                })
+              } finally {
+                setNotificandoEnvolvidos(false)
+              }
+            }}
+            disabled={notificandoEnvolvidos || !obra?.id}
+          >
+            {notificandoEnvolvidos ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-2" />
+                Notificar Envolvidos
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                // Aguardar um pouco para garantir que o DOM está atualizado
+                await new Promise(resolve => setTimeout(resolve, 200))
+
+                // Encontrar o conteúdo da tab ativa usando múltiplas estratégias
+                let tabElement: HTMLElement | null = null
+
+                // Estratégia 1: Buscar pelo TabsContent do Radix UI (mais confiável)
+                // O Radix UI usa data-state e data-value nos TabsContent
+                const allTabsContent = document.querySelectorAll('[role="tabpanel"], [data-radix-tabs-content]')
+                allTabsContent.forEach((el) => {
+                  const value = el.getAttribute('data-value') || el.getAttribute('value')
+                  const state = el.getAttribute('data-state')
+                  
+                  if (value === activeTab || (state === 'active' && value === activeTab)) {
                     tabElement = el as HTMLElement
                   }
                 })
+
+                // Estratégia 2: Buscar diretamente pelo seletor de classe que contém o value
+                if (!tabElement) {
+                  // Tentar encontrar pelo seletor CSS que o Radix UI usa
+                  const radixContent = document.querySelector(`[data-radix-tabs-content][value="${activeTab}"]`) as HTMLElement
+                  if (radixContent) {
+                    tabElement = radixContent
+                  }
+                }
+
+                // Estratégia 3: Buscar pelo TabsContent com value
+                if (!tabElement) {
+                  const contentByValue = document.querySelector(`[data-value="${activeTab}"]`) as HTMLElement
+                  if (contentByValue && contentByValue.classList.contains('space-y-4')) {
+                    tabElement = contentByValue
+                  }
+                }
+
+                // Estratégia 4: Buscar todos os TabsContent e verificar qual está visível
+                if (!tabElement) {
+                  const allContent = document.querySelectorAll('[class*="TabsContent"], [class*="space-y-4"]')
+                  allContent.forEach((el) => {
+                    const computedStyle = window.getComputedStyle(el)
+                    if (computedStyle.display !== 'none' && el.getAttribute('data-value') === activeTab) {
+                      tabElement = el as HTMLElement
+                    }
+                  })
+                }
+
+                if (!tabElement) {
+                  throw new Error(`Conteúdo da tab "${getTabName(activeTab)}" não encontrado. Tente recarregar a página.`)
+                }
+
+                await exportTabToPDF(tabElement, {
+                  titulo: `Relatório - ${obra.name}`,
+                  subtitulo: `Aba: ${getTabName(activeTab)}`,
+                  obraNome: obra.name,
+                  obraId: obra.id?.toString(),
+                  tabName: getTabName(activeTab)
+                })
+
+                toast({
+                  title: "Sucesso",
+                  description: "PDF exportado com sucesso"
+                })
+              } catch (error: any) {
+                console.error('Erro ao exportar PDF:', error)
+                toast({
+                  title: "Erro",
+                  description: error.message || "Erro ao exportar PDF",
+                  variant: "destructive"
+                })
               }
-
-              if (!tabElement) {
-                throw new Error(`Conteúdo da tab "${getTabName(activeTab)}" não encontrado. Tente recarregar a página.`)
-              }
-
-              await exportTabToPDF(tabElement, {
-                titulo: `Relatório - ${obra.name}`,
-                subtitulo: `Aba: ${getTabName(activeTab)}`,
-                obraNome: obra.name,
-                obraId: obra.id?.toString(),
-                tabName: getTabName(activeTab)
-              })
-
-              toast({
-                title: "Sucesso",
-                description: "PDF exportado com sucesso"
-              })
-            } catch (error: any) {
-              console.error('Erro ao exportar PDF:', error)
-              toast({
-                title: "Erro",
-                description: error.message || "Erro ao exportar PDF",
-                variant: "destructive"
-              })
-            }
-          }}
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Exportar PDF
-        </Button>
+            }}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exportar PDF
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

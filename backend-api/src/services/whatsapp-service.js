@@ -150,20 +150,35 @@ function formatarTelefone(telefone) {
  */
 async function buscarTelefoneWhatsAppCliente(cliente_id) {
   try {
+    console.log(`[whatsapp-service] 🔍 Buscando telefone do cliente ${cliente_id}...`);
     const { data: cliente, error } = await supabaseAdmin
       .from('clientes')
       .select('telefone')
       .eq('id', cliente_id)
       .single();
     
-    if (!error && cliente && cliente.telefone) {
-      return formatarTelefone(cliente.telefone);
+    if (error) {
+      console.error(`[whatsapp-service] ❌ Erro ao buscar telefone do cliente ${cliente_id}:`, error);
+      return null;
     }
     
-    console.warn(`[whatsapp-service] Telefone WhatsApp não encontrado para cliente ${cliente_id}`);
+    if (!cliente) {
+      console.warn(`[whatsapp-service] ⚠️ Cliente ${cliente_id} não encontrado`);
+      return null;
+    }
+    
+    console.log(`[whatsapp-service] 📞 Telefone encontrado no banco: ${cliente.telefone || 'null'}`);
+    
+    if (cliente.telefone) {
+      const telefoneFormatado = formatarTelefone(cliente.telefone);
+      console.log(`[whatsapp-service] ✅ Telefone formatado: ${cliente.telefone} -> ${telefoneFormatado}`);
+      return telefoneFormatado;
+    }
+    
+    console.warn(`[whatsapp-service] ⚠️ Cliente ${cliente_id} não tem telefone cadastrado`);
     return null;
   } catch (error) {
-    console.error('[whatsapp-service] Erro ao buscar telefone WhatsApp do cliente:', error);
+    console.error('[whatsapp-service] ❌ Erro ao buscar telefone WhatsApp do cliente:', error);
     return null;
   }
 }
@@ -669,15 +684,26 @@ export async function enviarMensagemNovaObra(obra) {
     // Buscar dados completos do cliente
     let cliente = null;
     if (obraCompleta.cliente_id) {
+      console.log(`[whatsapp-service] 🔍 Buscando cliente ID: ${obraCompleta.cliente_id}`);
       const { data: clienteData, error: clienteError } = await supabaseAdmin
         .from('clientes')
         .select('id, nome, telefone')
         .eq('id', obraCompleta.cliente_id)
         .single();
       
-      if (!clienteError && clienteData) {
+      if (clienteError) {
+        console.error(`[whatsapp-service] ❌ Erro ao buscar cliente:`, clienteError);
+        resultados.erros.push(`Cliente: Erro ao buscar dados (${clienteError.message || 'Cliente não encontrado'})`);
+      } else if (clienteData) {
         cliente = clienteData;
+        console.log(`[whatsapp-service] ✅ Cliente encontrado: ${cliente.nome} (ID: ${cliente.id}, Telefone: ${cliente.telefone || 'não cadastrado'})`);
+      } else {
+        console.warn(`[whatsapp-service] ⚠️ Cliente ${obraCompleta.cliente_id} não encontrado no banco`);
+        resultados.erros.push(`Cliente: Não encontrado no banco de dados`);
       }
+    } else {
+      console.warn(`[whatsapp-service] ⚠️ Obra ${obraCompleta.id} não tem cliente_id associado`);
+      resultados.erros.push('Cliente: Obra não possui cliente associado');
     }
     
     // Formatar mensagem usando obra completa
@@ -689,17 +715,21 @@ export async function enviarMensagemNovaObra(obra) {
     
     // 1. Adicionar cliente
     if (cliente) {
+      console.log(`[whatsapp-service] 🔍 Buscando telefone WhatsApp do cliente ${cliente.id}...`);
       const telefoneCliente = await buscarTelefoneWhatsAppCliente(cliente.id);
+      console.log(`[whatsapp-service] 📞 Telefone do cliente retornado: ${telefoneCliente || 'null'}`);
+      
       if (telefoneCliente) {
         destinatarios.push({
           tipo: 'cliente',
           nome: cliente.nome,
           telefone: telefoneCliente
         });
-        console.log(`[whatsapp-service] ✅ Cliente adicionado: ${cliente.nome} (${telefoneCliente})`);
+        console.log(`[whatsapp-service] ✅ Cliente adicionado à lista de destinatários: ${cliente.nome} (${telefoneCliente})`);
       } else {
-        resultados.erros.push('Cliente: Telefone WhatsApp não cadastrado');
-        console.warn(`[whatsapp-service] ⚠️ Telefone WhatsApp não disponível para cliente ${cliente.id}`);
+        const erroCliente = `Cliente ${cliente.nome}: Telefone WhatsApp não cadastrado`;
+        resultados.erros.push(erroCliente);
+        console.warn(`[whatsapp-service] ⚠️ Telefone WhatsApp não disponível para cliente ${cliente.id} (${cliente.nome})`);
       }
     }
     

@@ -550,6 +550,19 @@ export const obrasApi = {
       method: 'POST',
       body: JSON.stringify(data),
     })
+  },
+
+  // Notificar envolvidos da obra via WhatsApp
+  async notificarEnvolvidos(obraId: number): Promise<{ 
+    success: boolean
+    enviados: number
+    erros: string[]
+    message?: string
+  }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/notificar-envolvidos`)
+    return apiRequest(url, {
+      method: 'POST',
+    })
   }
 }
 

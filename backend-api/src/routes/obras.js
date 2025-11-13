@@ -1602,6 +1602,109 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
  *       404:
  *         description: Obra não encontrada
  */
+/**
+ * @swagger
+ * /api/obras/{id}/notificar-envolvidos:
+ *   post:
+ *     summary: Notificar envolvidos da obra via WhatsApp
+ *     tags: [Obras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da obra
+ *     responses:
+ *       200:
+ *         description: Notificações enviadas com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 enviados:
+ *                   type: number
+ *                 erros:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       404:
+ *         description: Obra não encontrada
+ *       500:
+ *         description: Erro ao enviar notificações
+ */
+router.post('/:id/notificar-envolvidos', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const obraId = parseInt(id);
+
+    if (isNaN(obraId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID da obra inválido'
+      });
+    }
+
+    // Buscar dados completos da obra
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('*')
+      .eq('id', obraId)
+      .single();
+
+    if (obraError || !obra) {
+      console.error('[obras] Erro ao buscar obra:', obraError);
+      return res.status(404).json({
+        success: false,
+        error: 'Obra não encontrada'
+      });
+    }
+
+    // Enviar notificações WhatsApp usando a função existente
+    try {
+      const { enviarMensagemNovaObra } = await import('../services/whatsapp-service.js');
+      const resultado = await enviarMensagemNovaObra(obra);
+
+      if (resultado.sucesso) {
+        return res.json({
+          success: true,
+          enviados: resultado.enviados,
+          erros: resultado.erros || [],
+          message: `Notificações enviadas: ${resultado.enviados} enviada(s), ${resultado.erros?.length || 0} erro(s)`
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          enviados: resultado.enviados || 0,
+          erros: resultado.erros || [],
+          error: 'Erro ao enviar notificações',
+          message: resultado.erros?.join(', ') || 'Erro desconhecido'
+        });
+      }
+    } catch (whatsappError) {
+      console.error('[obras] Erro ao enviar notificações WhatsApp:', whatsappError);
+      return res.status(500).json({
+        success: false,
+        enviados: 0,
+        erros: [whatsappError.message || 'Erro ao enviar notificações'],
+        error: 'Erro ao enviar notificações WhatsApp'
+      });
+    }
+  } catch (error) {
+    console.error('[obras] Erro ao processar notificação de envolvidos:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
 router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params
