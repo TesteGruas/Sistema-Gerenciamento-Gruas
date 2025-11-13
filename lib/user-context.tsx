@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { AuthService } from '@/app/lib/auth'
 
 interface User {
@@ -28,22 +28,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Inicializar com null - dados serão carregados via getCurrentUser
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
-  // Carregar usuário atual ao montar o componente
+  // Carregar usuário atual ao montar o componente - apenas uma vez
   useEffect(() => {
     const loadCurrentUser = async () => {
+      if (loadingRef.current || dadosIniciaisCarregados) return
+      
       try {
+        loadingRef.current = true
+        console.log('⏳ [Preload] Carregando dados do usuário...')
         // Procurar por 'access_token' (usado pelo AuthService) ou 'token' (compatibilidade)
         const token = typeof window !== 'undefined' 
           ? (localStorage.getItem('access_token') || localStorage.getItem('token'))
           : null
-        console.log('[UserContext] Verificando token:', token ? 'Token encontrado' : 'Sem token')
         
         if (token) {
-          console.log('[UserContext] Carregando dados do usuário...')
           const user = await AuthService.getCurrentUser()
-          console.log('[UserContext] Usuário carregado:', user)
-          console.log('[UserContext] Role do usuário:', user.role)
+          console.log('✅ [Preload] Usuário carregado com sucesso')
           
           const userObject = {
             id: user.id.toString(),
@@ -53,8 +58,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
             status: 'ativo' as const,
             createdAt: new Date().toISOString()
           }
-          
-          console.log('[UserContext] Objeto do usuário criado:', userObject)
           
           // Salvar dados no localStorage para sincronizar com useAuth()
           if (user.perfil) {
@@ -68,26 +71,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
           }
           
           setCurrentUser(userObject)
-          console.log('[UserContext] setCurrentUser chamado com sucesso')
-          console.log('[UserContext] Dados salvos no localStorage para useAuth()')
         } else {
-          console.log('[UserContext] Nenhum token encontrado no localStorage')
+          console.log('⚠️ [Preload] Nenhum token encontrado')
         }
       } catch (error) {
-        console.error('[UserContext] Erro ao carregar usuário:', error)
-        console.error('[UserContext] Stack trace:', error instanceof Error ? error.stack : 'N/A')
+        console.error('❌ [Preload] Erro ao carregar usuário:', error instanceof Error ? error.message : 'Erro desconhecido')
         // Se falhar, limpar token inválido
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token')
           localStorage.removeItem('access_token')
         }
       } finally {
-        console.log('[UserContext] Finalizando loadCurrentUser, setLoading(false)')
+        console.log('✅ [Preload] Finalizado carregamento do usuário')
         setLoading(false)
+        setDadosIniciaisCarregados(true)
+        loadingRef.current = false
       }
     }
 
     loadCurrentUser()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -109,28 +112,35 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (data.success && data.data.access_token) {
         localStorage.setItem('access_token', data.data.access_token)
         
-        // Carregar dados do usuário
-        const user = await AuthService.getCurrentUser()
-        
-        // Salvar dados no localStorage para sincronizar com useAuth()
-        if (user.perfil) {
-          localStorage.setItem('user_perfil', JSON.stringify(user.perfil))
+        // Carregar dados do usuário apenas se não estiver em loading
+        if (!loadingRef.current) {
+          loadingRef.current = true
+          try {
+            const user = await AuthService.getCurrentUser()
+            
+            // Salvar dados no localStorage para sincronizar com useAuth()
+            if (user.perfil) {
+              localStorage.setItem('user_perfil', JSON.stringify(user.perfil))
+            }
+            if (user.permissoes && user.permissoes.length > 0) {
+              localStorage.setItem('user_permissoes', JSON.stringify(user.permissoes))
+            }
+            if (user.profile) {
+              localStorage.setItem('user_profile', JSON.stringify(user.profile))
+            }
+            
+            setCurrentUser({
+              id: user.id.toString(),
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              status: 'ativo',
+              createdAt: new Date().toISOString()
+            })
+          } finally {
+            loadingRef.current = false
+          }
         }
-        if (user.permissoes && user.permissoes.length > 0) {
-          localStorage.setItem('user_permissoes', JSON.stringify(user.permissoes))
-        }
-        if (user.profile) {
-          localStorage.setItem('user_profile', JSON.stringify(user.profile))
-        }
-        
-        setCurrentUser({
-          id: user.id.toString(),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          status: 'ativo',
-          createdAt: new Date().toISOString()
-        })
         
         return true
       }

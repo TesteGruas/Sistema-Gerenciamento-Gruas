@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import dynamic from "next/dynamic"
 import { useToast } from "@/hooks/use-toast"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -79,8 +80,9 @@ export default function ClientesPage() {
   const isLoadingRef = useRef(false)
   const isLoadingObrasRef = useRef(false)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
 
-  // Verificar autenticação e carregar dados da API
+  // Verificar autenticação e carregar dados da API - apenas uma vez
   useEffect(() => {
     // Verificar se há token de autenticação
     const token = localStorage.getItem('access_token')
@@ -92,30 +94,67 @@ export default function ClientesPage() {
       return
     }
     
-    carregarObras()
-  }, [])
-
-  // Carregar clientes quando paginação, busca ou filtro mudarem
-  useEffect(() => {
-    if (searchTerm.trim()) {
-      buscarClientes()
-    } else {
-      carregarClientes()
+    if (!dadosIniciaisCarregados && !isLoadingObrasRef.current) {
+      console.log('⏳ [Preload] Iniciando carregamento da página de clientes...')
+      const pageStartTime = performance.now()
+      
+      isLoadingObrasRef.current = true
+      // Carregar obras e clientes em paralelo (skipLoadingCheck para evitar conflito)
+      Promise.all([
+        carregarObras(),
+        carregarClientes(true) // skipLoadingCheck = true para carregamento inicial
+      ]).finally(() => {
+        const pageDuration = Math.round(performance.now() - pageStartTime)
+        console.log(`✅ [Preload] Página de clientes pronta (${pageDuration}ms total)`)
+        setDadosIniciaisCarregados(true)
+        isLoadingObrasRef.current = false
+      })
     }
-  }, [pagination.page, pagination.limit, searchTerm, statusFilter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
+
+  // Carregar clientes quando paginação, busca ou filtro mudarem (com debounce)
+  // NOTA: Este useEffect só roda APÓS dadosIniciaisCarregados ser true
+  // O carregamento inicial é feito no useEffect anterior
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!isLoadingRef.current) {
+        isLoadingRef.current = true
+        if (searchTerm.trim()) {
+          buscarClientes().finally(() => {
+            isLoadingRef.current = false
+          })
+        } else {
+          carregarClientes().finally(() => {
+            isLoadingRef.current = false
+          })
+        }
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.limit, searchTerm, statusFilter, dadosIniciaisCarregados])
 
 
-  const carregarClientes = async () => {
+  const carregarClientes = async (skipLoadingCheck = false) => {
     try {
-      if (isLoadingRef.current) return
+      if (!skipLoadingCheck && isLoadingRef.current) return
       isLoadingRef.current = true
       setLoading(true)
+      console.log('⏳ [Preload] Carregando clientes...')
+      const startTime = performance.now()
       setError(null)
       const response = await clientesApi.listarClientes({
         page: pagination.page,
         limit: pagination.limit,
         status: statusFilter || undefined
       })
+      const duration = Math.round(performance.now() - startTime)
+      console.log(`✅ [Preload] Clientes carregados (${duration}ms) - ${response.data.length} registros`)
+      
       setClientes(response.data)
       setPagination(response.pagination || {
         page: 1,
@@ -125,8 +164,8 @@ export default function ClientesPage() {
       })
       setHasLoadedOnce(true)
     } catch (err) {
+      console.error('❌ [Preload] Erro ao carregar clientes:', err instanceof Error ? err.message : 'Erro desconhecido')
       setError(err instanceof Error ? err.message : 'Erro ao carregar clientes')
-      console.error('Erro ao carregar clientes:', err)
       setHasLoadedOnce(true)
     } finally {
       setLoading(false)
@@ -138,12 +177,17 @@ export default function ClientesPage() {
     try {
       if (isLoadingObrasRef.current) return
       isLoadingObrasRef.current = true
+      console.log('⏳ [Preload] Carregando obras...')
+      const startTime = performance.now()
       
       // Carregar todas as obras (sem paginação para ter acesso completo)
       const response = await obrasApi.listarObras({ page: 1, limit: 10 })
+      const duration = Math.round(performance.now() - startTime)
+      console.log(`✅ [Preload] Obras carregadas (${duration}ms) - ${response.data.length} registros`)
+      
       setObras(response.data)
     } catch (err) {
-      console.error('Erro ao carregar obras:', err)
+      console.error('❌ [Preload] Erro ao carregar obras:', err instanceof Error ? err.message : 'Erro desconhecido')
       // Não definir erro aqui para não quebrar a interface de clientes
     } finally {
       isLoadingObrasRef.current = false
@@ -541,7 +585,7 @@ export default function ClientesPage() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={carregarClientes}
+                onClick={() => carregarClientes(false)}
                 className="mt-4"
               >
                 Tentar Novamente

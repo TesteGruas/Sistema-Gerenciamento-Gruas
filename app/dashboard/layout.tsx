@@ -163,6 +163,7 @@ function DashboardLayoutContent({
   const [isClientSide, setIsClientSide] = useState(false)
   const { isLoading, showLoading, hideLoading, message } = useGlobalLoading()
   const [isNavigating, setIsNavigating] = useState(false)
+  const navigationTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     principal: false,
     operacional: false,
@@ -327,16 +328,24 @@ function DashboardLayoutContent({
   const previousPathname = useRef(pathname)
   
   useEffect(() => {
+    // Limpar timer de navegação se o pathname mudou
+    if (navigationTimerRef.current) {
+      clearTimeout(navigationTimerRef.current)
+      navigationTimerRef.current = null
+    }
+    
     // Se o pathname mudou e estávamos navegando, desativar loading
     if (previousPathname.current !== pathname && isNavigating) {
+      console.log(`✅ [Preload] Página carregada: ${pathname}`)
       previousPathname.current = pathname
-      // Aguardar um pouco para garantir que a página carregou
+      // Desativar loading imediatamente - delay mínimo apenas para garantir renderização
       const timer = setTimeout(() => {
         setIsNavigating(false)
         hideLoading()
-      }, 500)
+      }, 50)
       return () => clearTimeout(timer)
     } else if (previousPathname.current !== pathname) {
+      console.log(`🔄 [Preload] Mudança de rota: ${previousPathname.current || 'inicial'} → ${pathname}`)
       previousPathname.current = pathname
     }
   }, [pathname, isNavigating, hideLoading])
@@ -345,12 +354,20 @@ function DashboardLayoutContent({
   // Não interfere na navegação - apenas adiciona feedback visual
   const handleLinkClick = (href: string, itemName: string) => {
     if (pathname !== href) {
-      // Usar um delay muito pequeno para não interferir com o Link do Next.js
-      const timer = setTimeout(() => {
-        setIsNavigating(true)
-        showLoading(`Carregando ${itemName}...`)
-      }, 10)
-      // Não precisamos limpar o timer pois é muito rápido
+      // Limpar timer anterior se existir
+      if (navigationTimerRef.current) {
+        clearTimeout(navigationTimerRef.current)
+      }
+      // Usar debounce para não mostrar loading em navegações muito rápidas
+      navigationTimerRef.current = setTimeout(() => {
+        // Só mostrar loading se ainda estiver navegando após 150ms
+        if (pathname !== href) {
+          setIsNavigating(true)
+          console.log(`⏳ [Preload] Navegando para: ${itemName}`)
+          showLoading(`Carregando ${itemName}...`)
+        }
+        navigationTimerRef.current = null
+      }, 150)
     }
   }
 

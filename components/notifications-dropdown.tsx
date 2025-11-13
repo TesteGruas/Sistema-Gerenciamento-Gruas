@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Bell, Check, CheckCheck, Trash2, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -31,29 +31,51 @@ export function NotificationsDropdown() {
   const [naoLidas, setNaoLidas] = useState(0)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
+  
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
 
-  // Carregar notificações
+  // Carregar notificações (otimizado - apenas uma chamada)
   const carregarNotificacoes = async () => {
+    if (loadingRef.current) return
+    
     try {
-      const [todas, count] = await Promise.all([
-        NotificacoesAPI.listarNaoLidas(),
-        NotificacoesAPI.contarNaoLidas(),
-      ])
+      loadingRef.current = true
+      // Otimização: usar apenas listarNaoLidas e contar localmente (evita 2 chamadas)
+      const todas = await NotificacoesAPI.listarNaoLidas()
       setNotificacoes(todas.slice(0, 5)) // Mostrar apenas as 5 mais recentes no dropdown
-      setNaoLidas(count)
+      setNaoLidas(todas.length) // Contar localmente em vez de fazer outra chamada
     } catch (error) {
       console.error('Erro ao carregar notificações:', error)
     } finally {
       setLoading(false)
+      loadingRef.current = false
     }
   }
 
+  // Carregar notificações iniciais - apenas uma vez
   useEffect(() => {
-    carregarNotificacoes()
-    // Atualizar a cada 30 segundos
-    const interval = setInterval(carregarNotificacoes, 30000)
+    if (!dadosIniciaisCarregados && !loadingRef.current) {
+      carregarNotificacoes().finally(() => {
+        setDadosIniciaisCarregados(true)
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados])
+
+  // Atualizar a cada 30 segundos (apenas após carregamento inicial)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const interval = setInterval(() => {
+      if (!loadingRef.current) {
+        carregarNotificacoes()
+      }
+    }, 30000)
+    
     return () => clearInterval(interval)
-  }, [])
+  }, [dadosIniciaisCarregados])
 
   // Marcar como lida
   const marcarComoLida = async (id: string) => {
@@ -204,4 +226,5 @@ export function NotificationsDropdown() {
     </DropdownMenu>
   )
 }
+
 

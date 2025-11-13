@@ -127,15 +127,15 @@ export class AuthService {
   // Obter dados do usuário atual
   static async getCurrentUser(): Promise<any> {
     try {
-      console.log('[AuthService] Chamando /api/auth/me...')
+      console.log('⏳ [Preload] Buscando dados do usuário (API /auth/me)...')
+      const startTime = performance.now()
+      
       const response = await this.authenticatedRequest(`${this.API_BASE_URL}/api/auth/me`, {
         method: 'GET'
       })
       
-      console.log('[AuthService] Response completo:', response)
-      console.log('[AuthService] response.data:', response.data)
-      console.log('[AuthService] response.data.perfil:', response.data.perfil)
-      console.log('[AuthService] response.data.perfil?.nome:', response.data.perfil?.nome)
+      const duration = Math.round(performance.now() - startTime)
+      console.log(`✅ [Preload] Dados do usuário recebidos (${duration}ms)`)
       
       // Retornar dados do usuário
       // Normalizar o nome do perfil para lowercase e mapear alguns perfis específicos
@@ -144,7 +144,6 @@ export class AuthService {
       // Primeiro, tentar pegar do perfil
       if (response.data.perfil?.nome) {
         const perfilNome = response.data.perfil.nome.toLowerCase()
-        console.log('[AuthService] perfilNome (lowercase):', perfilNome)
         
         // Mapeamento de perfis para nomes mais amigáveis
         const roleMapping: Record<string, string> = {
@@ -161,7 +160,6 @@ export class AuthService {
       // Fallback: verificar pelo nivel_acesso
       else if (response.data.perfil?.nivel_acesso) {
         const nivelAcesso = response.data.perfil.nivel_acesso
-        console.log('[AuthService] Perfil sem nome, usando nivel_acesso:', nivelAcesso)
         
         if (nivelAcesso >= 10) {
           roleNormalizado = 'admin'
@@ -178,7 +176,6 @@ export class AuthService {
       // Último fallback: verificar o user.role da resposta
       else if (response.data.user?.role) {
         const userRole = response.data.user.role.toLowerCase()
-        console.log('[AuthService] Usando user.role como fallback:', userRole)
         
         if (userRole.includes('admin')) {
           roleNormalizado = 'admin'
@@ -186,8 +183,6 @@ export class AuthService {
           roleNormalizado = userRole
         }
       }
-      
-      console.log('[AuthService] roleNormalizado FINAL:', roleNormalizado)
       
       const userObject = {
         id: response.data.user.id,
@@ -200,10 +195,9 @@ export class AuthService {
         avatar: '/placeholder-user.jpg'
       }
       
-      console.log('[AuthService] Objeto do usuário criado:', userObject)
       return userObject
     } catch (error) {
-      console.error('[AuthService] Erro ao buscar usuário atual:', error)
+      console.error('❌ [Preload] Erro ao buscar usuário:', error instanceof Error ? error.message : 'Erro desconhecido')
       throw new Error('Não foi possível carregar dados do usuário')
     }
   }
