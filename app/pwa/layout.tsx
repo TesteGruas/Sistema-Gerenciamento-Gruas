@@ -50,8 +50,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string; profile?: any } | null>(null)
-  // Inicializar como true para evitar diferença entre servidor e cliente na primeira renderização
-  const [isClient, setIsClient] = useState(true)
+  // Inicializar como false e atualizar no useEffect para evitar erro de hidratação
+  const [isClient, setIsClient] = useState(false)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
   const [isNavigating, setIsNavigating] = useState(false)
   const [previousPathname, setPreviousPathname] = useState<string | null>(null)
@@ -77,8 +77,12 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     loading: permissionsLoading
   } = usePWAPermissions()
   
-  // isClient já é inicializado como true para evitar diferença de renderização entre servidor e cliente
-  // useEffect removido para evitar erro de hidratação
+  // Atualizar isClient apenas no cliente para evitar erro de hidratação
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsClient(true)
+    }
+  }, [])
   
   // Detectar mudanças de rota e ocultar loading quando a página carregar
   useEffect(() => {
@@ -252,12 +256,23 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     return <>{children}</>
   }
   
-  // Renderizar loading apenas no cliente - evitar erro de hidratação
-  // Não renderizar nada no servidor para evitar diferença de HTML
-  if (typeof window === 'undefined' || !isClient) {
-    // Retornar null no servidor para evitar diferença de renderização
-    // O cliente vai renderizar o loading após a hidratação
-    return null
+  // Renderizar estrutura básica no servidor para evitar erro de hidratação
+  // No servidor, renderizar apenas a estrutura mínima
+  if (typeof window === 'undefined') {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+        {children}
+      </div>
+    )
+  }
+  
+  // No cliente, aguardar hidratação completa antes de renderizar o layout completo
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center">
+        <PageLoader text="Carregando..." />
+      </div>
+    )
   }
 
   // Mapear TODOS os itens do menu PWA para formato de navegação

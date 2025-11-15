@@ -173,8 +173,8 @@ const nextConfig = {
         ],
       },
       {
-        // Headers específicos para CSS
-        source: '/:all*.css',
+        // Headers específicos para CSS - usar padrão mais específico
+        source: '/_next/static/:path*.css',
         headers: [
           {
             key: 'Content-Type',

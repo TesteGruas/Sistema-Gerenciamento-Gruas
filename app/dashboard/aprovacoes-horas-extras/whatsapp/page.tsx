@@ -20,6 +20,20 @@ export default function WhatsAppAprovacoesPage() {
   const { isAdmin } = usePermissions()
   const router = useRouter()
   
+  // Estados para WhatsApp Evolution API - MOVER TODOS OS HOOKS ANTES DE QUALQUER RETURN
+  const [whatsappInstance, setWhatsappInstance] = useState<WhatsAppInstance | null>(null)
+  const [qrCode, setQrCode] = useState<string | null>(null)
+  const [criandoInstancia, setCriandoInstancia] = useState(false)
+  const [obtendoQRCode, setObtendoQRCode] = useState(false)
+  const [deletandoInstancia, setDeletandoInstancia] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRef = useRef(false)
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null)
+  
   // Verificar se é Admin - redirecionar se não for
   useEffect(() => {
     if (user && !isAdmin()) {
@@ -27,7 +41,7 @@ export default function WhatsAppAprovacoesPage() {
     }
   }, [user, isAdmin, router])
   
-  // Se não for Admin, não renderizar nada
+  // Se não for Admin, não renderizar nada (APÓS TODOS OS HOOKS)
   if (!user || !isAdmin()) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -50,20 +64,6 @@ export default function WhatsAppAprovacoesPage() {
       </div>
     )
   }
-  
-  // Estados para WhatsApp Evolution API
-  const [whatsappInstance, setWhatsappInstance] = useState<WhatsAppInstance | null>(null)
-  const [qrCode, setQrCode] = useState<string | null>(null)
-  const [criandoInstancia, setCriandoInstancia] = useState(false)
-  const [obtendoQRCode, setObtendoQRCode] = useState(false)
-  const [deletandoInstancia, setDeletandoInstancia] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  
-  // Flags para controlar carregamento e evitar chamadas duplicadas
-  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
-  const loadingRef = useRef(false)
-  const syncTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Carregar instância ao montar componente (única do sistema) - apenas uma vez
   useEffect(() => {
