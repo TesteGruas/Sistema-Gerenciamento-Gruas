@@ -25,7 +25,6 @@ import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diar
 import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
 import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
-import { ProtectedRoute } from "@/components/protected-route"
 
 export default function PWAGruaDetalhesPage() {
   const { toast } = useToast()
@@ -221,37 +220,32 @@ export default function PWAGruaDetalhesPage() {
   // Loading
   if (loading) {
     return (
-      <ProtectedRoute permission="gruas:visualizar">
-        <div className="space-y-6">
-          <PageLoader text="Carregando grua..." />
-        </div>
-      </ProtectedRoute>
+      <div className="space-y-6">
+        <PageLoader text="Carregando grua..." />
+      </div>
     )
   }
 
   // Erro
   if (error && !grua) {
     return (
-      <ProtectedRoute permission="gruas:visualizar">
-        <div className="space-y-6">
-          <div className="flex items-center justify-center p-8">
-            <div className="text-center">
-              <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
-              <h2 className="text-xl font-semibold text-red-700 mb-2">Erro ao carregar grua</h2>
-              <p className="text-red-600 mb-4">{error}</p>
-              <Button onClick={() => router.push('/pwa/gruas')} variant="outline">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Voltar para Gruas
-              </Button>
-            </div>
+      <div className="space-y-6">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
+            <h2 className="text-xl font-semibold text-red-700 mb-2">Erro ao carregar grua</h2>
+            <p className="text-red-600 mb-4">{error}</p>
+            <Button onClick={() => router.push('/pwa/gruas')} variant="outline">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Voltar para Gruas
+            </Button>
           </div>
         </div>
-      </ProtectedRoute>
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute permission="gruas:visualizar">
       <div className="space-y-4">
         {/* Cabeçalho */}
         <div className="flex items-center gap-3">
@@ -561,7 +555,6 @@ export default function PWAGruaDetalhesPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </ProtectedRoute>
   )
 }
 

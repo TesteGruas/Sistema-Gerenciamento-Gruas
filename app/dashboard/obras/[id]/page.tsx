@@ -60,7 +60,7 @@ import { CheckCircle2 } from "lucide-react"
 import { exportTabToPDF } from "@/lib/utils/export-pdf"
 import { Progress } from "@/components/ui/progress"
 import GruaComplementosManager from "@/components/grua-complementos-manager"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { obrasApi, converterObraBackendParaFrontend, ObraBackend, ensureAuthenticated } from "@/lib/api-obras"
 import { createFuncionarioObra, deleteFuncionarioObra } from "@/lib/api-funcionarios-obras"
 import { PageLoader, CardLoader, InlineLoader } from "@/components/ui/loader"
@@ -70,11 +70,17 @@ import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 import { obraGruasApi } from "@/lib/api-obra-gruas"
 import { useObraStore } from "@/lib/obra-store"
 import { sinaleirosApi } from "@/lib/api-sinaleiros"
+import { DocumentoUpload } from "@/components/documento-upload"
+import api from "@/lib/api"
+import { funcionariosApi } from "@/lib/api-funcionarios"
+import { clientesApi } from "@/lib/api-clientes"
+import { ValorMonetarioOculto, ValorFormatadoOculto } from "@/components/valor-oculto"
 
 function ObraDetailsPageContent() {
 
   const { toast } = useToast()
   const params = useParams()
+  const router = useRouter()
   const obraId = params.id as string
   
   // Usar store de obra
@@ -97,6 +103,159 @@ function ObraDetailsPageContent() {
   const [errorDocumentos, setErrorDocumentos] = useState<string | null>(null)
   const [errorArquivos, setErrorArquivos] = useState<string | null>(null)
   const [notificandoEnvolvidos, setNotificandoEnvolvidos] = useState(false)
+  
+  // Estados para edição inline
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingData, setEditingData] = useState<any>({})
+  const [saving, setSaving] = useState(false)
+  const [artArquivo, setArtArquivo] = useState<File | null>(null)
+  const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
+  
+  // Função para iniciar edição
+  const iniciarEdicao = () => {
+    if (!obra) return
+    setEditingData({
+      nome: obra.name || '',
+      descricao: obra.description || '',
+      status: obra.status || 'Em Andamento',
+      data_inicio: obra.startDate ? new Date(obra.startDate).toISOString().split('T')[0] : '',
+      data_fim: obra.endDate ? new Date(obra.endDate).toISOString().split('T')[0] : '',
+      orcamento: obra.budget || 0,
+      endereco: obra.location || '',
+      cno: obra.cno || '',
+      art_numero: obra.art_numero || '',
+      apolice_numero: obra.apolice_numero || '',
+      observacoes: obra.observations || ''
+    })
+    setIsEditing(true)
+  }
+  
+  // Função para cancelar edição
+  const cancelarEdicao = () => {
+    setEditingData({})
+    setArtArquivo(null)
+    setApoliceArquivo(null)
+    setIsEditing(false)
+  }
+  
+  // Função para salvar edição
+  const salvarEdicao = async () => {
+    if (!obra?.id) return
+    
+    setSaving(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      let artArquivoUrl = obra.art_arquivo || ''
+      let apoliceArquivoUrl = obra.apolice_arquivo || ''
+      
+      // 1. Fazer upload dos arquivos ART e Apólice se houver novos arquivos
+      if (artArquivo) {
+        try {
+          const formDataArt = new FormData()
+          formDataArt.append('arquivo', artArquivo)
+          formDataArt.append('categoria', 'art')
+          
+          const uploadArtResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obra.id}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataArt
+          })
+          
+          if (uploadArtResponse.ok) {
+            const uploadArtResult = await uploadArtResponse.json()
+            artArquivoUrl = uploadArtResult.data?.caminho || uploadArtResult.data?.arquivo || ''
+          }
+        } catch (uploadError) {
+          console.error('Erro ao fazer upload da ART:', uploadError)
+        }
+      }
+      
+      if (apoliceArquivo) {
+        try {
+          const formDataApolice = new FormData()
+          formDataApolice.append('arquivo', apoliceArquivo)
+          formDataApolice.append('categoria', 'apolice')
+          
+          const uploadApoliceResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obra.id}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataApolice
+          })
+          
+          if (uploadApoliceResponse.ok) {
+            const uploadApoliceResult = await uploadApoliceResponse.json()
+            apoliceArquivoUrl = uploadApoliceResult.data?.caminho || uploadApoliceResult.data?.arquivo || ''
+          }
+        } catch (uploadError) {
+          console.error('Erro ao fazer upload da Apólice:', uploadError)
+        }
+      }
+      
+      // 2. Converter dados para formato do backend
+      const updateData: any = {
+        nome: editingData.nome,
+        descricao: editingData.descricao,
+        status: editingData.status,
+        data_inicio: editingData.data_inicio || null,
+        data_fim: editingData.data_fim || null,
+        orcamento: editingData.orcamento ? parseFloat(editingData.orcamento.toString()) : null,
+        endereco: editingData.endereco || null,
+        cno: editingData.cno || null,
+        art_numero: editingData.art_numero || null,
+        apolice_numero: editingData.apolice_numero || null,
+        observacoes: editingData.observacoes || null
+      }
+      
+      // Adicionar URLs dos arquivos se houver
+      if (artArquivoUrl) {
+        updateData.art_arquivo = artArquivoUrl
+      }
+      if (apoliceArquivoUrl) {
+        updateData.apolice_arquivo = apoliceArquivoUrl
+      }
+      
+      // Remover campos vazios
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === null || updateData[key] === '' || updateData[key] === undefined) {
+          delete updateData[key]
+        }
+      })
+      
+      // 3. Atualizar obra
+      const response = await obrasApi.atualizarObra(parseInt(obra.id), updateData)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Obra atualizada com sucesso",
+          variant: "default"
+        })
+        
+        // Recarregar obra atualizada
+        await carregarObra(parseInt(obraId))
+        setIsEditing(false)
+        setEditingData({})
+        setArtArquivo(null)
+        setApoliceArquivo(null)
+      } else {
+        throw new Error('Erro ao atualizar obra')
+      }
+    } catch (error: any) {
+      console.error('Erro ao salvar edição:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar obra",
+        variant: "destructive"
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
   
   // Função para carregar sinaleiros reais da API
   const carregarSinaleiros = async () => {
@@ -182,6 +341,9 @@ function ObraDetailsPageContent() {
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
   const [isAdicionarFuncionarioOpen, setIsAdicionarFuncionarioOpen] = useState(false)
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
+  const [funcionariosDisponiveis, setFuncionariosDisponiveis] = useState<any[]>([])
+  const [funcionarioSearchValue, setFuncionarioSearchValue] = useState('')
+  const [loadingFuncionariosSearch, setLoadingFuncionariosSearch] = useState(false)
   const [novoFuncionarioData, setNovoFuncionarioData] = useState({
     dataInicio: '',
     dataFim: '',
@@ -232,6 +394,7 @@ function ObraDetailsPageContent() {
   const [entradaSelecionada, setEntradaSelecionada] = useState<EntradaLivroGruaCompleta | null>(null)
   const [isEditarEntradaOpen, setIsEditarEntradaOpen] = useState(false)
   const [isNovoArquivoOpen, setIsNovoArquivoOpen] = useState(false)
+  const [isNovoDocumentoOpen, setIsNovoDocumentoOpen] = useState(false)
   const [arquivosAdicionais, setArquivosAdicionais] = useState<any[]>([])
   const [novoArquivoData, setNovoArquivoData] = useState({
     nome: '',
@@ -239,6 +402,34 @@ function ObraDetailsPageContent() {
     categoria: 'geral',
     arquivo: null as File | null
   })
+  
+  // Estados para novo documento
+  const [novoDocumentoData, setNovoDocumentoData] = useState({
+    titulo: '',
+    descricao: '',
+    arquivo: null as File | null,
+    linkAssinatura: ''
+  })
+  const [documentoAssinantes, setDocumentoAssinantes] = useState<Array<{
+    userId: string,
+    ordem: number,
+    status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado',
+    tipo: 'interno' | 'cliente',
+    docuSignLink?: string,
+    userInfo?: {
+      id: number,
+      nome: string,
+      email: string,
+      cargo?: string,
+      role?: string
+    }
+  }>>([])
+  const [tipoAssinante, setTipoAssinante] = useState<'interno' | 'cliente' | ''>('')
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
+  const [clientes, setClientes] = useState<any[]>([])
+  const [assinanteFilter, setAssinanteFilter] = useState('')
+  const [assinantesFiltrados, setAssinantesFiltrados] = useState<any[]>([])
+  const [isSubmittingDocumento, setIsSubmittingDocumento] = useState(false)
   const [isNovoItemOpen, setIsNovoItemOpen] = useState(false)
   const [isNovoAditivoOpen, setIsNovoAditivoOpen] = useState(false)
   const [itensContrato, setItensContrato] = useState<any[]>([])
@@ -1177,6 +1368,63 @@ function ObraDetailsPageContent() {
     setFuncionariosSelecionados(funcionariosSelecionados.filter(f => f.id !== funcionarioId))
   }
 
+  // Buscar funcionários para o modal
+  const buscarFuncionarios = async (searchTerm: string = '') => {
+    if (!searchTerm || searchTerm.length < 2) {
+      setFuncionariosDisponiveis([])
+      return
+    }
+
+    setLoadingFuncionariosSearch(true)
+    try {
+      const response = await funcionariosApi.buscarFuncionarios(searchTerm, {
+        status: 'Ativo'
+      })
+
+      if (response.success && response.data) {
+        // Filtrar funcionários já vinculados à obra
+        const funcionariosVinculadosIds = funcionariosVinculados.map(f => f.funcionario_id || f.id)
+        const funcionariosFiltrados = response.data.filter((f: any) => 
+          !funcionariosVinculadosIds.includes(f.id) &&
+          !funcionariosSelecionados.find(sel => sel.id === f.id)
+        )
+        
+        // Converter para formato esperado
+        const funcionariosFormatados = funcionariosFiltrados.map((f: any) => ({
+          id: f.id,
+          name: f.nome,
+          role: f.cargo,
+          email: f.email,
+          telefone: f.telefone
+        }))
+        
+        setFuncionariosDisponiveis(funcionariosFormatados)
+      } else {
+        setFuncionariosDisponiveis([])
+      }
+    } catch (error) {
+      console.error('Erro ao buscar funcionários:', error)
+      setFuncionariosDisponiveis([])
+    } finally {
+      setLoadingFuncionariosSearch(false)
+    }
+  }
+
+  // Debounce para busca de funcionários
+  useEffect(() => {
+    if (!isAdicionarFuncionarioOpen) {
+      setFuncionarioSearchValue('')
+      setFuncionariosDisponiveis([])
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      buscarFuncionarios(funcionarioSearchValue)
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+  }, [funcionarioSearchValue, isAdicionarFuncionarioOpen, funcionariosVinculados, funcionariosSelecionados])
+
   const handleRemoverFuncionarioVinculado = async (funcionarioId: string) => {
     try {
       setLoadingFuncionarios(true)
@@ -1446,6 +1694,170 @@ function ObraDetailsPageContent() {
     window.location.reload()
   }
 
+  // Carregar funcionários e clientes para assinantes
+  useEffect(() => {
+    const carregarAssinantes = async () => {
+      try {
+        // Carregar funcionários
+        const funcionariosResponse = await funcionariosApi.listarFuncionarios({ limit: 100 })
+        setFuncionarios(funcionariosResponse.data || [])
+        
+        // Carregar clientes
+        const clientesResponse = await clientesApi.listarClientes({ limit: 100 })
+        const clientesData = clientesResponse.data as any
+        setClientes(Array.isArray(clientesData) ? clientesData : (Array.isArray(clientesData?.data) ? clientesData.data : []))
+      } catch (error) {
+        console.error('Erro ao carregar assinantes:', error)
+      }
+    }
+    
+    if (isNovoDocumentoOpen) {
+      carregarAssinantes()
+    }
+  }, [isNovoDocumentoOpen])
+  
+  // Buscar assinantes dinamicamente
+  const buscarAssinantes = async (termo: string) => {
+    if (!tipoAssinante || !termo.trim()) {
+      setAssinantesFiltrados([])
+      return
+    }
+
+    try {
+      let response
+      if (tipoAssinante === 'interno') {
+        response = await api.get(`/funcionarios?search=${encodeURIComponent(termo)}&limit=50`)
+      } else if (tipoAssinante === 'cliente') {
+        response = await api.get(`/clientes?search=${encodeURIComponent(termo)}&limit=50`)
+      }
+      
+      if (response?.data?.data) {
+        setAssinantesFiltrados(response.data.data)
+      }
+    } catch (error) {
+      console.error('Erro na busca de assinantes:', error)
+      setAssinantesFiltrados([])
+    }
+  }
+
+  // Debounce para busca de assinantes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      buscarAssinantes(assinanteFilter)
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [assinanteFilter, tipoAssinante])
+  
+  // Função para criar documento
+  const handleCriarDocumento = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!novoDocumentoData.arquivo) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione um arquivo para upload",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    if (documentoAssinantes.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Adicione pelo menos um assinante",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    setIsSubmittingDocumento(true)
+    try {
+      const dadosDocumento: DocumentoCreate = {
+        titulo: novoDocumentoData.titulo,
+        descricao: novoDocumentoData.descricao || undefined,
+        arquivo: novoDocumentoData.arquivo,
+        ordem_assinatura: documentoAssinantes.map(ass => ({
+          user_id: parseInt(ass.userId),
+          ordem: ass.ordem,
+          tipo: ass.tipo,
+          status: ass.status || 'pendente',
+          docu_sign_link: ass.docuSignLink || undefined
+        }))
+      }
+      
+      const response = await obrasDocumentosApi.criar(parseInt(obraId), dadosDocumento)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Documento criado com sucesso!",
+          variant: "default"
+        })
+        
+        // Limpar formulário
+        setNovoDocumentoData({
+          titulo: '',
+          descricao: '',
+          arquivo: null,
+          linkAssinatura: ''
+        })
+        setDocumentoAssinantes([])
+        setTipoAssinante('')
+        setAssinanteFilter('')
+        setAssinantesFiltrados([])
+        setIsNovoDocumentoOpen(false)
+        
+        // Recarregar documentos
+        await carregarDocumentos()
+      } else {
+        throw new Error(response.message || 'Erro ao criar documento')
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar documento:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar documento",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSubmittingDocumento(false)
+    }
+  }
+  
+  // Funções para gerenciar assinantes
+  const adicionarAssinante = () => {
+    setDocumentoAssinantes([...documentoAssinantes, {
+      userId: '',
+      ordem: documentoAssinantes.length + 1,
+      status: 'pendente',
+      tipo: tipoAssinante as 'interno' | 'cliente'
+    }])
+  }
+  
+  const removerAssinante = (index: number) => {
+    const novosAssinantes = documentoAssinantes.filter((_, i) => i !== index)
+    const reordenados = novosAssinantes.map((a, i) => ({ ...a, ordem: i + 1 }))
+    setDocumentoAssinantes(reordenados)
+  }
+  
+  const atualizarAssinante = (index: number, field: string, value: any) => {
+    const novosAssinantes = [...documentoAssinantes]
+    novosAssinantes[index] = { ...novosAssinantes[index], [field]: value }
+    setDocumentoAssinantes(novosAssinantes)
+  }
+  
+  const moverAssinante = (index: number, direction: 'up' | 'down') => {
+    const novosAssinantes = [...documentoAssinantes]
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    
+    if (targetIndex >= 0 && targetIndex < novosAssinantes.length) {
+      [novosAssinantes[index], novosAssinantes[targetIndex]] = [novosAssinantes[targetIndex], novosAssinantes[index]]
+      const reordenados = novosAssinantes.map((a, i) => ({ ...a, ordem: i + 1 }))
+      setDocumentoAssinantes(reordenados)
+    }
+  }
+
   // Verificar autenticação e carregar obra na inicialização
   useEffect(() => {
     const init = async () => {
@@ -1650,12 +2062,72 @@ function ObraDetailsPageContent() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{obra.name}</h1>
-            <p className="text-gray-600">{obra.description}</p>
+          <div className="flex-1">
+            {isEditing ? (
+              <div className="space-y-2">
+                <Input
+                  value={editingData.nome || ''}
+                  onChange={(e) => setEditingData({ ...editingData, nome: e.target.value })}
+                  className="text-3xl font-bold"
+                  placeholder="Nome da obra"
+                />
+                <Textarea
+                  value={editingData.descricao || ''}
+                  onChange={(e) => setEditingData({ ...editingData, descricao: e.target.value })}
+                  className="text-gray-600"
+                  placeholder="Descrição da obra"
+                  rows={2}
+                />
+              </div>
+            ) : (
+              <>
+                <h1 className="text-3xl font-bold text-gray-900">{obra.name}</h1>
+                <p className="text-gray-600">{obra.description}</p>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={cancelarEdicao}
+                disabled={saving}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancelar
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={salvarEdicao}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Salvar
+                  </>
+                )}
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={iniciarEdicao}
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Editar Obra
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1828,26 +2300,106 @@ function ObraDetailsPageContent() {
               <CardHeader>
                 <CardTitle className="text-sm">Informações Básicas</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Status:</span>
-                  <Badge className={getStatusColor(obra.status)}>
-                    {getStatusIcon(obra.status)}
-                    <span className="ml-1 capitalize">{obra.status}</span>
-                  </Badge>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-600">Status:</Label>
+                    {isEditing ? (
+                      <Select
+                        value={editingData.status || obra.status}
+                        onValueChange={(value) => setEditingData({ ...editingData, status: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Planejamento">Planejamento</SelectItem>
+                          <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                          <SelectItem value="Pausada">Pausada</SelectItem>
+                          <SelectItem value="Concluída">Concluída</SelectItem>
+                          <SelectItem value="Cancelada">Cancelada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge className={getStatusColor(obra.status)}>
+                        {getStatusIcon(obra.status)}
+                        <span className="ml-1 capitalize">{obra.status}</span>
+                      </Badge>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Data de Início:</Label>
+                    {isEditing ? (
+                      <Input
+                        type="date"
+                        value={editingData.data_inicio || ''}
+                        onChange={(e) => setEditingData({ ...editingData, data_inicio: e.target.value })}
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1">{new Date(obra.startDate).toLocaleDateString('pt-BR')}</span>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Data de Fim:</Label>
+                    {isEditing ? (
+                      <Input
+                        type="date"
+                        value={editingData.data_fim || ''}
+                        onChange={(e) => setEditingData({ ...editingData, data_fim: e.target.value })}
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1">{obra.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}</span>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Orçamento:</Label>
+                    {isEditing ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={editingData.orcamento || ''}
+                        onChange={(e) => setEditingData({ ...editingData, orcamento: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.00"
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1">
+                        {obra.budget ? (
+                          <ValorMonetarioOculto valor={obra.budget} />
+                        ) : (
+                          'Não informado'
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Endereço:</Label>
+                    {isEditing ? (
+                      <Input
+                        value={editingData.endereco || ''}
+                        onChange={(e) => setEditingData({ ...editingData, endereco: e.target.value })}
+                        placeholder="Endereço da obra"
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1">{obra.location || 'Não informado'}</span>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Responsável:</Label>
+                    <span className="text-sm block mt-1">{obra.responsavelName || 'Não informado'}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Início:</span>
-                  <span className="text-sm">{new Date(obra.startDate).toLocaleDateString('pt-BR')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Fim:</span>
-                  <span className="text-sm">{obra.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Responsável:</span>
-                  <span className="text-sm">{obra.responsavelName}</span>
-                </div>
+                {isEditing && (
+                  <div>
+                    <Label className="text-sm text-gray-600">Observações:</Label>
+                    <Textarea
+                      value={editingData.observacoes || ''}
+                      onChange={(e) => setEditingData({ ...editingData, observacoes: e.target.value })}
+                      placeholder="Observações sobre a obra"
+                      rows={3}
+                      className="mt-1"
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -1897,121 +2449,168 @@ function ObraDetailsPageContent() {
               <CardContent className="space-y-4">
                 {/* CNO */}
                 <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">CNO:</span>
-                    <span className="text-sm">{obra.cno || <span className="text-gray-400 italic">Não informado</span>}</span>
-                  </div>
+                  <Label className="text-sm font-medium text-gray-700">CNO:</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editingData.cno || ''}
+                      onChange={(e) => setEditingData({ ...editingData, cno: e.target.value })}
+                      placeholder="Número do CNO"
+                      className="mt-1"
+                    />
+                  ) : (
+                    <span className="text-sm block mt-1">{obra.cno || <span className="text-gray-400 italic">Não informado</span>}</span>
+                  )}
                 </div>
 
                 {/* ART */}
-                <div className="space-y-1 border-t pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">ART:</span>
-                    <div className="flex items-center gap-2">
-                      {obra.art_numero ? (
-                        <span className="text-sm">{obra.art_numero}</span>
-                      ) : (
-                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                <div className="space-y-3 border-t pt-3">
+                  <Label className="text-sm font-medium text-gray-700">ART:</Label>
+                  {isEditing ? (
+                    <div className="space-y-3">
+                      <Input
+                        value={editingData.art_numero || ''}
+                        onChange={(e) => setEditingData({ ...editingData, art_numero: e.target.value })}
+                        placeholder="Número da ART"
+                        className="mt-1"
+                      />
+                      <DocumentoUpload
+                        label="Upload do Documento ART (PDF)"
+                        accept="application/pdf"
+                        maxSize={10 * 1024 * 1024} // 10MB
+                        onUpload={(file) => setArtArquivo(file)}
+                        onRemove={() => setArtArquivo(null)}
+                        currentFile={artArquivo}
+                        fileUrl={obra.art_arquivo || null}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 mt-1">
+                        {obra.art_numero ? (
+                          <span className="text-sm">{obra.art_numero}</span>
+                        ) : (
+                          <span className="text-sm text-gray-400 italic">Não informado</span>
+                        )}
+                      </div>
+                      {obra.art_arquivo && (
+                        <div className="flex justify-end mt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                
+                                // Gerar URL assinada usando o endpoint do backend
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.art_arquivo)}`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (urlResponse.ok) {
+                                  const urlData = await urlResponse.json()
+                                  if (urlData.success && urlData.data?.url) {
+                                    window.open(urlData.data.url, '_blank')
+                                  } else {
+                                    throw new Error('URL não retornada')
+                                  }
+                                } else {
+                                  throw new Error('Erro ao gerar URL')
+                                }
+                              } catch (error) {
+                                console.error('Erro ao baixar ART:', error)
+                                toast({
+                                  title: "Erro",
+                                  description: "Não foi possível baixar o arquivo da ART",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
+                            Baixar ART
+                          </Button>
+                        </div>
                       )}
-                    </div>
-                  </div>
-                  {obra.art_arquivo && (
-                    <div className="flex justify-end mt-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-                            
-                            // Gerar URL assinada usando o endpoint do backend
-                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.art_arquivo)}`, {
-                              headers: {
-                                'Authorization': `Bearer ${token}`
-                              }
-                            })
-                            
-                            if (urlResponse.ok) {
-                              const urlData = await urlResponse.json()
-                              if (urlData.success && urlData.data?.url) {
-                                window.open(urlData.data.url, '_blank')
-                              } else {
-                                throw new Error('URL não retornada')
-                              }
-                            } else {
-                              throw new Error('Erro ao gerar URL')
-                            }
-                          } catch (error) {
-                            console.error('Erro ao baixar ART:', error)
-                            toast({
-                              title: "Erro",
-                              description: "Não foi possível baixar o arquivo da ART",
-                              variant: "destructive"
-                            })
-                          }
-                        }}
-                      >
-                        <Download className="w-3 h-3 mr-1" />
-                        Baixar ART
-                      </Button>
-                    </div>
+                    </>
                   )}
                 </div>
 
                 {/* Apólice */}
-                <div className="space-y-1 border-t pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">Apólice de Seguro:</span>
-                    <div className="flex items-center gap-2">
-                      {obra.apolice_numero ? (
-                        <span className="text-sm">{obra.apolice_numero}</span>
-                      ) : (
-                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                <div className="space-y-3 border-t pt-3">
+                  <Label className="text-sm font-medium text-gray-700">Apólice de Seguro:</Label>
+                  {isEditing ? (
+                    <div className="space-y-3">
+                      <Input
+                        value={editingData.apolice_numero || ''}
+                        onChange={(e) => setEditingData({ ...editingData, apolice_numero: e.target.value })}
+                        placeholder="Número da Apólice"
+                        className="mt-1"
+                      />
+                      <DocumentoUpload
+                        label="Upload da Apólice de Seguro (PDF)"
+                        accept="application/pdf"
+                        maxSize={10 * 1024 * 1024} // 10MB
+                        onUpload={(file) => setApoliceArquivo(file)}
+                        onRemove={() => setApoliceArquivo(null)}
+                        currentFile={apoliceArquivo}
+                        fileUrl={obra.apolice_arquivo || null}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 mt-1">
+                        {obra.apolice_numero ? (
+                          <span className="text-sm">{obra.apolice_numero}</span>
+                        ) : (
+                          <span className="text-sm text-gray-400 italic">Não informado</span>
+                        )}
+                      </div>
+                      {obra.apolice_arquivo && (
+                        <div className="flex justify-end mt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                
+                                // Gerar URL assinada usando o endpoint do backend
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.apolice_arquivo)}`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (urlResponse.ok) {
+                                  const urlData = await urlResponse.json()
+                                  if (urlData.success && urlData.data?.url) {
+                                    window.open(urlData.data.url, '_blank')
+                                  } else {
+                                    throw new Error('URL não retornada')
+                                  }
+                                } else {
+                                  throw new Error('Erro ao gerar URL')
+                                }
+                              } catch (error) {
+                                console.error('Erro ao baixar Apólice:', error)
+                                toast({
+                                  title: "Erro",
+                                  description: "Não foi possível baixar o arquivo da Apólice",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
+                            Baixar Apólice
+                          </Button>
+                        </div>
                       )}
-                    </div>
-                  </div>
-                  {obra.apolice_arquivo && (
-                    <div className="flex justify-end mt-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-                            
-                            // Gerar URL assinada usando o endpoint do backend
-                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.apolice_arquivo)}`, {
-                              headers: {
-                                'Authorization': `Bearer ${token}`
-                              }
-                            })
-                            
-                            if (urlResponse.ok) {
-                              const urlData = await urlResponse.json()
-                              if (urlData.success && urlData.data?.url) {
-                                window.open(urlData.data.url, '_blank')
-                              } else {
-                                throw new Error('URL não retornada')
-                              }
-                            } else {
-                              throw new Error('Erro ao gerar URL')
-                            }
-                          } catch (error) {
-                            console.error('Erro ao baixar Apólice:', error)
-                            toast({
-                              title: "Erro",
-                              description: "Não foi possível baixar o arquivo da Apólice",
-                              variant: "destructive"
-                            })
-                          }
-                        }}
-                      >
-                        <Download className="w-3 h-3 mr-1" />
-                        Baixar Apólice
-                      </Button>
-                    </div>
+                    </>
                   )}
                 </div>
               </CardContent>
@@ -2024,15 +2623,21 @@ function ObraDetailsPageContent() {
               <CardContent className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Valor Total da Obra:</span>
-                  <span className="text-sm font-medium text-blue-600">R$ {(obra.valorTotalObra || 0).toLocaleString('pt-BR')}</span>
+                  <span className="text-sm font-medium text-blue-600">
+                    <ValorMonetarioOculto valor={obra.valorTotalObra || 0} />
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Gastos do Mês Passado:</span>
-                  <span className="text-sm font-medium text-orange-600">R$ {gastosMesPassado.toLocaleString('pt-BR')}</span>
+                  <span className="text-sm font-medium text-orange-600">
+                    <ValorMonetarioOculto valor={gastosMesPassado} />
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Gastos do Mês:</span>
-                  <span className="text-sm font-medium text-red-600">R$ {gastosMesAtual.toLocaleString('pt-BR')}</span>
+                  <span className="text-sm font-medium text-red-600">
+                    <ValorMonetarioOculto valor={gastosMesAtual} />
+                  </span>
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-sm font-semibold">Saldo Restante:</span>
@@ -2041,7 +2646,7 @@ function ObraDetailsPageContent() {
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    R$ {((obra.orcamento || 0) - totalTodosCustos).toLocaleString('pt-BR')}
+                    <ValorMonetarioOculto valor={(obra.orcamento || 0) - totalTodosCustos} />
                   </span>
                 </div>
               </CardContent>
@@ -2128,53 +2733,42 @@ function ObraDetailsPageContent() {
                             <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'} className="text-xs">
                               {s.tipo_vinculo === 'interno' ? 'Interno' : 'Indicado pelo Cliente'}
                             </Badge>
-                            {s.id && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  try {
-                                    if (!s.id) {
-                                      toast({
-                                        title: "Atenção",
-                                        description: "Este sinaleiro ainda não foi cadastrado. Cadastre-o primeiro antes de editar.",
-                                        variant: "default"
-                                      })
-                                      return
-                                    }
-                                    
-                                    const sinaleiroFormatado: any = {
-                                      id: s.id,
-                                      obra_id: s.obra_id || parseInt(obraId) || 0,
-                                      nome: s.nome || 'Não informado',
-                                      cpf: s.cpf || s.rg_cpf || '',
-                                      rg: s.rg || s.rg_cpf || '',
-                                      rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
-                                      telefone: s.telefone || '',
-                                      email: s.email || '',
-                                      tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
-                                      tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
-                                      cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
-                                      documentos: s.documentos || [],
-                                      certificados: s.certificados || []
-                                    }
-                                    
-                                    setSinaleiroSelecionado(sinaleiroFormatado)
-                                    setIsEditarSinaleiroOpen(true)
-                                  } catch (error) {
-                                    console.error('Erro ao abrir modal de edição:', error)
-                                    toast({
-                                      title: "Erro",
-                                      description: "Erro ao abrir modal de edição",
-                                      variant: "destructive"
-                                    })
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                try {
+                                  const sinaleiroFormatado: any = {
+                                    id: s.id || null,
+                                    obra_id: s.obra_id || parseInt(obraId) || 0,
+                                    nome: s.nome || '',
+                                    cpf: s.cpf || s.rg_cpf || '',
+                                    rg: s.rg || s.rg_cpf || '',
+                                    rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+                                    telefone: s.telefone || '',
+                                    email: s.email || '',
+                                    tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
+                                    tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
+                                    cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
+                                    documentos: s.documentos || [],
+                                    certificados: s.certificados || []
                                   }
-                                }}
-                              >
-                                <Edit className="w-3 h-3 mr-1" />
-                                Editar
-                              </Button>
-                            )}
+                                  
+                                  setSinaleiroSelecionado(sinaleiroFormatado)
+                                  setIsEditarSinaleiroOpen(true)
+                                } catch (error) {
+                                  console.error('Erro ao abrir modal de edição:', error)
+                                  toast({
+                                    title: "Erro",
+                                    description: "Erro ao abrir modal de edição",
+                                    variant: "destructive"
+                                  })
+                                }
+                              }}
+                            >
+                              <Edit className="w-3 h-3 mr-1" />
+                              {s.id ? 'Editar' : 'Cadastrar'}
+                            </Button>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
@@ -2229,7 +2823,7 @@ function ObraDetailsPageContent() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               {loadingGruas ? (
                 <CardLoader text="Carregando gruas vinculadas..." />
               ) : gruasVinculadas.length > 0 ? (
@@ -2262,7 +2856,7 @@ function ObraDetailsPageContent() {
                               )}
                               {grua.valorLocacaoMensal && (
                                 <p className="text-xs text-gray-500">
-                                  <strong>Valor Mensal:</strong> R$ {grua.valorLocacaoMensal.toLocaleString('pt-BR')}
+                                  <strong>Valor Mensal:</strong> <ValorMonetarioOculto valor={grua.valorLocacaoMensal} />
                                 </p>
                               )}
                               {grua.observacoes && (
@@ -2353,56 +2947,43 @@ function ObraDetailsPageContent() {
                                       <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'} className="text-xs">
                                         {s.tipo_vinculo === 'interno' ? 'Interno' : 'Indicado pelo Cliente'}
                                       </Badge>
-                                      {(s.tipo_vinculo === 'cliente' || s.tipo_vinculo === 'interno') && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => {
-                                            try {
-                                              // Se o sinaleiro não tem ID (não foi salvo), mostrar mensagem
-                                              if (!s.id) {
-                                                toast({
-                                                  title: "Atenção",
-                                                  description: "Este sinaleiro ainda não foi cadastrado. Cadastre-o primeiro antes de editar.",
-                                                  variant: "default"
-                                                })
-                                                return
-                                              }
-                                              
-                                              // Converter para o formato Sinaleiro esperado pelo componente
-                                              const sinaleiroFormatado: any = {
-                                                id: s.id, // UUID real do banco
-                                                obra_id: s.obra_id || parseInt(obraId) || 0,
-                                                nome: s.nome || 'Não informado',
-                                                cpf: s.cpf || s.rg_cpf || '',
-                                                rg: s.rg || s.rg_cpf || '',
-                                                rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
-                                                telefone: s.telefone || '',
-                                                email: s.email || '',
-                                                tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
-                                                tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
-                                                cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
-                                                documentos: s.documentos || [],
-                                                certificados: s.certificados || []
-                                              }
-                                              
-                                              console.log('🔍 Abrindo modal de edição para sinaleiro:', sinaleiroFormatado)
-                                              setSinaleiroSelecionado(sinaleiroFormatado)
-                                              setIsEditarSinaleiroOpen(true)
-                                            } catch (error) {
-                                              console.error('Erro ao abrir modal de edição:', error)
-                                              toast({
-                                                title: "Erro",
-                                                description: "Erro ao abrir modal de edição",
-                                                variant: "destructive"
-                                              })
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          try {
+                                            // Converter para o formato Sinaleiro esperado pelo componente
+                                            const sinaleiroFormatado: any = {
+                                              id: s.id || null,
+                                              obra_id: s.obra_id || parseInt(obraId) || 0,
+                                              nome: s.nome || '',
+                                              cpf: s.cpf || s.rg_cpf || '',
+                                              rg: s.rg || s.rg_cpf || '',
+                                              rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+                                              telefone: s.telefone || '',
+                                              email: s.email || '',
+                                              tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
+                                              tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
+                                              cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
+                                              documentos: s.documentos || [],
+                                              certificados: s.certificados || []
                                             }
-                                          }}
-                                        >
-                                          <Edit className="w-3 h-3 mr-1" />
-                                          Editar
-                                        </Button>
-                                      )}
+                                            
+                                            setSinaleiroSelecionado(sinaleiroFormatado)
+                                            setIsEditarSinaleiroOpen(true)
+                                          } catch (error) {
+                                            console.error('Erro ao abrir modal de edição:', error)
+                                            toast({
+                                              title: "Erro",
+                                              description: "Erro ao abrir modal de edição",
+                                              variant: "destructive"
+                                            })
+                                          }
+                                        }}
+                                      >
+                                        <Edit className="w-3 h-3 mr-1" />
+                                        {s.id ? 'Editar' : 'Cadastrar'}
+                                      </Button>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                       <div>
@@ -2695,7 +3276,7 @@ function ObraDetailsPageContent() {
                                   <> até {new Date(dataFim).toLocaleDateString('pt-BR')}</>
                                 )}
                                 {grua.valorLocacaoMensal && (
-                                  <> • R$ {grua.valorLocacaoMensal.toLocaleString('pt-BR')}/mês</>
+                                  <> • <ValorMonetarioOculto valor={grua.valorLocacaoMensal} />/mês</>
                                 )}
                               </span>
                             )}
@@ -2802,18 +3383,20 @@ function ObraDetailsPageContent() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Valor Total da Obra</Label>
-                  <p className="text-lg font-bold text-blue-600">R$ {(obra.valorTotalObra || 0).toLocaleString('pt-BR')}</p>
+                  <p className="text-lg font-bold text-blue-600">
+                    <ValorMonetarioOculto valor={obra.valorTotalObra || 0} />
+                  </p>
                 </div>
                 <div className="text-center p-4 bg-orange-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Gastos do Mês Passado</Label>
                   <p className="text-lg font-bold text-orange-600">
-                    R$ {gastosMesPassado.toLocaleString('pt-BR')}
+                    <ValorMonetarioOculto valor={gastosMesPassado} />
                   </p>
                 </div>
                 <div className="text-center p-4 bg-yellow-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Gastos do Mês</Label>
                   <p className="text-lg font-bold text-yellow-600">
-                    R$ {gastosMesAtual.toLocaleString('pt-BR')}
+                    <ValorMonetarioOculto valor={gastosMesAtual} />
                   </p>
                 </div>
                 <div className="text-center p-4 bg-red-50 rounded-lg">
@@ -2823,7 +3406,7 @@ function ObraDetailsPageContent() {
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    R$ {((obra.orcamento || 0) - totalTodosCustos).toLocaleString('pt-BR')}
+                    <ValorMonetarioOculto valor={(obra.orcamento || 0) - totalTodosCustos} />
                   </p>
                 </div>
               </div>
@@ -2905,21 +3488,21 @@ function ObraDetailsPageContent() {
                           <TableCell className="text-center">
                             <div className="bg-blue-50 p-2 rounded-lg border border-blue-200">
                               <div className="text-xs text-blue-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_orcamento)}</div>
-                              <div className="text-xs text-blue-600 mb-1">Unit: R$ {formatarValor(custo.valor_unitario)}</div>
-                              <div className="text-sm font-bold text-blue-800">Total: R$ {formatarValor(custo.total_orcamento)}</div>
+                              <div className="text-xs text-blue-600 mb-1">Unit: <ValorFormatadoOculto valor={custo.valor_unitario} formatar={(v) => `R$ ${formatarValor(v)}`} /></div>
+                              <div className="text-sm font-bold text-blue-800">Total: <ValorFormatadoOculto valor={custo.total_orcamento} formatar={(v) => `R$ ${formatarValor(v)}`} /></div>
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
                             <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
                               <div className="text-xs text-gray-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada - custo.quantidade_realizada)}</div>
-                              <div className="text-sm font-medium text-gray-800">R$ {formatarValor(custo.valor_acumulado - custo.valor_realizado)}</div>
+                              <div className="text-sm font-medium text-gray-800"><ValorFormatadoOculto valor={custo.valor_acumulado - custo.valor_realizado} formatar={(v) => `R$ ${formatarValor(v)}`} /></div>
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
                             <div className={`p-2 rounded-lg border ${custo.valor_saldo >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                               <div className="text-xs mb-1">Qtd: {formatarQuantidade(custo.quantidade_saldo)}</div>
                               <div className={`text-sm font-medium ${custo.valor_saldo >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                                R$ {formatarValor(custo.valor_saldo)}
+                                <ValorFormatadoOculto valor={custo.valor_saldo} formatar={(v) => `R$ ${formatarValor(v)}`} />
                               </div>
                               {/* Barra de progresso */}
                               <div className="mt-2">
@@ -2979,14 +3562,14 @@ function ObraDetailsPageContent() {
                         <TableCell className="text-center">
                           <div className="bg-blue-100 p-2 rounded-lg border-2 border-blue-300">
                             <div className="text-sm font-bold text-blue-900">
-                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.total_orcamento, 0))}
+                              <ValorFormatadoOculto valor={custosMensais.reduce((sum, custo) => sum + custo.total_orcamento, 0)} formatar={(v) => `R$ ${formatarValor(v)}`} />
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="bg-gray-100 p-2 rounded-lg border-2 border-gray-300">
                             <div className="text-sm font-bold text-gray-900">
-                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + (custo.valor_acumulado - custo.valor_realizado), 0))}
+                              <ValorFormatadoOculto valor={custosMensais.reduce((sum, custo) => sum + (custo.valor_acumulado - custo.valor_realizado), 0)} formatar={(v) => `R$ ${formatarValor(v)}`} />
                             </div>
                           </div>
                         </TableCell>
@@ -3170,8 +3753,9 @@ function ObraDetailsPageContent() {
                   Documentos da Obra
                 </CardTitle>
                 <Button 
+                  type="button"
                   size="sm"
-                  onClick={() => window.location.href = `/dashboard/assinatura?obra=${obra.id}`}
+                  onClick={() => setIsNovoDocumentoOpen(true)}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Novo Documento
@@ -3309,7 +3893,8 @@ function ObraDetailsPageContent() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum documento encontrado</h3>
                   <p className="text-gray-600 mb-4">Esta obra ainda não possui documentos para assinatura.</p>
                   <Button 
-                    onClick={() => window.location.href = `/dashboard/assinatura?obra=${obra.id}`}
+                    type="button"
+                    onClick={() => setIsNovoDocumentoOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Criar Primeiro Documento
@@ -3327,15 +3912,27 @@ function ObraDetailsPageContent() {
               <div className="flex justify-between items-center">
                 <CardTitle className="flex items-center gap-2">
                   <Folder className="w-5 h-5" />
-                  Arquivos Adicionais - {obra.name}
+                  Arquivos Adicionais
                 </CardTitle>
-                <Button 
-                  size="sm"
-                  onClick={() => setIsNovoArquivoOpen(true)}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Novo Arquivo
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsNovoArquivoOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Novo Arquivo
+                  </Button>
+                  <Button 
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsNovoDocumentoOpen(true)}
+                  >
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    Novo Documento
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -3359,6 +3956,7 @@ function ObraDetailsPageContent() {
                               {arquivo.categoria}
                             </Badge>
                             <Button
+                              type="button"
                               size="sm"
                               variant="outline"
                               onClick={async () => {
@@ -3377,6 +3975,7 @@ function ObraDetailsPageContent() {
                               Baixar
                             </Button>
                             <Button
+                              type="button"
                               size="sm"
                               variant="outline"
                               onClick={() => handleRemoverArquivo(arquivo.id)}
@@ -3430,6 +4029,7 @@ function ObraDetailsPageContent() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum arquivo encontrado</h3>
                   <p className="text-gray-600 mb-4">Esta obra ainda não possui arquivos adicionais.</p>
                   <Button 
+                    type="button"
                     onClick={() => setIsNovoArquivoOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -4089,6 +4689,8 @@ function ObraDetailsPageContent() {
                     id="funcionarioSearch"
                     placeholder="Digite o nome do funcionário..."
                     className="pl-10"
+                    value={funcionarioSearchValue}
+                    onChange={(e) => setFuncionarioSearchValue(e.target.value)}
                   />
                 </div>
               </div>
@@ -4097,8 +4699,21 @@ function ObraDetailsPageContent() {
               <div className="space-y-2">
                 <Label>Funcionários Disponíveis</Label>
                 <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-2">
-                  {/* TODO: Integrar com API de funcionários */}
-                  {[].map((funcionario: any) => (
+                  {loadingFuncionariosSearch ? (
+                    <div className="flex items-center justify-center p-4">
+                      <InlineLoader size="sm" />
+                      <span className="ml-2 text-sm text-gray-600">Buscando funcionários...</span>
+                    </div>
+                  ) : funcionariosDisponiveis.length === 0 && funcionarioSearchValue.length >= 2 ? (
+                    <div className="text-center p-4 text-sm text-gray-500">
+                      Nenhum funcionário encontrado
+                    </div>
+                  ) : funcionarioSearchValue.length < 2 ? (
+                    <div className="text-center p-4 text-sm text-gray-500">
+                      Digite pelo menos 2 caracteres para buscar
+                    </div>
+                  ) : (
+                    funcionariosDisponiveis.map((funcionario: any) => (
                     <div 
                       key={funcionario.id} 
                       className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
@@ -4120,7 +4735,8 @@ function ObraDetailsPageContent() {
                         <Plus className="w-4 h-4" />
                       </Button>
                     </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -5371,6 +5987,344 @@ function ObraDetailsPageContent() {
         }}
         readOnly={false}
       />
+
+      {/* Modal de Novo Documento */}
+      <Dialog open={isNovoDocumentoOpen} onOpenChange={setIsNovoDocumentoOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-semibold">Criar Novo Documento</DialogTitle>
+          </DialogHeader>
+          
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-blue-100 rounded-full">
+                <FileSignature className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-medium text-blue-900">Configuração Manual de Links DocuSign</h3>
+                <p className="text-sm text-blue-700 mt-1">Para cada assinante, você deve preencher:</p>
+                <ul className="text-sm text-blue-700 mt-2 space-y-1">
+                  <li>• <strong>Ordem:</strong> Sequência de assinatura (1, 2, 3...)</li>
+                  <li>• <strong>Assinante:</strong> Selecionar usuário da lista</li>
+                  <li>• <strong>Link DocuSign:</strong> URL do envelope no DocuSign</li>
+                  <li>• <strong>Status:</strong> Pendente, Aguardando, Assinado ou Rejeitado</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleCriarDocumento} className="space-y-6 overflow-x-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label htmlFor="titulo">Título do Documento *</Label>
+                <Input
+                  id="titulo"
+                  value={novoDocumentoData.titulo}
+                  onChange={(e) => setNovoDocumentoData({...novoDocumentoData, titulo: e.target.value})}
+                  placeholder="Ex: Contrato de Prestação de Serviços"
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="obra">Obra *</Label>
+                <Input
+                  id="obra"
+                  value={obra?.name || ''}
+                  disabled
+                  className="bg-gray-100"
+                />
+                <p className="text-xs text-gray-500 mt-1">Obra atual: {obra?.name}</p>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="descricao">Descrição</Label>
+              <Textarea
+                id="descricao"
+                value={novoDocumentoData.descricao}
+                onChange={(e) => setNovoDocumentoData({...novoDocumentoData, descricao: e.target.value})}
+                placeholder="Descreva o conteúdo e propósito do documento..."
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="arquivo">Arquivo Original *</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="arquivo"
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null
+                    setNovoDocumentoData({...novoDocumentoData, arquivo: file})
+                  }}
+                  required
+                />
+                <Button type="button" variant="outline">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Formatos aceitos: PDF, DOC, DOCX</p>
+              {novoDocumentoData.arquivo && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
+                  ✅ Arquivo selecionado: {novoDocumentoData.arquivo.name} ({(novoDocumentoData.arquivo.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="link-assinatura">Link para Assinatura (Opcional)</Label>
+              <Input
+                id="link-assinatura"
+                type="url"
+                value={novoDocumentoData.linkAssinatura}
+                onChange={(e) => setNovoDocumentoData({...novoDocumentoData, linkAssinatura: e.target.value})}
+                placeholder="https://exemplo.com/assinatura"
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">Link externo onde o usuário pode acessar e assinar o documento (opcional)</p>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <Label>Ordem de Assinatura</Label>
+                <div className="text-sm text-gray-500">Use os filtros abaixo para adicionar assinantes</div>
+              </div>
+
+              {/* Filtros para seleção de assinantes */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-3">Filtros para Seleção de Assinantes</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="tipo-assinante">Tipo de Assinante *</Label>
+                    <Select value={tipoAssinante} onValueChange={(value) => setTipoAssinante(value as 'interno' | 'cliente' | '')}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="interno">Interno (Funcionários/Usuários)</SelectItem>
+                        <SelectItem value="cliente">Cliente</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {tipoAssinante && (
+                    <div>
+                      <Label htmlFor="filtro-assinante">
+                        Buscar {tipoAssinante === 'interno' ? 'Funcionário' : 'Cliente'}
+                      </Label>
+                      <Input
+                        id="filtro-assinante"
+                        placeholder={`Buscar por nome, email ou função...`}
+                        value={assinanteFilter}
+                        onChange={(e) => setAssinanteFilter(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {tipoAssinante && assinanteFilter && (
+                    <div className="flex items-end">
+                      <div className="text-sm text-gray-600">
+                        {assinantesFiltrados.length} {tipoAssinante === 'interno' ? 'funcionário(s)' : 'cliente(s)'} encontrado(s)
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Lista de Assinantes Disponíveis */}
+                {tipoAssinante && assinanteFilter && (
+                  <div className="mt-4">
+                    <Label className="text-sm font-medium text-gray-700">
+                      {tipoAssinante === 'interno' ? 'Funcionários' : 'Clientes'} Encontrados:
+                    </Label>
+                    {assinantesFiltrados.length > 0 ? (
+                      <div className="mt-2 max-h-40 overflow-y-auto overflow-x-hidden border rounded-lg">
+                        {assinantesFiltrados.map((item) => (
+                          <div key={item.id} className="p-3 border-b last:border-b-0 hover:bg-gray-50">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm truncate">{item.nome || item.name}</div>
+                                <div className="text-xs text-gray-500 truncate">{item.email}</div>
+                                <div className="text-xs text-gray-400 truncate">{item.cargo || item.role}</div>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="shrink-0"
+                                onClick={() => {
+                                  const novoAssinante = {
+                                    userId: item.id.toString(),
+                                    ordem: documentoAssinantes.length + 1,
+                                    status: 'pendente' as const,
+                                    tipo: tipoAssinante as 'interno' | 'cliente',
+                                    userInfo: {
+                                      id: item.id,
+                                      nome: item.nome || item.name,
+                                      email: item.email,
+                                      cargo: item.cargo,
+                                      role: item.role
+                                    }
+                                  }
+                                  setDocumentoAssinantes([...documentoAssinantes, novoAssinante])
+                                  setAssinanteFilter('')
+                                  setAssinantesFiltrados([])
+                                }}
+                                disabled={documentoAssinantes.some(a => a.userId === item.id.toString())}
+                              >
+                                {documentoAssinantes.some(a => a.userId === item.id.toString()) ? 'Adicionado' : 'Adicionar'}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 p-3 text-center text-gray-500 text-sm border rounded-lg">
+                        Nenhum {tipoAssinante === 'interno' ? 'funcionário' : 'cliente'} encontrado para "{assinanteFilter}"
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tipoAssinante && !assinanteFilter && (
+                  <div className="mt-4 p-3 text-center text-gray-500 text-sm border rounded-lg">
+                    Digite um termo de busca para encontrar {tipoAssinante === 'interno' ? 'funcionários' : 'clientes'}
+                  </div>
+                )}
+              </div>
+
+              {/* Lista de Assinantes Adicionados */}
+              {documentoAssinantes.length > 0 && (
+                <div className="mt-4">
+                  <Label className="text-sm font-medium text-gray-700 mb-3 block">
+                    Assinantes Adicionados ({documentoAssinantes.length}):
+                  </Label>
+                  <div className="space-y-3">
+                    {documentoAssinantes.map((assinante, index) => (
+                      <div key={index} className="p-4 border rounded-lg bg-white overflow-hidden">
+                        <div className="flex items-center justify-between mb-3 gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <Badge variant="outline" className="shrink-0">{assinante.ordem}</Badge>
+                            <span className="text-sm font-medium text-gray-700 truncate">
+                              {assinante.userInfo?.nome || `Usuário ${assinante.userId}`}
+                            </span>
+                            <Badge variant="secondary" className="text-xs shrink-0">
+                              {assinante.tipo === 'interno' ? 'Interno' : 'Cliente'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => moverAssinante(index, 'up')}
+                              disabled={index === 0}
+                              title="Mover para cima"
+                            >
+                              ↑
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => moverAssinante(index, 'down')}
+                              disabled={index === documentoAssinantes.length - 1}
+                              title="Mover para baixo"
+                            >
+                              ↓
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removerAssinante(index)}
+                              className="text-red-600 hover:text-red-700"
+                              title="Remover assinante"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-gray-500 mb-3 truncate">
+                          {assinante.userInfo?.email || 'Email não disponível'}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor={`status-${index}`} className="text-sm font-medium">Status *</Label>
+                            <Select 
+                              value={assinante.status} 
+                              onValueChange={(value) => atualizarAssinante(index, 'status', value)}
+                            >
+                              <SelectTrigger className="mt-1">
+                                <SelectValue placeholder="Selecione o status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pendente">Pendente</SelectItem>
+                                <SelectItem value="aguardando">Aguardando</SelectItem>
+                                <SelectItem value="assinado">Assinado</SelectItem>
+                                <SelectItem value="rejeitado">Rejeitado</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor={`docuSign-${index}`} className="text-sm font-medium">Link DocuSign (Opcional)</Label>
+                            <Input
+                              id={`docuSign-${index}`}
+                              type="url"
+                              value={assinante.docuSignLink || ''}
+                              onChange={(e) => atualizarAssinante(index, 'docuSignLink', e.target.value)}
+                              placeholder="https://..."
+                              className="font-mono text-xs mt-1"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {documentoAssinantes.length === 0 && (
+                <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                  <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                  <p>Nenhum assinante adicionado</p>
+                  <p className="text-sm">Use os filtros acima para encontrar e adicionar assinantes</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-6 border-t">
+              <Button type="button" variant="outline" onClick={() => setIsNovoDocumentoOpen(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isSubmittingDocumento || documentoAssinantes.length === 0 || documentoAssinantes.some(a => !a.userId)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isSubmittingDocumento ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Criando Documento...
+                  </>
+                ) : (
+                  <>
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    Criar Documento
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

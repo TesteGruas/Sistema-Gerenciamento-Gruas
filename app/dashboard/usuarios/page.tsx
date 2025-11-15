@@ -99,6 +99,7 @@ const roleColors = {
 export default function UsuariosPage() {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
+  const [filterRole, setFilterRole] = useState<string>("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -310,13 +311,14 @@ export default function UsuariosPage() {
     return roleToPerfilMap[role] || null
   }
 
-  const carregarUsuarios = async (page: number = 1, limit: number = itemsPerPage, search?: string) => {
+  const carregarUsuarios = async (page: number = 1, limit: number = itemsPerPage, search?: string, role?: string) => {
     try {
       setLoading(true)
       const response = await apiUsuarios.listar({ 
         page, 
         limit,
-        ...(search && search.trim() && { search: search.trim() })
+        ...(search && search.trim() && { search: search.trim() }),
+        ...(role && role !== "all" && { role: role })
       })
       setUsuariosBackend(response.data)
       
@@ -387,28 +389,37 @@ export default function UsuariosPage() {
     carregarUsuarios(1, itemsPerPage)
   }, [])
 
-  // Recarregar usuários quando o termo de busca mudar (com debounce)
+  // Recarregar usuários quando o termo de busca ou filtro de função mudar (com debounce)
   useEffect(() => {
-    // Resetar para primeira página ao buscar
+    // Resetar para primeira página ao buscar ou filtrar
     setCurrentPage(1)
-    carregarUsuarios(1, itemsPerPage, debouncedSearchTerm)
-  }, [debouncedSearchTerm])
+    carregarUsuarios(1, itemsPerPage, debouncedSearchTerm, filterRole)
+  }, [debouncedSearchTerm, filterRole])
 
   // Função para mudar de página
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    carregarUsuarios(page, itemsPerPage, debouncedSearchTerm)
+    carregarUsuarios(page, itemsPerPage, debouncedSearchTerm, filterRole)
   }
 
   // Função para mudar itens por página
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage)
     setCurrentPage(1)
-    carregarUsuarios(1, newItemsPerPage, debouncedSearchTerm)
+    carregarUsuarios(1, newItemsPerPage, debouncedSearchTerm, filterRole)
   }
+  
+  // Obter funções únicas dos usuários para o filtro
+  // Combinar funções dos usuários carregados com funções padrão do sistema
+  const funcoesDosUsuarios = [...new Set(usuarios.map(u => u.role))].filter(Boolean)
+  const funcoesPadrao = ['administrador', 'gerente', 'supervisor', 'operador', 'visualizador', 'cliente', 'admin', 'gestor']
+  const funcoesUnicas = [...new Set([...funcoesDosUsuarios, ...funcoesPadrao])].sort()
 
-  // Usar os usuários diretamente da API (já filtrados pelo backend)
-  const filteredUsuarios = usuarios
+  // Aplicar filtro local caso o backend não suporte (fallback)
+  const filteredUsuarios = usuarios.filter(usuario => {
+    if (filterRole === "all") return true
+    return usuario.role === filterRole
+  })
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -689,8 +700,8 @@ export default function UsuariosPage() {
       {/* Filtros */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex gap-4 items-end">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
               <label className="text-sm font-medium">Buscar usuários</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -702,7 +713,37 @@ export default function UsuariosPage() {
                 />
               </div>
             </div>
+            <div>
+              <label className="text-sm font-medium">Função</label>
+              <Select value={filterRole} onValueChange={setFilterRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as funções" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as funções</SelectItem>
+                  {funcoesUnicas.map((funcao) => (
+                    <SelectItem key={funcao} value={funcao}>
+                      {roleLabels[funcao as keyof typeof roleLabels] || funcao}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          {(searchTerm || filterRole !== "all") && (
+            <div className="mt-4 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm("")
+                  setFilterRole("all")
+                }}
+              >
+                Limpar Filtros
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

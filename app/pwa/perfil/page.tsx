@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,11 +33,39 @@ import {
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { usePWAUser } from "@/hooks/use-pwa-user"
+import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
+import { funcionariosApi } from "@/lib/api-funcionarios"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 
 export default function PWAPerfilPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { user, pontoHoje, documentosPendentes, horasTrabalhadas, loading } = usePWAUser()
+  const { userRole } = usePWAPermissions()
+  
+  // Verificar se é admin - verificar também no localStorage como fallback
+  const [isAdmin, setIsAdmin] = useState(false)
+  
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const userDataFromStorage = localStorage.getItem('user_data')
+      const parsedUserData = userDataFromStorage ? JSON.parse(userDataFromStorage) : null
+      const userRoleFromStorage = parsedUserData?.role || parsedUserData?.cargo
+      
+      const adminCheck = userRole === 'Admin' || 
+                        userRoleFromStorage === 'Admin' || 
+                        userRoleFromStorage === 'admin' || 
+                        userRoleFromStorage === 'Administrador' ||
+                        (typeof userRoleFromStorage === 'string' && userRoleFromStorage.toLowerCase().includes('admin'))
+      
+      setIsAdmin(adminCheck)
+    } catch (error) {
+      console.warn('Erro ao verificar se é admin:', error)
+      setIsAdmin(false)
+    }
+  }, [userRole])
   
   const [isEditing, setIsEditing] = useState(false)
   const [userData, setUserData] = useState({
@@ -46,14 +73,64 @@ export default function PWAPerfilPage() {
     email: ''
   })
   const [isSimulatingManager, setIsSimulatingManager] = useState(false)
+  const [funcionarioCompleto, setFuncionarioCompleto] = useState<any>(null)
+  const [loadingFuncionario, setLoadingFuncionario] = useState(true)
 
+  // Carregar dados completos do funcionário da API
   useEffect(() => {
-    if (user) {
-      setUserData({
-        telefone: (user as any).telefone || '',
-        email: (user as any).email || ''
-      })
+    const carregarFuncionarioCompleto = async () => {
+      if (!user || typeof window === 'undefined') {
+        setLoadingFuncionario(false)
+        return
+      }
+
+      try {
+        setLoadingFuncionario(true)
+        const token = localStorage.getItem('access_token')
+        if (!token) {
+          setLoadingFuncionario(false)
+          return
+        }
+
+        let funcionarioId: number | null = null
+        
+        try {
+          funcionarioId = await getFuncionarioIdWithFallback(
+            user,
+            token,
+            'ID do funcionário não encontrado'
+          )
+        } catch (idError) {
+          // Se não encontrar o ID, não é um erro crítico - apenas logar e continuar
+          console.warn('ID do funcionário não encontrado, usando dados do localStorage:', idError)
+          setLoadingFuncionario(false)
+          return
+        }
+
+        if (funcionarioId) {
+          try {
+            const response = await funcionariosApi.obterFuncionario(funcionarioId)
+            if (response.success && response.data) {
+              setFuncionarioCompleto(response.data)
+              // Atualizar userData com dados da API
+              setUserData({
+                telefone: response.data.telefone || '',
+                email: response.data.email || user.email || ''
+              })
+            }
+          } catch (apiError) {
+            console.warn('Erro ao buscar dados do funcionário da API, usando dados do localStorage:', apiError)
+            // Não é um erro crítico - continuar com dados do localStorage
+          }
+        }
+      } catch (error) {
+        console.warn('Erro ao carregar dados do funcionário, usando dados do localStorage:', error)
+      } finally {
+        setLoadingFuncionario(false)
+      }
     }
+
+    carregarFuncionarioCompleto()
     
     // Carregar estado de simulação do localStorage
     const simulatingManager = localStorage.getItem('simulating_manager') === 'true'
@@ -159,8 +236,7 @@ export default function PWAPerfilPage() {
   }
 
   return (
-    <ProtectedRoute permission="perfil:visualizar">
-      <div className="space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Meu Perfil</h1>
@@ -186,8 +262,12 @@ export default function PWAPerfilPage() {
 
             {/* Informações */}
             <div className="flex-1 text-center sm:text-left">
-              <h2 className="text-2xl font-bold text-gray-900">{user.nome || 'Usuário'}</h2>
-              <p className="text-gray-600 mb-2">{user.cargo || 'Sem cargo'}</p>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {funcionarioCompleto?.nome || user.nome || 'Usuário'}
+              </h2>
+              <p className="text-gray-600 mb-2">
+                {funcionarioCompleto?.cargo || user.cargo || 'Sem cargo'}
+              </p>
               <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                 <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
                   <CheckCircle className="w-3 h-3 mr-1" />
@@ -270,7 +350,8 @@ export default function PWAPerfilPage() {
         </Card>
       </div>
 
-      {/* Links de Teste - Apenas para Desenvolvimento */}
+      {/* Links de Teste - Apenas para Admin */}
+      {isAdmin && (
       <Card className="bg-blue-50 border-blue-200">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-blue-800">
@@ -385,8 +466,10 @@ export default function PWAPerfilPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {/* Modo de Teste - Simular Gestor */}
+      {/* Modo de Teste - Simular Gestor - Apenas para Admin */}
+      {isAdmin && (
       <Card className={isSimulatingManager ? "border-2 border-orange-500 bg-orange-50" : "border border-gray-200"}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -446,6 +529,7 @@ export default function PWAPerfilPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Dados Pessoais */}
       <Card>
@@ -469,7 +553,9 @@ export default function PWAPerfilPage() {
                   className="mt-1"
                 />
               ) : (
-                <p className="mt-1 text-gray-900">{userData.email || 'Não informado'}</p>
+                <p className="mt-1 text-gray-900">
+                  {funcionarioCompleto?.email || userData.email || user.email || 'Não informado'}
+                </p>
               )}
             </div>
 
@@ -487,7 +573,9 @@ export default function PWAPerfilPage() {
                   className="mt-1"
                 />
               ) : (
-                <p className="mt-1 text-gray-900">{userData.telefone || 'Não informado'}</p>
+                <p className="mt-1 text-gray-900">
+                  {funcionarioCompleto?.telefone || userData.telefone || 'Não informado'}
+                </p>
               )}
             </div>
 
@@ -496,7 +584,9 @@ export default function PWAPerfilPage() {
                 <Briefcase className="w-4 h-4 inline mr-2" />
                 Cargo
               </Label>
-              <p className="mt-1 text-gray-900">{user.cargo}</p>
+              <p className="mt-1 text-gray-900">
+                {funcionarioCompleto?.cargo || user.cargo || 'Não informado'}
+              </p>
             </div>
 
             <div>
@@ -505,9 +595,11 @@ export default function PWAPerfilPage() {
                 Data de Admissão
               </Label>
               <p className="mt-1 text-gray-900">
-                {(user as any).dataAdmissao 
-                  ? new Date((user as any).dataAdmissao).toLocaleDateString('pt-BR')
-                  : 'Não informado'}
+                {funcionarioCompleto?.data_admissao 
+                  ? new Date(funcionarioCompleto.data_admissao).toLocaleDateString('pt-BR')
+                  : (user as any).dataAdmissao 
+                    ? new Date((user as any).dataAdmissao).toLocaleDateString('pt-BR')
+                    : 'Não informado'}
               </p>
             </div>
           </div>
@@ -574,7 +666,6 @@ export default function PWAPerfilPage() {
         </CardContent>
       </Card>
     </div>
-    </ProtectedRoute>
   )
 }
 

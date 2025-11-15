@@ -373,8 +373,24 @@ export const livroGruaApi = {
   /**
    * Listar todas as relações grua-obra para funcionários
    */
-  async listarRelacoesGruaObra(funcionarioId?: number): Promise<{success: boolean, data: any[]}> {
-    const params = funcionarioId ? `?funcionario_id=${funcionarioId}` : ''
+  async listarRelacoesGruaObra(
+    funcionarioId?: number,
+    page?: number,
+    limit?: number
+  ): Promise<{success: boolean, data: any[], total?: number, page?: number, limit?: number, totalPages?: number}> {
+    const searchParams = new URLSearchParams()
+    
+    if (funcionarioId) {
+      searchParams.append('funcionario_id', funcionarioId.toString())
+    }
+    if (page) {
+      searchParams.append('page', page.toString())
+    }
+    if (limit) {
+      searchParams.append('limit', limit.toString())
+    }
+    
+    const params = searchParams.toString() ? `?${searchParams.toString()}` : ''
     const response = await httpRequest(`/livro-grua/relacoes-grua-obra${params}`)
     return response
   },

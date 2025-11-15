@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, Send, X, User, Building2, Users, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,11 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { NotificacoesAPI, NotificationType, DestinatarioTipo, Destinatario } from '@/lib/api-notificacoes'
+import { NotificacoesAPI, NotificationType, DestinatarioTipo, Destinatario, obterTiposPermitidosPorRole } from '@/lib/api-notificacoes'
 import { ClienteSearch } from '@/components/cliente-search'
 import { FuncionarioSearch } from '@/components/funcionario-search'
 import { ObraSearch } from '@/components/obra-search'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
 
 interface NovaNotificacaoDialogProps {
   onNotificacaoCriada?: () => void
@@ -35,19 +36,31 @@ export function NovaNotificacaoDialog({ onNotificacaoCriada }: NovaNotificacaoDi
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
+  const { user } = useAuth()
+
+  // Obter tipos permitidos baseado na role do usuário
+  const tiposPermitidos = obterTiposPermitidosPorRole(user?.role)
+  const tipoInicial = tiposPermitidos[0] || 'info'
 
   // Campos do formulário
   const [titulo, setTitulo] = useState('')
   const [mensagem, setMensagem] = useState('')
-  const [tipo, setTipo] = useState<NotificationType>('info')
+  const [tipo, setTipo] = useState<NotificationType>(tipoInicial as NotificationType)
   const [destinatarioTipo, setDestinatarioTipo] = useState<DestinatarioTipo>('geral')
   // Array de destinatários selecionados
   const [destinatariosSelecionados, setDestinatariosSelecionados] = useState<Destinatario[]>([])
 
+  // Atualizar tipo se o tipo atual não estiver mais permitido
+  useEffect(() => {
+    if (!tiposPermitidos.includes(tipo)) {
+      setTipo(tipoInicial as NotificationType)
+    }
+  }, [tiposPermitidos, tipo, tipoInicial])
+
   const resetForm = () => {
     setTitulo('')
     setMensagem('')
-    setTipo('info')
+    setTipo(tipoInicial as NotificationType)
     setDestinatarioTipo('geral')
     setDestinatariosSelecionados([])
   }
@@ -152,15 +165,15 @@ export function NovaNotificacaoDialog({ onNotificacaoCriada }: NovaNotificacaoDi
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="info">Informação</SelectItem>
-                <SelectItem value="success">Sucesso</SelectItem>
-                <SelectItem value="warning">Aviso</SelectItem>
-                <SelectItem value="error">Erro</SelectItem>
-                <SelectItem value="grua">Gruas</SelectItem>
-                <SelectItem value="obra">Obras</SelectItem>
-                <SelectItem value="financeiro">Financeiro</SelectItem>
-                <SelectItem value="rh">RH</SelectItem>
-                <SelectItem value="estoque">Estoque</SelectItem>
+                {tiposPermitidos.includes('info') && <SelectItem value="info">Informação</SelectItem>}
+                {tiposPermitidos.includes('success') && <SelectItem value="success">Sucesso</SelectItem>}
+                {tiposPermitidos.includes('warning') && <SelectItem value="warning">Aviso</SelectItem>}
+                {tiposPermitidos.includes('error') && <SelectItem value="error">Erro</SelectItem>}
+                {tiposPermitidos.includes('grua') && <SelectItem value="grua">Gruas</SelectItem>}
+                {tiposPermitidos.includes('obra') && <SelectItem value="obra">Obras</SelectItem>}
+                {tiposPermitidos.includes('financeiro') && <SelectItem value="financeiro">Financeiro</SelectItem>}
+                {tiposPermitidos.includes('rh') && <SelectItem value="rh">RH</SelectItem>}
+                {tiposPermitidos.includes('estoque') && <SelectItem value="estoque">Estoque</SelectItem>}
               </SelectContent>
             </Select>
           </div>

@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 import {
   Toast,
@@ -14,6 +15,16 @@ import { cn } from "@/lib/utils"
 
 export function Toaster() {
   const { toasts } = useToast()
+  const [isClient, setIsClient] = useState(false)
+  
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+  
+  // Não renderizar no servidor para evitar erro de hidratação
+  if (!isClient) {
+    return null
+  }
 
   const getIcon = (variant?: string, title?: string) => {
     if (variant === "destructive") {

@@ -15,6 +15,52 @@ export type NotificationType =
 
 export type DestinatarioTipo = 'geral' | 'cliente' | 'funcionario' | 'obra';
 
+/**
+ * Retorna os tipos de notificação permitidos baseado na role do usuário
+ */
+export function obterTiposPermitidosPorRole(userRole: string | null | undefined): NotificationType[] {
+  if (!userRole) {
+    // Se não tiver role, apenas tipos básicos
+    return ['info', 'success', 'warning', 'error']
+  }
+
+  const roleNormalizado = userRole.toLowerCase()
+
+  // Admin tem acesso a todos os tipos
+  if (roleNormalizado === 'admin' || roleNormalizado === 'administrador') {
+    return ['info', 'success', 'warning', 'error', 'grua', 'obra', 'financeiro', 'rh', 'estoque']
+  }
+
+  // Gestor: sem financeiro e rh
+  if (roleNormalizado === 'gestores' || roleNormalizado === 'gestor') {
+    return ['info', 'success', 'warning', 'error', 'grua', 'obra', 'estoque']
+  }
+
+  // Supervisor: sem financeiro e rh
+  if (roleNormalizado === 'supervisores' || roleNormalizado === 'supervisor') {
+    return ['info', 'success', 'warning', 'error', 'grua', 'obra', 'estoque']
+  }
+
+  // Financeiro: apenas financeiro
+  if (roleNormalizado === 'financeiro') {
+    return ['info', 'success', 'warning', 'error', 'financeiro']
+  }
+
+  // RH: apenas rh
+  if (roleNormalizado === 'rh') {
+    return ['info', 'success', 'warning', 'error', 'rh']
+  }
+
+  // Operários e Clientes: apenas tipos básicos
+  if (roleNormalizado === 'operários' || roleNormalizado === 'operario' || 
+      roleNormalizado === 'clientes' || roleNormalizado === 'cliente') {
+    return ['info', 'success', 'warning', 'error']
+  }
+
+  // Padrão: apenas tipos básicos
+  return ['info', 'success', 'warning', 'error']
+}
+
 export interface Destinatario {
   tipo: DestinatarioTipo;
   id?: string; // ID do cliente, funcionário ou obra (undefined para 'geral')

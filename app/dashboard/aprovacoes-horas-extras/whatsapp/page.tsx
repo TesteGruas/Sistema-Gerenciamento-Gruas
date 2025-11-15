@@ -6,15 +6,50 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Settings, BarChart3, MessageSquare, Send, CheckCircle2, XCircle, Clock, AlertCircle, QrCode, RefreshCw, Loader2 } from "lucide-react"
+import { Settings, BarChart3, MessageSquare, Send, CheckCircle2, XCircle, Clock, AlertCircle, QrCode, RefreshCw, Loader2, Shield } from "lucide-react"
 import { WhatsAppConfiguracao } from "@/components/whatsapp-configuracao"
 import { WhatsAppRelatorios } from "@/components/whatsapp-relatorios"
 import { createInstance, getQRCode, getConnectionState, syncInstanceStatus, getInstance, deleteInstance, type WhatsAppInstance } from '@/lib/whatsapp-evolution-service'
 import { useAuth } from "@/hooks/use-auth"
+import { usePermissions } from "@/hooks/use-permissions"
+import { useRouter } from "next/navigation"
 
 export default function WhatsAppAprovacoesPage() {
   const [activeTab, setActiveTab] = useState("conexao")
   const { user } = useAuth()
+  const { isAdmin } = usePermissions()
+  const router = useRouter()
+  
+  // Verificar se é Admin - redirecionar se não for
+  useEffect(() => {
+    if (user && !isAdmin()) {
+      router.push('/dashboard')
+    }
+  }, [user, isAdmin, router])
+  
+  // Se não for Admin, não renderizar nada
+  if (!user || !isAdmin()) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <Shield className="w-5 h-5" />
+              Acesso Restrito
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Você não tem permissão para acessar esta página. Apenas administradores podem acessar as configurações do WhatsApp.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
   
   // Estados para WhatsApp Evolution API
   const [whatsappInstance, setWhatsappInstance] = useState<WhatsAppInstance | null>(null)

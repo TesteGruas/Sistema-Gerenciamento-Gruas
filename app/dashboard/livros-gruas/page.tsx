@@ -25,6 +25,7 @@ import { gruasApi } from "@/lib/api-gruas"
 import { obrasApi } from "@/lib/api-obras"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { useCurrentUser } from "@/hooks/use-current-user"
+import { PaginationControl } from "@/components/ui/pagination-control"
 
 interface GruaObraRelacao {
   id: number
@@ -62,9 +63,15 @@ export default function LivrosGruasPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterObra, setFilterObra] = useState<string>("all")
   const [filterStatus, setFilterStatus] = useState<string>("all")
+  
+  // Estados de paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(9)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
 
   // Carregar relações grua-obra
-  const carregarRelacoes = async () => {
+  const carregarRelacoes = async (page: number = currentPage, limit: number = itemsPerPage) => {
     try {
       setLoading(true)
       setError(null)
@@ -79,27 +86,60 @@ export default function LivrosGruasPage() {
         return
       }
 
-      // Buscar relações grua-obra (filtradas por perfil do usuário)
-      console.log('⏳ [Preload] Buscando relações grua-obra...')
+      // Buscar relações grua-obra (filtradas por perfil do usuário) com paginação
+      console.log(`⏳ [Preload] Buscando relações grua-obra (página ${page}, ${limit} por página)...`)
       const startTime = performance.now()
-      const response = await livroGruaApi.listarRelacoesGruaObra()
+      const response = await livroGruaApi.listarRelacoesGruaObra(undefined, page, limit)
       const duration = Math.round(performance.now() - startTime)
       
       if (response.success && response.data) {
         console.log(`✅ [Preload] Relações grua-obra carregadas (${duration}ms) - ${response.data.length} registros`)
         setRelacoes(response.data)
+        
+        // Atualizar informações de paginação
+        if (response.total !== undefined) {
+          setTotalItems(response.total)
+          setTotalPages(response.totalPages || Math.ceil(response.total / limit))
+        } else {
+          // Fallback: usar length dos dados se total não vier da API
+          setTotalItems(response.data.length)
+          setTotalPages(1)
+        }
       } else {
         console.log('⚠️ [Preload] Nenhuma relação encontrada')
-        setError('Nenhuma relação grua-obra encontrada para este usuário.')
+        setRelacoes([])
+        setTotalItems(0)
+        setTotalPages(0)
+        if (page === 1) {
+          setError('Nenhuma relação grua-obra encontrada para este usuário.')
+        }
       }
 
     } catch (err) {
       console.error('Erro ao carregar relações:', err)
       const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar dados'
       setError(errorMessage)
+      setRelacoes([])
+      setTotalItems(0)
+      setTotalPages(0)
     } finally {
       setLoading(false)
     }
+  }
+  
+  // Handler para mudança de página
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    carregarRelacoes(page, itemsPerPage)
+    // Scroll para o topo
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  
+  // Handler para mudança de itens por página
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage)
+    setCurrentPage(1)
+    carregarRelacoes(1, newItemsPerPage)
   }
 
   // Filtrar relações
@@ -139,12 +179,15 @@ export default function LivrosGruasPage() {
     if (!user) return
     
     loadingRelacoesRef.current = true
-    carregarRelacoes().finally(() => {
+    carregarRelacoes(1, itemsPerPage).finally(() => {
       setDadosIniciaisCarregados(true)
       loadingRelacoesRef.current = false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userLoading, isAdmin, dadosIniciaisCarregados])
+  
+  // Aplicar filtros localmente (filtros são aplicados no frontend)
+  // Nota: Se houver muitos dados, considerar mover filtros para o backend
 
   // Tratamento de loading e erro
   if (loading) {
@@ -163,7 +206,7 @@ export default function LivrosGruasPage() {
             <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
             <h2 className="text-xl font-semibold text-red-700 mb-2">Erro ao carregar dados</h2>
             <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={carregarRelacoes} variant="outline">
+            <Button onClick={() => carregarRelacoes(currentPage, itemsPerPage)} variant="outline">
               Tentar novamente
             </Button>
           </div>
@@ -333,7 +376,7 @@ export default function LivrosGruasPage() {
       </div>
 
       {/* Mensagem quando não há resultados */}
-      {relacoesFiltradas.length === 0 && (
+      {relacoesFiltradas.length === 0 && !loading && (
         <Card>
           <CardContent className="text-center py-8">
             <BookOpen className="w-12 h-12 mx-auto mb-4 text-gray-400" />
@@ -341,11 +384,28 @@ export default function LivrosGruasPage() {
               Nenhuma relação encontrada
             </h3>
             <p className="text-gray-600">
-              {searchTerm || filterObra || filterStatus 
+              {searchTerm || filterObra !== "all" || filterStatus !== "all"
                 ? "Tente ajustar os filtros para encontrar o que procura."
                 : "Não há relações grua-obra cadastradas no momento."
               }
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Paginação */}
+      {!loading && !error && totalPages > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <PaginationControl
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handleItemsPerPageChange}
+              itemsPerPageOptions={[9, 18, 27, 36]}
+            />
           </CardContent>
         </Card>
       )}

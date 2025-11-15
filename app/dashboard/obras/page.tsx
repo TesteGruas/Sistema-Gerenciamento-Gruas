@@ -47,6 +47,7 @@ import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
+import { ValorMonetarioOculto } from "@/components/valor-oculto"
 
 export default function ObrasPage() {
   const router = useRouter()
@@ -1301,7 +1302,7 @@ export default function ObrasPage() {
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <DollarSign className="w-4 h-4" />
-                    <span>Orçamento: R$ {obra.budget.toLocaleString('pt-BR')}</span>
+                    <span>Orçamento: <ValorMonetarioOculto valor={typeof obra.budget === 'string' ? parseFloat(obra.budget) || 0 : obra.budget || 0} /></span>
                   </div>
                   
                   {/* Gruas Vinculadas */}
@@ -1331,7 +1332,7 @@ export default function ObrasPage() {
                               </Badge>
                             </div>
                             <div className="mt-1 text-gray-600">
-                              <div>Mensalidade: R$ {parseFloat(grua.valorLocacaoMensal || 0).toLocaleString('pt-BR')}</div>
+                              <div>Mensalidade: <ValorMonetarioOculto valor={parseFloat(grua.valorLocacaoMensal || 0)} /></div>
                               <div>Início: {new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR')}</div>
                               {grua.dataFimLocacao && (
                                 <div>Fim: {new Date(grua.dataFimLocacao).toLocaleDateString('pt-BR')}</div>

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -29,8 +28,10 @@ import {
 } from "lucide-react"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { useToast } from "@/hooks/use-toast"
+import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
+import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
 
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
@@ -44,6 +45,85 @@ export default function PWAMainPage() {
   
   // Hook de usuário sempre chamado (mas com fallback interno)
   const pwaUserData = usePWAUser()
+  
+  // Hook de permissões para obter role do usuário
+  const { userRole } = usePWAPermissions()
+  
+  // Obter role também do perfil (fallback)
+  const [roleFromPerfil, setRoleFromPerfil] = useState<string | null>(null)
+  const [roleFromUserData, setRoleFromUserData] = useState<string | null>(null)
+  const [temObraAtiva, setTemObraAtiva] = useState<boolean>(false)
+  const [isCheckingObra, setIsCheckingObra] = useState(true)
+  
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      // Ler do perfil
+      const perfilStr = localStorage.getItem('user_perfil')
+      if (perfilStr) {
+        const perfil = JSON.parse(perfilStr)
+        setRoleFromPerfil(perfil?.nome || null)
+      }
+      
+      // Ler do user_data também
+      const userDataStr = localStorage.getItem('user_data')
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr)
+        setRoleFromUserData(userData?.role || userData?.cargo || null)
+      }
+    } catch (error) {
+      console.warn('Erro ao ler perfil/user_data:', error)
+    }
+  }, [])
+  
+  // Verificar se funcionário tem obra ativa
+  useEffect(() => {
+    const verificarObraAtiva = async () => {
+      if (typeof window === 'undefined') return
+      
+      try {
+        setIsCheckingObra(true)
+        const token = localStorage.getItem('access_token')
+        if (!token) {
+          setIsCheckingObra(false)
+          return
+        }
+        
+        const funcionarioId = await getFuncionarioIdWithFallback(
+          pwaUserData.user,
+          token,
+          'ID do funcionário não encontrado'
+        )
+        
+        if (funcionarioId) {
+          const alocacoes = await getAlocacoesAtivasFuncionario(funcionarioId)
+          const temObra = alocacoes.data && alocacoes.data.length > 0
+          setTemObraAtiva(temObra)
+          console.log('[PWA Dashboard] Funcionário tem obra ativa?', temObra, alocacoes.data)
+        } else {
+          setTemObraAtiva(false)
+        }
+      } catch (error) {
+        console.warn('[PWA Dashboard] Erro ao verificar obra ativa:', error)
+        setTemObraAtiva(false)
+      } finally {
+        setIsCheckingObra(false)
+      }
+    }
+    
+    if (pwaUserData.user && !pwaUserData.loading) {
+      verificarObraAtiva()
+    }
+  }, [pwaUserData.user, pwaUserData.loading])
+  
+  // Usar role do perfil primeiro (mais confiável), depois do hook, ignorando 'authenticated'
+  // Priorizar roleFromPerfil porque userRole pode ser 'authenticated' (não é um role válido)
+  const currentUserRole = roleFromPerfil || 
+                         roleFromUserData ||
+                         (userRole && userRole !== 'authenticated' ? userRole : null) || 
+                         pwaUserData.user?.role || 
+                         pwaUserData.user?.cargo
 
   // Função de navegação com loading imediato
   const handleNavigation = (href: string) => {
@@ -200,7 +280,8 @@ export default function PWAMainPage() {
       color: "text-[#871b0b]",
       bgColor: "bg-red-50",
       borderColor: "border-red-100",
-      priority: true
+      priority: true,
+      requiresObra: true // Requer obra ativa
     },
     {
       title: "Espelho",
@@ -219,7 +300,8 @@ export default function PWAMainPage() {
       href: "/pwa/gruas",
       color: "text-purple-600",
       bgColor: "bg-purple-50",
-      borderColor: "border-purple-100"
+      borderColor: "border-purple-100",
+      requiresObra: true // Requer obra ativa
     },
     {
       title: "Documentos",
@@ -256,7 +338,8 @@ export default function PWAMainPage() {
       color: "text-orange-600",
       bgColor: "bg-orange-50",
       borderColor: "border-orange-100",
-      priority: true
+      priority: true,
+      requiresSupervisor: true // Apenas Supervisor para cima
     },
     {
       title: "Holerites",
@@ -569,8 +652,7 @@ export default function PWAMainPage() {
   }
 
   return (
-    <ProtectedRoute permission="dashboard:visualizar">
-      <div className="space-y-4 animate-in fade-in duration-500">
+    <div className="space-y-4 animate-in fade-in duration-500">
       {/* Card de Boas-vindas com Relógio */}
       <div className="relative bg-gradient-to-br from-[#871b0b] via-[#6b1509] to-[#4d0f06] text-white rounded-3xl p-6 shadow-xl overflow-hidden">
         {/* Padrão decorativo */}
@@ -585,7 +667,7 @@ export default function PWAMainPage() {
               <h2 className="text-2xl font-bold">{pwaUserData.user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
             </div>
             <div className="flex items-center gap-2">
-              {getProximoRegistro() && (
+              {getProximoRegistro() && temObraAtiva && (
                 <button
                   onClick={handleRegistrarPonto}
                   disabled={isRegistrandoPonto}
@@ -624,17 +706,21 @@ export default function PWAMainPage() {
           </div>
 
           {/* Mini stats */}
-          <div className="grid grid-cols-3 gap-2 mt-6">
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
-              <p className="text-sm font-bold">
-                {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-              </p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
-              <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
-            </div>
+          <div className={`grid gap-2 mt-6 ${temObraAtiva ? 'grid-cols-3' : 'grid-cols-1'}`}>
+            {temObraAtiva && (
+              <>
+                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+                  <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
+                  <p className="text-sm font-bold">
+                    {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
+                  </p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+                  <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
+                  <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
+                </div>
+              </>
+            )}
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
               <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
@@ -644,22 +730,49 @@ export default function PWAMainPage() {
       </div>
 
       {/* Status Rápido */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-          <div className="flex flex-col items-center text-center">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
-              pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
-            }`}>
-              <CheckCircle className={`w-6 h-6 ${
-                pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
-              }`} />
+      <div className={`grid gap-3 ${temObraAtiva ? 'grid-cols-3' : 'grid-cols-1'}`}>
+        {temObraAtiva && (
+          <>
+            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+              <div className="flex flex-col items-center text-center">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
+                  pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
+                }`}>
+                  <CheckCircle className={`w-6 h-6 ${
+                    pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
+                  }`} />
+                </div>
+                <p className="text-base font-bold text-gray-900">
+                  {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
+              </div>
             </div>
-            <p className="text-base font-bold text-gray-900">
-              {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-            </p>
-            <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
-          </div>
-        </div>
+            
+            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
+                  <Clock className="w-6 h-6 text-[#871b0b]" />
+                </div>
+                <p className="text-base font-bold text-gray-900">
+                  {pwaUserData.pontoHoje?.saida
+                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
+                    : pwaUserData.pontoHoje?.volta_almoco
+                    ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
+                    : pwaUserData.pontoHoje?.saida_almoco
+                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
+                    : '--:--'}
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium">
+                  {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
+                   pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
+                   pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
+                   'Saída'}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
         
         <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
           <div className="flex flex-col items-center text-center">
@@ -674,153 +787,96 @@ export default function PWAMainPage() {
             <p className="text-[10px] text-gray-500 font-medium">Pendentes</p>
           </div>
         </div>
-        
-        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
-              <Clock className="w-6 h-6 text-[#871b0b]" />
-            </div>
-            <p className="text-base font-bold text-gray-900">
-              {pwaUserData.pontoHoje?.saida
-                ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
-                : pwaUserData.pontoHoje?.volta_almoco
-                ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
-                : pwaUserData.pontoHoje?.saida_almoco
-                ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
-                : '--:--'}
-            </p>
-            <p className="text-[10px] text-gray-500 font-medium">
-              {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
-               pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
-               pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
-               'Saída'}
-            </p>
-          </div>
-        </div>
       </div>
 
-      {/* Todas as Funcionalidades */}
+      {/* Ações Rápidas - Filtradas por permissões */}
       <div>
         <div className="grid grid-cols-2 gap-3">
-          {/* Card de Assinatura de Documentos */}
-          <div 
-            onClick={() => handleNavigation('/pwa/documentos')}
-            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-                <FileSignature className="w-5 h-5 text-orange-600" />
-              </div>
-              {pwaUserData.documentosPendentes > 0 && (
-                <Badge className="bg-orange-100 text-orange-800 text-xs">
-                  {pwaUserData.documentosPendentes}
-                </Badge>
-              )}
-            </div>
-            <h3 className="font-semibold text-sm text-gray-900 mb-1">Assinatura Digital</h3>
-            <p className="text-xs text-gray-500 mb-2">
-              {pwaUserData.documentosPendentes > 0 
-                ? `${pwaUserData.documentosPendentes} documento${pwaUserData.documentosPendentes > 1 ? 's' : ''} aguardando`
-                : 'Nenhum documento pendente'}
-            </p>
-            <div className="flex items-center text-xs text-[#871b0b] font-medium">
-              Ver documentos
-              <ChevronRight className="w-3 h-3 ml-1" />
-            </div>
-          </div>
-
-          {/* Card de Aprovações */}
-          <div 
-            onClick={() => handleNavigation('/pwa/aprovacoes')}
-            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-            </div>
-            <h3 className="font-semibold text-sm text-gray-900 mb-1">Aprovações</h3>
-            <p className="text-xs text-gray-500 mb-2">
-              Horas extras e solicitações
-            </p>
-            <div className="flex items-center text-xs text-[#871b0b] font-medium">
-              Ver aprovações
-              <ChevronRight className="w-3 h-3 ml-1" />
-            </div>
-          </div>
-
-          {/* Card de Holerites */}
-          <div 
-            onClick={() => handleNavigation('/pwa/holerites')}
-            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Receipt className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-            <h3 className="font-semibold text-sm text-gray-900 mb-1">Holerites</h3>
-            <p className="text-xs text-gray-500 mb-2">
-              Visualizar e assinar holerites
-            </p>
-            <div className="flex items-center text-xs text-[#871b0b] font-medium">
-              Ver holerites
-              <ChevronRight className="w-3 h-3 ml-1" />
-            </div>
-          </div>
-
-          {/* Card de Espelho de Ponto */}
-          <div 
-            onClick={() => handleNavigation('/pwa/espelho-ponto')}
-            className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all active:scale-95 cursor-pointer"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                <FileText className="w-5 h-5 text-purple-600" />
-              </div>
-            </div>
-            <h3 className="font-semibold text-sm text-gray-900 mb-1">Espelho de Ponto</h3>
-            <p className="text-xs text-gray-500 mb-2">
-              Consultar registros de ponto
-            </p>
-            <div className="flex items-center text-xs text-[#871b0b] font-medium">
-              Ver espelho
-              <ChevronRight className="w-3 h-3 ml-1" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Ações Rápidas - Todos os itens */}
-      <div>
-        <div className="grid grid-cols-2 gap-3">
-          {quickActions.map((action, index) => {
-            const Icon = action.icon
-            
-            return (
-              <div
-                key={action.title}
-                onClick={() => handleNavigation(action.href)}
-                className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-red-100 relative overflow-hidden group"
-                style={{
-                  animationDelay: `${index * 50}ms`
-                }}
-              >
-                {/* Efeito de hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-red-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          {quickActions
+            .filter(action => {
+              // Filtrar itens que requerem obra ativa (Ponto e Gruas)
+              if (action.requiresObra) {
+                if (!temObraAtiva) {
+                  console.log(`[PWA Dashboard] ${action.title} requer obra ativa, ocultando`)
+                  return false
+                }
+              }
+              
+              // Filtrar Aprovações para Operários - apenas Supervisor para cima
+              if (action.requiresSupervisor) {
+                const roleLower = (currentUserRole || '').toLowerCase()
                 
-                <div className="relative z-10">
-                  <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
-                    <Icon className={`w-6 h-6 ${action.color}`} />
+                // Debug: log do role detectado (remover em produção)
+                if (action.title === 'Aprovações') {
+                  console.log('[PWA Dashboard] Role detectado:', {
+                    userRole,
+                    roleFromPerfil,
+                    roleFromUserData,
+                    userRoleFromData: pwaUserData.user?.role,
+                    userCargoFromData: pwaUserData.user?.cargo,
+                    currentUserRole,
+                    roleLower
+                  })
+                }
+                
+                // Verificar se é Operário (todas as variações) - se for, não mostrar
+                const isOperario = roleLower.includes('operário') || 
+                                  roleLower.includes('operario') || 
+                                  roleLower.includes('operador') ||
+                                  roleLower === 'operários' ||
+                                  roleLower === 'operarios' ||
+                                  roleLower === 'operador' ||
+                                  roleLower === 'operador teste' || // Caso específico
+                                  roleLower === '4' // Nível 4 = Operários
+                
+                if (isOperario) {
+                  console.log('[PWA Dashboard] Operário detectado, ocultando Aprovações')
+                  return false // Não mostrar para Operários
+                }
+                
+                // Mostrar apenas para Supervisor, Gestor e Admin
+                const canSee = roleLower === 'supervisores' || 
+                              roleLower === 'supervisor' || 
+                              roleLower === 'gestores' || 
+                              roleLower === 'gestor' || 
+                              roleLower === 'admin' || 
+                              roleLower === 'administrador'
+                
+                if (action.title === 'Aprovações') {
+                  console.log('[PWA Dashboard] Pode ver Aprovações?', canSee)
+                }
+                
+                return canSee
+              }
+              return true
+            })
+            .map((action, index) => {
+              const Icon = action.icon
+              
+              return (
+                <div
+                  key={action.title}
+                  onClick={() => handleNavigation(action.href)}
+                  className="bg-white rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer border-2 border-transparent hover:border-red-100 relative overflow-hidden group"
+                  style={{
+                    animationDelay: `${index * 50}ms`
+                  }}
+                >
+                  {/* Efeito de hover */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-red-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  <div className="relative z-10">
+                    <div className={`${action.bgColor} w-12 h-12 rounded-2xl flex items-center justify-center mb-3 border ${action.borderColor} group-hover:scale-110 transition-transform shadow-md`}>
+                      <Icon className={`w-6 h-6 ${action.color}`} />
+                    </div>
+                    <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
+                    <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
+                      {action.description}
+                    </p>
                   </div>
-                  <h3 className="font-semibold text-sm text-gray-900 mb-0.5">{action.title}</h3>
-                  <p className="text-[11px] text-gray-500 leading-tight line-clamp-1">
-                    {action.description}
-                  </p>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
         </div>
       </div>
 
@@ -849,6 +905,5 @@ export default function PWAMainPage() {
         </div>
       )}
     </div>
-    </ProtectedRoute>
   )
 }

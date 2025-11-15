@@ -174,23 +174,38 @@ export const usePermissions = () => {
 
   /**
    * Verifica se tem acesso ao ponto eletrônico
+   * Nota: Gestores não têm acesso completo (apenas visualizar e relatórios, sem aprovações)
    */
   const canAccessPontoEletronico = (): boolean => {
-    return canAccessModule('ponto') || canAccessModule('ponto_eletronico')
+    // Verificar se tem permissão específica de visualizar ou gerenciar
+    return hasPermission('ponto:visualizar') || 
+           hasPermission('ponto_eletronico:visualizar') ||
+           hasPermission('ponto:gerenciar') ||
+           hasPermission('ponto_eletronico:gerenciar')
   }
 
   /**
    * Verifica se tem acesso ao financeiro
+   * Nota: Apenas Admin e Financeiro têm acesso (Gestores não têm)
    */
   const canAccessFinanceiro = (): boolean => {
-    return hasMinLevel(9 as AccessLevel) || canAccessModule('financeiro')
+    // Admin tem acesso total
+    if (isAdmin()) return true
+    
+    // Verificar se tem permissão específica de financeiro
+    return canAccessModule('financeiro')
   }
 
   /**
    * Verifica se tem acesso ao RH
+   * Nota: Apenas Admin e RH têm acesso (Gestores não têm)
    */
   const canAccessRH = (): boolean => {
-    return hasMinLevel(9 as AccessLevel) || canAccessModule('rh')
+    // Admin tem acesso total
+    if (isAdmin()) return true
+    
+    // Verificar se tem permissão específica de RH
+    return canAccessModule('rh')
   }
 
   /**

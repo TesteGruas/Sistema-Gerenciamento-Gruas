@@ -29,15 +29,101 @@ export const ROLES = {
     id: 2,
     nome: 'Gestores',
     nivel: 9,
-    descricao: 'Acesso gerencial completo',
-    permissoes: ['*'] // Wildcard = todas as permissões
+    descricao: 'Acesso gerencial completo (exceto RH e Financeiro)',
+    permissoes: [
+      // Dashboard
+      'dashboard:visualizar',
+      
+      // Gruas
+      'gruas:visualizar',
+      'gruas:criar',
+      'gruas:editar',
+      'gruas:excluir',
+      'gruas:gerenciar',
+      'gruas:relatorios',
+      
+      // Obras
+      'obras:visualizar',
+      'obras:criar',
+      'obras:editar',
+      'obras:excluir',
+      'obras:gerenciar',
+      'obras:relatorios',
+      
+      // Clientes
+      'clientes:visualizar',
+      'clientes:criar',
+      'clientes:editar',
+      'clientes:excluir',
+      'clientes:gerenciar',
+      
+      // Contratos
+      'contratos:visualizar',
+      'contratos:criar',
+      'contratos:editar',
+      'contratos:excluir',
+      'contratos:gerenciar',
+      
+      // Funcionários (apenas visualizar, sem gerenciar)
+      'funcionarios:visualizar',
+      
+      // NÃO TEM ACESSO A PONTO ELETRÔNICO
+      // - ponto:*
+      // - ponto_eletronico:*
+      
+      // Documentos
+      'documentos:visualizar',
+      'documentos:criar',
+      'documentos:editar',
+      'documentos:excluir',
+      'documentos:gerenciar',
+      'documentos:assinatura',
+      'assinatura_digital:visualizar',
+      'assinatura_digital:gerenciar',
+      
+      // Livro de Gruas
+      'livros_gruas:visualizar',
+      'livros_gruas:criar',
+      'livros_gruas:editar',
+      'livros_gruas:gerenciar',
+      
+      // Estoque
+      'estoque:visualizar',
+      'estoque:criar',
+      'estoque:editar',
+      'estoque:excluir',
+      'estoque:gerenciar',
+      'estoque:movimentacoes',
+      'estoque:relatorios',
+      
+      // Justificativas (apenas visualizar)
+      'justificativas:visualizar',
+      
+      // Notificações
+      'notificacoes:visualizar',
+      'notificacoes:gerenciar',
+      
+      // Relatórios gerais
+      'relatorios:visualizar',
+      'relatorios:gerenciar',
+      'relatorios:exportar',
+      
+      // Histórico
+      'historico:visualizar',
+      
+      // NÃO TEM ACESSO A:
+      // - rh:*
+      // - financeiro:*
+      // - usuarios:gerenciar (apenas visualizar funcionários)
+      // - ponto:gerenciar, ponto:aprovacoes
+    ]
   },
   
   SUPERVISORES: {
     id: 3,
     nome: 'Supervisores',
     nivel: 6,
-    descricao: 'Supervisão operacional - Gruas, Obras, Clientes, Contratos, Funcionários, Ponto, Documentos, Livro Grua, Estoque',
+    descricao: 'Supervisão operacional - Gruas, Obras, Clientes, Contratos, Funcionários, Documentos, Livro Grua, Estoque',
     permissoes: [
       // Gruas
       'gruas:visualizar',
@@ -76,16 +162,9 @@ export const ROLES = {
       'funcionarios:excluir',
       'funcionarios:gerenciar',
       
-      // Ponto Eletrônico
-      'ponto:visualizar',
-      'ponto:gerenciar',
-      'ponto:aprovacoes',
-      'ponto:relatorios',
-      'ponto:editar',
-      'ponto_eletronico:visualizar',
-      'ponto_eletronico:gerenciar',
-      'ponto_eletronico:aprovacoes',
-      'ponto_eletronico:relatorios',
+      // NÃO TEM ACESSO A PONTO ELETRÔNICO
+      // - ponto:*
+      // - ponto_eletronico:*
       
       // Documentos
       'documentos:visualizar',
@@ -176,6 +255,58 @@ export const ROLES = {
       // Notificações (próprias)
       'notificacoes:visualizar'
     ]
+  },
+  
+  FINANCEIRO: {
+    id: 6,
+    nome: 'Financeiro',
+    nivel: 8,
+    descricao: 'Gestão financeira, orçamentos, contratos e relatórios financeiros',
+    permissoes: [
+      // Dashboard
+      'dashboard:visualizar',
+      
+      // Financeiro
+      'financeiro:visualizar',
+      'financeiro:criar',
+      'financeiro:editar',
+      'financeiro:excluir',
+      'financeiro:gerenciar',
+      'financeiro:relatorios',
+      
+      // Orçamentos
+      'orcamentos:visualizar',
+      'orcamentos:criar',
+      'orcamentos:editar',
+      'orcamentos:excluir',
+      'orcamentos:gerenciar',
+      
+      // Contratos
+      'contratos:visualizar',
+      'contratos:criar',
+      'contratos:editar',
+      'contratos:excluir',
+      'contratos:gerenciar',
+      
+      // Clientes (visualização e gerenciamento)
+      'clientes:visualizar',
+      'clientes:gerenciar',
+      
+      // Documentos (gerenciamento)
+      'documentos:visualizar',
+      'documentos:gerenciar',
+      'assinatura_digital:visualizar',
+      'assinatura_digital:gerenciar',
+      
+      // Notificações
+      'notificacoes:visualizar',
+      'notificacoes:gerenciar',
+      
+      // Relatórios financeiros
+      'relatorios:visualizar',
+      'relatorios:gerenciar',
+      'relatorios:exportar'
+    ]
   }
 }
 
@@ -188,7 +319,8 @@ export const ROLES_PERMISSIONS = {
   'Gestores': ROLES.GESTORES.permissoes,
   'Supervisores': ROLES.SUPERVISORES.permissoes,
   'Operários': ROLES.OPERARIOS.permissoes,
-  'Clientes': ROLES.CLIENTES.permissoes
+  'Clientes': ROLES.CLIENTES.permissoes,
+  'Financeiro': ROLES.FINANCEIRO.permissoes
 }
 
 // ========================================
@@ -198,6 +330,7 @@ export const ROLES_PERMISSIONS = {
 export const ROLES_LEVELS = {
   'Admin': 10,
   'Gestores': 9,
+  'Financeiro': 8,
   'Supervisores': 6,
   'Operários': 4,
   'Clientes': 1
@@ -210,6 +343,7 @@ export const ROLES_LEVELS = {
 export const ROLES_LIST = [
   ROLES.ADMIN,
   ROLES.GESTORES,
+  ROLES.FINANCEIRO,
   ROLES.SUPERVISORES,
   ROLES.OPERARIOS,
   ROLES.CLIENTES

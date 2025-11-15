@@ -164,6 +164,8 @@ function DashboardLayoutContent({
   const { isLoading, showLoading, hideLoading, message } = useGlobalLoading()
   const [isNavigating, setIsNavigating] = useState(false)
   const navigationTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const initialLoadingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     principal: false,
     operacional: false,
@@ -189,9 +191,9 @@ function DashboardLayoutContent({
         return canAccessDashboard()
       }
       
-      // WhatsApp Aprovações - apenas Admin e Gerente
+      // WhatsApp Aprovações - apenas Admin
       if (item.href === '/dashboard/aprovacoes-horas-extras/whatsapp') {
-        return canAccessDashboard()
+        return isAdminFromPermissions()
       }
       
       // Clientes - apenas Admin e Gerente
@@ -224,9 +226,9 @@ function DashboardLayoutContent({
         return isAdminFromPermissions() || isManager() || isSupervisor()
       }
       
-      // Orçamentos - Admin, Gerente, Supervisor
+      // Orçamentos - apenas Admin, Gestor e Financeiro
       if (item.href === '/dashboard/orcamentos') {
-        return isAdminFromPermissions() || isManager() || isSupervisor()
+        return hasPermission('orcamentos:visualizar')
       }
       
       // Ponto Eletrônico - Admin, Gerente, Supervisor
@@ -375,6 +377,31 @@ function DashboardLayoutContent({
   useEffect(() => {
     setIsClientSide(true)
   }, [])
+
+  // Timeout de 5 segundos para recarregar a página se o loading inicial demorar muito
+  useEffect(() => {
+    if (!isClientSide) {
+      // Configurar timeout de 5 segundos para recarregar a página
+      initialLoadingTimeoutRef.current = setTimeout(() => {
+        console.warn('⚠️ [Loading] Timeout de 5s no loading inicial. Recarregando página...')
+        window.location.reload()
+      }, 5000)
+    }
+
+    return () => {
+      if (initialLoadingTimeoutRef.current) {
+        clearTimeout(initialLoadingTimeoutRef.current)
+        initialLoadingTimeoutRef.current = null
+      }
+    }
+  }, [isClientSide])
+  
+  // Redirecionar Operários para o PWA - não devem ter acesso ao dashboard web
+  useEffect(() => {
+    if (!permissionsLoading && isOperator()) {
+      router.replace('/pwa')
+    }
+  }, [permissionsLoading, isOperator, router])
   
   // Renderizar apenas no cliente para evitar erros de SSR
   // IMPORTANTE: Este check deve vir DEPOIS de todos os hooks
@@ -386,6 +413,20 @@ function DashboardLayoutContent({
             <Building2 className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-xl font-bold text-gray-900">Carregando Dashboard...</h1>
+        </div>
+      </div>
+    )
+  }
+  
+  // Não renderizar layout se for Operário (enquanto redireciona)
+  if (!permissionsLoading && isOperator()) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Building2 className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Redirecionando para o aplicativo...</h1>
         </div>
       </div>
     )
@@ -500,75 +541,79 @@ function DashboardLayoutContent({
             )}
           </div>
 
-          {/* Seção RH e Pessoas */}
-          <div>
-            <button
-              onClick={() => toggleSection('rh')}
-              className="flex items-center justify-between w-full text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 hover:text-gray-700 transition-colors"
-            >
-              <span>RH e Pessoas</span>
-              {collapsedSections.rh ? (
-                <ChevronRight className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
+          {/* Seção RH e Pessoas - Só exibir se houver itens visíveis */}
+          {filteredBaseNavigation.filter(item => item.category === "rh").length > 0 && (
+            <div>
+              <button
+                onClick={() => toggleSection('rh')}
+                className="flex items-center justify-between w-full text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 hover:text-gray-700 transition-colors"
+              >
+                <span>RH e Pessoas</span>
+                {collapsedSections.rh ? (
+                  <ChevronRight className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+              {!collapsedSections.rh && (
+                <div className="space-y-1">
+                  {filteredBaseNavigation.filter(item => item.category === "rh").map((item) => {
+                    const isActive = pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => handleLinkClick(item.href, item.name)}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <item.icon className="w-5 h-5" />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </div>
               )}
-            </button>
-            {!collapsedSections.rh && (
-              <div className="space-y-1">
-                {navigation.filter(item => item.category === "rh").map((item) => {
-                  const isActive = pathname === item.href
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      onClick={() => handleLinkClick(item.href, item.name)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
-                      }`}
-                    >
-                      <item.icon className="w-5 h-5" />
-                      {item.name}
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Seção Financeira */}
-          <div>
-            <button
-              onClick={() => toggleSection('financeiro')}
-              className="flex items-center justify-between w-full text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 hover:text-gray-700 transition-colors"
-            >
-              <span>Financeiro</span>
-              {collapsedSections.financeiro ? (
-                <ChevronRight className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
+          {/* Seção Financeira - Só exibir se houver itens visíveis */}
+          {filteredBaseNavigation.filter(item => item.category === "financeiro").length > 0 && (
+            <div>
+              <button
+                onClick={() => toggleSection('financeiro')}
+                className="flex items-center justify-between w-full text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 hover:text-gray-700 transition-colors"
+              >
+                <span>Financeiro</span>
+                {collapsedSections.financeiro ? (
+                  <ChevronRight className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+              {!collapsedSections.financeiro && (
+                <div className="space-y-1">
+                  {filteredBaseNavigation.filter(item => item.category === "financeiro").map((item) => {
+                    const isActive = pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => handleLinkClick(item.href, item.name)}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <item.icon className="w-5 h-5" />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </div>
               )}
-            </button>
-            {!collapsedSections.financeiro && (
-              <div className="space-y-1">
-                {navigation.filter(item => item.category === "financeiro").map((item) => {
-                  const isActive = pathname === item.href
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      onClick={() => handleLinkClick(item.href, item.name)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
-                      }`}
-                    >
-                      <item.icon className="w-5 h-5" />
-                      {item.name}
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Seção Relatórios e Análises */}
           <div>

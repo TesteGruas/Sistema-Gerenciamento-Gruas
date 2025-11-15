@@ -216,7 +216,7 @@ export const funcionariosApi = {
     const searchParams = new URLSearchParams()
     searchParams.append('page', '1')
     searchParams.append('limit', '100')
-    searchParams.append('q', termo) // Parâmetro de pesquisa por nome
+    searchParams.append('search', termo) // Parâmetro de pesquisa por nome (backend espera 'search', não 'q')
     
     if (filtros?.cargo) searchParams.append('cargo', filtros.cargo)
     if (filtros?.status) searchParams.append('status', filtros.status)

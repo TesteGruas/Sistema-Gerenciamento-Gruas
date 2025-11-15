@@ -30,8 +30,16 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { NotificacoesAPI, Notificacao, formatarTempoRelativo, NotificationType, ListarNotificacoesResponse } from '@/lib/api-notificacoes'
+import { 
+  NotificacoesAPI, 
+  Notificacao, 
+  formatarTempoRelativo, 
+  NotificationType, 
+  ListarNotificacoesResponse,
+  obterTiposPermitidosPorRole
+} from '@/lib/api-notificacoes'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
 
 // Lazy load de componentes pesados para melhorar performance inicial
 const NovaNotificacaoDialog = dynamic(
@@ -118,6 +126,9 @@ const tipoConfig: Record<NotificationType, {
 }
 
 export default function NotificacoesPage() {
+  const { user } = useAuth()
+  const tiposPermitidos = obterTiposPermitidosPorRole(user?.role)
+  
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
@@ -446,15 +457,15 @@ export default function NotificacoesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="info">Informação</SelectItem>
-                  <SelectItem value="warning">Aviso</SelectItem>
-                  <SelectItem value="error">Erro</SelectItem>
-                  <SelectItem value="success">Sucesso</SelectItem>
-                  <SelectItem value="grua">Gruas</SelectItem>
-                  <SelectItem value="obra">Obras</SelectItem>
-                  <SelectItem value="financeiro">Financeiro</SelectItem>
-                  <SelectItem value="rh">RH</SelectItem>
-                  <SelectItem value="estoque">Estoque</SelectItem>
+                  {tiposPermitidos.includes('info') && <SelectItem value="info">Informação</SelectItem>}
+                  {tiposPermitidos.includes('success') && <SelectItem value="success">Sucesso</SelectItem>}
+                  {tiposPermitidos.includes('warning') && <SelectItem value="warning">Aviso</SelectItem>}
+                  {tiposPermitidos.includes('error') && <SelectItem value="error">Erro</SelectItem>}
+                  {tiposPermitidos.includes('grua') && <SelectItem value="grua">Gruas</SelectItem>}
+                  {tiposPermitidos.includes('obra') && <SelectItem value="obra">Obras</SelectItem>}
+                  {tiposPermitidos.includes('financeiro') && <SelectItem value="financeiro">Financeiro</SelectItem>}
+                  {tiposPermitidos.includes('rh') && <SelectItem value="rh">RH</SelectItem>}
+                  {tiposPermitidos.includes('estoque') && <SelectItem value="estoque">Estoque</SelectItem>}
                 </SelectContent>
               </Select>
             </div>

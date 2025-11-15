@@ -95,14 +95,7 @@ export const ROLES: Role[] = [
     id: 2,
     nome: 'Gestores',
     nivel: 9,
-    descricao: 'Acesso gerencial completo',
-    permissoes: ['*'] // Wildcard = todas as permissões
-  },
-  {
-    id: 3,
-    nome: 'Supervisores',
-    nivel: 6,
-    descricao: 'Supervisão operacional - Gruas, Obras, Ponto, Documentos, Livro Grua, Estoque',
+    descricao: 'Acesso gerencial completo (exceto RH e Financeiro)',
     permissoes: [
       // Dashboard
       'dashboard:visualizar',
@@ -123,16 +116,102 @@ export const ROLES: Role[] = [
       'obras:gerenciar',
       'obras:relatorios',
       
-      // Ponto Eletrônico
-      'ponto:visualizar',
-      'ponto:gerenciar',
-      'ponto:aprovacoes',
-      'ponto:relatorios',
-      'ponto:editar',
-      'ponto_eletronico:visualizar',
-      'ponto_eletronico:gerenciar',
-      'ponto_eletronico:aprovacoes',
-      'ponto_eletronico:relatorios',
+      // Clientes
+      'clientes:visualizar',
+      'clientes:criar',
+      'clientes:editar',
+      'clientes:excluir',
+      'clientes:gerenciar',
+      
+      // Contratos
+      'contratos:visualizar',
+      'contratos:criar',
+      'contratos:editar',
+      'contratos:excluir',
+      'contratos:gerenciar',
+      
+      // Funcionários (apenas visualizar, sem gerenciar)
+      'funcionarios:visualizar',
+      
+      // NÃO TEM ACESSO A PONTO ELETRÔNICO
+      // - ponto:*
+      // - ponto_eletronico:*
+      
+      // Documentos
+      'documentos:visualizar',
+      'documentos:criar',
+      'documentos:editar',
+      'documentos:excluir',
+      'documentos:gerenciar',
+      'documentos:assinatura',
+      'assinatura_digital:visualizar',
+      'assinatura_digital:gerenciar',
+      
+      // Livro de Gruas
+      'livros_gruas:visualizar',
+      'livros_gruas:criar',
+      'livros_gruas:editar',
+      'livros_gruas:gerenciar',
+      
+      // Estoque
+      'estoque:visualizar',
+      'estoque:criar',
+      'estoque:editar',
+      'estoque:excluir',
+      'estoque:gerenciar',
+      'estoque:movimentacoes',
+      'estoque:relatorios',
+      
+      // Justificativas (apenas visualizar)
+      'justificativas:visualizar',
+      
+      // Notificações
+      'notificacoes:visualizar',
+      'notificacoes:gerenciar',
+      
+      // Relatórios gerais
+      'relatorios:visualizar',
+      'relatorios:gerenciar',
+      'relatorios:exportar',
+      
+      // Histórico
+      'historico:visualizar',
+      
+      // NÃO TEM ACESSO A:
+      // - rh:*
+      // - financeiro:*
+      // - usuarios:gerenciar (apenas visualizar funcionários)
+      // - ponto:gerenciar, ponto:aprovacoes
+    ]
+  },
+  {
+    id: 3,
+    nome: 'Supervisores',
+    nivel: 6,
+    descricao: 'Supervisão operacional - Gruas, Obras, Documentos, Livro Grua, Estoque',
+    permissoes: [
+      // Dashboard
+      'dashboard:visualizar',
+      
+      // Gruas
+      'gruas:visualizar',
+      'gruas:criar',
+      'gruas:editar',
+      'gruas:excluir',
+      'gruas:gerenciar',
+      'gruas:relatorios',
+      
+      // Obras
+      'obras:visualizar',
+      'obras:criar',
+      'obras:editar',
+      'obras:excluir',
+      'obras:gerenciar',
+      'obras:relatorios',
+      
+      // NÃO TEM ACESSO A PONTO ELETRÔNICO
+      // - ponto:*
+      // - ponto_eletronico:*
       
       // Documentos
       'documentos:visualizar',

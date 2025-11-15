@@ -36,7 +36,9 @@ function PWALoginPageContent(): JSX.Element {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  // Inicializar como false para evitar erro de hidratação - será true apenas no cliente após verificação
+  const [isCheckingAuth, setIsCheckingAuth] = useState(false)
+  const [isClient, setIsClient] = useState(false)
   const [rememberEmail, setRememberEmail] = useState(false)
   const [setupBiometric, setSetupBiometric] = useState(false)
   const [showBiometricOption, setShowBiometricOption] = useState(false)
@@ -59,14 +61,25 @@ function PWALoginPageContent(): JSX.Element {
     clearRememberedEmail
   } = usePersistentSession()
 
+  // Verificar se estamos no cliente
+  useEffect(() => {
+    setIsClient(true)
+    // Iniciar verificação de autenticação apenas no cliente
+    if (sessionLoading) {
+      setIsCheckingAuth(true)
+    }
+  }, [sessionLoading])
+
   // Verificar se já está autenticado
   useEffect(() => {
+    if (!isClient) return // Não executar no servidor
+    
     if (isAuthenticated) {
       router.push('/pwa')
     } else if (!sessionLoading) {
       setIsCheckingAuth(false)
     }
-  }, [isAuthenticated, sessionLoading, router])
+  }, [isAuthenticated, sessionLoading, router, isClient])
 
   // Carregar email lembrado
   useEffect(() => {
@@ -297,6 +310,12 @@ function PWALoginPageContent(): JSX.Element {
     })
   }
 
+  // Não renderizar nada no servidor para evitar erro de hidratação
+  // O cliente vai renderizar após a hidratação
+  if (!isClient) {
+    return null
+  }
+  
   // Mostrar loading enquanto verifica autenticação
   if (isCheckingAuth) {
     return (

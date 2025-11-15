@@ -35,10 +35,24 @@ export default function Dashboard() {
     canAccessRH,
     canAccessObras,
     canAccessClientes,
-    canAccessRelatorios
+    canAccessRelatorios,
+    isOperator
   } = usePermissions()
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Redirecionar Operários para o PWA - não devem ter acesso ao dashboard web
+  useEffect(() => {
+    if (!permissionsLoading && isOperator()) {
+      window.location.href = '/pwa'
+      return
+    }
+  }, [permissionsLoading, isOperator])
+  
+  // Não renderizar nada se for Operário (enquanto redireciona)
+  if (!permissionsLoading && isOperator()) {
+    return null
+  }
 
   useEffect(() => {
     const loadDashboardData = async () => {

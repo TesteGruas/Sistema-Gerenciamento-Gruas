@@ -139,11 +139,21 @@ const funcionarioUpdateSchema = Joi.object({
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    console.log('='.repeat(80))
+    console.log('[FUNCIONARIOS] Rota GET / chamada')
+    console.log('[FUNCIONARIOS] Query params:', JSON.stringify(req.query, null, 2))
+    console.log('[FUNCIONARIOS] Headers:', {
+      authorization: req.headers.authorization ? 'presente' : 'ausente',
+      'content-type': req.headers['content-type']
+    })
+    
     const page = parseInt(req.query.page) || 1
     const limit = Math.min(parseInt(req.query.limit) || 10, 100)
     const offset = (page - 1) * limit
+    
+    console.log('[FUNCIONARIOS] Paginação:', { page, limit, offset })
 
-    // Construir filtros
+    // Construir filtros para funcionários
     let query = supabaseAdmin
       .from('funcionarios')
       .select(`
@@ -184,46 +194,257 @@ router.get('/', authenticateToken, async (req, res) => {
     if (req.query.turno) {
       query = query.eq('turno', req.query.turno)
     }
-    if (req.query.search) {
-      const searchTerm = `%${req.query.search}%`
-      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm}`)
+    // Aceitar tanto 'search' quanto 'q' para compatibilidade
+    // Decodificar o termo de busca (pode vir com + ou %20 para espaços)
+    let searchTermParam = req.query.search || req.query.q
+    console.log('[FUNCIONARIOS] Termo de busca original:', searchTermParam)
+    
+    if (searchTermParam) {
+      // Decodificar URL (substituir + por espaço e decodificar %20, etc)
+      searchTermParam = decodeURIComponent(searchTermParam.replace(/\+/g, ' '))
+      console.log(`[FUNCIONARIOS] Termo de busca decodificado: "${searchTermParam}"`)
+      // Usar ilike corretamente - incluir busca por nome, email e telefone
+      // Remover caracteres não numéricos do telefone para busca
+      const telefoneLimpo = searchTermParam.replace(/\D/g, '')
+      if (telefoneLimpo.length >= 3) {
+        query = query.or(`nome.ilike.%${searchTermParam}%,email.ilike.%${searchTermParam}%,telefone.ilike.%${telefoneLimpo}%`)
+      } else {
+        query = query.or(`nome.ilike.%${searchTermParam}%,email.ilike.%${searchTermParam}%`)
+      }
+      console.log(`[FUNCIONARIOS] Query com busca aplicada`)
+    } else {
+      console.log('[FUNCIONARIOS] Nenhum termo de busca fornecido')
     }
 
     // Aplicar paginação e ordenação (ID descendente para mostrar os mais recentes primeiro)
     query = query.order('id', { ascending: false }).range(offset, offset + limit - 1)
 
-    const { data, error, count } = await query
+    console.log('[FUNCIONARIOS] Executando query no Supabase...')
+    const { data: funcionariosData, error: funcionariosError, count: funcionariosCount } = await query
 
-    if (error) {
+    if (funcionariosError) {
+      console.error('[FUNCIONARIOS] ❌ Erro ao buscar funcionários:', funcionariosError)
+      console.error('[FUNCIONARIOS] Detalhes do erro:', JSON.stringify(funcionariosError, null, 2))
       return res.status(500).json({
         error: 'Erro ao buscar funcionários',
-        message: error.message
+        message: funcionariosError.message
       })
     }
 
+    console.log(`[FUNCIONARIOS] ✅ Query executada com sucesso`)
+    console.log(`[FUNCIONARIOS] Termo de busca: "${searchTermParam || 'nenhum'}"`)
+    console.log(`[FUNCIONARIOS] Status filtro: "${req.query.status || 'nenhum'}"`)
+    console.log(`[FUNCIONARIOS] Funcionários encontrados: ${funcionariosData?.length || 0}`)
+    console.log(`[FUNCIONARIOS] Total no banco: ${funcionariosCount || 0}`)
+
+    // Buscar também usuários sem funcionario_id vinculado (como operadores)
+    // que podem não estar na tabela funcionarios
+    let usuariosSemFuncionario = []
+    try {
+      // Decodificar o termo de busca se ainda não foi decodificado
+      let searchTermClean = searchTermParam
+      if (searchTermClean) {
+        if (searchTermClean.includes('+') || searchTermClean.includes('%')) {
+          searchTermClean = decodeURIComponent(searchTermClean.replace(/\+/g, ' '))
+        }
+      }
+      
+      console.log(`[DEBUG] Buscando usuários sem funcionario_id com termo: "${searchTermClean || 'nenhum'}"`)
+      
+      // Fazer a query completa
+      let usuariosQuery = supabaseAdmin
+        .from('usuarios')
+        .select(`
+          *,
+          usuario_perfis(
+            id,
+            perfil_id,
+            status,
+            data_atribuicao,
+            perfis(
+              id,
+              nome,
+              descricao,
+              nivel_acesso
+            )
+          )
+        `)
+        .is('funcionario_id', null)
+      
+      // Aplicar filtro de status se fornecido
+      if (req.query.status) {
+        usuariosQuery = usuariosQuery.eq('status', req.query.status)
+        console.log(`[DEBUG] Filtro de status aplicado: ${req.query.status}`)
+      }
+      
+      // Aplicar busca por nome, email ou telefone se houver termo de busca
+      if (searchTermClean) {
+        const telefoneLimpo = searchTermClean.replace(/\D/g, '')
+        if (telefoneLimpo.length >= 3) {
+          usuariosQuery = usuariosQuery.or(`nome.ilike.%${searchTermClean}%,email.ilike.%${searchTermClean}%,telefone.ilike.%${telefoneLimpo}%`)
+        } else {
+          usuariosQuery = usuariosQuery.or(`nome.ilike.%${searchTermClean}%,email.ilike.%${searchTermClean}%`)
+        }
+      }
+      
+      // Aplicar paginação
+      // Se houver termo de busca, buscar mais resultados para garantir que encontramos todos os que correspondem
+      // Se não houver termo de busca, aplicar paginação normal
+      if (!searchTermClean) {
+        usuariosQuery = usuariosQuery.range(offset, offset + limit - 1)
+      } else {
+        // Com busca, buscar mais resultados para garantir que não perdemos nenhum
+        usuariosQuery = usuariosQuery.limit(limit * 3)
+      }
+      
+      usuariosQuery = usuariosQuery.order('created_at', { ascending: false })
+      
+      console.log(`[DEBUG] Query final de usuários:`, {
+        termo: searchTermClean || 'nenhum',
+        status: req.query.status || 'nenhum',
+        funcionario_id: 'null',
+        offset: searchTermClean ? 'não aplicado' : offset,
+        limit: searchTermClean ? limit * 2 : limit
+      })
+      
+      console.log(`[DEBUG] Query de usuários construída, executando...`)
+
+      const { data: usuariosData, error: usuariosError } = await usuariosQuery
+
+      if (usuariosError) {
+        console.error('[DEBUG] Erro ao buscar usuários sem funcionario_id:', usuariosError)
+        console.error('[DEBUG] Detalhes do erro:', JSON.stringify(usuariosError, null, 2))
+        console.error('[DEBUG] Código do erro:', usuariosError.code)
+        console.error('[DEBUG] Mensagem do erro:', usuariosError.message)
+        console.error('[DEBUG] Detalhes completos:', usuariosError.details)
+      } else {
+        console.log(`[DEBUG] Query de usuários executada com sucesso. Resultados: ${usuariosData?.length || 0}`)
+        if (usuariosData && usuariosData.length > 0) {
+          console.log(`[DEBUG] ✅ Encontrados ${usuariosData.length} usuários sem funcionario_id`)
+          if (usuariosData.length > 0) {
+            console.log(`[DEBUG] Primeiro usuário encontrado:`, {
+              id: usuariosData[0].id,
+              nome: usuariosData[0].nome,
+              email: usuariosData[0].email,
+              telefone: usuariosData[0].telefone,
+              status: usuariosData[0].status,
+              funcionario_id: usuariosData[0].funcionario_id
+            })
+          }
+        
+          // Converter usuários para formato de funcionário
+          usuariosSemFuncionario = usuariosData.map(usuario => {
+            const perfil = usuario.usuario_perfis?.[0]?.perfis
+            return {
+              id: usuario.id,
+              nome: usuario.nome,
+              email: usuario.email,
+              telefone: usuario.telefone,
+              cpf: usuario.cpf,
+              status: usuario.status,
+              cargo: usuario.cargo || null, // Usar cargo do usuário se existir
+              turno: usuario.turno || null,
+              data_admissao: usuario.data_admissao || null,
+              salario: usuario.salario || null,
+              funcionario_id: null,
+              usuario_existe: true,
+              usuario_criado: true,
+              perfil_usuario: perfil ? {
+                id: perfil.id,
+                nome: perfil.nome,
+                nivel_acesso: perfil.nivel_acesso
+              } : null,
+              funcionarios_obras: [],
+              obra_atual: null,
+              obras_vinculadas: []
+            }
+          })
+        } else {
+          console.log('[DEBUG] Nenhum usuário sem funcionario_id encontrado')
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao processar busca de usuários sem funcionario_id:', error)
+    }
+
+    // Combinar funcionários e usuários sem funcionario_id
+    // Remover duplicatas baseado no ID (caso um funcionário esteja em ambas as tabelas)
+    const funcionariosMap = new Map()
+    
+    // Adicionar funcionários da tabela funcionarios
+    if (funcionariosData) {
+      funcionariosData.forEach(func => {
+        funcionariosMap.set(func.id, func)
+      })
+    }
+    
+    // Adicionar usuários sem funcionario_id (só se não existir já na tabela funcionarios)
+    usuariosSemFuncionario.forEach(usuario => {
+      if (!funcionariosMap.has(usuario.id)) {
+        funcionariosMap.set(usuario.id, usuario)
+      }
+    })
+    
+    const todosFuncionarios = Array.from(funcionariosMap.values())
+    
+    console.log(`[FUNCIONARIOS] Total combinado (sem duplicatas): ${todosFuncionarios.length}`)
+    console.log(`[FUNCIONARIOS] - Funcionários da tabela funcionarios: ${funcionariosData?.length || 0}`)
+    console.log(`[FUNCIONARIOS] - Usuários sem funcionario_id: ${usuariosSemFuncionario.length}`)
+
     // Adicionar informações sobre usuário existente e obra atual para cada funcionário
-    const funcionariosComUsuario = (data || []).map(funcionario => {
+    const funcionariosComUsuario = todosFuncionarios.map(funcionario => {
       const alocacoesAtivas = funcionario.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
       const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
       
       return {
         ...funcionario,
-        usuario_existe: !!funcionario.usuario,
-        usuario_criado: !!funcionario.usuario,
+        usuario_existe: funcionario.usuario_existe ?? !!funcionario.usuario,
+        usuario_criado: funcionario.usuario_criado ?? !!funcionario.usuario,
         obra_atual: obraAtual,
         obras_vinculadas: alocacoesAtivas
       }
     })
 
-    const totalPages = Math.ceil(count / limit)
+    // Ordenar por ID descendente
+    funcionariosComUsuario.sort((a, b) => (b.id || 0) - (a.id || 0))
 
+    // Calcular total correto
+    // Se houver termo de busca, o count já está filtrado, então usamos o tamanho da lista combinada
+    // Se não houver termo de busca, precisamos contar todos os usuários sem funcionario_id
+    let totalItems
+    if (searchTermParam) {
+      // Com busca, o total é o tamanho da lista combinada (já filtrada)
+      totalItems = funcionariosComUsuario.length
+    } else {
+      // Sem busca, precisamos contar todos os usuários sem funcionario_id
+      // Para isso, vamos fazer uma query de contagem
+      let countQuery = supabaseAdmin
+        .from('usuarios')
+        .select('id', { count: 'exact', head: true })
+        .is('funcionario_id', null)
+      
+      if (req.query.status) {
+        countQuery = countQuery.eq('status', req.query.status)
+      }
+      
+      const { count: usuariosCount } = await countQuery
+      totalItems = (funcionariosCount || 0) + (usuariosCount || 0)
+    }
+    
+    const totalPages = Math.ceil(totalItems / limit)
+    const paginatedData = funcionariosComUsuario.slice(offset, offset + limit)
+
+    console.log(`[FUNCIONARIOS] 📤 Enviando resposta: ${paginatedData.length} itens`)
+    console.log(`[FUNCIONARIOS] Paginação: página ${page} de ${totalPages}, total: ${totalItems}`)
+    console.log('='.repeat(80))
+    
     res.json({
       success: true,
-      data: funcionariosComUsuario,
+      data: paginatedData,
       pagination: {
         page,
         limit,
-        total: count,
+        total: totalItems,
         pages: totalPages
       }
     })

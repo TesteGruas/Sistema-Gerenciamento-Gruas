@@ -34,6 +34,8 @@ import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { PWA_MENU_ITEMS } from "@/app/pwa/lib/permissions"
 import { PageLoader } from "@/components/ui/loader"
 import { EmpresaProvider, useEmpresa } from "@/hooks/use-empresa"
+import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
+import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
 import Image from "next/image"
 
 interface PWALayoutProps {
@@ -48,10 +50,12 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string; profile?: any } | null>(null)
-  const [isClient, setIsClient] = useState(false)
+  // Inicializar como true para evitar diferença entre servidor e cliente na primeira renderização
+  const [isClient, setIsClient] = useState(true)
   const [documentosPendentes, setDocumentosPendentes] = useState(0)
   const [isNavigating, setIsNavigating] = useState(false)
   const [previousPathname, setPreviousPathname] = useState<string | null>(null)
+  const [temObraAtiva, setTemObraAtiva] = useState<boolean>(false)
   
   // Hook de sessão persistente
   const {
@@ -73,11 +77,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     loading: permissionsLoading
   } = usePWAPermissions()
   
-  // Verificar se estamos no cliente
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
-
+  // isClient já é inicializado como true para evitar diferença de renderização entre servidor e cliente
+  // useEffect removido para evitar erro de hidratação
+  
   // Detectar mudanças de rota e ocultar loading quando a página carregar
   useEffect(() => {
     // Se é a primeira renderização, não fazer nada
@@ -195,20 +197,67 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     await persistentLogout()
     setUser(null)
     setDocumentosPendentes(0)
+    setTemObraAtiva(false)
   }
+  
+  // Verificar se funcionário tem obra ativa
+  useEffect(() => {
+    const verificarObraAtiva = async () => {
+      if (typeof window === 'undefined') return
+      if (!user || sessionLoading) return
+      
+      try {
+        const token = localStorage.getItem('access_token')
+        if (!token) {
+          setTemObraAtiva(false)
+          return
+        }
+        
+        const userData = localStorage.getItem('user_data')
+        if (!userData) {
+          setTemObraAtiva(false)
+          return
+        }
+        
+        const parsedUser = JSON.parse(userData)
+        const funcionarioId = await getFuncionarioIdWithFallback(
+          parsedUser,
+          token,
+          'ID do funcionário não encontrado'
+        )
+        
+        if (funcionarioId) {
+          const alocacoes = await getAlocacoesAtivasFuncionario(funcionarioId)
+          const temObra = alocacoes.data && alocacoes.data.length > 0
+          setTemObraAtiva(temObra)
+          console.log('[PWA Layout] Funcionário tem obra ativa?', temObra, alocacoes.data)
+        } else {
+          setTemObraAtiva(false)
+        }
+      } catch (error) {
+        console.warn('[PWA Layout] Erro ao verificar obra ativa:', error)
+        setTemObraAtiva(false)
+      }
+    }
+    
+    verificarObraAtiva()
+  }, [user, sessionLoading])
 
-  // Renderizar apenas no cliente
-  if (!isClient) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-[#871b0b] rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Smartphone className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">Carregando...</h1>
-        </div>
-      </div>
-    )
+  // Rotas que não precisam do layout (login e redirect) - renderizar children diretamente
+  const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
+  const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
+  
+  // Se for uma rota sem layout, renderizar children diretamente sem verificação de cliente
+  if (!shouldShowLayout) {
+    return <>{children}</>
+  }
+  
+  // Renderizar loading apenas no cliente - evitar erro de hidratação
+  // Não renderizar nada no servidor para evitar diferença de HTML
+  if (typeof window === 'undefined' || !isClient) {
+    // Retornar null no servidor para evitar diferença de renderização
+    // O cliente vai renderizar o loading após a hidratação
+    return null
   }
 
   // Mapear TODOS os itens do menu PWA para formato de navegação
@@ -220,6 +269,14 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   
   const allNavigationItems = itemsToUse
     .filter(item => item && item.icon) // Filtrar itens inválidos ou sem ícone
+    .filter(item => {
+      // Filtrar "Ponto Eletrônico" e "Gruas" se não tiver obra ativa
+      if ((item.path === '/pwa/ponto' || item.path === '/pwa/gruas') && !temObraAtiva) {
+        console.log(`[PWA Layout] ${item.label} requer obra ativa, ocultando`)
+        return false
+      }
+      return true
+    })
     .map(item => {
       // Mapear labels para nomes mais curtos para o menu inferior
       const labelMap: Record<string, string> = {
@@ -306,15 +363,18 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   })
 
   // Itens essenciais da navbar inferior (5 itens: Ponto, Espelho, Home, Docs, Perfil)
+  // Filtrar "Ponto" se não tiver obra ativa
   const essentialNavItems = [
-    // Ponto
-    allNavigationItems.find(item => item.href === '/pwa/ponto') || {
-      name: 'Ponto',
-      href: '/pwa/ponto',
-      icon: Clock,
-      label: 'Ponto',
-      description: 'Registrar ponto'
-    },
+    // Ponto - apenas se tiver obra ativa
+    ...(temObraAtiva ? [
+      allNavigationItems.find(item => item.href === '/pwa/ponto') || {
+        name: 'Ponto',
+        href: '/pwa/ponto',
+        icon: Clock,
+        label: 'Ponto',
+        description: 'Registrar ponto'
+      }
+    ] : []),
     // Espelho
     allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
       name: 'Espelho',
@@ -349,7 +409,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     }
   ].filter(Boolean) // Remove itens undefined
 
-  // Usar apenas os 5 itens essenciais na navegação inferior
+  // Usar apenas os 5 itens essenciais na navegação inferior (ou menos se não tiver obra ativa)
   const filteredNavigationItems = essentialNavItems.slice(0, 5)
 
   // Para o menu lateral (drawer), separar em "Principal" e "Mais"
@@ -359,9 +419,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   // Demais itens para o drawer (outros + sempre visíveis)
   const drawerSideItems = [...otherItems, ...alwaysVisibleItems]
 
-  // Rotas que não precisam do layout
-  const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
-  const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
+  // noLayoutPaths e shouldShowLayout já foram declarados acima
 
   return (
     <PWAErrorBoundary>
@@ -648,7 +706,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
 
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb overflow-visible">
-              <div className="grid grid-cols-5 h-16 relative">
+              <div className={`grid h-16 relative ${temObraAtiva ? 'grid-cols-5' : 'grid-cols-4'}`}>
                 {filteredNavigationItems.length > 0 ? (
                   filteredNavigationItems
                     .filter(item => item && item.icon) // Filtrar itens sem ícone

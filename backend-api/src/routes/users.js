@@ -110,7 +110,7 @@ router.get('/test-auth', authenticateToken, (req, res) => {
 router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
-    const limit = parseInt(req.query.limit) || 10
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100)
     const offset = (page - 1) * limit
     const { status, search } = req.query
 
@@ -121,8 +121,10 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
 
     // Aplicar filtro de busca por nome ou email
     if (search) {
-      const searchTerm = `%${search}%`
-      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm}`)
+      // Decodificar o termo de busca (pode vir com + ou %20 para espaços)
+      let searchTerm = decodeURIComponent(search.replace(/\+/g, ' '))
+      // Usar ilike corretamente - o padrão deve ser passado sem % no método or()
+      query = query.or(`nome.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
     }
 
     if (status) {
@@ -142,7 +144,7 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
 
     // Buscar perfis para cada usuário
     const usuariosComPerfis = await Promise.all(
-      usuarios.map(async (usuario) => {
+      (usuarios || []).map(async (usuario) => {
         const { data: perfilData } = await supabaseAdmin
           .from('usuario_perfis')
           .select(`
@@ -168,24 +170,15 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
       })
     )
 
-    const data = usuariosComPerfis
-
-    if (error) {
-      return res.status(500).json({
-        error: 'Erro ao buscar usuários',
-        message: error.message
-      })
-    }
-
-    const totalPages = Math.ceil(count / limit)
+    const totalPages = Math.ceil((count || 0) / limit)
 
     res.json({
       success: true,
-      data: data || [],
+      data: usuariosComPerfis || [],
       pagination: {
         page,
         limit,
-        total: count,
+        total: count || 0,
         pages: totalPages
       }
     })

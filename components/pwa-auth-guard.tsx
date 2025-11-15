@@ -11,8 +11,14 @@ interface PWAAuthGuardProps {
 export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [isClient, setIsClient] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  
+  // Garantir que só renderiza no cliente para evitar erro de hidratação
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
     const checkAuth = () => {
@@ -88,6 +94,11 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       clearInterval(interval)
     }
   }, [pathname, router])
+
+  // Não renderizar nada no servidor para evitar erro de hidratação
+  if (!isClient) {
+    return null
+  }
 
   // Mostrar tela de loading enquanto verifica autenticação
   if (isLoading) {
