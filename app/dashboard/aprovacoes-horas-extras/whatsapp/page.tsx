@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -34,119 +34,8 @@ export default function WhatsAppAprovacoesPage() {
   const loadingRef = useRef(false)
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null)
   
-  // Verificar se é Admin - redirecionar se não for
-  useEffect(() => {
-    if (user && !isAdmin()) {
-      router.push('/dashboard')
-    }
-  }, [user, isAdmin, router])
-  
-  // Se não for Admin, não renderizar nada (APÓS TODOS OS HOOKS)
-  if (!user || !isAdmin()) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
-              <Shield className="w-5 h-5" />
-              Acesso Restrito
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Você não tem permissão para acessar esta página. Apenas administradores podem acessar as configurações do WhatsApp.
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  // Carregar instância ao montar componente (única do sistema) - apenas uma vez
-  useEffect(() => {
-    if (!dadosIniciaisCarregados && !loadingRef.current) {
-      loadingRef.current = true
-      console.log('[WhatsApp] Carregando instância do sistema')
-      carregarInstanciaWhatsApp().finally(() => {
-        setDadosIniciaisCarregados(true)
-        loadingRef.current = false
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosIniciaisCarregados])
-
-  // Polling para status de conexão (otimizado para evitar múltiplas chamadas)
-  useEffect(() => {
-    if (!whatsappInstance || !dadosIniciaisCarregados) {
-      return
-    }
-    
-    // Limpar timer anterior se existir
-    if (syncTimerRef.current) {
-      clearTimeout(syncTimerRef.current)
-      syncTimerRef.current = null
-    }
-    
-    // Se já está conectado, verificar uma vez com debounce
-    if (whatsappInstance.status === 'connected') {
-      syncTimerRef.current = setTimeout(() => {
-        if (!loadingRef.current) {
-          loadingRef.current = true
-          syncInstanceStatus().then(updated => {
-            if (updated) {
-              setWhatsappInstance(updated)
-            }
-          }).catch(err => console.error('Erro ao sincronizar status conectado:', err))
-          .finally(() => {
-            loadingRef.current = false
-          })
-        }
-      }, 1000) // Debounce de 1 segundo
-      return () => {
-        if (syncTimerRef.current) {
-          clearTimeout(syncTimerRef.current)
-          syncTimerRef.current = null
-        }
-      }
-    }
-    
-    // Se está conectando, fazer polling (mas com controle)
-    if (whatsappInstance.status === 'connecting') {
-      const interval = setInterval(async () => {
-        if (!loadingRef.current) {
-          loadingRef.current = true
-          try {
-            const updated = await syncInstanceStatus()
-            if (updated) {
-              console.log('[WhatsApp] Status atualizado:', updated.status)
-              setWhatsappInstance(updated)
-              if (updated.status !== 'connecting') {
-                console.log('[WhatsApp] Conexão concluída, parando polling')
-                clearInterval(interval)
-              }
-            }
-          } catch (error) {
-            console.error('Erro ao sincronizar status:', error)
-          } finally {
-            loadingRef.current = false
-          }
-        }
-      }, 5000) // Polling a cada 5 segundos
-      
-      return () => {
-        clearInterval(interval)
-        if (syncTimerRef.current) {
-          clearTimeout(syncTimerRef.current)
-          syncTimerRef.current = null
-        }
-      }
-    }
-  }, [whatsappInstance?.status, whatsappInstance?.id, dadosIniciaisCarregados])
-
-  const carregarInstanciaWhatsApp = async () => {
+  // Função para carregar instância WhatsApp - definida antes dos useEffect
+  const carregarInstanciaWhatsApp = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -228,6 +117,123 @@ export default function WhatsAppAprovacoesPage() {
     } finally {
       setLoading(false)
     }
+  }, [])
+  
+  // Verificar se é Admin - redirecionar se não for
+  useEffect(() => {
+    if (user && !isAdmin()) {
+      router.push('/dashboard')
+    }
+  }, [user, isAdmin, router])
+  
+  // Carregar instância ao montar componente (única do sistema) - apenas uma vez
+  // IMPORTANTE: Este useEffect deve ser chamado ANTES de qualquer return condicional
+  useEffect(() => {
+    // Só carregar se for admin e tiver usuário
+    if ((!user || !isAdmin()) || dadosIniciaisCarregados || loadingRef.current) {
+      return
+    }
+    
+    loadingRef.current = true
+    console.log('[WhatsApp] Carregando instância do sistema')
+    carregarInstanciaWhatsApp().finally(() => {
+      setDadosIniciaisCarregados(true)
+      loadingRef.current = false
+    })
+  }, [dadosIniciaisCarregados, user, isAdmin, carregarInstanciaWhatsApp])
+
+  // Polling para status de conexão (otimizado para evitar múltiplas chamadas)
+  // IMPORTANTE: Este useEffect deve ser chamado ANTES de qualquer return condicional
+  useEffect(() => {
+    // Só executar se for admin e tiver dados carregados
+    if (!user || !isAdmin() || !whatsappInstance || !dadosIniciaisCarregados) {
+      return
+    }
+    
+    // Limpar timer anterior se existir
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current)
+      syncTimerRef.current = null
+    }
+    
+    // Se já está conectado, verificar uma vez com debounce
+    if (whatsappInstance.status === 'connected') {
+      syncTimerRef.current = setTimeout(() => {
+        if (!loadingRef.current) {
+          loadingRef.current = true
+          syncInstanceStatus().then(updated => {
+            if (updated) {
+              setWhatsappInstance(updated)
+            }
+          }).catch(err => console.error('Erro ao sincronizar status conectado:', err))
+          .finally(() => {
+            loadingRef.current = false
+          })
+        }
+      }, 1000) // Debounce de 1 segundo
+      return () => {
+        if (syncTimerRef.current) {
+          clearTimeout(syncTimerRef.current)
+          syncTimerRef.current = null
+        }
+      }
+    }
+    
+    // Se está conectando, fazer polling (mas com controle)
+    if (whatsappInstance.status === 'connecting') {
+      const interval = setInterval(async () => {
+        if (!loadingRef.current) {
+          loadingRef.current = true
+          try {
+            const updated = await syncInstanceStatus()
+            if (updated) {
+              console.log('[WhatsApp] Status atualizado:', updated.status)
+              setWhatsappInstance(updated)
+              if (updated.status !== 'connecting') {
+                console.log('[WhatsApp] Conexão concluída, parando polling')
+                clearInterval(interval)
+              }
+            }
+          } catch (error) {
+            console.error('Erro ao sincronizar status:', error)
+          } finally {
+            loadingRef.current = false
+          }
+        }
+      }, 5000) // Polling a cada 5 segundos
+      
+      return () => {
+        clearInterval(interval)
+        if (syncTimerRef.current) {
+          clearTimeout(syncTimerRef.current)
+          syncTimerRef.current = null
+        }
+      }
+    }
+  }, [whatsappInstance?.status, whatsappInstance?.id, dadosIniciaisCarregados, user, isAdmin])
+  
+  // Se não for Admin, não renderizar nada (APÓS TODOS OS HOOKS)
+  if (!user || !isAdmin()) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <Shield className="w-5 h-5" />
+              Acesso Restrito
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Você não tem permissão para acessar esta página. Apenas administradores podem acessar as configurações do WhatsApp.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
   
   const criarInstanciaWhatsApp = async () => {
