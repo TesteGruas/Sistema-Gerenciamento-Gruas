@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -24,7 +24,7 @@ import { apiAprovacoesHorasExtras, type RegistroPontoAprovacao } from '@/lib/api
 import { useUser } from '@/lib/user-context'
 import { useToast } from '@/components/ui/use-toast'
 
-export default function PWAAprovacaoDetalhesPage() {
+function PWAAprovacaoDetalhesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser } = useUser();
@@ -453,5 +453,20 @@ export default function PWAAprovacaoDetalhesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function PWAAprovacaoDetalhesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <PWAAprovacaoDetalhesPageContent />
+    </Suspense>
   );
 }

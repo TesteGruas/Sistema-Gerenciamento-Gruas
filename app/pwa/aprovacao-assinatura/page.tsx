@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,7 +14,8 @@ import {
   Check,
   AlertTriangle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Loader2
 } from 'lucide-react'
 import { 
   apiAprovacoesHorasExtras,
@@ -24,7 +25,6 @@ import { apiRegistrosPonto } from '@/lib/api-ponto-eletronico'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { useEffect } from 'react'
 
 // Funções utilitárias
 function formatarData(data: string): string {
@@ -48,7 +48,7 @@ function getStatusColor(status: string): string {
   }
 }
 
-export default function PWAAprovacaoAssinaturaPage() {
+function PWAAprovacaoAssinaturaPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registroId = searchParams.get('id');
@@ -418,5 +418,20 @@ export default function PWAAprovacaoAssinaturaPage() {
         `}</style>
       </div>
     </div>
+  );
+}
+
+export default function PWAAprovacaoAssinaturaPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <PWAAprovacaoAssinaturaPageContent />
+    </Suspense>
   );
 }

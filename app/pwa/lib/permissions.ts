@@ -12,7 +12,7 @@ import {
   ROLES_LEVELS,
   PWA_PERMISSIONS as BASE_PWA_PERMISSIONS
 } from '@/types/permissions'
-import { LucideIcon, Clock, FileText, CheckCircle, Crane, User, Settings, Bell, Receipt } from 'lucide-react'
+import { LucideIcon, Clock, FileText, CheckCircle, Building2, User, Settings, Bell, Receipt } from 'lucide-react'
 
 // ========================================
 // TIPOS ESPECÍFICOS DO PWA
@@ -59,7 +59,7 @@ export const PWA_MENU_ITEMS: PWAMenuItem[] = [
   {
     label: 'Gruas',
     path: '/pwa/gruas',
-    icon: Crane,
+    icon: Building2,
     permission: 'gruas:visualizar',
     description: 'Visualize informações das gruas'
   },

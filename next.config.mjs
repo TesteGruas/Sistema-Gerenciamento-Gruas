@@ -128,9 +128,6 @@ const nextConfig = {
   // ==================================
   // ⚡ OTIMIZAÇÕES ADICIONAIS
   // ==================================
-  // Reduzir tamanho do bundle
-  swcMinify: true,
-  
   // Otimizar compilação
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
