@@ -74,30 +74,27 @@ router.get('/:id', validarTokenMiddleware, async (req, res) => {
     
     console.log(`[aprovacao-publica] Buscando aprovação: id=${aprovacao_id}, token=${token?.substring(0, 20)}...`);
     
-    // Validar token
-    const validacao = await validarToken(token, aprovacao_id);
-    
-    if (!validacao.valido) {
-      console.log(`[aprovacao-publica] Token inválido: ${validacao.motivo}`);
-      return res.status(400).json({
-        success: false,
-        message: validacao.motivo,
-        aprovacao: null
-      });
-    }
-    
-    // Buscar dados completos da aprovação
+    // Buscar aprovação diretamente (sem validar status para visualização)
     const aprovacao = await buscarAprovacaoPorToken(token, aprovacao_id);
     
     if (!aprovacao) {
-      console.log(`[aprovacao-publica] Aprovação não encontrada após validação`);
+      console.log(`[aprovacao-publica] Aprovação não encontrada`);
       return res.status(404).json({
         success: false,
         message: 'Aprovação não encontrada'
       });
     }
     
-    console.log(`[aprovacao-publica] Aprovação encontrada: ${aprovacao.id}`);
+    console.log(`[aprovacao-publica] Aprovação encontrada: ${aprovacao.id}, status: ${aprovacao.status}`);
+    
+    // Verificar se o token corresponde (validação básica)
+    if (aprovacao.token_aprovacao !== token) {
+      console.log(`[aprovacao-publica] Token não corresponde`);
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido'
+      });
+    }
     
     // Formatar dados para resposta
     const dataTrabalho = new Date(aprovacao.data_trabalho).toLocaleDateString('pt-BR');
@@ -124,6 +121,7 @@ router.get('/:id', validarTokenMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('[aprovacao-publica] Erro ao buscar aprovação:', error);
+    console.error('[aprovacao-publica] Stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Erro ao buscar aprovação',

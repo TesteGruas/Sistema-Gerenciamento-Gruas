@@ -143,43 +143,99 @@ export async function validarToken(token, aprovacao_id) {
  */
 export async function buscarAprovacaoPorToken(token, aprovacao_id) {
   try {
-    console.log(`[approval-tokens] Buscando aprovação por token: id=${aprovacao_id}`);
+    console.log(`[approval-tokens] Buscando aprovação por token: id=${aprovacao_id}, token=${token?.substring(0, 20)}...`);
     
-    // Buscar aprovação sem join com registros_ponto primeiro (porque registro_ponto_id é UUID mas registros_ponto.id é VARCHAR)
-    const { data, error } = await supabaseAdmin
+    // Primeiro, buscar aprovação sem join para garantir que existe
+    const { data: aprovacao, error: aprovacaoError } = await supabaseAdmin
       .from('aprovacoes_horas_extras')
-      .select(`
-        *,
-        funcionarios:funcionario_id (
-          id,
-          nome,
-          cpf
-        )
-      `)
+      .select('*')
       .eq('id', aprovacao_id)
       .eq('token_aprovacao', token)
       .single();
     
-    if (error) {
-      console.error('[approval-tokens] Erro ao buscar aprovação:', error);
-      console.error('[approval-tokens] Detalhes do erro:', JSON.stringify(error, null, 2));
+    if (aprovacaoError) {
+      console.error('[approval-tokens] Erro ao buscar aprovação:', aprovacaoError);
+      console.error('[approval-tokens] Código do erro:', aprovacaoError.code);
+      console.error('[approval-tokens] Mensagem:', aprovacaoError.message);
+      console.error('[approval-tokens] Detalhes:', JSON.stringify(aprovacaoError, null, 2));
       return null;
     }
     
-    if (!data) {
+    if (!aprovacao) {
       console.error('[approval-tokens] Aprovação não encontrada (data é null)');
       return null;
     }
     
-    console.log(`[approval-tokens] Aprovação encontrada: ${data.id}, funcionario: ${data.funcionarios?.nome || 'não encontrado'}`);
+    console.log(`[approval-tokens] Aprovação encontrada: ${aprovacao.id}, funcionario_id: ${aprovacao.funcionario_id}`);
     
-    // Buscar registro de ponto separadamente se necessário
-    // Como registro_ponto_id é UUID mas registros_ponto.id é VARCHAR,
-    // não podemos fazer join direto. Vamos buscar pelo ID que está nas observações ou pular
-    // Por enquanto, retornar sem registro_ponto já que não é crítico para a aprovação
+    // Buscar funcionário separadamente (pode ser UUID ou número)
+    let funcionario = null;
+    try {
+      const funcionarioId = aprovacao.funcionario_id;
+      console.log(`[approval-tokens] Buscando funcionário com ID: ${funcionarioId} (tipo: ${typeof funcionarioId})`);
+      
+      // Tentar buscar diretamente
+      const { data: funcionarioData, error: funcError } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id, nome, cpf')
+        .eq('id', funcionarioId)
+        .single();
+      
+      if (funcError) {
+        console.error(`[approval-tokens] Erro ao buscar funcionário:`, funcError);
+        console.error(`[approval-tokens] Código do erro:`, funcError.code);
+        console.error(`[approval-tokens] Mensagem:`, funcError.message);
+        
+        // Se o erro for porque não encontrou, tentar como string
+        if (funcError.code === 'PGRST116') {
+          console.log(`[approval-tokens] Tentando buscar funcionário como string...`);
+          const { data: funcionarioData2, error: funcError2 } = await supabaseAdmin
+            .from('funcionarios')
+            .select('id, nome, cpf')
+            .eq('id', funcionarioId.toString())
+            .single();
+          
+          if (!funcError2 && funcionarioData2) {
+            funcionario = funcionarioData2;
+            console.log(`[approval-tokens] Funcionário encontrado (como string): ${funcionario.nome}`);
+          } else {
+            console.warn(`[approval-tokens] Funcionário não encontrado mesmo como string: ${funcionarioId}`);
+          }
+        }
+      } else if (funcionarioData) {
+        funcionario = funcionarioData;
+        console.log(`[approval-tokens] Funcionário encontrado: ${funcionario.nome}`);
+      } else {
+        console.warn(`[approval-tokens] Funcionário não encontrado: ${funcionarioId}`);
+      }
+    } catch (funcSearchError) {
+      console.error('[approval-tokens] Erro ao buscar funcionário (catch):', funcSearchError);
+      console.error('[approval-tokens] Stack:', funcSearchError.stack);
+    }
+    
+    // Buscar registro de ponto se necessário
+    let registroPonto = null;
+    if (aprovacao.registro_ponto_id) {
+      try {
+        const { data: registroData, error: registroError } = await supabaseAdmin
+          .from('registros_ponto')
+          .select('entrada, saida')
+          .eq('id', aprovacao.registro_ponto_id)
+          .single();
+        
+        if (!registroError && registroData) {
+          registroPonto = registroData;
+          console.log(`[approval-tokens] Registro de ponto encontrado`);
+        }
+      } catch (regError) {
+        console.warn('[approval-tokens] Erro ao buscar registro de ponto:', regError);
+      }
+    }
+    
     return {
-      ...data,
-      registros_ponto: null // Não podemos fazer join devido à incompatibilidade de tipos
+      ...aprovacao,
+      funcionarios: funcionario,
+      registros_ponto: registroPonto
     };
   } catch (error) {
     console.error('[approval-tokens] Erro ao buscar aprovação por token:', error);
