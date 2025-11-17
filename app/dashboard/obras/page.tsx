@@ -115,6 +115,28 @@ export default function ObrasPage() {
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
   const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
   
+  // Tipo local para custos mensais
+  interface CustoMensal {
+    id: string
+    obraId: string
+    item: string
+    descricao: string
+    unidade: string
+    quantidadeOrcamento: number
+    valorUnitario: number
+    totalOrcamento: number
+    mes: string
+    quantidadeRealizada: number
+    valorRealizado: number
+    quantidadeAcumulada: number
+    valorAcumulado: number
+    quantidadeSaldo: number
+    valorSaldo: number
+    tipo: string
+    createdAt: string
+    updatedAt: string
+  }
+  
   // Estados para custos mensais
   const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
   const [isCustosDialogOpen, setIsCustosDialogOpen] = useState(false)
@@ -143,9 +165,68 @@ export default function ObrasPage() {
       })
       
       // Converter obras - os relacionamentos já vêm incluídos no endpoint
-      const obrasComRelacionamentos = response.data.map((obraBackend: any) => {
-        return converterObraBackendParaFrontend(obraBackend)
-      })
+      const obrasComRelacionamentos = await Promise.all(
+        response.data.map(async (obraBackend: any) => {
+          // Debug: verificar se grua_obra está presente
+          if (obraBackend.grua_obra && obraBackend.grua_obra.length > 0) {
+            console.log(`🔍 Obra ${obraBackend.id} - Gruas encontradas:`, obraBackend.grua_obra)
+          }
+          
+          const obraConvertida = converterObraBackendParaFrontend(obraBackend)
+          
+          // Se não houver gruas na listagem, buscar separadamente via grua_obra (fallback)
+          // Isso resolve casos onde o relacionamento não veio na query inicial
+          if (!obraConvertida.gruasVinculadas || obraConvertida.gruasVinculadas.length === 0) {
+            try {
+              console.log(`⚠️ Obra ${obraBackend.id} - Sem gruas na listagem, buscando separadamente via grua_obra...`)
+              const gruasResponse = await obrasApi.buscarGruasVinculadas(obraBackend.id)
+              console.log(`🔍 Obra ${obraBackend.id} - Resposta buscarGruasVinculadas:`, {
+                success: gruasResponse.success,
+                hasData: !!gruasResponse.data,
+                dataLength: gruasResponse.data?.length || 0
+              })
+              
+              if (gruasResponse.success && gruasResponse.data && gruasResponse.data.length > 0) {
+                console.log(`✅ Obra ${obraBackend.id} - ${gruasResponse.data.length} grua(s) encontrada(s) via buscarGruasVinculadas`)
+                
+                // Converter formato para o esperado pela renderização
+                const gruasFormatadas = gruasResponse.data.map((grua: any) => ({
+                  id: grua.id?.toString() || '',
+                  gruaId: grua.gruaId || grua.grua?.id || '',
+                  obraId: obraBackend.id.toString(),
+                  dataInicioLocacao: grua.dataInicioLocacao || '',
+                  dataFimLocacao: grua.dataFimLocacao || null,
+                  valorLocacaoMensal: grua.valorLocacaoMensal || 0,
+                  status: grua.status === 'ativa' ? 'Ativa' : grua.status === 'concluida' ? 'Concluída' : grua.status === 'suspensa' ? 'Suspensa' : 'Ativa',
+                  observacoes: grua.observacoes || '',
+                  createdAt: grua.createdAt || '',
+                  updatedAt: grua.updatedAt || '',
+                  grua: grua.grua ? {
+                    id: grua.grua.id,
+                    modelo: grua.grua.model || grua.grua.modelo || '',
+                    fabricante: grua.grua.manufacturer || grua.grua.fabricante || '',
+                    tipo: grua.grua.type || grua.grua.tipo || ''
+                  } : null
+                }))
+                
+                obraConvertida.gruasVinculadas = gruasFormatadas
+              } else {
+                console.log(`ℹ️ Obra ${obraBackend.id} - Nenhuma grua encontrada em grua_obra`)
+              }
+            } catch (error) {
+              console.error(`❌ Erro ao buscar gruas para obra ${obraBackend.id}:`, error)
+              // Continuar sem as gruas se houver erro
+            }
+          }
+          
+          // Debug: verificar se gruasVinculadas foi convertido corretamente
+          if (obraConvertida.gruasVinculadas && obraConvertida.gruasVinculadas.length > 0) {
+            console.log(`✅ Obra ${obraConvertida.id} - Gruas convertidas:`, obraConvertida.gruasVinculadas)
+          }
+          
+          return obraConvertida
+        })
+      )
       
       setObras(obrasComRelacionamentos)
       
@@ -773,6 +854,11 @@ export default function ObrasPage() {
         monthlyFee: '',
         responsavelId: '',
         responsavelName: '',
+        cno: '',
+        art_numero: '',
+        art_arquivo: '',
+        apolice_numero: '',
+        apolice_arquivo: '',
         funcionarios: []
       })
       setClienteSelecionado(null)
@@ -930,15 +1016,25 @@ export default function ObrasPage() {
       const custosBackend = custosResponse.data?.custos_mensais || []
       console.log('📦 Custos do backend:', custosBackend)
       
-      const custosFormatados = custosBackend.map((custo: any) => ({
+      const custosFormatados: CustoMensal[] = custosBackend.map((custo: any) => ({
         id: custo.id.toString(),
+        obraId: custo.obra_id?.toString() || obra.id.toString(),
         item: custo.item,
         descricao: custo.descricao,
         unidade: custo.unidade,
         quantidadeOrcamento: parseFloat(custo.quantidade_orcamento) || 0,
         valorUnitario: parseFloat(custo.valor_unitario) || 0,
         totalOrcamento: parseFloat(custo.total_orcamento) || 0,
-        mes: custo.mes
+        mes: custo.mes,
+        quantidadeRealizada: parseFloat(custo.quantidade_realizada) || 0,
+        valorRealizado: parseFloat(custo.valor_realizado) || 0,
+        quantidadeAcumulada: parseFloat(custo.quantidade_acumulada) || 0,
+        valorAcumulado: parseFloat(custo.valor_acumulado) || 0,
+        quantidadeSaldo: parseFloat(custo.quantidade_saldo) || 0,
+        valorSaldo: parseFloat(custo.valor_saldo) || 0,
+        tipo: custo.tipo || 'contrato',
+        createdAt: custo.created_at || new Date().toISOString(),
+        updatedAt: custo.updated_at || new Date().toISOString()
       }))
 
       console.log('✅ Custos mensais formatados:', custosFormatados)
@@ -1267,6 +1363,11 @@ export default function ObrasPage() {
           // A função converterObraBackendParaFrontend já retorna gruasVinculadas e outros campos
           // Usar os campos que já vêm da conversão
           const obraComRelacionamentos = obra as any
+          
+          // Debug: verificar se gruasVinculadas está presente
+          if (obraComRelacionamentos.gruasVinculadas && obraComRelacionamentos.gruasVinculadas.length > 0) {
+            console.log(`🎯 Renderizando obra ${obra.id} com ${obraComRelacionamentos.gruasVinculadas.length} grua(s)`)
+          }
           
           return (
             <Card key={obra.id} className="hover:shadow-lg transition-shadow">
@@ -1896,7 +1997,6 @@ export default function ObrasPage() {
                 </div>
 
                 {/* Lista de custos mensais */}
-                {console.log('🔍 Renderizando custos no dialog:', custosMensais)}
                 {custosMensais.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Custos Mensais Configurados ({custosMensais.length})</h4>
@@ -2475,7 +2575,6 @@ export default function ObrasPage() {
                 </div>
 
                 {/* Lista de custos mensais */}
-                {console.log('🔍 Renderizando custos no dialog:', custosMensais)}
                 {custosMensais.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Custos Mensais Configurados ({custosMensais.length})</h4>
@@ -2706,21 +2805,21 @@ export default function ObrasPage() {
                 <div className="space-y-3">
                   <h4 className="font-medium">Custos por Mês</h4>
                   {Object.entries(
-                    custosMensais.reduce((acc, custo) => {
+                    custosMensais.reduce((acc: Record<string, CustoMensal[]>, custo: CustoMensal) => {
                       if (!acc[custo.mes]) acc[custo.mes] = []
                       acc[custo.mes].push(custo)
                       return acc
                     }, {} as Record<string, CustoMensal[]>)
-                  ).map(([mes, custos]) => (
+                  ).map(([mes, custos]: [string, CustoMensal[]]) => (
                     <div key={mes} className="border rounded-lg p-4">
                       <div className="flex justify-between items-center mb-3">
                         <h5 className="font-medium text-gray-900">{mes}</h5>
                         <span className="text-sm text-gray-600">
-                          {custos.length} item(s) - R$ {custos.reduce((total, c) => total + c.totalOrcamento, 0).toLocaleString('pt-BR')}
+                          {custos.length} item(s) - R$ {custos.reduce((total: number, c: CustoMensal) => total + c.totalOrcamento, 0).toLocaleString('pt-BR')}
                         </span>
                       </div>
                       <div className="space-y-2">
-                        {custos.map((custo) => (
+                        {custos.map((custo: CustoMensal) => (
                           <div key={custo.id} className="flex justify-between items-center text-sm bg-white p-2 rounded">
                             <span>{custo.item} - {custo.descricao}</span>
                             <span className="font-medium">R$ {custo.totalOrcamento.toLocaleString('pt-BR')}</span>

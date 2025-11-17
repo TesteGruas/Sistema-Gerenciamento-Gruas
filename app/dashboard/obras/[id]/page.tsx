@@ -1566,49 +1566,80 @@ function ObraDetailsPageContent() {
       
       console.log('🔍 Buscando gruas para obra ID:', obra.id)
       
-      // Usar o endpoint específico de obra-gruas que busca da tabela obra_gruas_configuracao
-      const response = await obraGruasApi.listarGruasObra(parseInt(obra.id))
-      console.log('🔍 Resposta da API obra-gruas:', response)
+      // Usar grua_obra como fonte única de verdade
+      const response = await obrasApi.buscarGruasVinculadas(parseInt(obra.id))
+      console.log('🔍 Resposta da API buscarGruasVinculadas:', response)
       
       if (response.success && response.data) {
         const gruasVinculadas = response.data
-        console.log('🔍 Gruas encontradas:', gruasVinculadas)
+        console.log('🔍 Gruas encontradas em grua_obra:', gruasVinculadas)
         
         if (gruasVinculadas.length > 0) {
-          // Converter dados das gruas vinculadas
-          const gruasConvertidas = gruasVinculadas.map((config: any, index: number) => {
-            console.log(`🔍 Processando configuração ${index}:`, config)
-            const gruaData = config.grua || {}
+          // Converter dados das gruas vinculadas de grua_obra
+          // Os dados já vêm convertidos de buscarGruasVinculadas, mas precisamos ajustar para o formato esperado
+          const gruasConvertidas = gruasVinculadas.map((relacao: any, index: number) => {
+            console.log(`🔍 Processando relação ${index}:`, relacao)
+            const gruaData = relacao.grua || {}
             console.log(`🔍 Dados da grua ${index}:`, gruaData)
             
+            // Converter status de 'ativa'/'concluida'/'suspensa' para 'Ativa'/'Concluída'/'Suspensa'
+            const statusLegacy = relacao.status === 'ativa' ? 'Ativa' : 
+                                relacao.status === 'concluida' ? 'Concluída' : 
+                                relacao.status === 'suspensa' ? 'Suspensa' : 'Ativa'
+            
             const gruaConvertida = {
-              id: config.grua_id,
-              configId: config.id, // ID da configuração para editar/remover
-              name: gruaData.name || `${gruaData.fabricante || 'Grua'} ${gruaData.modelo || config.grua_id}`,
-              modelo: gruaData.modelo || 'Modelo não informado',
-              fabricante: gruaData.fabricante || 'Fabricante não informado',
-              tipo: gruaData.tipo || 'Tipo não informado',
-              capacidade: gruaData.capacidade || 'Capacidade não informada',
-              status: config.status || 'ativa',
-              data_instalacao: config.data_instalacao,
-              data_inicio_locacao: config.data_instalacao,
-              dataFimLocacao: config.data_remocao,
-              valor_locacao_mensal: 0, // Extrair do observacoes se necessário
-              valorLocacaoMensal: 0, // Extrair do observacoes se necessário
-              observacoes: config.observacoes,
+              id: relacao.gruaId || relacao.grua?.id || '',
+              relacaoId: relacao.id, // ID da relação grua_obra
+              name: gruaData.name || `${gruaData.manufacturer || gruaData.fabricante || 'Grua'} ${gruaData.model || gruaData.modelo || relacao.gruaId || 'N/A'}`,
+              modelo: gruaData.model || gruaData.modelo || 'Modelo não informado',
+              fabricante: gruaData.manufacturer || gruaData.fabricante || 'Fabricante não informado',
+              tipo: gruaData.type || gruaData.tipo || 'Tipo não informado',
+              capacidade: gruaData.capacity || gruaData.capacidade || 'Capacidade não informada',
+              status: statusLegacy,
+              data_instalacao: relacao.dataInicioLocacao || relacao.data_inicio_locacao,
+              data_inicio_locacao: relacao.dataInicioLocacao || relacao.data_inicio_locacao,
+              dataFimLocacao: relacao.dataFimLocacao || relacao.data_fim_locacao,
+              data_fim_locacao: relacao.dataFimLocacao || relacao.data_fim_locacao,
+              valor_locacao_mensal: relacao.valorLocacaoMensal || relacao.valor_locacao_mensal || 0,
+              valorLocacaoMensal: relacao.valorLocacaoMensal || relacao.valor_locacao_mensal || 0,
+              observacoes: relacao.observacoes || '',
               // Campos adicionais para compatibilidade
-              status_legacy: config.status === 'ativa' ? 'Ativa' : config.status,
+              status_legacy: statusLegacy,
               // Dados da grua para exibição
               grua: {
-                id: config.grua_id,
-                modelo: gruaData.modelo,
-                fabricante: gruaData.fabricante,
-                tipo: gruaData.tipo
+                id: relacao.gruaId || relacao.grua?.id || '',
+                modelo: gruaData.model || gruaData.modelo,
+                fabricante: gruaData.manufacturer || gruaData.fabricante,
+                tipo: gruaData.type || gruaData.tipo
               }
             }
             
             return gruaConvertida
           })
+          
+          // Opcionalmente, buscar dados técnicos de obra_gruas_configuracao para enriquecimento
+          try {
+            const configResponse = await obraGruasApi.listarGruasObra(parseInt(obra.id))
+            if (configResponse.success && configResponse.data && configResponse.data.length > 0) {
+              console.log('🔍 Dados técnicos encontrados em obra_gruas_configuracao:', configResponse.data)
+              
+              // Enriquecer gruas com dados técnicos quando disponível
+              gruasConvertidas.forEach((grua: any) => {
+                const configTecnica = configResponse.data.find((c: any) => c.grua_id === grua.id)
+                if (configTecnica) {
+                  grua.configId = configTecnica.id
+                  grua.posicao_x = configTecnica.posicao_x
+                  grua.posicao_y = configTecnica.posicao_y
+                  grua.angulo_rotacao = configTecnica.angulo_rotacao
+                  grua.alcance_operacao = configTecnica.alcance_operacao
+                  grua.area_cobertura = configTecnica.area_cobertura
+                }
+              })
+            }
+          } catch (configError) {
+            console.log('ℹ️ Dados técnicos não disponíveis (opcional):', configError)
+            // Não é crítico, continuar sem dados técnicos
+          }
           
           console.log('✅ Gruas convertidas:', gruasConvertidas)
           setGruasReais(gruasConvertidas)
@@ -1633,7 +1664,7 @@ function ObraDetailsPageContent() {
           }
           setHistoricosGruas(historicosCarregados)
         } else {
-          console.log('⚠️ Nenhuma grua encontrada para esta obra')
+          console.log('⚠️ Nenhuma grua encontrada para esta obra em grua_obra')
           setGruasReais([])
         }
       } else {
@@ -2837,26 +2868,26 @@ function ObraDetailsPageContent() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="font-semibold text-lg">
-                              {grua.grua ? `${grua.grua.fabricante} ${grua.grua.modelo}` : `Grua ${grua.gruaId}`}
+                              {grua.grua ? `${grua.grua.fabricante || grua.grua.manufacturer || ''} ${grua.grua.modelo || grua.grua.model || ''}`.trim() || grua.name : `Grua ${grua.gruaId || grua.id}`}
                             </h3>
                             <p className="text-sm text-gray-600">
                               {grua.grua ? 
-                                `${grua.grua.tipo} - ID: ${grua.grua.id}` : 
-                                `ID: ${grua.gruaId}`
+                                `${grua.grua.tipo || grua.grua.type || 'N/A'} - ID: ${grua.grua.id}` : 
+                                `ID: ${grua.gruaId || grua.id}`
                               }
                             </p>
                             <div className="mt-2 space-y-1">
                               <p className="text-xs text-gray-500">
-                                <strong>Início da Locação:</strong> {grua.dataInicioLocacao ? new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR') : 'Não informado'}
+                                <strong>Início da Locação:</strong> {(grua.dataInicioLocacao || grua.data_inicio_locacao || grua.data_instalacao) ? new Date(grua.dataInicioLocacao || grua.data_inicio_locacao || grua.data_instalacao).toLocaleDateString('pt-BR') : 'Não informado'}
                               </p>
-                              {grua.dataFimLocacao && (
+                              {(grua.dataFimLocacao || grua.data_fim_locacao || grua.data_remocao) && (
                                 <p className="text-xs text-gray-500">
-                                  <strong>Fim da Locação:</strong> {new Date(grua.dataFimLocacao).toLocaleDateString('pt-BR')}
+                                  <strong>Fim da Locação:</strong> {new Date(grua.dataFimLocacao || grua.data_fim_locacao || grua.data_remocao).toLocaleDateString('pt-BR')}
                                 </p>
                               )}
-                              {grua.valorLocacaoMensal && (
+                              {(grua.valorLocacaoMensal || grua.valor_locacao_mensal) && (
                                 <p className="text-xs text-gray-500">
-                                  <strong>Valor Mensal:</strong> <ValorMonetarioOculto valor={grua.valorLocacaoMensal} />
+                                  <strong>Valor Mensal:</strong> <ValorMonetarioOculto valor={grua.valorLocacaoMensal || grua.valor_locacao_mensal || 0} />
                                 </p>
                               )}
                               {grua.observacoes && (
@@ -2868,10 +2899,10 @@ function ObraDetailsPageContent() {
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <Badge 
-                              variant={grua.status === 'em_obra' || grua.status === 'ativa' ? 'default' : 'secondary'}
-                              className={grua.status === 'ativa' ? 'bg-green-100 text-green-800' : ''}
+                              variant={(grua.status === 'Ativa' || grua.status === 'ativa' || grua.status === 'em_obra') ? 'default' : 'secondary'}
+                              className={(grua.status === 'Ativa' || grua.status === 'ativa') ? 'bg-green-100 text-green-800' : ''}
                             >
-                              {grua.status}
+                              {grua.status || 'Ativa'}
                             </Badge>
                             {isGruaReal && (
                               <Badge variant="outline" className="text-xs">
@@ -3254,10 +3285,10 @@ function ObraDetailsPageContent() {
                     }
                     
                     const gruaId = grua.gruaId || grua.grua?.id || grua.id
-                    const gruaObraId = grua.configId || grua.id?.toString()
+                    const gruaObraId = grua.relacaoId || grua.configId || grua.id?.toString()
                     
                     return (
-                      <Card key={grua.id || grua.configId} className="border-l-4 border-l-blue-500">
+                      <Card key={grua.id || grua.relacaoId || grua.configId} className="border-l-4 border-l-blue-500">
                         <CardHeader>
                           <CardTitle className="text-base flex items-center gap-2">
                             <Wrench className="w-5 h-5 text-blue-600" />
@@ -4154,7 +4185,7 @@ function ObraDetailsPageContent() {
                   <SelectContent>
                     {gruasVinculadas.map(grua => (
                       <SelectItem key={grua.id} value={grua.id}>
-                        {grua.name} - {grua.model}
+                        {grua.name} - {grua.modelo || grua.model || 'N/A'}
                       </SelectItem>
                     ))}
                   </SelectContent>
