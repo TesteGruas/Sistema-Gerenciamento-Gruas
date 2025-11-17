@@ -764,9 +764,20 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
   
   console.log('🔍 DEBUG - Gruas processadas:', gruas)
   
+  // Validar cliente_id - campo obrigatório
+  const clienteId = obraFrontend.clienteId || obraFrontend.cliente_id
+  if (!clienteId) {
+    throw new Error('cliente_id é obrigatório para criar uma obra')
+  }
+  
+  const clienteIdParsed = typeof clienteId === 'number' ? clienteId : parseInt(clienteId)
+  if (isNaN(clienteIdParsed) || clienteIdParsed <= 0) {
+    throw new Error(`cliente_id inválido: ${clienteId}. Deve ser um número inteiro positivo.`)
+  }
+  
   const result = {
     nome: obraFrontend.name,
-    cliente_id: parseInt(obraFrontend.clienteId),
+    cliente_id: clienteIdParsed,
     endereco: obraFrontend.location || obraFrontend.endereco || '',
     cidade: obraFrontend.cidade || '',
     estado: obraFrontend.estado || '',

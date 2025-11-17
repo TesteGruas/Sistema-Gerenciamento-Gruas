@@ -1,3 +1,4 @@
+
 /**
  * Utilitário para detectar se o sistema está rodando como PWA
  */

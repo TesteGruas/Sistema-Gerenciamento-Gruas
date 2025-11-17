@@ -12,6 +12,7 @@ import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
 import { CARGOS_PREDEFINIDOS, formatarCargo } from "@/lib/utils/cargos-predefinidos"
+import { useToast } from "@/hooks/use-toast"
 
 interface CreateFuncionarioDialogProps {
   open: boolean
@@ -26,6 +27,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   onSubmit,
   submitting,
 }: CreateFuncionarioDialogProps) {
+  const { toast } = useToast()
   const { cargosAtivos, loading: loadingCargos } = useCargos()
   const [mostrarInputNovoCargo, setMostrarInputNovoCargo] = useState(false)
   const [novoCargo, setNovoCargo] = useState("")
@@ -82,6 +84,45 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validações no frontend antes de enviar
+    if (!form.name || form.name.trim().length < 2) {
+      toast({
+        title: "Erro de validação",
+        description: "O nome é obrigatório e deve ter no mínimo 2 caracteres",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    if (!form.role) {
+      toast({
+        title: "Erro de validação",
+        description: "O cargo é obrigatório",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    if (form.criar_usuario) {
+      if (!form.usuario_senha || form.usuario_senha.length < 6) {
+        toast({
+          title: "Erro de validação",
+          description: "A senha do usuário deve ter no mínimo 6 caracteres",
+          variant: "destructive"
+        })
+        return
+      }
+      
+      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+        toast({
+          title: "Erro de validação",
+          description: "O email fornecido é inválido",
+          variant: "destructive"
+        })
+        return
+      }
+    }
     
     // Converte o salário de centavos para reais (API espera em reais)
     const salarioNumerico = form.salary ? parseFloat(form.salary) / 100 : 0
@@ -354,7 +395,13 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                 value={form.usuario_senha}
                 onChange={(e) => handleChange('usuario_senha', e.target.value)}
                 required={form.criar_usuario}
+                placeholder="Mínimo de 6 caracteres"
+                minLength={6}
+                className={form.usuario_senha && form.usuario_senha.length > 0 && form.usuario_senha.length < 6 ? "border-red-500" : ""}
               />
+              {form.usuario_senha && form.usuario_senha.length > 0 && form.usuario_senha.length < 6 && (
+                <p className="text-sm text-red-500">A senha deve ter no mínimo 6 caracteres</p>
+              )}
             </div>
           )}
 

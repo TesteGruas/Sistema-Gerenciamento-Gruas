@@ -9,7 +9,9 @@
     "start": "next start",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "clean": "rm -rf .next && echo '✅ Cache do Next.js limpo'",
+    "clean:all": "rm -rf .next node_modules/.cache && echo '✅ Cache completo limpo'"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

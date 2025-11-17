@@ -28,7 +28,8 @@ import {
   Smartphone,
   Eye,
   ExternalLink,
-  CheckSquare
+  CheckSquare,
+  Building2
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -36,12 +37,14 @@ import { usePWAUser } from "@/hooks/use-pwa-user"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
+import { useEmpresa } from "@/hooks/use-empresa"
 
 export default function PWAPerfilPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { user, pontoHoje, documentosPendentes, horasTrabalhadas, loading } = usePWAUser()
   const { userRole } = usePWAPermissions()
+  const { empresa, getEnderecoCompleto, getContatoCompleto, getHorarioFuncionamento } = useEmpresa()
   
   // Verificar se é admin - verificar também no localStorage como fallback
   const [isAdmin, setIsAdmin] = useState(false)
@@ -651,6 +654,33 @@ export default function PWAPerfilPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Informações da Empresa */}
+      <Card className="border-gray-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="w-5 h-5" />
+            Informações da Empresa
+          </CardTitle>
+          <CardDescription>Dados de contato e localização</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label className="text-xs text-gray-500">Endereço</Label>
+            <p className="text-sm text-gray-900 mt-1">{getEnderecoCompleto()}</p>
+          </div>
+          <div>
+            <Label className="text-xs text-gray-500">Contato</Label>
+            <p className="text-sm text-gray-900 mt-1">{getContatoCompleto()}</p>
+          </div>
+          {empresa.horario_funcionamento && (
+            <div>
+              <Label className="text-xs text-gray-500">Horário de Funcionamento</Label>
+              <p className="text-sm text-gray-900 mt-1">{getHorarioFuncionamento()}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Botão de Logout */}
       <Card className="border-red-200">

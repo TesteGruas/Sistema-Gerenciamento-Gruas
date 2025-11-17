@@ -195,6 +195,9 @@ function LoginPageContent() {
             <p className="text-sm font-semibold text-gray-900">{empresa.razao_social || empresa.nome}</p>
             <p className="text-xs text-gray-600">{getEnderecoCompleto()}</p>
             <p className="text-xs text-gray-600">{getContatoCompleto()}</p>
+            {empresa.horario_funcionamento && (
+              <p className="text-xs text-gray-600">{empresa.horario_funcionamento}</p>
+            )}
             <p className="text-xs text-gray-500 mt-2">© {new Date().getFullYear()} - Todos os direitos reservados</p>
           </div>
         </div>

@@ -5,6 +5,7 @@ import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { UserProvider } from '@/lib/user-context'
 import { ServiceWorkerProvider } from '@/components/service-worker-provider'
+import { ChunkErrorHandler } from '@/components/chunk-error-handler'
 
 export const metadata: Metadata = {
   title: 'Sistema IRBANA',
@@ -51,6 +52,7 @@ html {
         `}</style>
       </head>
       <body>
+        <ChunkErrorHandler />
         <ServiceWorkerProvider>
           <UserProvider>
             {children}

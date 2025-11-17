@@ -172,9 +172,21 @@ export default function RHPage() {
       }
     } catch (error: any) {
       console.error('Erro ao criar funcionário:', error)
+      
+      // Extrair mensagem de erro mais amigável
+      let mensagemErro = "Erro ao criar funcionário. Tente novamente."
+      
+      if (error.response?.data?.message) {
+        mensagemErro = error.response.data.message
+      } else if (error.response?.data?.details) {
+        mensagemErro = error.response.data.details
+      } else if (error.message) {
+        mensagemErro = error.message
+      }
+      
       toast({
         title: "Erro",
-        description: error.message || "Erro ao criar funcionário",
+        description: mensagemErro,
         variant: "destructive"
       })
     } finally {

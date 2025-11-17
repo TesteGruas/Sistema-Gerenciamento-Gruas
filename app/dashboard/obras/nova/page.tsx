@@ -349,7 +349,10 @@ export default function NovaObraPage() {
   const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!obraFormData.name || !obraFormData.clienteId || !obraFormData.location || !obraFormData.cidade || !obraFormData.estado || !obraFormData.tipo) {
+    // Determinar clienteId - usar clienteSelecionado como fallback
+    const clienteIdFinal = obraFormData.clienteId || clienteSelecionado?.id || clienteSelecionado?.cliente_id
+    
+    if (!obraFormData.name || !clienteIdFinal || !obraFormData.location || !obraFormData.cidade || !obraFormData.estado || !obraFormData.tipo) {
       toast({
         title: "Erro",
         description: "Preencha todos os campos obrigatórios (Nome, Cliente, Endereço, Cidade, Estado, Tipo)",
@@ -412,7 +415,7 @@ export default function NovaObraPage() {
         cidade: obraFormData.cidade,
         estado: obraFormData.estado,
         tipo: obraFormData.tipo,
-        clienteId: obraFormData.clienteId,
+        clienteId: clienteIdFinal,
         observations: obraFormData.observations,
         // Novos campos obrigatórios
         cno: cno,

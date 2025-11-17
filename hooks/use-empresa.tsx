@@ -17,6 +17,7 @@ export interface EmpresaData {
   telefone: string
   email: string
   site: string
+  horario_funcionamento?: string
   logo?: string
   created_at?: string
   updated_at?: string
@@ -30,13 +31,14 @@ const EMPRESA_DEFAULT: EmpresaData = {
   endereco: "Rua Benevenuto Vieira",
   numero: "48",
   complemento: "",
-  bairro: "Rancho Grande",
+  bairro: "Jardim Aeroporto",
   cidade: "ITU",
   estado: "SP",
   cep: "13306-141",
-  telefone: "(11) 0000-0000",
+  telefone: "(11) 98818-5951",
   email: "info@gruascopa.com.br",
   site: "www.gruascopa.com.br",
+  horario_funcionamento: "Segundas às Sextas-Feiras 8:00 - 12:00 ; 13:00 - 17:00",
   logo: "/logo.png"
 }
 
@@ -46,6 +48,7 @@ interface EmpresaContextType {
   updateEmpresa: (data: Partial<EmpresaData>) => Promise<void>
   getEnderecoCompleto: () => string
   getContatoCompleto: () => string
+  getHorarioFuncionamento: () => string
 }
 
 const EmpresaContext = createContext<EmpresaContextType | undefined>(undefined)
@@ -112,6 +115,10 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
     return parts.join(' | ')
   }
 
+  const getHorarioFuncionamento = () => {
+    return empresa.horario_funcionamento || 'Segundas às Sextas-Feiras 8:00 - 12:00 ; 13:00 - 17:00'
+  }
+
   return (
     <EmpresaContext.Provider
       value={{
@@ -119,7 +126,8 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
         loading,
         updateEmpresa,
         getEnderecoCompleto,
-        getContatoCompleto
+        getContatoCompleto,
+        getHorarioFuncionamento
       }}
     >
       {children}

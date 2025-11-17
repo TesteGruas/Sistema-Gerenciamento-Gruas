@@ -323,6 +323,28 @@ router.get('/', authenticateToken, async (req, res) => {
             tipo
           )
         ),
+        obra_gruas_configuracao:obra_gruas_configuracao (
+          id,
+          grua_id,
+          posicao_x,
+          posicao_y,
+          posicao_z,
+          angulo_rotacao,
+          alcance_operacao,
+          area_cobertura,
+          data_instalacao,
+          data_remocao,
+          status,
+          observacoes,
+          grua:gruas (
+            id,
+            name,
+            modelo,
+            fabricante,
+            tipo,
+            capacidade
+          )
+        ),
         grua_funcionario (
           id,
           grua_id,
@@ -364,8 +386,49 @@ router.get('/', authenticateToken, async (req, res) => {
       })
     }
 
+    // Processar dados para combinar grua_obra e obra_gruas_configuracao
+    const processedData = (data || []).map(obra => {
+      // Combinar grua_obra (tabela antiga) e obra_gruas_configuracao (tabela nova)
+      const gruaObraAntiga = obra.grua_obra || []
+      const obraGruasConfiguracao = (obra.obra_gruas_configuracao || [])
+        .filter(config => config.status === 'ativa') // Apenas configurações ativas
+        .map(config => ({
+          id: config.id,
+          grua_id: config.grua_id,
+          // Mapear campos da nova tabela para o formato esperado
+          data_inicio_locacao: config.data_instalacao,
+          data_fim_locacao: config.data_remocao,
+          valor_locacao_mensal: null, // Não existe na nova tabela
+          status: config.status === 'ativa' ? 'Ativa' : config.status,
+          observacoes: config.observacoes,
+          // Campos adicionais da nova tabela
+          posicao_x: config.posicao_x,
+          posicao_y: config.posicao_y,
+          posicao_z: config.posicao_z,
+          angulo_rotacao: config.angulo_rotacao,
+          alcance_operacao: config.alcance_operacao,
+          area_cobertura: config.area_cobertura,
+          data_instalacao: config.data_instalacao,
+          data_remocao: config.data_remocao,
+          grua: config.grua || null
+        }))
+      
+      // Combinar ambas as fontes, removendo duplicatas por grua_id
+      const todasGruas = [...gruaObraAntiga, ...obraGruasConfiguracao]
+      const gruasUnicas = Array.from(
+        new Map(todasGruas.map(g => [g.grua_id, g])).values()
+      )
+      
+      return {
+        ...obra,
+        grua_obra: gruasUnicas,
+        // Manter obra_gruas_configuracao para compatibilidade
+        obra_gruas_configuracao: obra.obra_gruas_configuracao || []
+      }
+    })
+
     // Se for operador, filtrar apenas obras onde está alocado (a menos que tenha acesso global)
-    let filteredData = data || []
+    let filteredData = processedData
     let filteredCount = count
 
     if (isOperador && user.funcionario_id && !temAcessoGlobal) {
@@ -598,6 +661,28 @@ router.get('/:id', authenticateToken, async (req, res) => {
             tipo
           )
         ),
+        obra_gruas_configuracao:obra_gruas_configuracao (
+          id,
+          grua_id,
+          posicao_x,
+          posicao_y,
+          posicao_z,
+          angulo_rotacao,
+          alcance_operacao,
+          area_cobertura,
+          data_instalacao,
+          data_remocao,
+          status,
+          observacoes,
+          grua:gruas (
+            id,
+            name,
+            modelo,
+            fabricante,
+            tipo,
+            capacidade
+          )
+        ),
         grua_funcionario (
           id,
           grua_id,
@@ -689,6 +774,37 @@ router.get('/:id', authenticateToken, async (req, res) => {
       console.log(`✅ [OBRAS] Funcionário tem acesso global - permitindo acesso à obra ${id}`)
     }
 
+    // Processar dados para combinar grua_obra e obra_gruas_configuracao
+    const gruaObraAntiga = data.grua_obra || []
+    const obraGruasConfiguracao = (data.obra_gruas_configuracao || [])
+      .filter(config => config.status === 'ativa') // Apenas configurações ativas
+      .map(config => ({
+        id: config.id,
+        grua_id: config.grua_id,
+        // Mapear campos da nova tabela para o formato esperado
+        data_inicio_locacao: config.data_instalacao,
+        data_fim_locacao: config.data_remocao,
+        valor_locacao_mensal: null, // Não existe na nova tabela
+        status: config.status === 'ativa' ? 'Ativa' : config.status,
+        observacoes: config.observacoes,
+        // Campos adicionais da nova tabela
+        posicao_x: config.posicao_x,
+        posicao_y: config.posicao_y,
+        posicao_z: config.posicao_z,
+        angulo_rotacao: config.angulo_rotacao,
+        alcance_operacao: config.alcance_operacao,
+        area_cobertura: config.area_cobertura,
+        data_instalacao: config.data_instalacao,
+        data_remocao: config.data_remocao,
+        grua: config.grua || null
+      }))
+    
+    // Combinar ambas as fontes, removendo duplicatas por grua_id
+    const todasGruas = [...gruaObraAntiga, ...obraGruasConfiguracao]
+    const gruasUnicas = Array.from(
+      new Map(todasGruas.map(g => [g.grua_id, g])).values()
+    )
+
     // Calcular totais dos custos
     const totalCustosMensais = data.custos_mensais?.reduce((total, custo) => 
       total + parseFloat(custo.total_orcamento || 0), 0) || 0
@@ -703,9 +819,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const totalCustosGerais = custosGerais?.reduce((total, custo) => 
       total + parseFloat(custo.valor || 0), 0) || 0
 
-    // Adicionar totais aos dados
+    // Adicionar totais aos dados e combinar gruas
     const obraComTotais = {
       ...data,
+      grua_obra: gruasUnicas,
+      // Manter obra_gruas_configuracao para compatibilidade
+      obra_gruas_configuracao: data.obra_gruas_configuracao || [],
       total_custos_mensais: totalCustosMensais,
       total_custos_gerais: totalCustosGerais,
       custos_iniciais: totalCustosMensais, // Para compatibilidade com frontend

@@ -707,8 +707,11 @@ export default function ObrasPage() {
   const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Determinar clienteId - usar clienteSelecionado como fallback
+    const clienteIdFinal = obraFormData.clienteId || clienteSelecionado?.id || clienteSelecionado?.cliente_id
+    
     // Validação dos campos obrigatórios
-    if (!obraFormData.name || !obraFormData.description || !obraFormData.clienteId) {
+    if (!obraFormData.name || !obraFormData.description || !clienteIdFinal) {
       toast({
         title: "Erro",
         description: "Por favor, preencha todos os campos obrigatórios (Nome, Descrição, Cliente)",
@@ -732,7 +735,7 @@ export default function ObrasPage() {
               endDate: obraFormData.endDate,
               budget: obraFormData.budget,
               location: obraFormData.location,
-              clienteId: obraFormData.clienteId,
+              clienteId: clienteIdFinal,
               observations: obraFormData.observations,
               // Dados do responsável
               responsavelId: obraFormData.responsavelId,

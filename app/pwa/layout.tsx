@@ -368,10 +368,28 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   )
 
   // Itens sempre presentes no final: Perfil e Configurações
+  // Garantir que Perfil sempre esteja disponível, mesmo que não esteja em allNavigationItems
   const alwaysVisibleItems = allNavigationItems.filter(item => 
     item.label === 'Perfil' || item.label === 'Configurações'
-  ).sort((a, b) => {
-    // Perfil antes de Configurações
+  )
+  
+  // Se Perfil não estiver na lista, adicionar manualmente
+  if (!alwaysVisibleItems.find(item => item.label === 'Perfil')) {
+    const perfilItem = PWA_MENU_ITEMS.find(item => item.path === '/pwa/perfil')
+    if (perfilItem) {
+      alwaysVisibleItems.unshift({
+        name: 'Perfil',
+        href: '/pwa/perfil',
+        icon: perfilItem.icon,
+        description: 'Meu perfil',
+        permission: '*',
+        label: 'Perfil'
+      })
+    }
+  }
+  
+  // Ordenar: Perfil antes de Configurações
+  alwaysVisibleItems.sort((a, b) => {
     if (a.label === 'Perfil') return -1
     if (b.label === 'Perfil') return 1
     return 0
@@ -379,6 +397,15 @@ function PWALayoutContent({ children }: PWALayoutProps) {
 
   // Itens essenciais da navbar inferior (5 itens: Ponto, Espelho, Home, Docs, Perfil)
   // Filtrar "Ponto" se não tiver obra ativa
+  // GARANTIR que Perfil sempre apareça, mesmo sem obra ativa
+  const perfilItem = allNavigationItems.find(item => item.href === '/pwa/perfil') || {
+    name: 'Perfil',
+    href: '/pwa/perfil',
+    icon: UserCircle,
+    label: 'Perfil',
+    description: 'Meu perfil'
+  }
+  
   const essentialNavItems = [
     // Ponto - apenas se tiver obra ativa
     ...(temObraAtiva ? [
@@ -414,14 +441,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       label: 'Docs',
       description: 'Documentos'
     },
-    // Perfil
-    allNavigationItems.find(item => item.href === '/pwa/perfil') || {
-      name: 'Perfil',
-      href: '/pwa/perfil',
-      icon: UserCircle,
-      label: 'Perfil',
-      description: 'Meu perfil'
-    }
+    // Perfil - SEMPRE presente
+    perfilItem
   ].filter(Boolean) // Remove itens undefined
 
   // Usar apenas os 5 itens essenciais na navegação inferior (ou menos se não tiver obra ativa)
@@ -479,19 +500,18 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                     </div>
                   </div>
 
-                  {/* Menu do Usuário */}
+                  {/* Menu do Usuário - SEMPRE visível */}
                   <div className="flex items-center gap-2">
-                    {user && (
-                      <div className="relative" data-user-menu>
-                        <button
-                          onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                          className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
-                          aria-label="Menu do usuário"
-                        >
-                          <div className="w-10 h-10 bg-white/30 rounded-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-white" />
-                          </div>
-                        </button>
+                    <div className="relative" data-user-menu>
+                      <button
+                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                        className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg"
+                        aria-label="Menu do usuário"
+                      >
+                        <div className="w-10 h-10 bg-white/30 rounded-full flex items-center justify-center">
+                          <User className="w-5 h-5 text-white" />
+                        </div>
+                      </button>
 
                         {isUserMenuOpen && (
                           <>
@@ -504,9 +524,13 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                               <div className="p-2">
                                 {/* Informações do usuário */}
                                 <div className="px-3 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-                                  <p className="text-sm font-semibold text-gray-900">{user.nome}</p>
-                                  {user.cargo && (
-                                    <p className="text-xs text-gray-500 mt-0.5">{user.cargo}</p>
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    {user?.nome || 'Usuário'}
+                                  </p>
+                                  {(user?.cargo || persistentUser?.cargo) && (
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                      {user?.cargo || persistentUser?.cargo}
+                                    </p>
                                   )}
                                   <div className="flex items-center gap-2 mt-2">
                                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -551,23 +575,24 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                                   
                                   <div className="border-t border-gray-100 my-1"></div>
                                   
-                                  <button
-                                    onClick={() => {
-                                      setIsUserMenuOpen(false)
-                                      handleLogout()
-                                    }}
-                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  >
-                                    <LogOut className="w-4 h-4" />
-                                    Sair
-                                  </button>
+                                  <div className="border-t border-gray-100 mt-1 pt-1">
+                                    <button
+                                      onClick={() => {
+                                        setIsUserMenuOpen(false)
+                                        handleLogout()
+                                      }}
+                                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    >
+                                      <LogOut className="w-4 h-4" />
+                                      Sair
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </>
                         )}
                       </div>
-                    )}
                   </div>
                 </div>
               </div>

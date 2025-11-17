@@ -720,11 +720,36 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     // Validar dados
-    const { error, value } = funcionarioSchema.validate(req.body)
+    const { error, value } = funcionarioSchema.validate(req.body, {
+      abortEarly: false,
+      messages: {
+        'string.min': 'O campo {#label} deve ter no mínimo {#limit} caracteres',
+        'string.max': 'O campo {#label} deve ter no máximo {#limit} caracteres',
+        'string.email': 'O email fornecido é inválido',
+        'any.required': 'O campo {#label} é obrigatório',
+        'string.pattern.base': 'O formato do campo {#label} é inválido'
+      }
+    })
+    
     if (error) {
+      // Mapear mensagens de erro para português mais amigável
+      const mensagensErro = {
+        'usuario_senha': 'A senha do usuário deve ter no mínimo 6 caracteres',
+        'nome': 'O nome é obrigatório e deve ter no mínimo 2 caracteres',
+        'cargo': 'O cargo é obrigatório',
+        'email': 'O email fornecido é inválido',
+        'cpf': 'O CPF fornecido é inválido'
+      }
+      
+      const primeiroErro = error.details[0]
+      const campo = primeiroErro.path[0]
+      const mensagemAmigavel = mensagensErro[campo] || primeiroErro.message
+      
       return res.status(400).json({
         error: 'Dados inválidos',
-        details: error.details[0].message
+        message: mensagemAmigavel,
+        details: primeiroErro.message,
+        field: campo
       })
     }
 
