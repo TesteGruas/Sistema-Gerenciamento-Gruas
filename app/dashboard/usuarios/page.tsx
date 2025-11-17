@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
 import { apiPerfis, apiPermissoes, apiPerfilPermissoes, utilsPermissoes, type Perfil, type Permissao, type PerfilPermissao } from "@/lib/api-permissoes"
@@ -43,7 +45,10 @@ import {
   Save,
   X,
   ChevronLeft,
-  ChevronRight as ChevronRightIcon
+  ChevronRight as ChevronRightIcon,
+  User,
+  Building2,
+  ChevronDown
 } from "lucide-react"
 
 // Tipos para compatibilidade com o frontend
@@ -97,6 +102,7 @@ const roleColors = {
 
 
 export default function UsuariosPage() {
+  const router = useRouter()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [filterRole, setFilterRole] = useState<string>("all")
@@ -647,13 +653,31 @@ export default function UsuariosPage() {
             <Shield className="w-4 h-4" />
             Permissões
           </Button>
-          <Button 
-            className="flex items-center gap-2"
-            onClick={() => setIsCreateDialogOpen(true)}
-          >
-            <Plus className="w-4 h-4" />
-            Novo Usuário
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Novo Usuário
+                <ChevronDown className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => router.push('/dashboard/funcionarios?create=true')}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <User className="w-4 h-4" />
+                Criar Funcionário
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push('/dashboard/clientes?create=true')}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Building2 className="w-4 h-4" />
+                Criar Cliente
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

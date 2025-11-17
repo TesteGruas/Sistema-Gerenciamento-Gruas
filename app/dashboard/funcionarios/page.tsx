@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +40,7 @@ import { ExportButton } from "@/components/export-button"
 
 export default function FuncionariosPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedRole, setSelectedRole] = useState("all")
@@ -89,6 +90,17 @@ export default function FuncionariosPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosIniciaisCarregados])
+
+  // Verificar query param para abrir dialog de criação
+  useEffect(() => {
+    const createParam = searchParams.get('create')
+    if (createParam === 'true' && dadosIniciaisCarregados) {
+      setIsCreateDialogOpen(true)
+      // Remover query param da URL sem recarregar a página
+      router.replace('/dashboard/funcionarios', { scroll: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, dadosIniciaisCarregados])
 
   const carregarFuncionarios = async (page: number = pagination.page) => {
     try {

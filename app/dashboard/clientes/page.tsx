@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import dynamic from "next/dynamic"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -38,6 +39,8 @@ import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
 
 export default function ClientesPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("")
@@ -112,6 +115,17 @@ export default function ClientesPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosIniciaisCarregados])
+
+  // Verificar query param para abrir dialog de criação
+  useEffect(() => {
+    const createParam = searchParams.get('create')
+    if (createParam === 'true' && dadosIniciaisCarregados) {
+      setIsCreateDialogOpen(true)
+      // Remover query param da URL sem recarregar a página
+      router.replace('/dashboard/clientes', { scroll: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, dadosIniciaisCarregados])
 
   // Carregar clientes quando paginação, busca ou filtro mudarem (com debounce)
   // NOTA: Este useEffect só roda APÓS dadosIniciaisCarregados ser true
