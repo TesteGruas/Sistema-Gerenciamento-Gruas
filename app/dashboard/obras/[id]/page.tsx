@@ -314,6 +314,50 @@ function ObraDetailsPageContent() {
     }
   }
 
+  // Função para gerar PDF de medição mensal
+  const handleGerarPDFMedicao = async (medicao: MedicaoMensal) => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('token')
+      
+      const response = await fetch(`${API_URL}/api/relatorios/medicoes/${medicao.orcamento_id}/pdf?medicao_id=${medicao.id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao gerar PDF')
+      }
+
+      // Obter o blob do PDF
+      const blob = await response.blob()
+      
+      // Criar link de download
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Medicao-${medicao.numero}-${medicao.periodo}-${new Date().toISOString().split('T')[0]}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: "Sucesso",
+        description: "PDF da medição gerado com sucesso!",
+      })
+    } catch (error) {
+      console.error('Erro ao gerar PDF da medição:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao gerar PDF da medição. Tente novamente.",
+        variant: "destructive"
+      })
+    }
+  }
+
   // Função para carregar sinaleiros reais da API
   const carregarSinaleiros = async () => {
     if (!obraId) return
@@ -4229,14 +4273,56 @@ function ObraDetailsPageContent() {
                     Histórico de medições mensais dos orçamentos vinculados a esta obra
                   </CardDescription>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={carregarMedicoesMensais}
-                  disabled={loadingMedicoes}
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${loadingMedicoes ? 'animate-spin' : ''}`} />
-                  Atualizar
-                </Button>
+                <div className="flex gap-2">
+                  {orcamentosObra.length > 0 && (
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          // Gerar medição automática para o primeiro orçamento (pode ser melhorado para selecionar)
+                          const orcamento = orcamentosObra[0]
+                          const hoje = new Date()
+                          const periodo = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+                          
+                          const response = await medicoesMensaisApi.gerarAutomatica({
+                            orcamento_id: orcamento.id,
+                            periodo: periodo,
+                            data_medicao: hoje.toISOString().split('T')[0],
+                            aplicar_valores_orcamento: true,
+                            incluir_horas_extras: true,
+                            incluir_servicos_adicionais: true
+                          })
+                          
+                          if (response.success) {
+                            toast({
+                              title: "Sucesso",
+                              description: "Medição mensal gerada automaticamente!",
+                            })
+                            await carregarMedicoesMensais()
+                          }
+                        } catch (error: any) {
+                          console.error('Erro ao gerar medição:', error)
+                          toast({
+                            title: "Erro",
+                            description: error.response?.data?.message || "Erro ao gerar medição automática",
+                            variant: "destructive"
+                          })
+                        }
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Gerar Medição Automática
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={carregarMedicoesMensais}
+                    disabled={loadingMedicoes}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loadingMedicoes ? 'animate-spin' : ''}`} />
+                    Atualizar
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -4385,6 +4471,63 @@ function ObraDetailsPageContent() {
                                   >
                                     <Eye className="w-4 h-4" />
                                   </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleGerarPDFMedicao(medicao)}
+                                    title="Gerar PDF da medição"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                  {medicao.status === 'pendente' && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={async () => {
+                                          try {
+                                            const response = await medicoesMensaisApi.atualizar(medicao.id, {
+                                              status: 'finalizada',
+                                              data_finalizacao: new Date().toISOString()
+                                            })
+                                            
+                                            if (response.success) {
+                                              toast({
+                                                title: "Sucesso",
+                                                description: "Medição finalizada com sucesso!",
+                                              })
+                                              await carregarMedicoesMensais()
+                                            }
+                                          } catch (error: any) {
+                                            console.error('Erro ao finalizar medição:', error)
+                                            toast({
+                                              title: "Erro",
+                                              description: error.response?.data?.message || "Erro ao finalizar medição",
+                                              variant: "destructive"
+                                            })
+                                          }
+                                        }}
+                                        title="Finalizar medição"
+                                        className="text-green-600 hover:text-green-700"
+                                      >
+                                        <CheckCircle className="w-4 h-4" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          // TODO: Implementar diálogo de edição
+                                          toast({
+                                            title: "Em desenvolvimento",
+                                            description: "Funcionalidade de edição será implementada em breve",
+                                          })
+                                        }}
+                                        title="Editar medição"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

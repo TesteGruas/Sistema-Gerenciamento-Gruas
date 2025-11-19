@@ -103,6 +103,17 @@ export default function GruasPage() {
     velocidade_elevacao: string
     observacoes: string
     createdAt: string
+    capacidade_ponta: string
+    altura_trabalho: string
+    localizacao: string
+    horas_operacao: string
+    valor_locacao: string
+    valor_real: string
+    valor_operacao: string
+    valor_sinaleiro: string
+    valor_manutencao: string
+    ultima_manutencao: string
+    proxima_manutencao: string
   }>({
     name: '',
     model: '',
@@ -121,7 +132,18 @@ export default function GruasPage() {
     velocidade_rotacao: '',
     velocidade_elevacao: '',
     observacoes: '',
-    createdAt: ''
+    createdAt: '',
+    capacidade_ponta: '',
+    altura_trabalho: '',
+    localizacao: '',
+    horas_operacao: '',
+    valor_locacao: '',
+    valor_real: '',
+    valor_operacao: '',
+    valor_sinaleiro: '',
+    valor_manutencao: '',
+    ultima_manutencao: '',
+    proxima_manutencao: ''
   })
   
   // Estados para API
@@ -138,7 +160,11 @@ export default function GruasPage() {
 
   // Função auxiliar para converter dados do backend para o formato do componente
   const converterGruaBackend = (grua: any): GruaFrontend => {
-    const converted = {
+    // Preservar TODOS os campos do backend primeiro, depois sobrescrever com campos específicos
+    const converted: any = {
+      // Primeiro, espalhar todos os campos do backend
+      ...grua,
+      // Depois, sobrescrever com campos específicos formatados
       id: grua.id,
       name: grua.name || grua.nome,
       model: grua.model || grua.modelo,
@@ -302,6 +328,45 @@ export default function GruasPage() {
     }
   }
 
+  // Funções auxiliares para formatar valores no modal de detalhes
+  const formatValue = (value: any): string => {
+    // Verifica se o valor é null ou undefined explicitamente
+    if (value === null || value === undefined) return 'Não informado'
+    
+    // Para números (incluindo 0)
+    if (typeof value === 'number') {
+      return value.toString()
+    }
+    
+    // Para strings (incluindo "1", "0", etc)
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      // String vazia retorna "Não informado", mas "0" ou "1" são válidos
+      if (trimmed === '') return 'Não informado'
+      return trimmed
+    }
+    
+    // Para booleanos
+    if (typeof value === 'boolean') {
+      return value ? 'Sim' : 'Não'
+    }
+    
+    // Para outros tipos, tenta converter para string
+    return String(value)
+  }
+
+  const formatCurrency = (value: any): string => {
+    // Verifica se o valor é null ou undefined explicitamente
+    if (value === null || value === undefined) return 'Não informado'
+    
+    // Para strings vazias
+    if (typeof value === 'string' && value.trim() === '') return 'Não informado'
+    
+    const numValue = typeof value === 'string' ? parseFloat(value) : value
+    if (isNaN(numValue)) return 'Não informado'
+    return `R$ ${numValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
   const handleViewDetails = async (grua: GruaFrontend) => {
     try {
       // Fazer GET específico da grua para obter dados completos
@@ -391,6 +456,50 @@ export default function GruasPage() {
 
   const handleObservacoesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setGruaFormData(prev => ({ ...prev, observacoes: e.target.value }))
+  }
+
+  const handleCapacidadePontaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, capacidade_ponta: e.target.value }))
+  }
+
+  const handleAlturaTrabalhoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, altura_trabalho: e.target.value }))
+  }
+
+  const handleLocalizacaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, localizacao: e.target.value }))
+  }
+
+  const handleHorasOperacaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, horas_operacao: e.target.value }))
+  }
+
+  const handleValorLocacaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, valor_locacao: e.target.value }))
+  }
+
+  const handleValorRealChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, valor_real: e.target.value }))
+  }
+
+  const handleValorOperacaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, valor_operacao: e.target.value }))
+  }
+
+  const handleValorSinaleiroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, valor_sinaleiro: e.target.value }))
+  }
+
+  const handleValorManutencaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, valor_manutencao: e.target.value }))
+  }
+
+  const handleUltimaManutencaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, ultima_manutencao: e.target.value }))
+  }
+
+  const handleProximaManutencaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, proxima_manutencao: e.target.value }))
   }
 
 
@@ -542,34 +651,159 @@ export default function GruasPage() {
     }
   }
 
-  const handleEditGrua = (grua: GruaFrontend) => {
+  const handleEditGrua = async (grua: GruaFrontend) => {
     setGruaToEdit(grua)
     
-    // Normalizar status para os valores aceitos
-    const normalizarStatus = (status: any): 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' => {
-      const statusMap: Record<string, 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'> = {
-        'disponivel': 'disponivel',
-        'Disponível': 'disponivel',
-        'em_obra': 'em_obra',
-        'Operacional': 'em_obra',
-        'manutencao': 'manutencao',
-        'Manutenção': 'manutencao',
-        'inativa': 'inativa',
-        'Vendida': 'inativa',
+    // Buscar dados completos da grua da API para garantir que temos todos os campos técnicos
+    try {
+      const response = await gruasApi.obterGrua(grua.id)
+      if (response.success && response.data) {
+        const gruaCompleta = response.data
+        
+        // Normalizar status para os valores aceitos
+        const normalizarStatus = (status: any): 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' => {
+          const statusMap: Record<string, 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'> = {
+            'disponivel': 'disponivel',
+            'Disponível': 'disponivel',
+            'em_obra': 'em_obra',
+            'Operacional': 'em_obra',
+            'manutencao': 'manutencao',
+            'Manutenção': 'manutencao',
+            'inativa': 'inativa',
+            'Vendida': 'inativa',
+          }
+          return statusMap[status] || 'disponivel'
+        }
+        
+        setGruaFormData({
+          name: gruaCompleta.name || grua.name || '',
+          model: gruaCompleta.model || gruaCompleta.modelo || grua.model || grua.modelo || '',
+          fabricante: gruaCompleta.fabricante || grua.fabricante || '',
+          capacity: gruaCompleta.capacity || gruaCompleta.capacidade || grua.capacity || grua.capacidade || '',
+          status: normalizarStatus(gruaCompleta.status || grua.status),
+          tipo: gruaCompleta.tipo || grua.tipo || '',
+          lanca: gruaCompleta.lanca?.toString() || '',
+          altura_final: gruaCompleta.altura_final?.toString() || '',
+          ano: gruaCompleta.ano?.toString() || '',
+          tipo_base: gruaCompleta.tipo_base || '',
+          capacidade_1_cabo: gruaCompleta.capacidade_1_cabo?.toString() || '',
+          capacidade_2_cabos: gruaCompleta.capacidade_2_cabos?.toString() || '',
+          potencia_instalada: gruaCompleta.potencia_instalada?.toString() || '',
+          voltagem: gruaCompleta.voltagem || '',
+          velocidade_rotacao: gruaCompleta.velocidade_rotacao?.toString() || '',
+          velocidade_elevacao: gruaCompleta.velocidade_elevacao?.toString() || '',
+          observacoes: gruaCompleta.observacoes || grua.observacoes || '',
+          createdAt: gruaCompleta.created_at || gruaCompleta.createdAt || grua.createdAt || grua.created_at || '',
+          capacidade_ponta: gruaCompleta.capacidade_ponta || gruaCompleta.capacidadePonta || '',
+          altura_trabalho: gruaCompleta.altura_trabalho || gruaCompleta.alturaTrabalho || '',
+          localizacao: gruaCompleta.localizacao || '',
+          horas_operacao: gruaCompleta.horas_operacao?.toString() || gruaCompleta.horasOperacao?.toString() || '',
+          valor_locacao: gruaCompleta.valor_locacao?.toString() || gruaCompleta.valorLocacao?.toString() || '',
+          valor_real: gruaCompleta.valor_real?.toString() || '',
+          valor_operacao: gruaCompleta.valor_operacao?.toString() || gruaCompleta.valorOperacao?.toString() || '',
+          valor_sinaleiro: gruaCompleta.valor_sinaleiro?.toString() || gruaCompleta.valorSinaleiro?.toString() || '',
+          valor_manutencao: gruaCompleta.valor_manutencao?.toString() || gruaCompleta.valorManutencao?.toString() || '',
+          ultima_manutencao: gruaCompleta.ultima_manutencao ? new Date(gruaCompleta.ultima_manutencao).toISOString().split('T')[0] : gruaCompleta.ultimaManutencao ? new Date(gruaCompleta.ultimaManutencao).toISOString().split('T')[0] : '',
+          proxima_manutencao: gruaCompleta.proxima_manutencao ? new Date(gruaCompleta.proxima_manutencao).toISOString().split('T')[0] : gruaCompleta.proximaManutencao ? new Date(gruaCompleta.proximaManutencao).toISOString().split('T')[0] : ''
+        })
+      } else {
+        // Fallback para dados locais se a API falhar
+        const normalizarStatus = (status: any): 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' => {
+          const statusMap: Record<string, 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'> = {
+            'disponivel': 'disponivel',
+            'Disponível': 'disponivel',
+            'em_obra': 'em_obra',
+            'Operacional': 'em_obra',
+            'manutencao': 'manutencao',
+            'Manutenção': 'manutencao',
+            'inativa': 'inativa',
+            'Vendida': 'inativa',
+          }
+          return statusMap[status] || 'disponivel'
+        }
+        
+        setGruaFormData({
+          name: grua.name || '',
+          model: grua.model || grua.modelo || '',
+          fabricante: grua.fabricante || '',
+          capacity: grua.capacity || grua.capacidade || '',
+          status: normalizarStatus(grua.status),
+          tipo: grua.tipo || '',
+          lanca: (grua as any).lanca || '',
+          altura_final: (grua as any).altura_final?.toString() || '',
+          ano: (grua as any).ano?.toString() || '',
+          tipo_base: (grua as any).tipo_base || '',
+          capacidade_1_cabo: (grua as any).capacidade_1_cabo?.toString() || '',
+          capacidade_2_cabos: (grua as any).capacidade_2_cabos?.toString() || '',
+          potencia_instalada: (grua as any).potencia_instalada?.toString() || '',
+          voltagem: (grua as any).voltagem || '',
+          velocidade_rotacao: (grua as any).velocidade_rotacao?.toString() || '',
+          velocidade_elevacao: (grua as any).velocidade_elevacao?.toString() || '',
+          observacoes: grua.observacoes || (grua as any).observacoes || '',
+          createdAt: grua.createdAt || grua.created_at || '',
+          capacidade_ponta: (grua as any).capacidade_ponta || (grua as any).capacidadePonta || '',
+          altura_trabalho: (grua as any).altura_trabalho || (grua as any).alturaTrabalho || '',
+          localizacao: (grua as any).localizacao || '',
+          horas_operacao: (grua as any).horas_operacao?.toString() || (grua as any).horasOperacao?.toString() || '',
+          valor_locacao: (grua as any).valor_locacao?.toString() || (grua as any).valorLocacao?.toString() || '',
+          valor_real: (grua as any).valor_real?.toString() || '',
+          valor_operacao: (grua as any).valor_operacao?.toString() || (grua as any).valorOperacao?.toString() || '',
+          valor_sinaleiro: (grua as any).valor_sinaleiro?.toString() || (grua as any).valorSinaleiro?.toString() || '',
+          valor_manutencao: (grua as any).valor_manutencao?.toString() || (grua as any).valorManutencao?.toString() || '',
+          ultima_manutencao: (grua as any).ultima_manutencao ? new Date((grua as any).ultima_manutencao).toISOString().split('T')[0] : (grua as any).ultimaManutencao ? new Date((grua as any).ultimaManutencao).toISOString().split('T')[0] : '',
+          proxima_manutencao: (grua as any).proxima_manutencao ? new Date((grua as any).proxima_manutencao).toISOString().split('T')[0] : (grua as any).proximaManutencao ? new Date((grua as any).proximaManutencao).toISOString().split('T')[0] : ''
+        })
       }
-      return statusMap[status] || 'disponivel'
+    } catch (error) {
+      console.error('Erro ao buscar dados completos da grua:', error)
+      // Fallback para dados locais
+      const normalizarStatus = (status: any): 'disponivel' | 'em_obra' | 'manutencao' | 'inativa' => {
+        const statusMap: Record<string, 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'> = {
+          'disponivel': 'disponivel',
+          'Disponível': 'disponivel',
+          'em_obra': 'em_obra',
+          'Operacional': 'em_obra',
+          'manutencao': 'manutencao',
+          'Manutenção': 'manutencao',
+          'inativa': 'inativa',
+          'Vendida': 'inativa',
+        }
+        return statusMap[status] || 'disponivel'
+      }
+      
+      setGruaFormData({
+        name: grua.name || '',
+        model: grua.model || grua.modelo || '',
+        fabricante: grua.fabricante || '',
+        capacity: grua.capacity || grua.capacidade || '',
+        status: normalizarStatus(grua.status),
+        tipo: grua.tipo || '',
+        lanca: (grua as any).lanca || '',
+        altura_final: (grua as any).altura_final?.toString() || '',
+        ano: (grua as any).ano?.toString() || '',
+        tipo_base: (grua as any).tipo_base || '',
+        capacidade_1_cabo: (grua as any).capacidade_1_cabo?.toString() || '',
+        capacidade_2_cabos: (grua as any).capacidade_2_cabos?.toString() || '',
+        potencia_instalada: (grua as any).potencia_instalada?.toString() || '',
+        voltagem: (grua as any).voltagem || '',
+        velocidade_rotacao: (grua as any).velocidade_rotacao?.toString() || '',
+        velocidade_elevacao: (grua as any).velocidade_elevacao?.toString() || '',
+        observacoes: grua.observacoes || (grua as any).observacoes || '',
+        createdAt: grua.createdAt || grua.created_at || '',
+        capacidade_ponta: (grua as any).capacidade_ponta || (grua as any).capacidadePonta || '',
+        altura_trabalho: (grua as any).altura_trabalho || (grua as any).alturaTrabalho || '',
+        localizacao: (grua as any).localizacao || '',
+        horas_operacao: (grua as any).horas_operacao?.toString() || (grua as any).horasOperacao?.toString() || '',
+        valor_locacao: (grua as any).valor_locacao?.toString() || (grua as any).valorLocacao?.toString() || '',
+        valor_real: (grua as any).valor_real?.toString() || '',
+        valor_operacao: (grua as any).valor_operacao?.toString() || (grua as any).valorOperacao?.toString() || '',
+        valor_sinaleiro: (grua as any).valor_sinaleiro?.toString() || (grua as any).valorSinaleiro?.toString() || '',
+        valor_manutencao: (grua as any).valor_manutencao?.toString() || (grua as any).valorManutencao?.toString() || '',
+        ultima_manutencao: (grua as any).ultima_manutencao ? new Date((grua as any).ultima_manutencao).toISOString().split('T')[0] : (grua as any).ultimaManutencao ? new Date((grua as any).ultimaManutencao).toISOString().split('T')[0] : '',
+        proxima_manutencao: (grua as any).proxima_manutencao ? new Date((grua as any).proxima_manutencao).toISOString().split('T')[0] : (grua as any).proximaManutencao ? new Date((grua as any).proximaManutencao).toISOString().split('T')[0] : ''
+      })
     }
     
-    setGruaFormData({
-      name: grua.name || '',
-      model: grua.model || grua.modelo || '',
-      fabricante: grua.fabricante || '',
-      capacity: grua.capacity || grua.capacidade || '',
-      status: normalizarStatus(grua.status),
-      tipo: grua.tipo || '',
-      observacoes: grua.observacoes || '',
-      createdAt: grua.createdAt || grua.created_at || ''
-    })
     setIsEditDialogOpen(true)
   }
 
@@ -681,7 +915,18 @@ export default function GruasPage() {
           velocidade_rotacao: '',
           velocidade_elevacao: '',
           observacoes: '',
-          createdAt: ''
+          createdAt: '',
+          capacidade_ponta: '',
+          altura_trabalho: '',
+          localizacao: '',
+          horas_operacao: '',
+          valor_locacao: '',
+          valor_real: '',
+          valor_operacao: '',
+          valor_sinaleiro: '',
+          valor_manutencao: '',
+          ultima_manutencao: '',
+          proxima_manutencao: ''
         })
         setIsCreateDialogOpen(false)
         
@@ -723,9 +968,30 @@ export default function GruasPage() {
         model: gruaFormData.model,
         capacity: gruaFormData.capacity,
         status: gruaFormData.status,
-        fabricante: gruaFormData.fabricante || undefined,
-        tipo: gruaFormData.tipo || undefined,
+        fabricante: gruaFormData.fabricante,
+        tipo: gruaFormData.tipo,
+        lanca: gruaFormData.lanca,
+        altura_final: parseFloat(gruaFormData.altura_final) || 0,
+        ano: parseInt(gruaFormData.ano) || new Date().getFullYear(),
+        tipo_base: gruaFormData.tipo_base,
+        capacidade_1_cabo: parseFloat(gruaFormData.capacidade_1_cabo) || 0,
+        capacidade_2_cabos: parseFloat(gruaFormData.capacidade_2_cabos) || 0,
+        potencia_instalada: parseFloat(gruaFormData.potencia_instalada) || 0,
+        voltagem: gruaFormData.voltagem,
+        velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
+        velocidade_elevacao: parseFloat(gruaFormData.velocidade_elevacao) || 0,
         observacoes: gruaFormData.observacoes || undefined,
+        capacidade_ponta: gruaFormData.capacidade_ponta || undefined,
+        altura_trabalho: gruaFormData.altura_trabalho || undefined,
+        localizacao: gruaFormData.localizacao || undefined,
+        horas_operacao: parseFloat(gruaFormData.horas_operacao) || 0,
+        valor_locacao: gruaFormData.valor_locacao ? parseFloat(gruaFormData.valor_locacao) : undefined,
+        valor_real: parseFloat(gruaFormData.valor_real) || 0,
+        valor_operacao: parseFloat(gruaFormData.valor_operacao) || 0,
+        valor_sinaleiro: parseFloat(gruaFormData.valor_sinaleiro) || 0,
+        valor_manutencao: parseFloat(gruaFormData.valor_manutencao) || 0,
+        ultima_manutencao: gruaFormData.ultima_manutencao || undefined,
+        proxima_manutencao: gruaFormData.proxima_manutencao || undefined,
       }
       
       const response = await gruasApi.atualizarGrua(gruaToEdit.id, gruaData)
@@ -742,8 +1008,29 @@ export default function GruasPage() {
           capacity: '',
           status: 'disponivel',
           tipo: '',
+          lanca: '',
+          altura_final: '',
+          ano: '',
+          tipo_base: '',
+          capacidade_1_cabo: '',
+          capacidade_2_cabos: '',
+          potencia_instalada: '',
+          voltagem: '',
+          velocidade_rotacao: '',
+          velocidade_elevacao: '',
           observacoes: '',
-          createdAt: ''
+          createdAt: '',
+          capacidade_ponta: '',
+          altura_trabalho: '',
+          localizacao: '',
+          horas_operacao: '',
+          valor_locacao: '',
+          valor_real: '',
+          valor_operacao: '',
+          valor_sinaleiro: '',
+          valor_manutencao: '',
+          ultima_manutencao: '',
+          proxima_manutencao: ''
         })
         setIsEditDialogOpen(false)
         setGruaToEdit(null)
@@ -978,7 +1265,7 @@ export default function GruasPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredGruas.map((grua) => {
           // Nome da obra deve vir da API de gruas
-          const obraNome = grua.obraNome || 'Sem obra'
+          const obraNome = grua.currentObraName || 'Sem obra'
           
           return (
             <Card key={grua.id} className="hover:shadow-lg transition-shadow">
@@ -1531,6 +1818,153 @@ export default function GruasPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <Label htmlFor="edit-lanca">Lança (metros) *</Label>
+                <Input
+                  id="edit-lanca"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.lanca}
+                  onChange={handleLancaChange}
+                  placeholder="Ex: 50.00"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-altura_final">Altura Final (metros) *</Label>
+                <Input
+                  id="edit-altura_final"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.altura_final}
+                  onChange={handleAlturaFinalChange}
+                  placeholder="Ex: 100.00"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-ano">Ano *</Label>
+                <Input
+                  id="edit-ano"
+                  type="number"
+                  min="1900"
+                  max={new Date().getFullYear()}
+                  value={gruaFormData.ano}
+                  onChange={handleAnoChange}
+                  placeholder={`Ex: ${new Date().getFullYear()}`}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-tipo_base">Tipo de Base *</Label>
+                <Select
+                  value={gruaFormData.tipo_base}
+                  onValueChange={handleTipoBaseChange}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo de base" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Chumbador">Chumbador</SelectItem>
+                    <SelectItem value="Fixa">Fixa</SelectItem>
+                    <SelectItem value="Móvel">Móvel</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-capacidade_1_cabo">Capacidade 1 cabo (kg) *</Label>
+                <Input
+                  id="edit-capacidade_1_cabo"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.capacidade_1_cabo}
+                  onChange={handleCapacidade1CaboChange}
+                  placeholder="Ex: 5000"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-capacidade_2_cabos">Capacidade 2 cabos (kg) *</Label>
+                <Input
+                  id="edit-capacidade_2_cabos"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.capacidade_2_cabos}
+                  onChange={handleCapacidade2CabosChange}
+                  placeholder="Ex: 10000"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-potencia_instalada">Potência Instalada (KVA) *</Label>
+                <Input
+                  id="edit-potencia_instalada"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.potencia_instalada}
+                  onChange={handlePotenciaInstaladaChange}
+                  placeholder="Ex: 50.00"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-voltagem">Voltagem *</Label>
+                <Input
+                  id="edit-voltagem"
+                  value={gruaFormData.voltagem}
+                  onChange={handleVoltagemChange}
+                  placeholder="Ex: 380"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-velocidade_rotacao">Velocidade de Rotação (rpm) *</Label>
+                <Input
+                  id="edit-velocidade_rotacao"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.velocidade_rotacao}
+                  onChange={handleVelocidadeRotacaoChange}
+                  placeholder="Ex: 0.5"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-velocidade_elevacao">Velocidade de Elevação (m/min) *</Label>
+                <Input
+                  id="edit-velocidade_elevacao"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.velocidade_elevacao}
+                  onChange={handleVelocidadeElevacaoChange}
+                  placeholder="Ex: 60.00"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
                 <Label htmlFor="edit-capacity">Capacidade *</Label>
                 <Input
                   id="edit-capacity"
@@ -1559,7 +1993,6 @@ export default function GruasPage() {
               </div>
             </div>
 
-
             <div>
               <Label htmlFor="edit-observacoes">Observações</Label>
               <Textarea
@@ -1569,6 +2002,147 @@ export default function GruasPage() {
                 placeholder="Observações sobre a grua..."
                 rows={3}
               />
+            </div>
+
+            {/* Campos Adicionais */}
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-semibold mb-4">Informações Adicionais</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-capacidade_ponta">Capacidade na Ponta</Label>
+                  <Input
+                    id="edit-capacidade_ponta"
+                    value={gruaFormData.capacidade_ponta}
+                    onChange={handleCapacidadePontaChange}
+                    placeholder="Ex: 1000 KGS"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-altura_trabalho">Altura de Trabalho</Label>
+                  <Input
+                    id="edit-altura_trabalho"
+                    value={gruaFormData.altura_trabalho}
+                    onChange={handleAlturaTrabalhoChange}
+                    placeholder="Ex: 80 metros"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-localizacao">Localização</Label>
+                  <Input
+                    id="edit-localizacao"
+                    value={gruaFormData.localizacao}
+                    onChange={handleLocalizacaoChange}
+                    placeholder="Ex: São Paulo, SP"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-horas_operacao">Horas de Operação</Label>
+                  <Input
+                    id="edit-horas_operacao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.horas_operacao}
+                    onChange={handleHorasOperacaoChange}
+                    placeholder="Ex: 1500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Informações Financeiras */}
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-semibold mb-4">Informações Financeiras</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-valor_locacao">Valor de Locação (R$)</Label>
+                  <Input
+                    id="edit-valor_locacao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_locacao}
+                    onChange={handleValorLocacaoChange}
+                    placeholder="Ex: 5000.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-valor_real">Valor Real (R$)</Label>
+                  <Input
+                    id="edit-valor_real"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_real}
+                    onChange={handleValorRealChange}
+                    placeholder="Ex: 100000.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-valor_operacao">Valor de Operação (R$)</Label>
+                  <Input
+                    id="edit-valor_operacao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_operacao}
+                    onChange={handleValorOperacaoChange}
+                    placeholder="Ex: 2000.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-valor_sinaleiro">Valor de Sinaleiro (R$)</Label>
+                  <Input
+                    id="edit-valor_sinaleiro"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_sinaleiro}
+                    onChange={handleValorSinaleiroChange}
+                    placeholder="Ex: 1500.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-valor_manutencao">Valor de Manutenção (R$)</Label>
+                  <Input
+                    id="edit-valor_manutencao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_manutencao}
+                    onChange={handleValorManutencaoChange}
+                    placeholder="Ex: 3000.00"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Manutenção */}
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-semibold mb-4">Manutenção</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-ultima_manutencao">Última Manutenção</Label>
+                  <Input
+                    id="edit-ultima_manutencao"
+                    type="date"
+                    value={gruaFormData.ultima_manutencao}
+                    onChange={handleUltimaManutencaoChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-proxima_manutencao">Próxima Manutenção</Label>
+                  <Input
+                    id="edit-proxima_manutencao"
+                    type="date"
+                    value={gruaFormData.proxima_manutencao}
+                    onChange={handleProximaManutencaoChange}
+                  />
+                </div>
+              </div>
             </div>
 
             {gruaFormData.createdAt && (
@@ -1662,7 +2236,7 @@ export default function GruasPage() {
 
       {/* Dialog de Visualização de Detalhes */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="w-5 h-5 text-blue-600" />
@@ -1670,112 +2244,257 @@ export default function GruasPage() {
             </DialogTitle>
           </DialogHeader>
           
-          {gruaToView && (
-            <div className="space-y-6">
-              {/* Informações Básicas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Nome</Label>
-                    <p className="text-lg font-semibold">{gruaToView.name}</p>
+          {gruaToView && (() => {
+            const grua = gruaToView as any
+            
+            return (
+              <div className="space-y-6">
+                {/* Informações Básicas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Nome</Label>
+                      <p className="text-lg font-semibold">{gruaToView.name}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Modelo</Label>
+                      <p className="text-base">{formatValue(gruaToView.model || grua.modelo)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Fabricante</Label>
+                      <p className="text-base">{formatValue(gruaToView.fabricante)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Capacidade</Label>
+                      <p className="text-base">{formatValue(gruaToView.capacity || grua.capacidade)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Capacidade na Ponta</Label>
+                      <p className="text-base">{formatValue(grua.capacidade_ponta || grua.capacidadePonta)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Ano</Label>
+                      <p className="text-base">{formatValue(grua.ano)}</p>
+                    </div>
                   </div>
                   
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Modelo</Label>
-                    <p className="text-base">{gruaToView.model}</p>
-                  </div>
-                  
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Fabricante</Label>
-                    <p className="text-base">{gruaToView.fabricante || 'Não informado'}</p>
-                  </div>
-                  
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Capacidade</Label>
-                    <p className="text-base">{gruaToView.capacity}</p>
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Status</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        {getStatusIcon(gruaToView.status)}
+                        <Badge 
+                          variant={gruaToView.status === 'disponivel' ? 'default' : 
+                                  gruaToView.status === 'em_obra' ? 'secondary' :
+                                  gruaToView.status === 'manutencao' ? 'destructive' : 'outline'}
+                          className="text-xs"
+                        >
+                          {gruaToView.status === 'disponivel' ? 'Disponível' :
+                           gruaToView.status === 'em_obra' ? 'Em Obra' :
+                           gruaToView.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Tipo</Label>
+                      <p className="text-base">{formatValue(gruaToView.tipo)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Localização</Label>
+                      <p className="text-base">{formatValue(grua.localizacao)}</p>
+                    </div>
+                    
+                    {gruaToView.currentObraName && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Obra Atual</Label>
+                        <p className="text-base">{gruaToView.currentObraName}</p>
+                      </div>
+                    )}
+                    
+                    {gruaToView.createdAt && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-600">Data de Criação</Label>
+                        <p className="text-base">{new Date(gruaToView.createdAt).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Status</Label>
-                    <div className="flex items-center gap-2 mt-1">
-                      {getStatusIcon(gruaToView.status)}
-                      <Badge 
-                        variant={gruaToView.status === 'disponivel' ? 'default' : 
-                                gruaToView.status === 'em_obra' ? 'secondary' :
-                                gruaToView.status === 'manutencao' ? 'destructive' : 'outline'}
-                        className="text-xs"
-                      >
-                        {gruaToView.status === 'disponivel' ? 'Disponível' :
-                         gruaToView.status === 'em_obra' ? 'Em Obra' :
-                         gruaToView.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
-                      </Badge>
+                {/* Especificações Técnicas */}
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-4">Especificações Técnicas</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Lança</Label>
+                      <p className="text-base">{formatValue(grua.lanca)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Altura Final (m)</Label>
+                      <p className="text-base">{formatValue(grua.altura_final)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Altura de Trabalho</Label>
+                      <p className="text-base">{formatValue(grua.altura_trabalho || grua.alturaTrabalho)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Tipo de Base</Label>
+                      <p className="text-base">{formatValue(grua.tipo_base)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Capacidade 1 Cabo</Label>
+                      <p className="text-base">{formatValue(grua.capacidade_1_cabo)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Capacidade 2 Cabos</Label>
+                      <p className="text-base">{formatValue(grua.capacidade_2_cabos)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Potência Instalada</Label>
+                      <p className="text-base">{formatValue(grua.potencia_instalada)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Voltagem</Label>
+                      <p className="text-base">{formatValue(grua.voltagem)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Velocidade de Rotação</Label>
+                      <p className="text-base">{formatValue(grua.velocidade_rotacao)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Velocidade de Elevação</Label>
+                      <p className="text-base">{formatValue(grua.velocidade_elevacao)}</p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Horas de Operação</Label>
+                      <p className="text-base">{formatValue(grua.horas_operacao || grua.horasOperacao)}</p>
                     </div>
                   </div>
-                  
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Tipo</Label>
-                    <p className="text-base">{gruaToView.tipo || 'Não informado'}</p>
-                  </div>
-                  
-                  {gruaToView.currentObraName && (
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Obra Atual</Label>
-                      <p className="text-base">{gruaToView.currentObraName}</p>
-                    </div>
-                  )}
-                  
-                  {gruaToView.createdAt && (
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Data de Criação</Label>
-                      <p className="text-base">{new Date(gruaToView.createdAt).toLocaleDateString('pt-BR')}</p>
-                    </div>
-                  )}
                 </div>
-              </div>
               
-              {/* Observações */}
-              <div>
-                <Label className="text-sm font-medium text-gray-600">Observações</Label>
-                <p className="text-base mt-1 p-3 bg-gray-50 rounded-md">
-                  {gruaToView.observacoes || 'Nenhuma observação registrada'}
-                </p>
-              </div>
-              
-              {/* Ações */}
-              <div className="flex gap-3 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => handleEditGrua(gruaToView)}
-                  className="flex-1"
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Editar Grua
-                </Button>
+                {/* Informações Financeiras */}
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-4">Informações Financeiras</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Valor de Locação</Label>
+                      <p className="text-base">
+                        {formatCurrency(grua.valor_locacao || grua.valorLocacao)}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Valor Real</Label>
+                      <p className="text-base">
+                        {formatCurrency(grua.valor_real)}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Valor de Operação</Label>
+                      <p className="text-base">
+                        {formatCurrency(grua.valor_operacao || grua.valorOperacao)}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Valor de Sinaleiro</Label>
+                      <p className="text-base">
+                        {formatCurrency(grua.valor_sinaleiro || grua.valorSinaleiro)}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Valor de Manutenção</Label>
+                      <p className="text-base">
+                        {formatCurrency(grua.valor_manutencao || grua.valorManutencao)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
                 
-                {gruaToView.currentObraId && (
+                {/* Informações de Manutenção */}
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold mb-4">Manutenção</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Última Manutenção</Label>
+                      <p className="text-base">
+                        {grua.ultima_manutencao || grua.ultimaManutencao
+                          ? new Date(grua.ultima_manutencao || grua.ultimaManutencao).toLocaleDateString('pt-BR')
+                          : 'Não informado'}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Próxima Manutenção</Label>
+                      <p className="text-base">
+                        {grua.proxima_manutencao || grua.proximaManutencao
+                          ? new Date(grua.proxima_manutencao || grua.proximaManutencao).toLocaleDateString('pt-BR')
+                          : 'Não informado'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Observações */}
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-medium text-gray-600">Observações</Label>
+                  <p className="text-base mt-1 p-3 bg-gray-50 rounded-md">
+                    {gruaToView.observacoes || grua.observacoes || 'Nenhuma observação registrada'}
+                  </p>
+                </div>
+                
+                {/* Ações */}
+                <div className="flex gap-3 pt-4 border-t">
                   <Button
                     variant="outline"
-                    onClick={() => window.location.href = `/dashboard/obras/${gruaToView.currentObraId}?tab=livro`}
+                    onClick={() => handleEditGrua(gruaToView)}
                     className="flex-1"
                   >
-                    <Building2 className="w-4 h-4 mr-2" />
-                    Ver na Obra
+                    <Edit className="w-4 h-4 mr-2" />
+                    Editar Grua
                   </Button>
-                )}
-                
-                <Button
-                  variant="outline"
-                  onClick={() => window.location.href = `/dashboard/gruas/${gruaToView.id}/componentes`}
-                  className="flex-1"
-                >
-                  <Package className="w-4 h-4 mr-2" />
-                  Componentes
-                </Button>
+                  
+                  {gruaToView.currentObraId && (
+                    <Button
+                      variant="outline"
+                      onClick={() => window.location.href = `/dashboard/obras/${gruaToView.currentObraId}?tab=livro`}
+                      className="flex-1"
+                    >
+                      <Building2 className="w-4 h-4 mr-2" />
+                      Ver na Obra
+                    </Button>
+                  )}
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => window.location.href = `/dashboard/gruas/${gruaToView.id}/componentes`}
+                    className="flex-1"
+                  >
+                    <Package className="w-4 h-4 mr-2" />
+                    Componentes
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
         </DialogContent>
       </Dialog>
       </div>

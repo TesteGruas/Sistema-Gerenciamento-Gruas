@@ -372,59 +372,23 @@ export default function OrcamentosPage() {
     if (!orcamento) return
     
     try {
-      // Preparar dados no formato esperado pelo componente PDF
-      const enderecoObra = orcamento.obra_endereco 
-        ? `${orcamento.obra_endereco}${orcamento.obra_cidade ? `, ${orcamento.obra_cidade}` : ''}${orcamento.obra_estado ? `/${orcamento.obra_estado.toUpperCase()}` : ''}`
-        : undefined
+      // Usar API do backend para gerar PDF
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('token')
+      
+      const response = await fetch(`${API_URL}/api/relatorios/orcamentos/${orcamento.id}/pdf`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
 
-      const pdfData = {
-        empresa: {
-          nome: empresa.razao_social || empresa.nome,
-          cnpj: empresa.cnpj,
-          endereco: getEnderecoCompleto(),
-          contato: getContatoCompleto(),
-          logo: empresa.logo
-        },
-        documento: {
-          titulo: "ORÇAMENTO DE LOCAÇÃO DE GRUA",
-          numero: orcamento.numero,
-          geradoEm: new Date().toISOString()
-        },
-        cliente: {
-          nome: orcamento.cliente_nome || '',
-          obra: orcamento.obra_nome,
-          endereco: enderecoObra,
-          tipo: orcamento.tipo_obra,
-          equipamento: orcamento.equipamento
-        },
-        especificacoes: {
-          alturaInicial: orcamento.altura_inicial ? `${orcamento.altura_inicial} m` : undefined,
-          alturaFinal: orcamento.altura_final ? `${orcamento.altura_final} m` : undefined,
-          lanca: orcamento.comprimento_lanca ? `${orcamento.comprimento_lanca} m` : undefined,
-          cargaMax: orcamento.carga_maxima ? `${orcamento.carga_maxima.toLocaleString('pt-BR')} kg` : undefined,
-          cargaPonta: orcamento.carga_ponta ? `${orcamento.carga_ponta.toLocaleString('pt-BR')} kg` : undefined,
-          potencia: orcamento.potencia_eletrica,
-          energia: orcamento.energia_necessaria
-        },
-        custosMensais: [
-          { nome: "Locação da Grua", valor: orcamento.valor_locacao_mensal },
-          { nome: "Operador", valor: orcamento.valor_operador },
-          { nome: "Sinaleiro", valor: orcamento.valor_sinaleiro },
-          { nome: "Manutenção Preventiva", valor: orcamento.valor_manutencao }
-        ],
-        prazo: {
-          meses: orcamento.prazo_locacao_meses,
-          inicioEstimado: orcamento.data_inicio_estimada,
-          tolerancia: orcamento.tolerancia_dias ? `±${orcamento.tolerancia_dias} dias` : undefined
-        },
-        escopoIncluso: orcamento.escopo_incluso,
-        responsabilidadesCliente: orcamento.responsabilidades_cliente,
-        condicoesComerciais: orcamento.condicoes_comerciais
+      if (!response.ok) {
+        throw new Error('Erro ao gerar PDF')
       }
 
-      // Gerar PDF usando @react-pdf/renderer
-      // @ts-ignore - @react-pdf/renderer aceita componentes React
-      const blob = await pdf(<OrcamentoPDFDocument data={pdfData} />).toBlob()
+      // Obter o blob do PDF
+      const blob = await response.blob()
       
       // Criar link de download
       const url = URL.createObjectURL(blob)

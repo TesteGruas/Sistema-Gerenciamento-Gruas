@@ -133,6 +133,11 @@ export default function NovoOrcamentoPage() {
     // Condições comerciais
     condicoes_comerciais: '',
     
+    // Condições gerais, logística e garantias
+    condicoes_gerais: '',
+    logistica: '',
+    garantias: '',
+    
     // Observações
     observacoes: ''
   })
@@ -353,6 +358,9 @@ export default function NovoOrcamentoPage() {
           escopo_incluso: orcamento.escopo_incluso || '',
           responsabilidades_cliente: orcamento.responsabilidades_cliente || '',
           condicoes_comerciais: orcamento.condicoes_comerciais || '',
+          condicoes_gerais: orcamento.condicoes_gerais || '',
+          logistica: orcamento.logistica || '',
+          garantias: orcamento.garantias || '',
           observacoes: orcamento.observacoes || ''
         })
 
@@ -517,6 +525,9 @@ export default function NovoOrcamentoPage() {
         status: isDraft ? 'rascunho' : 'enviado',
         tipo_orcamento: 'locacao_grua',
         condicoes_pagamento: formData.condicoes_comerciais || '',
+        condicoes_gerais: formData.condicoes_gerais || '',
+        logistica: formData.logistica || '',
+        garantias: formData.garantias || '',
         prazo_entrega: formData.prazo_locacao_meses ? `${formData.prazo_locacao_meses} meses` : '',
         observacoes: formData.observacoes || '',
         valores_fixos: valoresFixos.map(vf => ({
@@ -1179,6 +1190,57 @@ export default function NovoOrcamentoPage() {
                 onChange={(e) => setFormData({ ...formData, condicoes_comerciais: e.target.value })}
                 rows={5}
                 placeholder="Ex: Medição mensal e pagamento até dia 15. Valores isentos de impostos por serem locação. Multa em caso de cancelamento após mobilização (geralmente 2 meses de locação). Validade da proposta enquanto houver equipamento disponível."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Condições Gerais</CardTitle>
+              <CardDescription>
+                Condições gerais do contrato e termos legais
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={formData.condicoes_gerais}
+                onChange={(e) => setFormData({ ...formData, condicoes_gerais: e.target.value })}
+                rows={5}
+                placeholder="Ex: Condições gerais de contrato, termos legais, cláusulas contratuais..."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Logística</CardTitle>
+              <CardDescription>
+                Informações sobre transporte, entrega e instalação
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={formData.logistica}
+                onChange={(e) => setFormData({ ...formData, logistica: e.target.value })}
+                rows={5}
+                placeholder="Ex: Transporte, prazo de entrega, condições de instalação, responsabilidades logísticas..."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Garantias</CardTitle>
+              <CardDescription>
+                Garantias oferecidas e condições de garantia
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={formData.garantias}
+                onChange={(e) => setFormData({ ...formData, garantias: e.target.value })}
+                rows={5}
+                placeholder="Ex: Garantia de funcionamento, garantia de peças, prazo de garantia, condições de cobertura..."
               />
             </CardContent>
           </Card>
