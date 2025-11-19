@@ -97,11 +97,19 @@ export default function PWAMainPage() {
         )
         
         if (funcionarioId) {
+          console.log('[PWA Dashboard] Verificando obra ativa para funcionário ID:', funcionarioId)
           const alocacoes = await getAlocacoesAtivasFuncionario(funcionarioId)
+          console.log('[PWA Dashboard] Resposta da API:', {
+            success: alocacoes.success,
+            dataLength: alocacoes.data?.length || 0,
+            data: alocacoes.data,
+            pagination: alocacoes.pagination
+          })
           const temObra = alocacoes.data && alocacoes.data.length > 0
           setTemObraAtiva(temObra)
           console.log('[PWA Dashboard] Funcionário tem obra ativa?', temObra, alocacoes.data)
         } else {
+          console.warn('[PWA Dashboard] Funcionário ID não encontrado')
           setTemObraAtiva(false)
         }
       } catch (error) {

@@ -38,6 +38,7 @@ import { FuncionarioRow } from "@/components/funcionario-row"
 import { CreateCargoDialog } from "@/components/create-cargo-dialog"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useCargos } from "@/hooks/use-cargos"
+import { PaginationControl } from "@/components/ui/pagination-control"
 
 interface FuncionarioRH {
   id: number
@@ -76,7 +77,7 @@ interface FuncionarioRH {
 }
 
 export default function RHPage() {
-  const { cargosAtivos, criarCargo } = useCargos()
+  const { cargosAtivos, criarCargo, carregarCargos } = useCargos()
   const [funcionarios, setFuncionarios] = useState<FuncionarioRH[]>([])
   const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState("")
@@ -91,19 +92,45 @@ export default function RHPage() {
   const { toast } = useToast()
   const router = useRouter()
 
-  // Carregar funcionários
-  useEffect(() => {
-    carregarFuncionarios()
-  }, [])
+  // Estados de paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(20)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
 
+  // Debounce do termo de busca
+  const debouncedQuery = useDebouncedValue(query, 500)
 
-  const carregarFuncionarios = async () => {
+  // Função para carregar funcionários
+  const carregarFuncionarios = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await funcionariosApi.listarFuncionarios({
-        page: 1,
-        limit: 100
-      })
+      
+      // Preparar parâmetros da API
+      const params: {
+        page: number
+        limit: number
+        cargo?: string
+        status?: string
+        search?: string
+      } = {
+        page: currentPage,
+        limit: itemsPerPage
+      }
+
+      // Adicionar filtros se não forem "all"
+      if (filtroCargo !== "all") {
+        params.cargo = filtroCargo
+      }
+      if (filtroStatus !== "all") {
+        params.status = filtroStatus
+      }
+      // Adicionar busca se houver termo
+      if (debouncedQuery.trim().length > 0) {
+        params.search = debouncedQuery.trim()
+      }
+
+      const response = await funcionariosApi.listarFuncionarios(params)
       
       if (response.success && response.data) {
         // Mapear dados do backend para o formato esperado
@@ -132,6 +159,12 @@ export default function RHPage() {
         }))
         
         setFuncionarios(funcionariosMapeados)
+        
+        // Atualizar informações de paginação
+        if (response.pagination) {
+          setTotalItems(response.pagination.total)
+          setTotalPages(response.pagination.pages)
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error)
@@ -143,7 +176,12 @@ export default function RHPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, itemsPerPage, debouncedQuery, filtroCargo, filtroStatus, toast])
+
+  // Carregar funcionários quando mudar página, itens por página, busca ou filtros
+  useEffect(() => {
+    carregarFuncionarios()
+  }, [carregarFuncionarios])
 
   // Função para criar funcionário
   const handleCreateFuncionario = async (payload: FuncionarioCreateData & { usuario_senha?: string, criar_usuario: boolean }) => {
@@ -276,6 +314,9 @@ export default function RHPage() {
       
       await criarCargo(data)
       
+      // Recarregar cargos para atualizar todos os componentes
+      await carregarCargos()
+      
       toast({
         title: "Sucesso",
         description: "Cargo criado com sucesso!",
@@ -294,7 +335,7 @@ export default function RHPage() {
     } finally {
       setSubmittingCargo(false)
     }
-  }, [criarCargo, toast])
+  }, [criarCargo, carregarCargos, toast])
 
   // Memoizar cálculos pesados - usar lista de cargos da API
   const cargosDisponiveis = useMemo(
@@ -302,86 +343,20 @@ export default function RHPage() {
     [cargosAtivos]
   )
 
-  // Debounce do termo de busca
-  const debouncedQuery = useDebouncedValue(query, 300)
-  
-  // Estado para funcionários filtrados da API
-  const [funcionariosFiltrados, setFuncionariosFiltrados] = useState<FuncionarioRH[]>([])
-  const [buscando, setBuscando] = useState(false)
+  // Handlers de paginação
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page)
+  }, [])
 
-  // Buscar funcionários na API quando o termo de busca mudar
+  const handleItemsPerPageChange = useCallback((newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage)
+    setCurrentPage(1) // Resetar para primeira página ao mudar itens por página
+  }, [])
+
+  // Resetar página quando busca ou filtros mudarem
   useEffect(() => {
-    let abort = new AbortController()
-
-    const run = async () => {
-      // Termo curto → NÃO chame API; filtre localmente
-      if (debouncedQuery.trim().length < 2) {
-        const list = funcionarios.filter((f) => {
-          const okCargo = filtroCargo === "all" || f.cargo === filtroCargo
-          const okStatus = filtroStatus === "all" || f.status === filtroStatus
-          return okCargo && okStatus
-        })
-        setFuncionariosFiltrados(list)
-        return
-      }
-
-      try {
-        setBuscando(true)
-        const resp = await funcionariosApi.buscarFuncionarios(
-          debouncedQuery,
-          {
-            cargo: filtroCargo !== "all" ? filtroCargo : undefined,
-            status: filtroStatus !== "all" ? filtroStatus : undefined,
-          },
-          { signal: abort.signal }
-        )
-
-        if (resp?.success && resp.data) {
-          const mapped: FuncionarioRH[] = resp.data.map((func: any) => ({
-            id: func.id,
-            nome: func.nome,
-            cpf: func.cpf || "",
-            cargo: func.cargo_info?.nome || func.cargo, // Priorizar JOIN, fallback para string
-            cargo_id: func.cargo_id, // Adicionar ID do cargo
-            departamento: "",
-            salario: func.salario || 0,
-            data_admissao: func.data_admissao || "",
-            telefone: func.telefone,
-            email: func.email,
-            endereco: "",
-            cidade: "",
-            estado: "",
-            cep: "",
-            status: func.status as any,
-            turno: func.turno as any,
-            observacoes: func.observacoes,
-            created_at: func.created_at,
-            updated_at: func.updated_at,
-            usuario: Array.isArray(func.usuario) && func.usuario.length > 0 ? func.usuario[0] : undefined,
-            obra_atual: undefined,
-          }))
-          setFuncionariosFiltrados(mapped)
-        }
-      } catch (e: any) {
-        if (e?.name !== "AbortError") {
-          // fallback local se der erro
-          const q = debouncedQuery.toLowerCase()
-          const list = funcionarios.filter((f) => {
-            const okNome = f.nome.toLowerCase().includes(q)
-            const okCargo = filtroCargo === "all" || f.cargo === filtroCargo
-            const okStatus = filtroStatus === "all" || f.status === filtroStatus
-            return okNome && okCargo && okStatus
-          })
-          setFuncionariosFiltrados(list)
-        }
-      } finally {
-        setBuscando(false)
-      }
-    }
-
-    run()
-    return () => abort.abort()
-  }, [debouncedQuery, filtroCargo, filtroStatus, funcionarios])
+    setCurrentPage(1)
+  }, [debouncedQuery, filtroCargo, filtroStatus])
 
 
   return (
@@ -492,7 +467,7 @@ export default function RHPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Buscar por nome..."
+              placeholder="Buscar por nome, CPF, telefone ou cargo..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="pl-10"
@@ -530,41 +505,53 @@ export default function RHPage() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             </div>
-          ) : buscando ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
-              <span className="text-gray-600">Buscando funcionários...</span>
-            </div>
-          ) : funcionariosFiltrados.length === 0 ? (
+          ) : funcionarios.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600">Nenhum funcionário encontrado</p>
             </div>
           ) : (
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[200px] max-w-[200px]">Nome</TableHead>
-                    <TableHead className="w-[180px]">CPF</TableHead>
-                    <TableHead className="w-[180px]">Telefone</TableHead>
-                    <TableHead className="flex-1">Cargo</TableHead>
-                    <TableHead className="w-[120px] text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-            <TableBody>
-              {funcionariosFiltrados.map((funcionario) => (
-                <FuncionarioRow
-                  key={funcionario.id}
-                  funcionario={funcionario}
-                  onView={handleViewDetails}
-                  onEdit={handleEditClick}
-                  onDelete={handleDeleteFuncionario}
-                />
-              ))}
-            </TableBody>
-              </Table>
-            </div>
+            <>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px] max-w-[200px]">Nome</TableHead>
+                      <TableHead className="w-[180px]">CPF</TableHead>
+                      <TableHead className="w-[180px]">Telefone</TableHead>
+                      <TableHead className="flex-1">Cargo</TableHead>
+                      <TableHead className="w-[120px] text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {funcionarios.map((funcionario) => (
+                      <FuncionarioRow
+                        key={funcionario.id}
+                        funcionario={funcionario}
+                        onView={handleViewDetails}
+                        onEdit={handleEditClick}
+                        onDelete={handleDeleteFuncionario}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              
+              {/* Controles de Paginação */}
+              {totalPages > 0 && (
+                <div className="mt-4">
+                  <PaginationControl
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={handlePageChange}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                    itemsPerPageOptions={[10, 20, 50, 100]}
+                  />
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

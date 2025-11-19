@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Edit, Loader2, User } from "lucide-react"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
-import { CARGOS_PREDEFINIDOS, formatarCargo } from "@/lib/utils/cargos-predefinidos"
+import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 
 interface FuncionarioRH {
   id: number
@@ -223,20 +223,28 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
                   <SelectValue placeholder="Selecione um cargo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CARGOS_PREDEFINIDOS.map((cargo) => (
-                    <SelectItem key={cargo} value={cargo}>
-                      {cargo}
+                  {loadingCargos ? (
+                    <SelectItem value="" disabled>
+                      Carregando cargos...
                     </SelectItem>
-                  ))}
-                  {/* Se o cargo atual não estiver na lista, mostrar também */}
-                  {form.role && !CARGOS_PREDEFINIDOS.some(c => c.toLowerCase() === form.role.toLowerCase()) && (
-                    <SelectItem value={form.role}>
-                      {form.role}
-                    </SelectItem>
+                  ) : (
+                    <>
+                      {cargosAtivos.map((cargo) => (
+                        <SelectItem key={cargo.id} value={cargo.nome}>
+                          {cargo.nome}
+                        </SelectItem>
+                      ))}
+                      {/* Se o cargo atual não estiver na lista, mostrar também */}
+                      {form.role && !cargosAtivos.some(c => c.nome.toLowerCase() === form.role.toLowerCase()) && (
+                        <SelectItem value={form.role}>
+                          {form.role}
+                        </SelectItem>
+                      )}
+                    </>
                   )}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500">Apenas cargos pré-definidos podem ser selecionados</p>
+              <p className="text-xs text-gray-500">Selecione um cargo do sistema</p>
             </div>
 
             <div className="space-y-2">

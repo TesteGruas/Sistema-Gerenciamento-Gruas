@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ArrowLeft,
@@ -19,7 +20,10 @@ import {
   Plus,
   Loader2,
   Save,
-  FileText as FileTextIcon
+  FileText as FileTextIcon,
+  Package,
+  Trash2,
+  Search
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useEmpresa } from "@/hooks/use-empresa"
@@ -52,6 +56,34 @@ const parseCurrency = (value: string) => {
   const cleanValue = value.replace(/[^\d,]/g, '').replace(',', '.')
   return parseFloat(cleanValue) || 0
 }
+
+// Catálogo de complementos disponíveis
+const CATALOGO_COMPLEMENTOS = [
+  // Acessórios/Produtos
+  { sku: 'ACESS-001', nome: 'Garfo Paleteiro', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 50000, descricao: 'Garfo para movimentação de paletes' },
+  { sku: 'ACESS-002', nome: 'Balde de Concreto', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 30000, descricao: 'Balde para transporte de concreto' },
+  { sku: 'ACESS-003', nome: 'Caçamba de Entulho', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 40000, descricao: 'Caçamba para descarte de entulho' },
+  { sku: 'ACESS-004', nome: 'Plataforma de Descarga', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 60000, descricao: 'Plataforma para descarga de materiais nos pavimentos' },
+  { sku: 'ACESS-005', nome: 'Estaiamentos', tipo_precificacao: 'por_metro' as const, unidade: 'm' as const, preco_unitario_centavos: 65000, fator: 650, descricao: 'Estaiamentos para fixação lateral da grua' },
+  { sku: 'ACESS-006', nome: 'Chumbadores/Base de Fundação', tipo_precificacao: 'unico' as const, unidade: 'unidade' as const, preco_unitario_centavos: 150000, descricao: 'Peças de ancoragem concretadas no bloco da grua' },
+  { sku: 'ACESS-007', nome: 'Auto-transformador (Energia)', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 80000, descricao: 'Adequação elétrica 220/380V' },
+  { sku: 'ACESS-008', nome: 'Plano de Rigging / ART de Engenheiro', tipo_precificacao: 'unico' as const, unidade: 'unidade' as const, preco_unitario_centavos: 500000, descricao: 'Projeto técnico e responsabilidade civil' },
+  { sku: 'ACESS-012', nome: 'Seguro RC / Roubo', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 120000, descricao: 'Seguro de responsabilidade civil e riscos' },
+  
+  // Serviços
+  { sku: 'SERV-001', nome: 'Serviço de Montagem', tipo_precificacao: 'por_hora' as const, unidade: 'h' as const, preco_unitario_centavos: 15000, descricao: 'Mão de obra para montagem e fixação da grua' },
+  { sku: 'SERV-002', nome: 'Serviço de Desmontagem', tipo_precificacao: 'por_hora' as const, unidade: 'h' as const, preco_unitario_centavos: 15000, descricao: 'Mão de obra para desmontagem da grua' },
+  { sku: 'SERV-003', nome: 'Ascensão da Torre', tipo_precificacao: 'por_metro' as const, unidade: 'm' as const, preco_unitario_centavos: 65000, fator: 650, descricao: 'Serviço de elevação da torre conforme a obra cresce' },
+  { sku: 'SERV-004', nome: 'Transporte de Ida e Retorno', tipo_precificacao: 'unico' as const, unidade: 'unidade' as const, preco_unitario_centavos: 300000, descricao: 'Transporte da grua até a obra e retorno ao depósito' },
+  { sku: 'SERV-005', nome: 'Serviço de Operador', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 800000, descricao: 'Locação mensal de operador de grua' },
+  { sku: 'SERV-006', nome: 'Serviço de Sinaleiro', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 600000, descricao: 'Locação mensal de sinaleiro' },
+  { sku: 'SERV-007', nome: 'Serviço de Manutenção Preventiva', tipo_precificacao: 'mensal' as const, unidade: 'unidade' as const, preco_unitario_centavos: 200000, descricao: 'Manutenção preventiva mensal da grua' },
+  { sku: 'SERV-008', nome: 'Serviço de Manutenção Corretiva', tipo_precificacao: 'por_hora' as const, unidade: 'h' as const, preco_unitario_centavos: 20000, descricao: 'Serviço de manutenção corretiva (cobrado por hora)' },
+  { sku: 'SERV-009', nome: 'Serviço de Técnico de Segurança', tipo_precificacao: 'por_dia' as const, unidade: 'dia' as const, preco_unitario_centavos: 50000, descricao: 'Serviço de técnico de segurança (NR-18)' },
+  { sku: 'SERV-010', nome: 'Consultoria Técnica', tipo_precificacao: 'por_hora' as const, unidade: 'h' as const, preco_unitario_centavos: 25000, descricao: 'Consultoria técnica especializada' },
+  { sku: 'SERV-011', nome: 'Treinamento de Operadores', tipo_precificacao: 'unico' as const, unidade: 'unidade' as const, preco_unitario_centavos: 150000, descricao: 'Treinamento e capacitação de operadores' },
+  { sku: 'SERV-012', nome: 'Inspeção Técnica', tipo_precificacao: 'unico' as const, unidade: 'unidade' as const, preco_unitario_centavos: 80000, descricao: 'Inspeção técnica periódica da grua' }
+]
 
 export default function NovoOrcamentoPage() {
   const router = useRouter()
@@ -106,6 +138,9 @@ export default function NovoOrcamentoPage() {
   const [isClienteModalOpen, setIsClienteModalOpen] = useState(false)
   const [isCreatingCliente, setIsCreatingCliente] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [complementosSelecionados, setComplementosSelecionados] = useState<any[]>([])
+  const [searchComplemento, setSearchComplemento] = useState("")
+  const [selectComplementoValue, setSelectComplementoValue] = useState("")
   const [clienteFormData, setClienteFormData] = useState({
     nome: '',
     email: '',
@@ -186,6 +221,39 @@ export default function NovoOrcamentoPage() {
       }
 
       const prazoMeses = parseInt(formData.prazo_locacao_meses || '1')
+      
+      // Calcular valor total dos complementos
+      let valorTotalComplementos = 0
+      const itensComplementos = complementosSelecionados.map(complemento => {
+        let valorItem = 0
+        let quantidade = complemento.quantidade || 1
+        
+        // Calcular valor baseado no tipo de precificação
+        if (complemento.tipo_precificacao === 'mensal') {
+          valorItem = (complemento.preco_unitario_centavos / 100) * quantidade * prazoMeses
+        } else if (complemento.tipo_precificacao === 'unico') {
+          valorItem = (complemento.preco_unitario_centavos / 100) * quantidade
+        } else {
+          // Para por_metro, por_hora, por_dia - usar o valor_total já calculado
+          valorItem = complemento.valor_total || (complemento.preco_unitario_centavos / 100) * quantidade
+        }
+        
+        valorTotalComplementos += valorItem
+        
+        return {
+          produto_servico: complemento.nome,
+          descricao: complemento.descricao || `${complemento.nome} - ${complemento.sku || ''}`,
+          quantidade: complemento.tipo_precificacao === 'mensal' ? quantidade * prazoMeses : quantidade,
+          valor_unitario: complemento.preco_unitario_centavos / 100,
+          valor_total: valorItem,
+          tipo: complemento.sku?.startsWith('ACESS') ? 'equipamento' : 'servico',
+          unidade: complemento.unidade || 'unidade',
+          observacoes: complemento.descricao || ''
+        }
+      })
+      
+      const valorTotalOrcamento = (totalMensal * prazoMeses) + valorTotalComplementos
+      
       const orcamentoData = {
         numero,
         cliente_id: parseInt(clienteId.toString()),
@@ -193,7 +261,7 @@ export default function NovoOrcamentoPage() {
         data_validade: formData.data_inicio_estimada 
           ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
           : new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        valor_total: totalMensal * prazoMeses,
+        valor_total: valorTotalOrcamento,
         desconto: 0,
         status: isDraft ? 'rascunho' : 'enviado',
         tipo_orcamento: 'locacao_grua',
@@ -240,7 +308,8 @@ export default function NovoOrcamentoPage() {
             tipo: 'servico',
             unidade: 'mês',
             observacoes: ''
-          }
+          },
+          ...itensComplementos
         ]
       }
 
@@ -390,7 +459,7 @@ export default function NovoOrcamentoPage() {
       </div>
 
       <Tabs defaultValue="identificacao" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="identificacao">
             <Building2 className="w-4 h-4 mr-2" />
             Identificação
@@ -410,6 +479,10 @@ export default function NovoOrcamentoPage() {
           <TabsTrigger value="condicoes">
             <FileText className="w-4 h-4 mr-2" />
             Condições
+          </TabsTrigger>
+          <TabsTrigger value="itens">
+            <Package className="w-4 h-4 mr-2" />
+            Itens
           </TabsTrigger>
         </TabsList>
 
@@ -500,21 +573,6 @@ export default function NovoOrcamentoPage() {
                 </div>
               </div>
 
-              <div>
-                <Label>Equipamento Ofertado *</Label>
-                <GruaSearch
-                  onGruaSelect={handleGruaSelect}
-                  selectedGrua={gruaSelecionada}
-                />
-                {formData.equipamento && (
-                  <Input
-                    value={formData.equipamento}
-                    onChange={(e) => setFormData({ ...formData, equipamento: e.target.value })}
-                    className="mt-2"
-                    placeholder="Ex: Grua Torre / XCMG QTZ40B"
-                  />
-                )}
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -774,6 +832,179 @@ export default function NovoOrcamentoPage() {
                 rows={3}
                 placeholder="Observações adicionais..."
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="itens" className="space-y-4 mt-4">
+          {/* Seção de Equipamentos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Equipamento Ofertado</CardTitle>
+              <CardDescription>
+                Selecione o equipamento principal do orçamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label>Equipamento Ofertado *</Label>
+                <GruaSearch
+                  onGruaSelect={handleGruaSelect}
+                  selectedGrua={gruaSelecionada}
+                />
+                {formData.equipamento && (
+                  <Input
+                    value={formData.equipamento}
+                    onChange={(e) => setFormData({ ...formData, equipamento: e.target.value })}
+                    className="mt-2"
+                    placeholder="Ex: Grua Torre / XCMG QTZ40B"
+                  />
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Seção de Complementos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Complementos do Orçamento</CardTitle>
+              <CardDescription>
+                Adicione complementos adicionais que podem ser atrelados a este orçamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Busca de complementos */}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    placeholder="Buscar complementos..."
+                    value={searchComplemento}
+                    onChange={(e) => setSearchComplemento(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select
+                  value={selectComplementoValue}
+                  onValueChange={(value) => {
+                    if (value && value !== '') {
+                      const complemento = CATALOGO_COMPLEMENTOS.find(c => c.sku === value)
+                      if (complemento && !complementosSelecionados.find(c => c.sku === complemento.sku)) {
+                        setComplementosSelecionados([
+                          ...complementosSelecionados,
+                          {
+                            ...complemento,
+                            quantidade: 1,
+                            valor_total: complemento.preco_unitario_centavos / 100
+                          }
+                        ])
+                        setSearchComplemento("")
+                        setSelectComplementoValue("")
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Selecione um complemento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATALOGO_COMPLEMENTOS
+                      .filter(c => 
+                        !complementosSelecionados.find(sel => sel.sku === c.sku) &&
+                        (searchComplemento === "" || 
+                         c.nome.toLowerCase().includes(searchComplemento.toLowerCase()) ||
+                         c.sku.toLowerCase().includes(searchComplemento.toLowerCase()))
+                      )
+                      .map((complemento) => (
+                        <SelectItem key={complemento.sku} value={complemento.sku}>
+                          {complemento.nome} - {complemento.sku}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Lista de complementos selecionados */}
+              {complementosSelecionados.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="border rounded-lg">
+                    <div className="grid grid-cols-12 gap-2 p-3 bg-gray-50 font-semibold text-sm border-b">
+                      <div className="col-span-4">Nome</div>
+                      <div className="col-span-2">Tipo</div>
+                      <div className="col-span-2">Preço Unit.</div>
+                      <div className="col-span-2">Quantidade</div>
+                      <div className="col-span-2">Ações</div>
+                    </div>
+                    {complementosSelecionados.map((complemento, index) => (
+                      <div key={complemento.sku || index} className="grid grid-cols-12 gap-2 p-3 border-b last:border-b-0 items-center">
+                        <div className="col-span-4">
+                          <div className="font-medium">{complemento.nome}</div>
+                          {complemento.sku && (
+                            <div className="text-xs text-gray-500">{complemento.sku}</div>
+                          )}
+                        </div>
+                        <div className="col-span-2">
+                          <Badge variant="outline">
+                            {complemento.tipo_precificacao === 'mensal' ? 'Mensal' :
+                             complemento.tipo_precificacao === 'unico' ? 'Único' :
+                             complemento.tipo_precificacao === 'por_metro' ? 'Por Metro' :
+                             complemento.tipo_precificacao === 'por_hora' ? 'Por Hora' :
+                             complemento.tipo_precificacao === 'por_dia' ? 'Por Dia' : complemento.tipo_precificacao}
+                          </Badge>
+                        </div>
+                        <div className="col-span-2">
+                          R$ {(complemento.preco_unitario_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="col-span-2">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={complemento.quantidade || 1}
+                            onChange={(e) => {
+                              const newQty = parseInt(e.target.value) || 1
+                              const updated = complementosSelecionados.map(c =>
+                                c.sku === complemento.sku
+                                  ? { ...c, quantidade: newQty, valor_total: (complemento.preco_unitario_centavos / 100) * newQty }
+                                  : c
+                              )
+                              setComplementosSelecionados(updated)
+                            }}
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setComplementosSelecionados(
+                                complementosSelecionados.filter(c => c.sku !== complemento.sku)
+                              )
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end pt-2 border-t">
+                    <div className="text-right">
+                      <div className="text-sm text-gray-600">Total dos Complementos:</div>
+                      <div className="text-xl font-bold text-green-600">
+                        R$ {complementosSelecionados.reduce((sum, c) => sum + (c.valor_total || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum complemento adicionado</p>
+                  <p className="text-sm">Use o campo acima para adicionar complementos ao orçamento</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

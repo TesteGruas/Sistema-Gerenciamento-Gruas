@@ -206,49 +206,197 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   
   // Verificar se funcionário tem obra ativa
   useEffect(() => {
+    console.log('[PWA Layout] ⚡ useEffect verificarObraAtiva disparado', { 
+      user: user ? 'existe' : 'null', 
+      persistentUser: persistentUser ? 'existe' : 'null',
+      sessionLoading 
+    })
+    
     const verificarObraAtiva = async () => {
-      if (typeof window === 'undefined') return
-      if (!user || sessionLoading) return
+      console.log('[PWA Layout] 🔍 Iniciando verificarObraAtiva')
+      if (typeof window === 'undefined') {
+        console.log('[PWA Layout] ❌ window undefined, retornando')
+        return
+      }
+      
+      // Usar user ou persistentUser como fallback
+      const userParaUsar = user || persistentUser
+      console.log('[PWA Layout] 👤 userParaUsar:', userParaUsar ? 'existe' : 'null', 'sessionLoading:', sessionLoading)
+      
+      if (!userParaUsar || sessionLoading) {
+        console.log('[PWA Layout] ⏳ user ou sessionLoading não pronto, retornando')
+        return
+      }
       
       try {
+        // Primeiro, verificar se já existe obra validada no localStorage
+        const obraValidada = localStorage.getItem('tem_obra_ativa')
+        const obraAtivaData = localStorage.getItem('obra_ativa')
+        
+        if (obraValidada === 'true' && obraAtivaData) {
+          try {
+            const obraData = JSON.parse(obraAtivaData)
+            console.log('[PWA Layout] ✅ Obra já validada encontrada no localStorage:', obraData.obra?.nome)
+            setTemObraAtiva(true)
+            return
+          } catch (e) {
+            console.warn('[PWA Layout] Erro ao ler obra validada, continuando busca...')
+          }
+        }
+
         const token = localStorage.getItem('access_token')
+        console.log('[PWA Layout] token:', token ? 'existe' : 'não existe')
         if (!token) {
+          console.log('[PWA Layout] Sem token, setando temObraAtiva = false')
           setTemObraAtiva(false)
           return
         }
         
         const userData = localStorage.getItem('user_data')
+        console.log('[PWA Layout] userData:', userData ? 'existe' : 'não existe')
         if (!userData) {
+          console.log('[PWA Layout] Sem userData, setando temObraAtiva = false')
           setTemObraAtiva(false)
           return
         }
         
-        const parsedUser = JSON.parse(userData)
-        const funcionarioId = await getFuncionarioIdWithFallback(
-          parsedUser,
-          token,
-          'ID do funcionário não encontrado'
-        )
+        // Usar userData do localStorage ou userParaUsar
+        let parsedUser
+        if (userData) {
+          parsedUser = JSON.parse(userData)
+        } else if (userParaUsar) {
+          parsedUser = userParaUsar
+        } else {
+          console.log('[PWA Layout] ❌ Sem userData nem userParaUsar')
+          setTemObraAtiva(false)
+          return
+        }
+        
+        console.log('[PWA Layout] 👤 parsedUser:', parsedUser?.id, parsedUser?.email, parsedUser?.nome)
+        console.log('[PWA Layout] 🔍 parsedUser completo:', {
+          id: parsedUser?.id,
+          email: parsedUser?.email,
+          nome: parsedUser?.nome,
+          funcionario_id: parsedUser?.funcionario_id,
+          profile: parsedUser?.profile
+        })
+        
+        // Tentar usar funcionario_id diretamente se estiver disponível
+        let funcionarioId: number | null = null
+        if (parsedUser?.funcionario_id && !isNaN(Number(parsedUser.funcionario_id))) {
+          funcionarioId = Number(parsedUser.funcionario_id)
+          console.log('[PWA Layout] ✅ funcionarioId encontrado diretamente no parsedUser:', funcionarioId)
+        } else if (parsedUser?.user_metadata?.funcionario_id && !isNaN(Number(parsedUser.user_metadata.funcionario_id))) {
+          funcionarioId = Number(parsedUser.user_metadata.funcionario_id)
+          console.log('[PWA Layout] ✅ funcionarioId encontrado no user_metadata:', funcionarioId)
+        } else if (parsedUser?.profile?.funcionario_id && !isNaN(Number(parsedUser.profile.funcionario_id))) {
+          funcionarioId = Number(parsedUser.profile.funcionario_id)
+          console.log('[PWA Layout] ✅ funcionarioId encontrado no profile:', funcionarioId)
+        } else {
+          console.log('[PWA Layout] 🔍 Buscando funcionarioId via API...')
+          try {
+            funcionarioId = await getFuncionarioIdWithFallback(
+              parsedUser,
+              token,
+              'ID do funcionário não encontrado'
+            )
+            console.log('[PWA Layout] ✅ funcionarioId obtido via API:', funcionarioId)
+          } catch (error) {
+          console.error('[PWA Layout] ❌ Erro ao buscar funcionarioId:', error)
+          console.error('[PWA Layout] ❌ Erro completo:', JSON.stringify(error, null, 2))
+          // Tentar buscar diretamente pelo email ou ID do usuário
+          console.log('[PWA Layout] 🔄 INICIANDO busca alternativa...')
+          console.log('[PWA Layout] 📧 Email para busca:', parsedUser?.email || 'NÃO DEFINIDO')
+          console.log('[PWA Layout] 🆔 User ID para busca:', parsedUser?.id || 'NÃO DEFINIDO')
+          console.log('[PWA Layout] 📝 parsedUser completo:', JSON.stringify(parsedUser, null, 2))
+          
+          try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+            console.log('[PWA Layout] 🌐 API URL:', apiUrl)
+            
+            // Tentar buscar pelo email primeiro
+            if (parsedUser.email) {
+              const searchUrl = `${apiUrl}/api/funcionarios?search=${encodeURIComponent(parsedUser.email)}&limit=20`
+              console.log('[PWA Layout] 🔍 Buscando em:', searchUrl)
+              
+              const response = await fetch(searchUrl, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              })
+              
+              console.log('[PWA Layout] 📡 Response status:', response.status)
+              
+              if (response.ok) {
+                const data = await response.json()
+                console.log('[PWA Layout] 📦 Funcionários encontrados:', data.data?.length || 0)
+                const funcionarios = data.data || []
+                
+                // Procurar funcionário que corresponde ao usuário
+                const funcionario = funcionarios.find((f: any) => {
+                  const matchUsuarioId = f.usuario?.id === parsedUser.id
+                  const matchUsuarioEmail = f.usuario?.email === parsedUser.email
+                  const matchEmail = f.email === parsedUser.email
+                  console.log('[PWA Layout] 🔍 Verificando funcionário:', {
+                    id: f.id,
+                    nome: f.nome,
+                    email: f.email,
+                    usuarioId: f.usuario?.id,
+                    usuarioEmail: f.usuario?.email,
+                    matchUsuarioId,
+                    matchUsuarioEmail,
+                    matchEmail
+                  })
+                  return matchUsuarioId || matchUsuarioEmail || matchEmail
+                })
+                
+                if (funcionario && funcionario.id) {
+                  funcionarioId = typeof funcionario.id === 'number' ? funcionario.id : parseInt(funcionario.id)
+                  console.log('[PWA Layout] ✅ funcionarioId encontrado via busca direta:', funcionarioId)
+                } else {
+                  console.warn('[PWA Layout] ⚠️ Funcionário não encontrado na lista retornada')
+                }
+              } else {
+                const errorText = await response.text()
+                console.error('[PWA Layout] ❌ Erro na resposta da API:', response.status, errorText)
+              }
+            } else {
+              console.warn('[PWA Layout] ⚠️ parsedUser não tem email para busca')
+            }
+          } catch (searchError) {
+            console.error('[PWA Layout] ❌ Erro na busca direta:', searchError)
+          }
+          }
+        }
         
         if (funcionarioId) {
+          console.log('[PWA Layout] Verificando obra ativa para funcionário ID:', funcionarioId)
           const alocacoes = await getAlocacoesAtivasFuncionario(funcionarioId)
+          console.log('[PWA Layout] Resposta da API:', {
+            success: alocacoes.success,
+            dataLength: alocacoes.data?.length || 0,
+            data: alocacoes.data,
+            pagination: alocacoes.pagination
+          })
           const temObra = alocacoes.data && alocacoes.data.length > 0
           setTemObraAtiva(temObra)
           console.log('[PWA Layout] Funcionário tem obra ativa?', temObra, alocacoes.data)
         } else {
+          console.warn('[PWA Layout] Funcionário ID não encontrado')
           setTemObraAtiva(false)
         }
       } catch (error) {
-        console.warn('[PWA Layout] Erro ao verificar obra ativa:', error)
+        console.error('[PWA Layout] Erro ao verificar obra ativa:', error)
         setTemObraAtiva(false)
       }
     }
     
     verificarObraAtiva()
-  }, [user, sessionLoading])
+  }, [user, persistentUser, sessionLoading])
 
-  // Rotas que não precisam do layout (login e redirect) - renderizar children diretamente
-  const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
+  // Rotas que não precisam do layout (login, redirect e validar-obra) - renderizar children diretamente
+  const noLayoutPaths = ['/pwa/login', '/pwa/redirect', '/pwa/validar-obra']
   const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
   
   // Se for uma rota sem layout, renderizar children diretamente sem verificação de cliente
@@ -267,10 +415,11 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   }
   
   // No cliente, aguardar hidratação completa antes de renderizar o layout completo
+  // IMPORTANTE: Renderizar a mesma estrutura que o servidor para evitar erro de hidratação
   if (!isClient) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center">
-        <PageLoader text="Carregando..." />
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100" suppressHydrationWarning>
+        {children}
       </div>
     )
   }

@@ -11,7 +11,7 @@ import { Plus, Loader2, User } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
-import { CARGOS_PREDEFINIDOS, formatarCargo } from "@/lib/utils/cargos-predefinidos"
+import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 import { useToast } from "@/hooks/use-toast"
 
 interface CreateFuncionarioDialogProps {
@@ -243,15 +243,28 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                       <SelectValue placeholder="Selecione um cargo" />
                     </SelectTrigger>
                     <SelectContent>
-                      {CARGOS_PREDEFINIDOS.map((cargo) => (
-                        <SelectItem key={cargo} value={cargo}>
-                          {cargo}
+                      {loadingCargos ? (
+                        <SelectItem value="" disabled>
+                          Carregando cargos...
                         </SelectItem>
-                      ))}
-                      <SelectItem value="__novo_cargo__" className="text-blue-600 font-medium">
-                        <Plus className="w-4 h-4 inline mr-2" />
-                        Adicionar novo cargo
-                      </SelectItem>
+                      ) : cargosAtivos.length > 0 ? (
+                        <>
+                          {cargosAtivos.map((cargo) => (
+                            <SelectItem key={cargo.id} value={cargo.nome}>
+                              {cargo.nome}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="__novo_cargo__" className="text-blue-600 font-medium">
+                            <Plus className="w-4 h-4 inline mr-2" />
+                            Adicionar novo cargo
+                          </SelectItem>
+                        </>
+                      ) : (
+                        <SelectItem value="__novo_cargo__" className="text-blue-600 font-medium">
+                          <Plus className="w-4 h-4 inline mr-2" />
+                          Adicionar novo cargo
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </>

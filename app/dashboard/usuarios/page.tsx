@@ -663,11 +663,11 @@ export default function UsuariosPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem
-                onClick={() => router.push('/dashboard/funcionarios?create=true')}
+                onClick={() => router.push('/dashboard/rh')}
                 className="flex items-center gap-2 cursor-pointer"
               >
                 <User className="w-4 h-4" />
-                Criar Funcionário
+                Gerenciar Funcionários (RH)
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => router.push('/dashboard/clientes?create=true')}

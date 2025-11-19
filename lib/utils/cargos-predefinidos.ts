@@ -3,18 +3,18 @@
  */
 
 export const CARGOS_PREDEFINIDOS = [
-  'Montador de Grua',
-  'Operador de Grua',
+  'Operador',
   'Sinaleiro',
-  'Auxiliar em Eletromecânica',
-  'Técnico em Eletromecânica',
-  'Analista de RH',
-  'Soldador',
-  'Analista Financeiro',
-  'Ajudante Geral',
-  'Auxiliar de Montagem',
-  'Auxiliar de Transporte',
-  'Mestre de Soldagem'
+  'Gestor',
+  'Presidente',
+  'Diretor',
+  'Gerência',
+  'Coordenação',
+  'Supervisão',
+  'Técnico',
+  'Assistente',
+  'Terceirizado',
+  'Cliente'
 ] as const
 
 export type CargoPredefinido = typeof CARGOS_PREDEFINIDOS[number]

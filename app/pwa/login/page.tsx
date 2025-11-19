@@ -159,9 +159,22 @@ function PWALoginPageContent(): JSX.Element {
         // Salvar dados de autenticação
         localStorage.setItem('access_token', data.data.access_token)
         
-        // Salvar dados do usuário
+        // Salvar dados do usuário - incluir profile.funcionario_id e user_metadata.funcionario_id no user_data
         if (data.data.user) {
-          localStorage.setItem('user_data', JSON.stringify(data.data.user))
+          const userData = {
+            ...data.data.user,
+            // Incluir funcionario_id do profile se existir
+            ...(data.data.profile?.funcionario_id && { funcionario_id: data.data.profile.funcionario_id }),
+            // Incluir funcionario_id do user_metadata se existir (Supabase Auth)
+            ...(data.data.user.user_metadata?.funcionario_id && { 
+              funcionario_id: data.data.user.user_metadata.funcionario_id,
+              user_metadata: data.data.user.user_metadata
+            }),
+            // Incluir profile completo
+            ...(data.data.profile && { profile: data.data.profile })
+          }
+          localStorage.setItem('user_data', JSON.stringify(userData))
+          console.log('[PWA Login] user_data salvo com funcionario_id:', userData.funcionario_id || userData.user_metadata?.funcionario_id)
         }
         
         // Salvar dados adicionais se existirem
@@ -216,7 +229,8 @@ function PWALoginPageContent(): JSX.Element {
         
         // Pequeno delay para garantir que o localStorage foi salvo
         setTimeout(() => {
-          router.push("/pwa")
+          // Redirecionar para validação de obra primeiro
+          router.push("/pwa/validar-obra")
         }, 100)
       } else {
         // Login falhou

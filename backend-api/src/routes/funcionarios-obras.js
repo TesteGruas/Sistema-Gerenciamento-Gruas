@@ -43,6 +43,20 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit)
     const offset = (pageNum - 1) * limitNum
 
+    // Converter funcionario_id e obra_id para números se existirem
+    const funcionarioIdNum = funcionario_id ? parseInt(funcionario_id) : null
+    const obraIdNum = obra_id ? parseInt(obra_id) : null
+
+    console.log('[FUNCIONARIOS-OBRAS] Buscando alocações:', {
+      funcionario_id: funcionario_id,
+      funcionarioIdNum,
+      obra_id: obra_id,
+      obraIdNum,
+      status,
+      page: pageNum,
+      limit: limitNum
+    })
+
     let query = supabaseAdmin
       .from('funcionarios_obras')
       .select(`
@@ -51,16 +65,19 @@ router.get('/', async (req, res) => {
         obras(id, nome, cidade, estado, status)
       `, { count: 'exact' })
 
-    if (funcionario_id) {
-      query = query.eq('funcionario_id', funcionario_id)
+    if (funcionarioIdNum && !isNaN(funcionarioIdNum)) {
+      query = query.eq('funcionario_id', funcionarioIdNum)
+      console.log('[FUNCIONARIOS-OBRAS] Filtrando por funcionario_id:', funcionarioIdNum)
     }
 
-    if (obra_id) {
-      query = query.eq('obra_id', obra_id)
+    if (obraIdNum && !isNaN(obraIdNum)) {
+      query = query.eq('obra_id', obraIdNum)
+      console.log('[FUNCIONARIOS-OBRAS] Filtrando por obra_id:', obraIdNum)
     }
 
     if (status) {
       query = query.eq('status', status)
+      console.log('[FUNCIONARIOS-OBRAS] Filtrando por status:', status)
     }
 
     query = query
@@ -69,16 +86,57 @@ router.get('/', async (req, res) => {
 
     const { data, error, count } = await query
 
-    if (error) throw error
+    if (error) {
+      console.error('[FUNCIONARIOS-OBRAS] Erro na query:', error)
+      throw error
+    }
+
+    // Filtrar alocações com data_fim no passado (mesmo que status seja 'ativo')
+    // Uma alocação com data_fim no passado não deve ser considerada ativa
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0) // Zerar horas para comparação apenas de data
+    
+    let alocacoesFiltradas = data || []
+    if (status === 'ativo') {
+      alocacoesFiltradas = alocacoesFiltradas.filter(aloc => {
+        // Se não tem data_fim, considerar ativa
+        if (!aloc.data_fim) return true
+        
+        // Se tem data_fim, verificar se ainda não passou
+        const dataFim = new Date(aloc.data_fim)
+        dataFim.setHours(0, 0, 0, 0)
+        const aindaAtiva = dataFim >= hoje
+        
+        if (!aindaAtiva) {
+          console.log(`[FUNCIONARIOS-OBRAS] Alocação ${aloc.id} tem data_fim no passado (${aloc.data_fim}), removendo de resultados ativos`)
+        }
+        
+        return aindaAtiva
+      })
+    }
+
+    console.log('[FUNCIONARIOS-OBRAS] Resultado:', {
+      total: count || 0,
+      encontrados: data?.length || 0,
+      filtrados: alocacoesFiltradas.length,
+      alocacoes: alocacoesFiltradas.map(a => ({
+        id: a.id,
+        funcionario_id: a.funcionario_id,
+        obra_id: a.obra_id,
+        status: a.status,
+        data_fim: a.data_fim,
+        obra_nome: a.obras?.nome
+      }))
+    })
 
     res.json({
       success: true,
-      data,
+      data: alocacoesFiltradas,
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limitNum)
+        total: alocacoesFiltradas.length, // Usar quantidade filtrada
+        pages: Math.ceil((alocacoesFiltradas.length) / limitNum)
       }
     })
   } catch (error) {

@@ -18,7 +18,11 @@ export function useCargos() {
       const response = await cargosApi.listarCargos({ ativo: true })
       
       if (response.success && response.data) {
-        setCargos(response.data)
+        // Ordenar cargos por nome para melhor UX
+        const cargosOrdenados = [...response.data].sort((a, b) => 
+          a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
+        )
+        setCargos(cargosOrdenados)
       } else {
         throw new Error('Falha ao carregar cargos')
       }

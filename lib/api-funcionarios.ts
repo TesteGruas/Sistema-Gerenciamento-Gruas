@@ -191,6 +191,7 @@ export const funcionariosApi = {
     cargo?: string
     status?: string
     turno?: string
+    search?: string
   }): Promise<FuncionariosResponse> {
     const searchParams = new URLSearchParams()
     
@@ -199,6 +200,7 @@ export const funcionariosApi = {
     if (params?.cargo) searchParams.append('cargo', params.cargo)
     if (params?.status) searchParams.append('status', params.status)
     if (params?.turno) searchParams.append('turno', params.turno)
+    if (params?.search) searchParams.append('search', params.search)
 
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}?${searchParams.toString()}`)
     return apiRequest(url)

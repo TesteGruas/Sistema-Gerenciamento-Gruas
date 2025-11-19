@@ -123,8 +123,7 @@ const baseNavigation: NavigationItemWithPermission[] = [
 
 const adminNavigation: NavigationItemWithPermission[] = [
   { name: "Usuários", href: "/dashboard/usuarios", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
-  { name: "Perfis de Acesso", href: "/dashboard/perfis", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
-  { name: "Permissões", href: "/dashboard/permissoes", icon: Lock, category: "admin", permission: "usuarios:gerenciar_permissoes" },
+  { name: "Perfis e Permissões", href: "/dashboard/perfis-permissoes", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
   { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail, category: "admin", permission: "email:configurar" },
   { name: "Configuração da Empresa", href: "/dashboard/configuracoes/empresa", icon: Building2, category: "admin", permission: "admin:configurar" },
 ]
@@ -266,13 +265,8 @@ function DashboardLayoutContent({
         return canAccessUsuarios()
       }
       
-      // Perfis - apenas Admin
-      if (item.href === '/dashboard/perfis') {
-        return isAdminFromPermissions()
-      }
-      
-      // Permissões - apenas Admin
-      if (item.href === '/dashboard/permissoes') {
+      // Perfis e Permissões - apenas Admin
+      if (item.href === '/dashboard/perfis-permissoes') {
         return isAdminFromPermissions()
       }
       

@@ -106,7 +106,7 @@ const funcionarioUpdateSchema = Joi.object({
  *         name: search
  *         schema:
  *           type: string
- *         description: Buscar por nome ou email (LIKE)
+ *         description: Buscar por nome, email, telefone, CPF ou cargo (LIKE)
  *     responses:
  *       200:
  *         description: Lista de funcionários
@@ -203,15 +203,32 @@ router.get('/', authenticateToken, async (req, res) => {
       // Decodificar URL (substituir + por espaço e decodificar %20, etc)
       searchTermParam = decodeURIComponent(searchTermParam.replace(/\+/g, ' '))
       console.log(`[FUNCIONARIOS] Termo de busca decodificado: "${searchTermParam}"`)
-      // Usar ilike corretamente - incluir busca por nome, email e telefone
-      // Remover caracteres não numéricos do telefone para busca
-      const telefoneLimpo = searchTermParam.replace(/\D/g, '')
+      
+      // Remover caracteres não numéricos para busca em CPF e telefone
+      const numerosLimpos = searchTermParam.replace(/\D/g, '')
+      const telefoneLimpo = numerosLimpos
+      const cpfLimpo = numerosLimpos
+      
+      // Construir condições de busca: nome, email, telefone, CPF e cargo
+      const condicoes = [
+        `nome.ilike.%${searchTermParam}%`,
+        `email.ilike.%${searchTermParam}%`,
+        `cargo.ilike.%${searchTermParam}%`
+      ]
+      
+      // Adicionar busca por telefone se tiver pelo menos 3 dígitos
       if (telefoneLimpo.length >= 3) {
-        query = query.or(`nome.ilike.%${searchTermParam}%,email.ilike.%${searchTermParam}%,telefone.ilike.%${telefoneLimpo}%`)
-      } else {
-        query = query.or(`nome.ilike.%${searchTermParam}%,email.ilike.%${searchTermParam}%`)
+        condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
       }
-      console.log(`[FUNCIONARIOS] Query com busca aplicada`)
+      
+      // Adicionar busca por CPF se tiver pelo menos 3 dígitos
+      if (cpfLimpo.length >= 3) {
+        condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
+      }
+      
+      // Aplicar busca com OR entre todas as condições
+      query = query.or(condicoes.join(','))
+      console.log(`[FUNCIONARIOS] Query com busca aplicada - condições: ${condicoes.length}`)
     } else {
       console.log('[FUNCIONARIOS] Nenhum termo de busca fornecido')
     }
@@ -277,14 +294,28 @@ router.get('/', authenticateToken, async (req, res) => {
         console.log(`[DEBUG] Filtro de status aplicado: ${req.query.status}`)
       }
       
-      // Aplicar busca por nome, email ou telefone se houver termo de busca
+      // Aplicar busca por nome, email, telefone e CPF se houver termo de busca
       if (searchTermClean) {
-        const telefoneLimpo = searchTermClean.replace(/\D/g, '')
+        const numerosLimpos = searchTermClean.replace(/\D/g, '')
+        const telefoneLimpo = numerosLimpos
+        const cpfLimpo = numerosLimpos
+        
+        const condicoes = [
+          `nome.ilike.%${searchTermClean}%`,
+          `email.ilike.%${searchTermClean}%`
+        ]
+        
+        // Adicionar busca por telefone se tiver pelo menos 3 dígitos
         if (telefoneLimpo.length >= 3) {
-          usuariosQuery = usuariosQuery.or(`nome.ilike.%${searchTermClean}%,email.ilike.%${searchTermClean}%,telefone.ilike.%${telefoneLimpo}%`)
-        } else {
-          usuariosQuery = usuariosQuery.or(`nome.ilike.%${searchTermClean}%,email.ilike.%${searchTermClean}%`)
+          condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
         }
+        
+        // Adicionar busca por CPF se tiver pelo menos 3 dígitos (se o campo existir na tabela usuarios)
+        if (cpfLimpo.length >= 3) {
+          condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
+        }
+        
+        usuariosQuery = usuariosQuery.or(condicoes.join(','))
       }
       
       // Aplicar paginação
