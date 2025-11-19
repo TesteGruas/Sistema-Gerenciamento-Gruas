@@ -154,12 +154,27 @@ router.post('/upload', authenticateToken, upload.single('arquivo'), async (req, 
       .from('arquivos-obras')
       .getPublicUrl(filePath)
 
+    // O getPublicUrl retorna { publicUrl: 'https://...' }
+    let arquivoUrl = urlData?.publicUrl
+    
+    // Se não tiver URL pública, construir manualmente usando SUPABASE_URL
+    if (!arquivoUrl || !arquivoUrl.startsWith('http')) {
+      const supabaseUrl = process.env.SUPABASE_URL || ''
+      if (supabaseUrl) {
+        arquivoUrl = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${filePath}`
+      } else {
+        // Se não tiver SUPABASE_URL configurado, usar o caminho (não ideal, mas melhor que nada)
+        console.warn('SUPABASE_URL não configurado, retornando apenas o caminho do arquivo')
+        arquivoUrl = filePath
+      }
+    }
+
     res.json({
       success: true,
       message: 'Arquivo enviado com sucesso',
       data: {
         caminho: filePath,
-        arquivo: urlData?.publicUrl || filePath,
+        arquivo: arquivoUrl,
         nome_original: file.originalname,
         tamanho: file.size,
         tipo_mime: file.mimetype

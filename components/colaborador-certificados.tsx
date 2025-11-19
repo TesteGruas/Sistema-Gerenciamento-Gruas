@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DocumentoUpload } from "./documento-upload"
 import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Shield } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 
 export interface CertificadoColaborador {
   id?: number
@@ -60,17 +61,24 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
   const loadCertificados = async () => {
     setLoading(true)
     try {
-      // TODO: Substituir por chamada real da API
-      // const response = await certificadosApi.listar(colaboradorId)
-      // setCertificados(response.data)
-      
-      // Mock temporário
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setCertificados([])
-    } catch (error) {
+      const response = await colaboradoresDocumentosApi.certificados.listar(colaboradorId)
+      if (response.success && response.data) {
+        // Converter CertificadoBackend para CertificadoColaborador
+        const certificadosConvertidos: CertificadoColaborador[] = response.data.map((cert: CertificadoBackend) => ({
+          id: parseInt(cert.id),
+          colaborador_id: cert.funcionario_id,
+          tipo: cert.tipo,
+          nome: cert.nome,
+          data_validade: cert.data_validade || '',
+          arquivo_url: cert.arquivo,
+          alerta_enviado: cert.alerta_enviado
+        }))
+        setCertificados(certificadosConvertidos)
+      }
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao carregar certificados",
+        description: error.message || "Erro ao carregar certificados",
         variant: "destructive"
       })
     } finally {
@@ -85,7 +93,7 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
         tipo: certificado.tipo,
         nome: certificado.nome,
         data_validade: certificado.data_validade,
-        arquivo: null
+        arquivo: null // Sempre null ao abrir, arquivo existente está em arquivo_url
       })
     } else {
       setEditingCertificado(null)
@@ -98,39 +106,129 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
     }
     setIsDialogOpen(true)
   }
+  
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false)
+    setEditingCertificado(null)
+    setFormData({
+      tipo: '',
+      nome: '',
+      data_validade: '',
+      arquivo: null
+    })
+  }
 
   const handleSave = async () => {
+    // Validação dos campos obrigatórios
     if (!formData.tipo || !formData.nome || !formData.data_validade) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
+        description: "Preencha todos os campos obrigatórios (Tipo, Nome e Data de Validade)",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Validação de arquivo (obrigatório apenas na criação)
+    if (!editingCertificado && !formData.arquivo) {
+      toast({
+        title: "Erro",
+        description: "O arquivo do certificado é obrigatório",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Validação da data de validade
+    const dataValidade = new Date(formData.data_validade)
+    if (isNaN(dataValidade.getTime())) {
+      toast({
+        title: "Erro",
+        description: "Data de validade inválida",
         variant: "destructive"
       })
       return
     }
 
     try {
-      // TODO: Substituir por chamada real da API
+      let arquivoUrl = editingCertificado?.arquivo_url || ''
+      
+      // Se tiver arquivo novo, fazer upload primeiro
+      if (formData.arquivo) {
+        try {
+          const formDataUpload = new FormData()
+          formDataUpload.append('arquivo', formData.arquivo)
+          formDataUpload.append('categoria', 'certificados')
+          
+          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+          
+          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataUpload
+          })
+          
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json().catch(() => ({}))
+            throw new Error(errorData.message || errorData.error || 'Erro ao fazer upload do arquivo')
+          }
+          
+          const uploadResult = await uploadResponse.json()
+          arquivoUrl = uploadResult.data?.arquivo || uploadResult.data?.caminho || uploadResult.arquivo || uploadResult.caminho
+          
+          if (!arquivoUrl) {
+            throw new Error('URL do arquivo não retornada após upload')
+          }
+        } catch (uploadError: any) {
+          toast({
+            title: "Erro",
+            description: uploadError.message || "Erro ao fazer upload do arquivo",
+            variant: "destructive"
+          })
+          return
+        }
+      }
+
+      // Preparar dados para a API
+      const certificadoData = {
+        tipo: formData.tipo,
+        nome: formData.nome,
+        data_validade: formData.data_validade,
+        arquivo: arquivoUrl
+      }
+
       if (editingCertificado?.id) {
-        // await certificadosApi.atualizar(editingCertificado.id, formData)
+        // Atualizar certificado existente
+        await colaboradoresDocumentosApi.certificados.atualizar(
+          editingCertificado.id.toString(),
+          certificadoData
+        )
         toast({
           title: "Sucesso",
           description: "Certificado atualizado com sucesso"
         })
       } else {
-        // await certificadosApi.criar(colaboradorId, formData)
+        // Criar novo certificado
+        await colaboradoresDocumentosApi.certificados.criar(
+          colaboradorId,
+          certificadoData
+        )
         toast({
           title: "Sucesso",
           description: "Certificado criado com sucesso"
         })
       }
 
-      setIsDialogOpen(false)
-      loadCertificados()
-    } catch (error) {
+      handleCloseDialog()
+      await loadCertificados()
+    } catch (error: any) {
+      console.error('Erro ao salvar certificado:', error)
       toast({
         title: "Erro",
-        description: "Erro ao salvar certificado",
+        description: error.message || "Erro ao salvar certificado",
         variant: "destructive"
       })
     }
@@ -140,17 +238,16 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
     if (!confirm("Tem certeza que deseja excluir este certificado?")) return
 
     try {
-      // TODO: Substituir por chamada real da API
-      // await certificadosApi.excluir(id)
+      await colaboradoresDocumentosApi.certificados.excluir(id.toString())
       toast({
         title: "Sucesso",
-        description: "Certificado excluído"
+        description: "Certificado excluído com sucesso"
       })
-      loadCertificados()
-    } catch (error) {
+      await loadCertificados()
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Erro ao excluir certificado",
+        description: error.message || "Erro ao excluir certificado",
         variant: "destructive"
       })
     }
@@ -275,7 +372,43 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           {certificado.arquivo_url && (
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                  const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                  
+                                  // Tentar obter URL assinada do arquivo
+                                  try {
+                                    const urlResponse = await fetch(
+                                      `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(certificado.arquivo_url!)}`,
+                                      {
+                                        headers: {
+                                          'Authorization': `Bearer ${token}`
+                                        }
+                                      }
+                                    )
+                                    
+                                    if (urlResponse.ok) {
+                                      const urlData = await urlResponse.json()
+                                      window.open(urlData.url || urlData.data?.url || certificado.arquivo_url, '_blank')
+                                    } else {
+                                      window.open(certificado.arquivo_url, '_blank')
+                                    }
+                                  } catch {
+                                    window.open(certificado.arquivo_url, '_blank')
+                                  }
+                                } catch (error) {
+                                  toast({
+                                    title: "Erro",
+                                    description: "Erro ao baixar certificado",
+                                    variant: "destructive"
+                                  })
+                                }
+                              }}
+                            >
                               <Download className="w-4 h-4" />
                             </Button>
                           )}
@@ -310,7 +443,13 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
       </Card>
 
       {/* Dialog de Criar/Editar */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          handleCloseDialog()
+        } else {
+          setIsDialogOpen(true)
+        }
+      }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
@@ -368,15 +507,17 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
             <div>
               <DocumentoUpload
                 accept="application/pdf,image/*"
-                maxSize={5 * 1024 * 1024}
+                maxSize={10 * 1024 * 1024}
                 onUpload={(file) => setFormData({ ...formData, arquivo: file })}
+                onRemove={() => setFormData({ ...formData, arquivo: null })}
                 label="Upload do Certificado"
                 required={!editingCertificado}
+                currentFile={formData.arquivo}
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button variant="outline" onClick={handleCloseDialog}>
                 Cancelar
               </Button>
               <Button onClick={handleSave}>

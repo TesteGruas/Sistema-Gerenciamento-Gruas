@@ -509,6 +509,7 @@ router.post('/funcionario-beneficios', async (req, res) => {
       funcionario_id,
       beneficio_tipo_id,
       data_inicio,
+      valor,
       observacoes
     } = req.body
 
@@ -519,14 +520,21 @@ router.post('/funcionario-beneficios', async (req, res) => {
       })
     }
 
+    const insertData = {
+      funcionario_id,
+      beneficio_tipo_id,
+      data_inicio,
+      observacoes
+    }
+
+    // Adicionar valor se fornecido
+    if (valor !== undefined && valor !== null && valor !== '') {
+      insertData.valor = parseFloat(valor)
+    }
+
     const { data, error } = await supabaseAdmin
       .from('funcionario_beneficios')
-      .insert({
-        funcionario_id,
-        beneficio_tipo_id,
-        data_inicio,
-        observacoes
-      })
+      .insert(insertData)
       .select()
       .single()
 

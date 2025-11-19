@@ -123,6 +123,7 @@ interface BeneficioFuncionario {
   data_inicio: string
   data_fim?: string
   status: string
+  valor?: number
   observacoes?: string
   funcionario?: {
     nome: string
@@ -183,6 +184,7 @@ export default function FuncionarioDetalhesPage() {
   const [beneficioForm, setBeneficioForm] = useState({
     tipo: '',
     dataInicio: '',
+    valor: '',
     observacoes: ''
   })
   
@@ -309,10 +311,20 @@ export default function FuncionarioDetalhesPage() {
       // Carregar documentos
       const documentosResponse = await funcionariosApi.listarDocumentosFuncionario(funcionarioId)
       if (documentosResponse.data) {
+        // Função para converter tipo do backend (underscore) para frontend (hífen)
+        const converterTipoParaFrontend = (tipo: string): string => {
+          const mapeamento: Record<string, string> = {
+            'titulo_eleitor': 'titulo-eleitor',
+            'certificado_reservista': 'certificado-reservista',
+            'comprovante_residencia': 'comprovante-residencia'
+          }
+          return mapeamento[tipo] || tipo
+        }
+
         // Converter formato do backend para o frontend
         const docsFormatados = documentosResponse.data.map((doc: any) => ({
           id: doc.id.toString(),
-          tipo: doc.tipo,
+          tipo: converterTipoParaFrontend(doc.tipo),
           nome: doc.nome,
           numero: doc.numero,
           orgaoEmissor: doc.orgao_emissor,
@@ -467,8 +479,20 @@ export default function FuncionarioDetalhesPage() {
     return nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
+  // Função para converter tipo do backend (underscore) para frontend (hífen)
+  const converterTipoDocumentoParaFrontend = (tipo: string): string => {
+    const mapeamento: Record<string, string> = {
+      'titulo_eleitor': 'titulo-eleitor',
+      'certificado_reservista': 'certificado-reservista',
+      'comprovante_residencia': 'comprovante-residencia'
+    }
+    return mapeamento[tipo] || tipo
+  }
+
   const getTipoDocumentoColor = (tipo: string) => {
-    switch (tipo) {
+    // Normalizar tipo para comparação (aceitar tanto hífen quanto underscore)
+    const tipoNormalizado = tipo.replace('_', '-')
+    switch (tipoNormalizado) {
       case 'rg': return 'bg-blue-100 text-blue-800'
       case 'cpf': return 'bg-green-100 text-green-800'
       case 'ctps': return 'bg-purple-100 text-purple-800'
@@ -568,6 +592,7 @@ export default function FuncionarioDetalhesPage() {
     setBeneficioForm({
       tipo: '',
       dataInicio: '',
+      valor: '',
       observacoes: ''
     })
   }
@@ -599,11 +624,27 @@ export default function FuncionarioDetalhesPage() {
       
       const funcionarioId = parseInt(params.id as string)
       
+      // Converter valor para número se fornecido
+      let valorNumerico: number | undefined = undefined
+      if (beneficioForm.valor && beneficioForm.valor.trim() !== '') {
+        const valorLimpo = beneficioForm.valor.replace(/\./g, '').replace(',', '.')
+        valorNumerico = parseFloat(valorLimpo)
+        if (isNaN(valorNumerico)) {
+          toast({
+            title: "Erro",
+            description: "Valor inválido. Use números e vírgula (ex: 1.234,56)",
+            variant: "destructive"
+          })
+          return
+        }
+      }
+
       // Chamar API para adicionar benefício
       const response = await rhApi.adicionarBeneficioFuncionario({
         funcionario_id: funcionarioId,
         beneficio_tipo_id: parseInt(beneficioForm.tipo),
         data_inicio: beneficioForm.dataInicio,
+        valor: valorNumerico,
         observacoes: beneficioForm.observacoes || undefined
       } as any)
       
@@ -636,6 +677,9 @@ export default function FuncionarioDetalhesPage() {
     setBeneficioForm({
       tipo: beneficio.beneficio_tipo_id.toString(),
       dataInicio: beneficio.data_inicio.split('T')[0],
+      valor: beneficio.valor 
+        ? beneficio.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : '',
       observacoes: beneficio.observacoes || ''
     })
     setIsEditBeneficioDialogOpen(true)
@@ -662,6 +706,9 @@ export default function FuncionarioDetalhesPage() {
         funcionario_id: funcionarioId,
         beneficio_tipo_id: parseInt(beneficioForm.tipo),
         data_inicio: beneficioForm.dataInicio,
+        valor: beneficioForm.valor && beneficioForm.valor.trim() !== '' 
+          ? parseFloat(beneficioForm.valor.replace(/\./g, '').replace(',', '.')) 
+          : undefined,
         observacoes: beneficioForm.observacoes || undefined
       } as any)
       
@@ -756,7 +803,24 @@ export default function FuncionarioDetalhesPage() {
           
           if (uploadResponse.ok) {
             const uploadResult = await uploadResponse.json()
-            arquivoUrl = uploadResult.data?.caminho || uploadResult.data?.arquivo || uploadResult.caminho || uploadResult.arquivo
+            // O backend agora retorna a URL completa no campo 'arquivo'
+            arquivoUrl = uploadResult.data?.arquivo || uploadResult.arquivo
+            
+            // Validar se temos uma URL válida
+            if (!arquivoUrl) {
+              throw new Error('URL do arquivo não retornada após upload')
+            }
+            
+            // Se não for uma URL completa (começa com http/https), tentar construir
+            if (!arquivoUrl.startsWith('http') && !arquivoUrl.startsWith('https')) {
+              const caminho = arquivoUrl
+              const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+              if (supabaseUrl) {
+                arquivoUrl = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${caminho}`
+              } else {
+                throw new Error('URL do arquivo inválida: não é uma URL completa e SUPABASE_URL não está configurada')
+              }
+            }
           } else {
             // Se falhar, usar URL temporária
             arquivoUrl = URL.createObjectURL(documentoForm.arquivo)
@@ -777,10 +841,20 @@ export default function FuncionarioDetalhesPage() {
         }
       }
       
+      // Função para converter tipo do frontend (hífen) para backend (underscore)
+      const converterTipoDocumento = (tipo: string): string => {
+        const mapeamento: Record<string, string> = {
+          'titulo-eleitor': 'titulo_eleitor',
+          'certificado-reservista': 'certificado_reservista',
+          'comprovante-residencia': 'comprovante_residencia'
+        }
+        return mapeamento[tipo] || tipo
+      }
+
       // Chamar API para adicionar documento
       const response = await funcionariosApi.criarDocumento({
         funcionario_id: funcionarioId,
-        tipo: documentoForm.tipo,
+        tipo: converterTipoDocumento(documentoForm.tipo),
         nome: documentoForm.nome,
         numero: documentoForm.numero,
         orgao_emissor: documentoForm.orgaoEmissor || undefined,
@@ -1911,7 +1985,7 @@ export default function FuncionarioDetalhesPage() {
                             ) : (
                               tiposBeneficios.map((tipo) => (
                                 <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                                  {tipo.tipo} - R$ {parseFloat(tipo.valor || '0').toFixed(2)}
+                                  {tipo.tipo}
                                   {tipo.descricao && ` (${tipo.descricao})`}
                                 </SelectItem>
                               ))
@@ -1927,6 +2001,34 @@ export default function FuncionarioDetalhesPage() {
                           value={beneficioForm.dataInicio}
                           onChange={(e) => setBeneficioForm({ ...beneficioForm, dataInicio: e.target.value })}
                         />
+                      </div>
+                      <div>
+                        <Label htmlFor="valor-beneficio">Valor (R$)</Label>
+                        <Input
+                          id="valor-beneficio"
+                          type="text"
+                          placeholder="0,00"
+                          value={beneficioForm.valor}
+                          onChange={(e) => {
+                            // Permitir apenas números, vírgula e ponto
+                            const value = e.target.value.replace(/[^\d,.-]/g, '')
+                            setBeneficioForm({ ...beneficioForm, valor: value })
+                          }}
+                          onBlur={(e) => {
+                            // Formatar como moeda brasileira
+                            const value = e.target.value.replace(',', '.')
+                            const numValue = parseFloat(value)
+                            if (!isNaN(numValue)) {
+                              setBeneficioForm({ 
+                                ...beneficioForm, 
+                                valor: numValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              })
+                            }
+                          }}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Valor do benefício em reais (opcional)
+                        </p>
                       </div>
                       <div>
                         <Label htmlFor="observacoes-beneficio">Observações</Label>
@@ -1977,7 +2079,7 @@ export default function FuncionarioDetalhesPage() {
                             ) : (
                               tiposBeneficios.map((tipo) => (
                                 <SelectItem key={tipo.id} value={tipo.id.toString()}>
-                                  {tipo.tipo} - R$ {parseFloat(tipo.valor || '0').toFixed(2)}
+                                  {tipo.tipo}
                                   {tipo.descricao && ` (${tipo.descricao})`}
                                 </SelectItem>
                               ))
@@ -1993,6 +2095,34 @@ export default function FuncionarioDetalhesPage() {
                           value={beneficioForm.dataInicio}
                           onChange={(e) => setBeneficioForm({ ...beneficioForm, dataInicio: e.target.value })}
                         />
+                      </div>
+                      <div>
+                        <Label htmlFor="valor-beneficio-edit">Valor (R$)</Label>
+                        <Input
+                          id="valor-beneficio-edit"
+                          type="text"
+                          placeholder="0,00"
+                          value={beneficioForm.valor}
+                          onChange={(e) => {
+                            // Permitir apenas números, vírgula e ponto
+                            const value = e.target.value.replace(/[^\d,.-]/g, '')
+                            setBeneficioForm({ ...beneficioForm, valor: value })
+                          }}
+                          onBlur={(e) => {
+                            // Formatar como moeda brasileira
+                            const value = e.target.value.replace(',', '.')
+                            const numValue = parseFloat(value)
+                            if (!isNaN(numValue)) {
+                              setBeneficioForm({ 
+                                ...beneficioForm, 
+                                valor: numValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              })
+                            }
+                          }}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Valor do benefício em reais (opcional)
+                        </p>
                       </div>
                       <div>
                         <Label htmlFor="observacoes-beneficio-edit">Observações</Label>
@@ -2064,7 +2194,9 @@ export default function FuncionarioDetalhesPage() {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Valor:</span>
-                            <span className="font-semibold">R$ {(beneficio.beneficios_tipo?.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span className="font-semibold">
+                              R$ {(beneficio.valor ?? beneficio.beneficios_tipo?.valor ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Data Início:</span>
