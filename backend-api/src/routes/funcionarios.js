@@ -7,7 +7,7 @@ import express from 'express'
 import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
-import { authenticateToken } from '../middleware/auth.js'
+import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendWelcomeEmail } from '../services/email.service.js'
 
 // Função auxiliar para gerar senha segura aleatória
@@ -1858,5 +1858,116 @@ router.get('/obra/:obra_id', async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /api/funcionarios/:id/reset-password
+ * Resetar senha do funcionário e enviar senha temporária por email e WhatsApp
+ */
+router.post('/:id/reset-password', authenticateToken, requirePermission('rh:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Buscar funcionário
+    const { data: funcionario, error: funcionarioError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, email, telefone, telefone_whatsapp, user_id')
+      .eq('id', id)
+      .single()
+
+    if (funcionarioError || !funcionario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Funcionário não encontrado'
+      })
+    }
+
+    // Verificar se o funcionário tem usuário vinculado
+    if (!funcionario.user_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Funcionário não possui usuário vinculado. Crie um usuário primeiro.'
+      })
+    }
+
+    // Gerar senha temporária
+    const senhaTemporaria = generateSecurePassword(12)
+
+    // Atualizar senha no Supabase Auth
+    try {
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+        funcionario.user_id.toString(),
+        { password: senhaTemporaria }
+      )
+
+      if (authError) {
+        console.error('Erro ao atualizar senha no Supabase Auth:', authError)
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao atualizar senha no sistema de autenticação',
+          error: authError.message
+        })
+      }
+    } catch (authError) {
+      console.error('Erro ao atualizar senha:', authError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao atualizar senha',
+        error: authError.message
+      })
+    }
+
+    // Enviar email com senha temporária
+    let emailEnviado = false
+    if (funcionario.email) {
+      try {
+        await sendWelcomeEmail({
+          nome: funcionario.nome,
+          email: funcionario.email,
+          senha_temporaria: senhaTemporaria
+        })
+        emailEnviado = true
+        console.log(`✅ Email de reset de senha enviado com sucesso para ${funcionario.email}`)
+      } catch (emailError) {
+        console.error('❌ Erro ao enviar email de reset de senha:', emailError)
+        // Não falha a operação se o email falhar
+      }
+    }
+
+    // Enviar WhatsApp com senha temporária
+    let whatsappEnviado = false
+    try {
+      const { enviarMensagemNovoUsuarioFuncionario } = await import('../services/whatsapp-service.js')
+      await enviarMensagemNovoUsuarioFuncionario(
+        funcionario,
+        funcionario.email,
+        senhaTemporaria
+      )
+      whatsappEnviado = true
+      console.log(`✅ WhatsApp de reset de senha enviado com sucesso para ${funcionario.nome}`)
+    } catch (whatsappError) {
+      console.error('❌ Erro ao enviar WhatsApp de reset de senha:', whatsappError)
+      // Não falha a operação se o WhatsApp falhar
+    }
+
+    // Retornar sucesso mesmo se algum envio falhar (senha foi resetada)
+    res.json({
+      success: true,
+      message: 'Senha resetada com sucesso. Senha temporária enviada por email e WhatsApp.',
+      data: {
+        email_enviado: emailEnviado,
+        whatsapp_enviado: whatsappEnviado,
+        // Por segurança, NÃO retornar a senha temporária
+      }
+    })
+
+  } catch (error) {
+    console.error('Erro ao resetar senha do funcionário:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
 
 export default router

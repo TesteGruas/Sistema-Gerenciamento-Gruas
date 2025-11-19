@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -42,7 +43,9 @@ import {
   TrendingUp,
   TrendingDown,
   BarChart3,
-  PieChart
+  PieChart,
+  KeyRound,
+  Bell
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -159,6 +162,8 @@ export default function FuncionarioDetalhesPage() {
   const [isEditBeneficioDialogOpen, setIsEditBeneficioDialogOpen] = useState(false)
   const [beneficioSelecionado, setBeneficioSelecionado] = useState<BeneficioFuncionario | null>(null)
   const [isDocumentoDialogOpen, setIsDocumentoDialogOpen] = useState(false)
+  const [isEditDocumentoDialogOpen, setIsEditDocumentoDialogOpen] = useState(false)
+  const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFuncionario | null>(null)
   const [submitting, setSubmitting] = useState(false)
   
   // Formulário de edição
@@ -205,6 +210,7 @@ export default function FuncionarioDetalhesPage() {
   const [tiposBeneficios, setTiposBeneficios] = useState<any[]>([])
   const [obrasFuncionario, setObrasFuncionario] = useState<any[]>([])
   const [holerites, setHolerites] = useState<any[]>([])
+  const [certificadosVencendo, setCertificadosVencendo] = useState<any[]>([])
   
   // Estados para cálculo de salário
   const [mesCalculo, setMesCalculo] = useState(() => {
@@ -355,6 +361,28 @@ export default function FuncionarioDetalhesPage() {
         } catch (obrasError) {
           // Silenciar erro, apenas não carregar obras
         }
+      }
+
+      // Carregar certificados para verificar vencimentos
+      try {
+        const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
+        const certificadosResponse = await colaboradoresDocumentosApi.certificados.listar(funcionarioId)
+        if (certificadosResponse.success && certificadosResponse.data) {
+          // Filtrar certificados vencendo (até 30 dias)
+          const hoje = new Date()
+          const trintaDias = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000)
+          
+          const vencendo = certificadosResponse.data.filter((cert: any) => {
+            if (!cert.data_validade) return false
+            const dataValidade = new Date(cert.data_validade)
+            return dataValidade >= hoje && dataValidade <= trintaDias
+          })
+          
+          setCertificadosVencendo(vencendo)
+        }
+      } catch (certificadosError) {
+        // Silenciar erro, apenas não carregar certificados
+        console.warn('Erro ao carregar certificados:', certificadosError)
       }
 
     } catch (error) {
@@ -608,6 +636,226 @@ export default function FuncionarioDetalhesPage() {
       observacoes: '',
       arquivo: null
     })
+    setDocumentoSelecionado(null)
+  }
+
+  const handleVisualizarDocumento = async (documento: DocumentoFuncionario) => {
+    if (!documento.arquivoUrl) {
+      toast({
+        title: "Aviso",
+        description: "Arquivo do documento não disponível",
+        variant: "default"
+      })
+      return
+    }
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      // Tentar obter URL assinada do arquivo
+      try {
+        const urlResponse = await fetch(
+          `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.arquivoUrl)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        )
+        
+        if (urlResponse.ok) {
+          const urlData = await urlResponse.json()
+          window.open(urlData.url || urlData.data?.url || documento.arquivoUrl, '_blank')
+        } else {
+          window.open(documento.arquivoUrl, '_blank')
+        }
+      } catch {
+        window.open(documento.arquivoUrl, '_blank')
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao visualizar documento",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDownloadDocumento = async (documento: DocumentoFuncionario) => {
+    if (!documento.arquivoUrl) {
+      toast({
+        title: "Aviso",
+        description: "Arquivo do documento não disponível",
+        variant: "default"
+      })
+      return
+    }
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      // Tentar obter URL assinada do arquivo
+      let downloadUrl = documento.arquivoUrl
+      try {
+        const urlResponse = await fetch(
+          `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.arquivoUrl)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        )
+        
+        if (urlResponse.ok) {
+          const urlData = await urlResponse.json()
+          downloadUrl = urlData.url || urlData.data?.url || documento.arquivoUrl
+        }
+      } catch {
+        // Usar URL original se falhar
+      }
+
+      // Criar link temporário para download
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = `${documento.nome}_${documento.numero}.pdf`
+      link.target = '_blank'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao baixar documento",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleEditarDocumento = (documento: DocumentoFuncionario) => {
+    setDocumentoSelecionado(documento)
+    setDocumentoForm({
+      tipo: documento.tipo,
+      nome: documento.nome,
+      numero: documento.numero,
+      orgaoEmissor: documento.orgaoEmissor || '',
+      dataEmissao: documento.dataEmissao || '',
+      dataVencimento: documento.dataVencimento || '',
+      observacoes: documento.observacoes || '',
+      arquivo: null
+    })
+    setIsEditDocumentoDialogOpen(true)
+  }
+
+  const handleSalvarEdicaoDocumento = async () => {
+    if (!documentoSelecionado) return
+
+    try {
+      // Validação básica
+      if (!documentoForm.tipo || !documentoForm.nome || !documentoForm.numero) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios (Tipo, Nome e Número)",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const funcionarioId = parseInt(params.id as string)
+      let arquivoUrl: string | undefined = documentoSelecionado.arquivoUrl
+
+      // Se tiver arquivo novo, fazer upload primeiro
+      if (documentoForm.arquivo) {
+        try {
+          const formDataUpload = new FormData()
+          formDataUpload.append('arquivo', documentoForm.arquivo)
+          
+          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+          
+          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataUpload
+          })
+          
+          if (uploadResponse.ok) {
+            const uploadResult = await uploadResponse.json()
+            arquivoUrl = uploadResult.data?.arquivo || uploadResult.arquivo
+            
+            if (!arquivoUrl) {
+              throw new Error('URL do arquivo não retornada após upload')
+            }
+            
+            if (!arquivoUrl.startsWith('http') && !arquivoUrl.startsWith('https')) {
+              const caminho = arquivoUrl
+              const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+              if (supabaseUrl) {
+                arquivoUrl = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${caminho}`
+              } else {
+                throw new Error('URL do arquivo inválida: não é uma URL completa e SUPABASE_URL não está configurada')
+              }
+            }
+          } else {
+            throw new Error('Erro ao fazer upload do arquivo')
+          }
+        } catch (uploadError: any) {
+          toast({
+            title: "Erro",
+            description: uploadError.message || "Erro ao fazer upload do arquivo",
+            variant: "destructive"
+          })
+          return
+        }
+      }
+
+      // Função para converter tipo do frontend (hífen) para backend (underscore)
+      const converterTipoDocumento = (tipo: string): string => {
+        const mapeamento: Record<string, string> = {
+          'titulo-eleitor': 'titulo_eleitor',
+          'certificado-reservista': 'certificado_reservista',
+          'comprovante-residencia': 'comprovante_residencia'
+        }
+        return mapeamento[tipo] || tipo
+      }
+
+      // Chamar API para atualizar documento
+      const response = await funcionariosApi.atualizarDocumento(parseInt(documentoSelecionado.id), {
+        tipo: converterTipoDocumento(documentoForm.tipo),
+        nome: documentoForm.nome,
+        numero: documentoForm.numero,
+        orgao_emissor: documentoForm.orgaoEmissor || undefined,
+        data_emissao: documentoForm.dataEmissao || undefined,
+        data_vencimento: documentoForm.dataVencimento || undefined,
+        observacoes: documentoForm.observacoes || undefined,
+        arquivo_url: arquivoUrl
+      })
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Documento atualizado com sucesso!",
+        })
+        
+        // Recarregar documentos
+        await carregarDadosTabs(funcionarioId)
+        
+        setIsEditDocumentoDialogOpen(false)
+        resetDocumentoForm()
+      } else {
+        throw new Error(response.message || 'Erro ao atualizar documento')
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar documento:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao atualizar documento",
+        variant: "destructive"
+      })
+    }
   }
   
   const handleCriarBeneficio = async () => {
@@ -734,6 +982,57 @@ export default function FuncionarioDetalhesPage() {
         description: error instanceof Error ? error.message : "Erro ao atualizar benefício",
         variant: "destructive"
       })
+    }
+  }
+
+  const handleResetPassword = async () => {
+    if (!funcionario) return
+
+    if (!funcionario.usuario) {
+      toast({
+        title: "Aviso",
+        description: "Este funcionário não possui usuário vinculado. Crie um usuário primeiro.",
+        variant: "default"
+      })
+      return
+    }
+
+    if (!confirm(`Tem certeza que deseja resetar a senha de ${funcionario.nome}?\n\nUma senha temporária será gerada e enviada por email e WhatsApp.`)) {
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+
+      const response = await fetch(`${apiUrl}/api/funcionarios/${funcionario.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        toast({
+          title: "Sucesso",
+          description: `Senha resetada com sucesso! ${data.data?.email_enviado ? 'Email enviado.' : ''} ${data.data?.whatsapp_enviado ? 'WhatsApp enviado.' : ''} O funcionário receberá uma senha temporária para acessar o sistema.`,
+        })
+      } else {
+        throw new Error(data.message || 'Erro ao resetar senha')
+      }
+    } catch (error: any) {
+      console.error('Erro ao resetar senha:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao resetar senha. Verifique se o funcionário possui email e telefone cadastrados.",
+        variant: "destructive"
+      })
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -1409,12 +1708,42 @@ export default function FuncionarioDetalhesPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{funcionario.nome}</h1>
-            <p className="text-gray-600">{funcionario.cargo}{funcionario.departamento ? ` • ${funcionario.departamento}` : ''}</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-bold text-gray-900">{funcionario.nome}</h1>
+                {certificadosVencendo.length > 0 && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="relative cursor-pointer">
+                        <Bell className="w-5 h-5 text-red-600 animate-pulse" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="font-semibold">Documento próximo a vencer</p>
+                      <p className="text-xs mt-1">
+                        {certificadosVencendo.length} certificado{certificadosVencendo.length > 1 ? 's' : ''} vencendo em até 30 dias
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+              <p className="text-gray-600">{funcionario.cargo}{funcionario.departamento ? ` • ${funcionario.departamento}` : ''}</p>
+            </div>
           </div>
         </div>
         <div className="flex gap-2">
+          {funcionario.usuario && !isEditMode && (
+            <Button 
+              variant="outline" 
+              onClick={handleResetPassword}
+              disabled={submitting}
+              className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+            >
+              <KeyRound className="w-4 h-4 mr-2" />
+              Resetar Senha
+            </Button>
+          )}
           <Button variant="outline" onClick={handleEdit}>
             <Edit className="w-4 h-4 mr-2" />
             {isEditMode ? 'Cancelar' : 'Editar'}
@@ -2399,6 +2728,120 @@ export default function FuncionarioDetalhesPage() {
                     </div>
                   </DialogContent>
                 </Dialog>
+
+                {/* Dialog de Editar Documento */}
+                <Dialog open={isEditDocumentoDialogOpen} onOpenChange={setIsEditDocumentoDialogOpen}>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Editar Documento</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="tipo-documento-edit">Tipo de Documento *</Label>
+                        <Select
+                          value={documentoForm.tipo}
+                          onValueChange={(value) => setDocumentoForm({ ...documentoForm, tipo: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="rg">RG</SelectItem>
+                            <SelectItem value="cpf">CPF</SelectItem>
+                            <SelectItem value="ctps">CTPS</SelectItem>
+                            <SelectItem value="pis">PIS</SelectItem>
+                            <SelectItem value="titulo-eleitor">Título de Eleitor</SelectItem>
+                            <SelectItem value="certificado-reservista">Certificado de Reservista</SelectItem>
+                            <SelectItem value="comprovante-residencia">Comprovante de Residência</SelectItem>
+                            <SelectItem value="outros">Outros</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="nome-documento-edit">Nome do Documento *</Label>
+                        <Input
+                          id="nome-documento-edit"
+                          value={documentoForm.nome}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, nome: e.target.value })}
+                          placeholder="Ex: RG - Carteira de Identidade"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="numero-documento-edit">Número *</Label>
+                        <Input
+                          id="numero-documento-edit"
+                          value={documentoForm.numero}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, numero: e.target.value })}
+                          placeholder="Número do documento"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="orgao-emissor-documento-edit">Órgão Emissor</Label>
+                        <Input
+                          id="orgao-emissor-documento-edit"
+                          value={documentoForm.orgaoEmissor}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, orgaoEmissor: e.target.value })}
+                          placeholder="Ex: SSP, IFP, etc."
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="data-emissao-documento-edit">Data de Emissão</Label>
+                          <Input
+                            id="data-emissao-documento-edit"
+                            type="date"
+                            value={documentoForm.dataEmissao}
+                            onChange={(e) => setDocumentoForm({ ...documentoForm, dataEmissao: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="data-vencimento-documento-edit">Data de Vencimento</Label>
+                          <Input
+                            id="data-vencimento-documento-edit"
+                            type="date"
+                            value={documentoForm.dataVencimento}
+                            onChange={(e) => setDocumentoForm({ ...documentoForm, dataVencimento: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <DocumentoUpload
+                          accept="application/pdf,image/*"
+                          maxSize={10 * 1024 * 1024}
+                          onUpload={(file) => setDocumentoForm({ ...documentoForm, arquivo: file })}
+                          onRemove={() => setDocumentoForm({ ...documentoForm, arquivo: null })}
+                          label="Upload do Documento (opcional - substituir arquivo atual)"
+                          required={false}
+                          currentFile={documentoForm.arquivo}
+                          fileUrl={documentoSelecionado?.arquivoUrl}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="observacoes-documento-edit">Observações</Label>
+                        <Textarea
+                          id="observacoes-documento-edit"
+                          placeholder="Informações adicionais sobre o documento"
+                          value={documentoForm.observacoes}
+                          onChange={(e) => setDocumentoForm({ ...documentoForm, observacoes: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsEditDocumentoDialogOpen(false)
+                            resetDocumentoForm()
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button onClick={handleSalvarEdicaoDocumento}>
+                          Salvar Alterações
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -2440,13 +2883,30 @@ export default function FuncionarioDetalhesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleVisualizarDocumento(documento)}
+                              title="Visualizar documento"
+                              disabled={!documento.arquivoUrl}
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleDownloadDocumento(documento)}
+                              title="Baixar documento"
+                              disabled={!documento.arquivoUrl}
+                            >
                               <Download className="w-4 h-4" />
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleEditarDocumento(documento)}
+                              title="Editar documento"
+                            >
                               <Edit className="w-4 h-4" />
                             </Button>
                           </div>

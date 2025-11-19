@@ -274,50 +274,8 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
   }
 
-  const certificadosVencendo = certificados.filter(c => {
-    const dias = diasParaVencimento(c.data_validade)
-    return dias >= 0 && dias <= 30
-  })
-
   return (
     <div className="space-y-4">
-      {/* Alerta de certificados vencendo */}
-      {certificadosVencendo.length > 0 && (
-        <Card className="border-yellow-300 bg-yellow-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-600" />
-              Atenção: Certificados Vencendo
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {certificadosVencendo.map((cert) => {
-                const dias = diasParaVencimento(cert.data_validade)
-                return (
-                  <div key={cert.id} className="flex items-center justify-between p-2 bg-white rounded">
-                    <div>
-                      <p className="font-medium">{cert.nome}</p>
-                      <p className="text-sm text-gray-600">
-                        Vence em {dias} dia{dias !== 1 ? 's' : ''} - {new Date(cert.data_validade).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleOpenDialog(cert)}
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Renovar
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
