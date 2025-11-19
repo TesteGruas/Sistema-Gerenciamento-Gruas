@@ -42,7 +42,9 @@ import {
   Trash2,
   Paperclip,
   X,
-  Shield
+  Shield,
+  Calculator,
+  XCircle
 } from "lucide-react"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalObra, CustoMensalObraCreate, CustoMensalObraUpdate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
@@ -75,6 +77,8 @@ import api from "@/lib/api"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { clientesApi } from "@/lib/api-clientes"
 import { ValorMonetarioOculto, ValorFormatadoOculto } from "@/components/valor-oculto"
+import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
+import { getOrcamentos } from "@/lib/api-orcamentos"
 
 function ObraDetailsPageContent() {
 
@@ -103,6 +107,12 @@ function ObraDetailsPageContent() {
   const [errorDocumentos, setErrorDocumentos] = useState<string | null>(null)
   const [errorArquivos, setErrorArquivos] = useState<string | null>(null)
   const [notificandoEnvolvidos, setNotificandoEnvolvidos] = useState(false)
+  
+  // Estados para medições mensais
+  const [medicoesMensais, setMedicoesMensais] = useState<MedicaoMensal[]>([])
+  const [orcamentosObra, setOrcamentosObra] = useState<any[]>([])
+  const [loadingMedicoes, setLoadingMedicoes] = useState(false)
+  const [errorMedicoes, setErrorMedicoes] = useState<string | null>(null)
   
   // Estados para edição inline
   const [isEditing, setIsEditing] = useState(false)
@@ -257,6 +267,53 @@ function ObraDetailsPageContent() {
     }
   }
   
+  // Função para carregar medições mensais da obra
+  const carregarMedicoesMensais = async () => {
+    if (!obraId) return
+    
+    setLoadingMedicoes(true)
+    setErrorMedicoes(null)
+    try {
+      // 1. Buscar orçamentos vinculados à obra
+      const orcamentosResponse = await getOrcamentos({ 
+        page: 1, 
+        limit: 100,
+        obra_id: parseInt(obraId)
+      })
+      
+      const orcamentos = orcamentosResponse.data || []
+      setOrcamentosObra(orcamentos)
+      
+      // 2. Buscar medições mensais de cada orçamento
+      const todasMedicoes: MedicaoMensal[] = []
+      
+      for (const orcamento of orcamentos) {
+        try {
+          const medicoesResponse = await medicoesMensaisApi.listarPorOrcamento(orcamento.id)
+          if (medicoesResponse.success && medicoesResponse.data) {
+            todasMedicoes.push(...medicoesResponse.data)
+          }
+        } catch (error) {
+          console.error(`Erro ao carregar medições do orçamento ${orcamento.id}:`, error)
+        }
+      }
+      
+      // Ordenar por período (mais recente primeiro)
+      todasMedicoes.sort((a, b) => {
+        if (b.periodo > a.periodo) return 1
+        if (b.periodo < a.periodo) return -1
+        return 0
+      })
+      
+      setMedicoesMensais(todasMedicoes)
+    } catch (error: any) {
+      console.error('Erro ao carregar medições mensais:', error)
+      setErrorMedicoes(error.message || 'Erro ao carregar medições mensais')
+    } finally {
+      setLoadingMedicoes(false)
+    }
+  }
+
   // Função para carregar sinaleiros reais da API
   const carregarSinaleiros = async () => {
     if (!obraId) return
@@ -1930,6 +1987,13 @@ function ObraDetailsPageContent() {
     }
   }, [custosMensais])
 
+  // Carregar medições mensais quando a aba for ativada
+  useEffect(() => {
+    if (activeTab === 'medicoes-mensais' && obra && !loadingMedicoes && medicoesMensais.length === 0) {
+      carregarMedicoesMensais()
+    }
+  }, [activeTab, obra])
+
   // Filtro de custos agora é feito via useMemo com custosFiltrados
 
   const getStatusColor = (status: string) => {
@@ -2302,7 +2366,7 @@ function ObraDetailsPageContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-10">
+      <TabsList className="grid w-full grid-cols-11">
         <TabsTrigger value="geral">Geral</TabsTrigger>
         <TabsTrigger value="gruas">Gruas</TabsTrigger>
         <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
@@ -2319,6 +2383,10 @@ function ObraDetailsPageContent() {
         </TabsTrigger>
         <TabsTrigger value="livro-grua">
           Livro da Grua
+        </TabsTrigger>
+        <TabsTrigger value="medicoes-mensais">
+          <Calculator className="w-4 h-4 mr-2" />
+          Medições Mensais
         </TabsTrigger>
       </TabsList>
 
@@ -4149,6 +4217,186 @@ function ObraDetailsPageContent() {
         {/* Aba: Livro da Grua */}
         <TabsContent value="livro-grua" className="space-y-4">
           <LivroGruaObra obraId={obraId} />
+        </TabsContent>
+
+        <TabsContent value="medicoes-mensais" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Medições Mensais</CardTitle>
+                  <CardDescription>
+                    Histórico de medições mensais dos orçamentos vinculados a esta obra
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={carregarMedicoesMensais}
+                  disabled={loadingMedicoes}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loadingMedicoes ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingMedicoes ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-600">Carregando medições...</span>
+                </div>
+              ) : errorMedicoes ? (
+                <div className="text-center py-8 text-red-600">
+                  <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+                  <p>{errorMedicoes}</p>
+                </div>
+              ) : orcamentosObra.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum orçamento vinculado a esta obra</p>
+                  <p className="text-sm">As medições mensais aparecerão aqui quando houver orçamentos vinculados</p>
+                </div>
+              ) : medicoesMensais.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma medição mensal encontrada</p>
+                  <p className="text-sm">As medições dos orçamentos vinculados aparecerão aqui</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Resumo */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-gray-600">Total de Medições</div>
+                        <div className="text-2xl font-bold">{medicoesMensais.length}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-gray-600">Medições Finalizadas</div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {medicoesMensais.filter(m => m.status === 'finalizada').length}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-gray-600">Medições Pendentes</div>
+                        <div className="text-2xl font-bold text-yellow-600">
+                          {medicoesMensais.filter(m => m.status === 'pendente').length}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-sm text-gray-600">Total Faturado</div>
+                        <div className="text-2xl font-bold text-green-600">
+                          R$ {medicoesMensais
+                            .filter(m => m.status === 'finalizada')
+                            .reduce((sum, m) => sum + (m.valor_total || 0), 0)
+                            .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Lista de Medições */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Histórico de Medições</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Número</TableHead>
+                            <TableHead>Orçamento</TableHead>
+                            <TableHead>Período</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Valor Mensal Bruto</TableHead>
+                            <TableHead>Valor Total</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Ações</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {medicoesMensais.map((medicao) => (
+                            <TableRow key={medicao.id}>
+                              <TableCell className="font-medium">{medicao.numero}</TableCell>
+                              <TableCell>
+                                {medicao.orcamentos?.numero || `ORC-${medicao.orcamento_id}`}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-gray-400" />
+                                  {medicao.periodo}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {new Date(medicao.data_medicao).toLocaleDateString('pt-BR')}
+                              </TableCell>
+                              <TableCell>
+                                R$ {medicao.valor_mensal_bruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="w-4 h-4 text-green-600" />
+                                  <span className="font-semibold">
+                                    R$ {medicao.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={
+                                    medicao.status === 'finalizada'
+                                      ? 'bg-green-100 text-green-800'
+                                      : medicao.status === 'pendente'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : medicao.status === 'cancelada'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-800'
+                                  }
+                                >
+                                  {medicao.status === 'finalizada' && <CheckCircle className="w-3 h-3 mr-1" />}
+                                  {medicao.status === 'pendente' && <Clock className="w-3 h-3 mr-1" />}
+                                  {medicao.status === 'cancelada' && <XCircle className="w-3 h-3 mr-1" />}
+                                  {medicao.status === 'finalizada'
+                                    ? 'Finalizada'
+                                    : medicao.status === 'pendente'
+                                    ? 'Pendente'
+                                    : medicao.status === 'cancelada'
+                                    ? 'Cancelada'
+                                    : medicao.status === 'enviada'
+                                    ? 'Enviada'
+                                    : medicao.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      window.open(`/dashboard/orcamentos/${medicao.orcamento_id}`, '_blank')
+                                    }}
+                                    title="Ver orçamento"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

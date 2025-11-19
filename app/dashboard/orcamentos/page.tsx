@@ -242,6 +242,13 @@ export default function OrcamentosPage() {
     setIsViewDialogOpen(true)
   }
 
+  // Garantir que editedOrcamento está sincronizado quando o dialog abrir
+  useEffect(() => {
+    if (isViewDialogOpen && selectedOrcamento && !editedOrcamento) {
+      setEditedOrcamento({ ...selectedOrcamento })
+    }
+  }, [isViewDialogOpen, selectedOrcamento, editedOrcamento])
+
   const handleSaveEdit = () => {
     if (!editedOrcamento) return
     
@@ -267,10 +274,7 @@ export default function OrcamentosPage() {
   }
 
   const handleEdit = (id: string) => {
-    const orcamento = orcamentos.find(item => item.id === id)
-    if (orcamento) {
-      handleView(orcamento)
-    }
+    router.push(`/dashboard/orcamentos/novo?id=${id}`)
   }
 
   const handleCreateObra = (orcamento: Orcamento) => {
@@ -619,101 +623,107 @@ export default function OrcamentosPage() {
       </Card>
 
       {/* Dialog de Visualização */}
-      {isViewDialogOpen && selectedOrcamento && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setIsViewDialogOpen(false)
-              setSelectedOrcamento(null)
-            }
-          }}
-        >
-          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Orçamento {selectedOrcamento.numero}</CardTitle>
-                  <CardDescription>{selectedOrcamento.obra_nome}</CardDescription>
+      {isViewDialogOpen && selectedOrcamento && (() => {
+        // Garantir que editedOrcamento está sincronizado com selectedOrcamento
+        const orcamentoAtual = editedOrcamento || selectedOrcamento
+        
+        return (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setIsViewDialogOpen(false)
+                setSelectedOrcamento(null)
+                setEditedOrcamento(null)
+              }
+            }}
+          >
+            <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Orçamento {selectedOrcamento.numero}</CardTitle>
+                    <CardDescription>{selectedOrcamento.obra_nome}</CardDescription>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      setIsViewDialogOpen(false)
+                      setSelectedOrcamento(null)
+                      setEditedOrcamento(null)
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => {
-                    setIsViewDialogOpen(false)
-                    setSelectedOrcamento(null)
-                  }}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Identificação Básica */}
-              <div className="space-y-5">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Identificação</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Cliente</label>
-                    <Input
-                      value={editedOrcamento?.cliente_nome || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, cliente_nome: e.target.value } : null)}
-                      className="text-gray-900 font-medium"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Status</label>
-                    <div className="h-9 flex items-center">
-                      {editedOrcamento && getStatusBadge(editedOrcamento.status)}
-                    </div>
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Obra</label>
-                    <Input
-                      value={editedOrcamento?.obra_nome || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_nome: e.target.value } : null)}
-                      className="text-gray-900 font-medium"
-                    />
-                    <div className="grid grid-cols-3 gap-2 mt-2">
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Identificação Básica */}
+                <div className="space-y-5">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Identificação</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Cliente</label>
                       <Input
-                        placeholder="Endereço"
-                        value={editedOrcamento?.obra_endereco || ''}
-                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_endereco: e.target.value } : null)}
-                        className="text-gray-600 text-sm"
-                      />
-                      <Input
-                        placeholder="Cidade"
-                        value={editedOrcamento?.obra_cidade || ''}
-                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_cidade: e.target.value } : null)}
-                        className="text-gray-600 text-sm"
-                      />
-                      <Input
-                        placeholder="Estado"
-                        value={editedOrcamento?.obra_estado || ''}
-                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_estado: e.target.value.toUpperCase() } : null)}
-                        className="text-gray-600 text-sm"
-                        maxLength={2}
+                        value={orcamentoAtual?.cliente_nome || ''}
+                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, cliente_nome: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, cliente_nome: e.target.value } : null)}
+                        className="text-gray-900 font-medium"
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Equipamento</label>
-                    <Input
-                      value={editedOrcamento?.equipamento || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, equipamento: e.target.value } : null)}
-                      className="text-gray-900 font-medium"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
-                    <Input
-                      value={editedOrcamento?.tipo_obra || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, tipo_obra: e.target.value } : null)}
-                      className="text-gray-900 font-medium"
-                    />
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Status</label>
+                      <div className="h-9 flex items-center">
+                        {orcamentoAtual && getStatusBadge(orcamentoAtual.status)}
+                      </div>
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Obra</label>
+                      <Input
+                        value={orcamentoAtual?.obra_nome || ''}
+                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_nome: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, obra_nome: e.target.value } : null)}
+                        className="text-gray-900 font-medium"
+                      />
+                      <div className="grid grid-cols-3 gap-2 mt-2">
+                        <Input
+                          placeholder="Endereço"
+                          value={orcamentoAtual?.obra_endereco || ''}
+                          onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_endereco: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, obra_endereco: e.target.value } : null)}
+                          className="text-gray-600 text-sm"
+                        />
+                        <Input
+                          placeholder="Cidade"
+                          value={orcamentoAtual?.obra_cidade || ''}
+                          onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_cidade: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, obra_cidade: e.target.value } : null)}
+                          className="text-gray-600 text-sm"
+                        />
+                        <Input
+                          placeholder="Estado"
+                          value={orcamentoAtual?.obra_estado || ''}
+                          onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_estado: e.target.value.toUpperCase() } : selectedOrcamento ? { ...selectedOrcamento, obra_estado: e.target.value.toUpperCase() } : null)}
+                          className="text-gray-600 text-sm"
+                          maxLength={2}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Equipamento</label>
+                      <Input
+                        value={orcamentoAtual?.equipamento || ''}
+                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, equipamento: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, equipamento: e.target.value } : null)}
+                        className="text-gray-900 font-medium"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
+                      <Input
+                        value={orcamentoAtual?.tipo_obra || ''}
+                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, tipo_obra: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, tipo_obra: e.target.value } : null)}
+                        className="text-gray-900 font-medium"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Especificações Técnicas</h3>
@@ -722,8 +732,11 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Altura Inicial (m)</label>
                     <Input
                       type="number"
-                      value={editedOrcamento?.altura_inicial || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, altura_inicial: parseFloat(e.target.value) || undefined } : null)}
+                      value={orcamentoAtual?.altura_inicial || ''}
+                      onChange={(e) => {
+                        const valor = parseFloat(e.target.value) || undefined
+                        setEditedOrcamento(prev => prev ? { ...prev, altura_inicial: valor } : selectedOrcamento ? { ...selectedOrcamento, altura_inicial: valor } : null)
+                      }}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 21"
                     />
@@ -732,8 +745,11 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Altura Final (m)</label>
                     <Input
                       type="number"
-                      value={editedOrcamento?.altura_final || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, altura_final: parseFloat(e.target.value) || undefined } : null)}
+                      value={orcamentoAtual?.altura_final || ''}
+                      onChange={(e) => {
+                        const valor = parseFloat(e.target.value) || undefined
+                        setEditedOrcamento(prev => prev ? { ...prev, altura_final: valor } : selectedOrcamento ? { ...selectedOrcamento, altura_final: valor } : null)
+                      }}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 95"
                     />
@@ -742,8 +758,11 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Comprimento da Lança (m)</label>
                     <Input
                       type="number"
-                      value={editedOrcamento?.comprimento_lanca || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, comprimento_lanca: parseFloat(e.target.value) || undefined } : null)}
+                      value={orcamentoAtual?.comprimento_lanca || ''}
+                      onChange={(e) => {
+                        const valor = parseFloat(e.target.value) || undefined
+                        setEditedOrcamento(prev => prev ? { ...prev, comprimento_lanca: valor } : selectedOrcamento ? { ...selectedOrcamento, comprimento_lanca: valor } : null)
+                      }}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 30"
                     />
@@ -752,8 +771,11 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Carga Máxima (kg)</label>
                     <Input
                       type="number"
-                      value={editedOrcamento?.carga_maxima || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, carga_maxima: parseFloat(e.target.value) || undefined } : null)}
+                      value={orcamentoAtual?.carga_maxima || ''}
+                      onChange={(e) => {
+                        const valor = parseFloat(e.target.value) || undefined
+                        setEditedOrcamento(prev => prev ? { ...prev, carga_maxima: valor } : selectedOrcamento ? { ...selectedOrcamento, carga_maxima: valor } : null)
+                      }}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 2000"
                     />
@@ -762,8 +784,11 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Carga na Ponta (kg)</label>
                     <Input
                       type="number"
-                      value={editedOrcamento?.carga_ponta || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, carga_ponta: parseFloat(e.target.value) || undefined } : null)}
+                      value={orcamentoAtual?.carga_ponta || ''}
+                      onChange={(e) => {
+                        const valor = parseFloat(e.target.value) || undefined
+                        setEditedOrcamento(prev => prev ? { ...prev, carga_ponta: valor } : selectedOrcamento ? { ...selectedOrcamento, carga_ponta: valor } : null)
+                      }}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 1300"
                     />
@@ -771,8 +796,8 @@ export default function OrcamentosPage() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">Potência Elétrica</label>
                     <Input
-                      value={editedOrcamento?.potencia_eletrica || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, potencia_eletrica: e.target.value } : null)}
+                      value={orcamentoAtual?.potencia_eletrica || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, potencia_eletrica: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, potencia_eletrica: e.target.value } : null)}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 42 KVA"
                     />
@@ -780,8 +805,8 @@ export default function OrcamentosPage() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">Energia Necessária</label>
                     <Input
-                      value={editedOrcamento?.energia_necessaria || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, energia_necessaria: e.target.value } : null)}
+                      value={orcamentoAtual?.energia_necessaria || ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, energia_necessaria: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, energia_necessaria: e.target.value } : null)}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 380V"
                     />
@@ -796,16 +821,17 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Locação da Grua (R$)</label>
                     <Input
                       type="text"
-                      value={editedOrcamento?.valor_locacao_mensal 
-                        ? formatCurrency(editedOrcamento.valor_locacao_mensal)
+                      value={orcamentoAtual?.valor_locacao_mensal 
+                        ? formatCurrency(orcamentoAtual.valor_locacao_mensal)
                         : ''}
                       onChange={(e) => {
                         const formatted = formatCurrency(e.target.value)
                         const valor = parseCurrency(formatted)
                         setEditedOrcamento(prev => {
-                          if (!prev) return null
-                          const total = valor + (prev.valor_operador || 0) + (prev.valor_sinaleiro || 0) + (prev.valor_manutencao || 0)
-                          return { ...prev, valor_locacao_mensal: valor, total_mensal: total }
+                          const base = prev || selectedOrcamento
+                          if (!base) return null
+                          const total = valor + (base.valor_operador || 0) + (base.valor_sinaleiro || 0) + (base.valor_manutencao || 0)
+                          return { ...base, valor_locacao_mensal: valor, total_mensal: total }
                         })
                       }}
                       className="text-gray-900 font-semibold"
@@ -816,16 +842,17 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Operador (R$)</label>
                     <Input
                       type="text"
-                      value={editedOrcamento?.valor_operador 
-                        ? formatCurrency(editedOrcamento.valor_operador)
+                      value={orcamentoAtual?.valor_operador 
+                        ? formatCurrency(orcamentoAtual.valor_operador)
                         : ''}
                       onChange={(e) => {
                         const formatted = formatCurrency(e.target.value)
                         const valor = parseCurrency(formatted)
                         setEditedOrcamento(prev => {
-                          if (!prev) return null
-                          const total = (prev.valor_locacao_mensal || 0) + valor + (prev.valor_sinaleiro || 0) + (prev.valor_manutencao || 0)
-                          return { ...prev, valor_operador: valor, total_mensal: total }
+                          const base = prev || selectedOrcamento
+                          if (!base) return null
+                          const total = (base.valor_locacao_mensal || 0) + valor + (base.valor_sinaleiro || 0) + (base.valor_manutencao || 0)
+                          return { ...base, valor_operador: valor, total_mensal: total }
                         })
                       }}
                       className="text-gray-900 font-semibold"
@@ -836,16 +863,17 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Sinaleiro (R$)</label>
                     <Input
                       type="text"
-                      value={editedOrcamento?.valor_sinaleiro 
-                        ? formatCurrency(editedOrcamento.valor_sinaleiro)
+                      value={orcamentoAtual?.valor_sinaleiro 
+                        ? formatCurrency(orcamentoAtual.valor_sinaleiro)
                         : ''}
                       onChange={(e) => {
                         const formatted = formatCurrency(e.target.value)
                         const valor = parseCurrency(formatted)
                         setEditedOrcamento(prev => {
-                          if (!prev) return null
-                          const total = (prev.valor_locacao_mensal || 0) + (prev.valor_operador || 0) + valor + (prev.valor_manutencao || 0)
-                          return { ...prev, valor_sinaleiro: valor, total_mensal: total }
+                          const base = prev || selectedOrcamento
+                          if (!base) return null
+                          const total = (base.valor_locacao_mensal || 0) + (base.valor_operador || 0) + valor + (base.valor_manutencao || 0)
+                          return { ...base, valor_sinaleiro: valor, total_mensal: total }
                         })
                       }}
                       className="text-gray-900 font-semibold"
@@ -856,16 +884,17 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Manutenção Preventiva (R$)</label>
                     <Input
                       type="text"
-                      value={editedOrcamento?.valor_manutencao 
-                        ? formatCurrency(editedOrcamento.valor_manutencao)
+                      value={orcamentoAtual?.valor_manutencao 
+                        ? formatCurrency(orcamentoAtual.valor_manutencao)
                         : ''}
                       onChange={(e) => {
                         const formatted = formatCurrency(e.target.value)
                         const valor = parseCurrency(formatted)
                         setEditedOrcamento(prev => {
-                          if (!prev) return null
-                          const total = (prev.valor_locacao_mensal || 0) + (prev.valor_operador || 0) + (prev.valor_sinaleiro || 0) + valor
-                          return { ...prev, valor_manutencao: valor, total_mensal: total }
+                          const base = prev || selectedOrcamento
+                          if (!base) return null
+                          const total = (base.valor_locacao_mensal || 0) + (base.valor_operador || 0) + (base.valor_sinaleiro || 0) + valor
+                          return { ...base, valor_manutencao: valor, total_mensal: total }
                         })
                       }}
                       className="text-gray-900 font-semibold"
@@ -876,7 +905,7 @@ export default function OrcamentosPage() {
                     <label className="text-base font-bold text-gray-900">Total Mensal</label>
                     <Input
                       readOnly
-                      value={formatCurrencyDisplay(editedOrcamento?.total_mensal || 0)}
+                      value={formatCurrencyDisplay(orcamentoAtual?.total_mensal || 0)}
                       className="bg-blue-50 border-blue-200 text-blue-700 text-lg font-bold cursor-default"
                     />
                   </div>
@@ -890,8 +919,11 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Prazo de Locação (meses)</label>
                     <Input
                       type="number"
-                      value={editedOrcamento?.prazo_locacao_meses || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, prazo_locacao_meses: parseInt(e.target.value) || 0 } : null)}
+                      value={orcamentoAtual?.prazo_locacao_meses || ''}
+                      onChange={(e) => {
+                        const valor = parseInt(e.target.value) || 0
+                        setEditedOrcamento(prev => prev ? { ...prev, prazo_locacao_meses: valor } : selectedOrcamento ? { ...selectedOrcamento, prazo_locacao_meses: valor } : null)
+                      }}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 13"
                     />
@@ -900,8 +932,8 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Data de Início Estimada</label>
                     <Input
                       type="date"
-                      value={editedOrcamento?.data_inicio_estimada ? editedOrcamento.data_inicio_estimada.split('T')[0] : ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, data_inicio_estimada: e.target.value } : null)}
+                      value={orcamentoAtual?.data_inicio_estimada ? orcamentoAtual.data_inicio_estimada.split('T')[0] : ''}
+                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, data_inicio_estimada: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, data_inicio_estimada: e.target.value } : null)}
                       className="text-gray-900 font-medium"
                     />
                   </div>
@@ -909,8 +941,11 @@ export default function OrcamentosPage() {
                     <label className="text-sm font-medium text-gray-700">Tolerância (± dias)</label>
                     <Input
                       type="number"
-                      value={editedOrcamento?.tolerancia_dias || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, tolerancia_dias: parseInt(e.target.value) || undefined } : null)}
+                      value={orcamentoAtual?.tolerancia_dias || ''}
+                      onChange={(e) => {
+                        const valor = parseInt(e.target.value) || undefined
+                        setEditedOrcamento(prev => prev ? { ...prev, tolerancia_dias: valor } : selectedOrcamento ? { ...selectedOrcamento, tolerancia_dias: valor } : null)
+                      }}
                       className="text-gray-900 font-medium"
                       placeholder="Ex: 15"
                     />
@@ -923,8 +958,8 @@ export default function OrcamentosPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">Descrição</label>
                   <Textarea
-                    value={editedOrcamento?.escopo_incluso || ''}
-                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, escopo_incluso: e.target.value } : null)}
+                    value={orcamentoAtual?.escopo_incluso || ''}
+                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, escopo_incluso: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, escopo_incluso: e.target.value } : null)}
                     className="bg-blue-50 border-blue-200 text-gray-700 min-h-[100px] resize-none"
                     rows={4}
                     placeholder="Descreva o escopo básico incluso no orçamento..."
@@ -937,8 +972,8 @@ export default function OrcamentosPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">Descrição</label>
                   <Textarea
-                    value={editedOrcamento?.responsabilidades_cliente || ''}
-                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, responsabilidades_cliente: e.target.value } : null)}
+                    value={orcamentoAtual?.responsabilidades_cliente || ''}
+                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, responsabilidades_cliente: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, responsabilidades_cliente: e.target.value } : null)}
                     className="bg-amber-50 border-amber-200 text-gray-700 min-h-[100px] resize-none"
                     rows={4}
                     placeholder="Descreva as responsabilidades do cliente..."
@@ -951,8 +986,8 @@ export default function OrcamentosPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">Descrição</label>
                   <Textarea
-                    value={editedOrcamento?.condicoes_comerciais || ''}
-                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, condicoes_comerciais: e.target.value } : null)}
+                    value={orcamentoAtual?.condicoes_comerciais || ''}
+                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, condicoes_comerciais: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, condicoes_comerciais: e.target.value } : null)}
                     className="bg-green-50 border-green-200 text-gray-700 min-h-[100px] resize-none"
                     rows={4}
                     placeholder="Descreva as condições comerciais..."
@@ -964,17 +999,17 @@ export default function OrcamentosPage() {
                 <div className="flex gap-2">
                   <Button 
                     variant="outline"
-                    onClick={() => editedOrcamento && handleExportPDF(editedOrcamento)}
+                    onClick={() => orcamentoAtual && handleExportPDF(orcamentoAtual)}
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Exportar PDF
                   </Button>
-                  {editedOrcamento && editedOrcamento.status === 'aprovado' && (
+                  {orcamentoAtual && orcamentoAtual.status === 'aprovado' && (
                     <Button 
                       variant="outline"
                       onClick={() => {
                         handleCancelEdit()
-                        handleCreateObra(editedOrcamento)
+                        handleCreateObra(orcamentoAtual)
                       }}
                     >
                       <Building2 className="w-4 h-4 mr-2" />
@@ -1001,7 +1036,8 @@ export default function OrcamentosPage() {
             </CardContent>
           </Card>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

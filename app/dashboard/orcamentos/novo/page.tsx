@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -87,7 +87,11 @@ const CATALOGO_COMPLEMENTOS = [
 
 export default function NovoOrcamentoPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
+  const orcamentoId = searchParams.get('id')
+  const [isLoadingOrcamento, setIsLoadingOrcamento] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
   
   const [formData, setFormData] = useState({
     // Identificação básica
@@ -209,6 +213,208 @@ export default function NovoOrcamentoPage() {
     return custosMensais.reduce((sum, cm) => sum + (cm.valor_mensal || 0), 0)
   }
 
+  // Carregar dados do orçamento quando houver ID na query
+  useEffect(() => {
+    if (orcamentoId) {
+      loadOrcamentoForEdit(orcamentoId)
+    }
+  }, [orcamentoId])
+
+  const loadOrcamentoForEdit = async (id: string) => {
+    setIsLoadingOrcamento(true)
+    try {
+      // TODO: Integrar com API real
+      // Por enquanto, usando dados mock baseados na estrutura da lista
+      const mockOrcamentos = [
+        {
+          id: '1',
+          numero: 'ORC-2025-001',
+          cliente_id: 1,
+          cliente_nome: 'Construtora ABC',
+          obra_nome: 'Residencial Jardim das Flores',
+          obra_endereco: 'Rua das Flores, 123',
+          obra_cidade: 'São Paulo',
+          obra_estado: 'SP',
+          tipo_obra: 'Residencial',
+          equipamento: 'Grua Torre / XCMG QTZ40B',
+          altura_inicial: 21,
+          altura_final: 95,
+          comprimento_lanca: 30,
+          carga_maxima: 2000,
+          carga_ponta: 1300,
+          potencia_eletrica: '42 KVA',
+          energia_necessaria: '380V',
+          valor_locacao_mensal: 31600,
+          valor_operador: 10200,
+          valor_sinaleiro: 10200,
+          valor_manutencao: 3750,
+          total_mensal: 55750,
+          prazo_locacao_meses: 13,
+          data_inicio_estimada: '2025-02-01',
+          tolerancia_dias: 15,
+          escopo_incluso: '',
+          responsabilidades_cliente: '',
+          condicoes_comerciais: '',
+          observacoes: ''
+        },
+        {
+          id: '2',
+          numero: 'ORC-2025-002',
+          cliente_id: 2,
+          cliente_nome: 'Empresa XYZ',
+          obra_nome: 'Shopping Center Norte',
+          obra_endereco: 'Av. Principal, 456',
+          obra_cidade: 'São Paulo',
+          obra_estado: 'SP',
+          tipo_obra: 'Comercial',
+          equipamento: 'Grua Torre / Potain MDT 178',
+          altura_inicial: 25,
+          altura_final: 120,
+          comprimento_lanca: 35,
+          carga_maxima: 2500,
+          carga_ponta: 1500,
+          potencia_eletrica: '50 KVA',
+          energia_necessaria: '380V',
+          valor_locacao_mensal: 38000,
+          valor_operador: 10200,
+          valor_sinaleiro: 10200,
+          valor_manutencao: 4500,
+          total_mensal: 62900,
+          prazo_locacao_meses: 18,
+          data_inicio_estimada: '2025-03-01',
+          tolerancia_dias: 15,
+          escopo_incluso: '',
+          responsabilidades_cliente: '',
+          condicoes_comerciais: '',
+          observacoes: ''
+        },
+        {
+          id: '3',
+          numero: 'ORC-2025-003',
+          cliente_id: 3,
+          cliente_nome: 'Construtora DEF',
+          obra_nome: 'Condomínio Vista Mar',
+          obra_endereco: 'Rua do Mar, 789',
+          obra_cidade: 'Rio de Janeiro',
+          obra_estado: 'RJ',
+          tipo_obra: 'Residencial',
+          equipamento: 'Grua Torre / Liebherr 132 EC-H',
+          altura_inicial: 20,
+          altura_final: 80,
+          comprimento_lanca: 28,
+          carga_maxima: 1800,
+          carga_ponta: 1100,
+          potencia_eletrica: '38 KVA',
+          energia_necessaria: '380V',
+          valor_locacao_mensal: 29000,
+          valor_operador: 10200,
+          valor_sinaleiro: 10200,
+          valor_manutencao: 3500,
+          total_mensal: 52900,
+          prazo_locacao_meses: 10,
+          data_inicio_estimada: '2025-02-15',
+          tolerancia_dias: 15,
+          escopo_incluso: '',
+          responsabilidades_cliente: '',
+          condicoes_comerciais: '',
+          observacoes: ''
+        }
+      ]
+
+      const orcamento = mockOrcamentos.find(o => o.id === id)
+      
+      if (orcamento) {
+        setIsEditMode(true)
+        
+        // Preencher formData
+        setFormData({
+          cliente_id: orcamento.cliente_id?.toString() || '',
+          cliente_nome: orcamento.cliente_nome || '',
+          obra_nome: orcamento.obra_nome || '',
+          obra_endereco: orcamento.obra_endereco || '',
+          obra_cidade: orcamento.obra_cidade || '',
+          obra_estado: orcamento.obra_estado || '',
+          tipo_obra: orcamento.tipo_obra || '',
+          equipamento: orcamento.equipamento || '',
+          altura_inicial: orcamento.altura_inicial?.toString() || '',
+          altura_final: orcamento.altura_final?.toString() || '',
+          comprimento_lanca: orcamento.comprimento_lanca?.toString() || '',
+          carga_maxima: orcamento.carga_maxima?.toString() || '',
+          carga_ponta: orcamento.carga_ponta?.toString() || '',
+          potencia_eletrica: orcamento.potencia_eletrica || '',
+          energia_necessaria: orcamento.energia_necessaria || '',
+          valor_locacao_mensal: orcamento.valor_locacao_mensal?.toString() || '',
+          valor_operador: orcamento.valor_operador?.toString() || '',
+          valor_sinaleiro: orcamento.valor_sinaleiro?.toString() || '',
+          valor_manutencao: orcamento.valor_manutencao?.toString() || '',
+          prazo_locacao_meses: orcamento.prazo_locacao_meses?.toString() || '',
+          data_inicio_estimada: orcamento.data_inicio_estimada || '',
+          tolerancia_dias: orcamento.tolerancia_dias?.toString() || '15',
+          escopo_incluso: orcamento.escopo_incluso || '',
+          responsabilidades_cliente: orcamento.responsabilidades_cliente || '',
+          condicoes_comerciais: orcamento.condicoes_comerciais || '',
+          observacoes: orcamento.observacoes || ''
+        })
+
+        // Preencher cliente selecionado
+        if (orcamento.cliente_id) {
+          setClienteSelecionado({
+            id: orcamento.cliente_id,
+            nome: orcamento.cliente_nome
+          })
+        }
+
+        // Preencher custos mensais
+        setCustosMensais([
+          {
+            id: 'cm_1',
+            tipo: 'Locação',
+            descricao: 'Locação da grua',
+            valor_mensal: orcamento.valor_locacao_mensal || 0,
+            obrigatorio: true
+          },
+          {
+            id: 'cm_2',
+            tipo: 'Operador',
+            descricao: 'Operador',
+            valor_mensal: orcamento.valor_operador || 0,
+            obrigatorio: true
+          },
+          {
+            id: 'cm_3',
+            tipo: 'Sinaleiro',
+            descricao: 'Sinaleiro',
+            valor_mensal: orcamento.valor_sinaleiro || 0,
+            obrigatorio: true
+          },
+          {
+            id: 'cm_4',
+            tipo: 'Manutenção',
+            descricao: 'Manutenção preventiva',
+            valor_mensal: orcamento.valor_manutencao || 0,
+            obrigatorio: true
+          }
+        ])
+      } else {
+        toast({
+          title: "Erro",
+          description: "Orçamento não encontrado",
+          variant: "destructive"
+        })
+        router.push('/dashboard/orcamentos')
+      }
+    } catch (error) {
+      console.error('Erro ao carregar orçamento:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar dados do orçamento",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoadingOrcamento(false)
+    }
+  }
+
   // Informações da empresa do hook (não precisa mais definir aqui)
 
   const handleSave = async (isDraft: boolean = false) => {
@@ -242,9 +448,12 @@ export default function NovoOrcamentoPage() {
       // Calcular total mensal dos custos mensais
       const totalMensal = calcularTotalMensal()
 
-      // Gerar número do orçamento (formato: ORC-YYYYMMDD-XXX)
-      const hoje = new Date()
-      const numero = `ORC-${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, '0')}${String(hoje.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`
+      // Gerar número do orçamento apenas se for criação (não edição)
+      let numero = ''
+      if (!isEditMode) {
+        const hoje = new Date()
+        numero = `ORC-${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, '0')}${String(hoje.getDate()).padStart(2, '0')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`
+      }
 
       // Preparar dados para a API
       const clienteId = clienteSelecionado?.id || formData.cliente_id
@@ -295,6 +504,7 @@ export default function NovoOrcamentoPage() {
       
       const valorTotalOrcamento = (totalMensal * prazoMeses) + valorTotalComplementos + valorTotalValoresFixos
       
+      const hoje = new Date()
       const orcamentoData = {
         numero,
         cliente_id: parseInt(clienteId.toString()),
@@ -340,14 +550,25 @@ export default function NovoOrcamentoPage() {
         ]
       }
 
-      const response = await orcamentosLocacaoApi.create(orcamentoData)
+      let response
+      if (isEditMode && orcamentoId) {
+        // Atualizar orçamento existente
+        response = await orcamentosLocacaoApi.update(parseInt(orcamentoId), orcamentoData)
+      } else {
+        // Criar novo orçamento
+        response = await orcamentosLocacaoApi.create(orcamentoData)
+      }
 
       if (response.success) {
         toast({
           title: "Sucesso",
-          description: isDraft 
-            ? "Orçamento salvo como rascunho com sucesso!" 
-            : "Orçamento salvo e enviado com sucesso!",
+          description: isEditMode
+            ? (isDraft 
+                ? "Orçamento atualizado como rascunho com sucesso!" 
+                : "Orçamento atualizado e enviado com sucesso!")
+            : (isDraft 
+                ? "Orçamento salvo como rascunho com sucesso!" 
+                : "Orçamento salvo e enviado com sucesso!"),
         })
         
         // Redirecionar para a lista de orçamentos
@@ -442,6 +663,17 @@ export default function NovoOrcamentoPage() {
     }
   }
 
+  if (isLoadingOrcamento) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <p className="text-gray-600">Carregando orçamento...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 w-full">
       <div className="flex items-center justify-between">
@@ -451,9 +683,13 @@ export default function NovoOrcamentoPage() {
             Voltar
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Novo Orçamento de Obra</h1>
+            <h1 className="text-3xl font-bold">
+              {isEditMode ? 'Editar Orçamento de Obra' : 'Novo Orçamento de Obra'}
+            </h1>
             <p className="text-gray-600 mt-1">
-              Preencha os dados essenciais do orçamento de locação
+              {isEditMode 
+                ? 'Edite os dados do orçamento de locação'
+                : 'Preencha os dados essenciais do orçamento de locação'}
             </p>
           </div>
         </div>

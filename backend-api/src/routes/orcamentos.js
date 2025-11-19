@@ -347,7 +347,7 @@ const itemOrcamentoSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, cliente_id, data_inicio, data_fim } = req.query;
+    const { page = 1, limit = 10, status, cliente_id, obra_id, data_inicio, data_fim } = req.query;
     const offset = (page - 1) * limit;
 
     let query = supabase
@@ -392,6 +392,9 @@ router.get('/', async (req, res) => {
     }
     if (cliente_id) {
       query = query.eq('cliente_id', cliente_id);
+    }
+    if (obra_id) {
+      query = query.eq('obra_id', obra_id);
     }
     if (data_inicio) {
       query = query.gte('data_orcamento', data_inicio);
