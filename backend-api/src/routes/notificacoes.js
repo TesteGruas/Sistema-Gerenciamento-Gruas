@@ -2,6 +2,7 @@ import express from 'express'
 import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } from '../services/whatsapp-service.js'
 
 const router = express.Router()
 
@@ -428,10 +429,74 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
       })
     }
 
+    // Enviar notificações via WhatsApp
+    let whatsappEnviados = 0
+    let whatsappErros = 0
+    
+    if (data && data.length > 0) {
+      // Formatar mensagem para WhatsApp
+      const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000'
+      const linkNotificacao = value.link 
+        ? (value.link.startsWith('http') ? value.link : `${FRONTEND_URL}${value.link}`)
+        : null
+      
+      const mensagemWhatsApp = `🔔 *${value.titulo}*
+
+${value.mensagem}
+
+${linkNotificacao ? `\n🔗 Acesse: ${linkNotificacao}` : ''}
+
+---
+_Enviado por: ${value.remetente || 'Sistema'}_`
+
+      // Enviar WhatsApp para cada destinatário único
+      for (const usuarioId of usuariosUnicos) {
+        try {
+          const telefone = await buscarTelefoneWhatsAppUsuario(usuarioId)
+          
+          if (telefone) {
+            const resultado = await enviarMensagemWebhook(
+              telefone,
+              mensagemWhatsApp,
+              linkNotificacao,
+              {
+                tipo: 'notificacao',
+                destinatario_nome: `Usuário ${usuarioId}`
+              }
+            )
+            
+            if (resultado.sucesso) {
+              whatsappEnviados++
+            } else {
+              whatsappErros++
+              console.warn(`[notificacoes] Erro ao enviar WhatsApp para usuário ${usuarioId}:`, resultado.erro)
+            }
+          } else {
+            console.warn(`[notificacoes] Telefone WhatsApp não encontrado para usuário ${usuarioId}`)
+          }
+        } catch (error) {
+          whatsappErros++
+          console.error(`[notificacoes] Erro ao processar WhatsApp para usuário ${usuarioId}:`, error)
+        }
+      }
+    }
+
+    const mensagemResposta = `Notificação criada com sucesso para ${usuariosUnicos.length} usuário(s)`
+    const mensagemWhatsAppInfo = whatsappEnviados > 0 
+      ? ` ${whatsappEnviados} mensagem(ns) enviada(s) via WhatsApp${whatsappErros > 0 ? `, ${whatsappErros} erro(s)` : ''}`
+      : whatsappErros > 0 
+        ? ` (${whatsappErros} erro(s) ao enviar WhatsApp)`
+        : ''
+
     res.status(201).json({
       success: true,
       data: data,
-      message: `Notificação criada com sucesso para ${usuariosUnicos.length} usuário(s)`
+      message: mensagemResposta + mensagemWhatsAppInfo,
+      whatsapp: {
+        enviados: whatsappEnviados,
+        erros: whatsappErros,
+        total: usuariosUnicos.length
+      }
     })
   } catch (error) {
     console.error('Erro ao criar notificação:', error)

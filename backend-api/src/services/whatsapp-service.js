@@ -79,6 +79,46 @@ async function buscarConfiguracaoEvolutionAPI() {
 }
 
 /**
+ * Busca telefone WhatsApp de um usuário
+ * @param {number} usuario_id - ID do usuário
+ * @returns {Promise<string|null>} - Telefone WhatsApp ou null
+ */
+async function buscarTelefoneWhatsAppUsuario(usuario_id) {
+  try {
+    // Primeiro, tentar buscar em funcionarios (se o usuário for um funcionário)
+    const { data: funcionario, error: funcError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('telefone_whatsapp, telefone')
+      .eq('user_id', usuario_id)
+      .single();
+    
+    if (!funcError && funcionario) {
+      // Priorizar telefone_whatsapp, senão usar telefone comum
+      const telefone = funcionario.telefone_whatsapp || funcionario.telefone;
+      if (telefone) {
+        return formatarTelefone(telefone);
+      }
+    }
+    
+    // Se não encontrou em funcionarios, buscar em usuarios (pode ter telefone direto)
+    const { data: usuario, error: userError } = await supabaseAdmin
+      .from('usuarios')
+      .select('telefone')
+      .eq('id', usuario_id)
+      .single();
+    
+    if (!userError && usuario && usuario.telefone) {
+      return formatarTelefone(usuario.telefone);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('[whatsapp-service] Erro ao buscar telefone WhatsApp do usuário:', error);
+    return null;
+  }
+}
+
+/**
  * Busca telefone WhatsApp do supervisor
  * @param {number} supervisor_id - ID do supervisor (usuário)
  * @returns {Promise<string|null>} - Telefone WhatsApp ou null
@@ -442,6 +482,9 @@ export async function registrarLogWhatsApp(dadosLog) {
  * @param {Object} opcoesLog - Opções para registro de log { tipo, aprovacao_id, destinatario_nome }
  * @returns {Promise<Object>} - { sucesso: boolean, erro: string|null, log_id: number|null }
  */
+// Exportar função para buscar telefone de usuário
+export { buscarTelefoneWhatsAppUsuario }
+
 export async function enviarMensagemWebhook(telefone, mensagem, link = null, opcoesLog = {}) {
   if (!telefone) {
     console.warn(`[whatsapp-service] ⚠️ Telefone não fornecido para envio de webhook`);

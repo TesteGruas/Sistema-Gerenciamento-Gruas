@@ -20,8 +20,13 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts"
+import { obrasApi } from "@/lib/api-obras"
+import { clientesApi } from "@/lib/api-clientes"
+import { gruasApi } from "@/lib/api-gruas"
+import { funcionariosApi } from "@/lib/api-funcionarios"
 
-const COLORS = [ '#ef4444', '#8b5cf6', '#ec4899']
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 export default function Dashboard() {
   // Todos os hooks devem ser chamados no topo
@@ -58,16 +63,68 @@ export default function Dashboard() {
     const loadDashboardData = async () => {
       try {
         setLoading(true)
-        // Simular carregamento de dados
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Buscar dados reais das APIs
+        const [obrasResponse, clientesResponse, gruasResponse, funcionariosResponse] = await Promise.all([
+          obrasApi.listarObras({ limit: 1000 }).catch(() => ({ success: false, data: [] })),
+          clientesApi.listarClientes({ limit: 1000 }).catch(() => ({ success: false, data: [] })),
+          gruasApi.listarGruas({ limit: 1000 }).catch(() => ({ success: false, data: [] })),
+          funcionariosApi.listarFuncionarios({ limit: 1000 }).catch(() => ({ success: false, data: [] }))
+        ])
+
+        const obras = obrasResponse?.success && obrasResponse?.data ? (Array.isArray(obrasResponse.data) ? obrasResponse.data : []) : []
+        const clientes = clientesResponse?.success && clientesResponse?.data ? (Array.isArray(clientesResponse.data) ? clientesResponse.data : []) : []
+        const gruas = gruasResponse?.success && gruasResponse?.data ? (Array.isArray(gruasResponse.data) ? gruasResponse.data : []) : []
+        const funcionarios = funcionariosResponse?.success && funcionariosResponse?.data ? (Array.isArray(funcionariosResponse.data) ? funcionariosResponse.data : []) : []
+
+        // Processar dados para gráficos
+        const obrasPorStatus = obras.reduce((acc: any, obra: any) => {
+          const status = obra.status || 'Sem Status'
+          acc[status] = (acc[status] || 0) + 1
+          return acc
+        }, {})
+
+        const gruasPorTipo = gruas.reduce((acc: any, grua: any) => {
+          const tipo = grua.tipo || 'Sem Tipo'
+          acc[tipo] = (acc[tipo] || 0) + 1
+          return acc
+        }, {})
+
+        // Gerar dados para gráfico de evolução (últimos 6 meses)
+        const meses = []
+        const hoje = new Date()
+        for (let i = 5; i >= 0; i--) {
+          const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+          const mesAno = data.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+          meses.push({
+            mes: mesAno,
+            obras: Math.floor(Math.random() * 5) + 8, // Simulado por enquanto
+            clientes: Math.floor(Math.random() * 10) + 40,
+            gruas: Math.floor(Math.random() * 3) + 6
+          })
+        }
+
         setDashboardData({
-          totalObras: 12,
-          totalClientes: 45,
-          totalGruas: 8,
-          totalFuncionarios: 156
+          totalObras: obras.length,
+          totalClientes: clientes.length,
+          totalGruas: gruas.length,
+          totalFuncionarios: funcionarios.length,
+          obrasPorStatus,
+          gruasPorTipo,
+          evolucaoMensal: meses
         })
       } catch (error) {
         console.error('Erro ao carregar dados do dashboard:', error)
+        // Dados de fallback
+        setDashboardData({
+          totalObras: 0,
+          totalClientes: 0,
+          totalGruas: 0,
+          totalFuncionarios: 0,
+          obrasPorStatus: {},
+          gruasPorTipo: {},
+          evolucaoMensal: []
+        })
       } finally {
         setLoading(false)
       }
@@ -147,51 +204,133 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Quick Actions */}
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              Ações Rápidas
-            </CardTitle>
-            <CardDescription>Acesso rápido às principais funcionalidades</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {canAccessObras() && (
-                <Link href="/dashboard/obras" className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left transition-colors block">
-                  <Building2 className="w-6 h-6 text-blue-600 mb-2" />
-                  <p className="font-medium text-gray-900">Obras</p>
-                  <p className="text-xs text-gray-600">Gerenciar projetos</p>
-                </Link>
-              )}
+        {/* Gráficos */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Gráfico de Evolução Mensal */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Evolução dos Últimos 6 Meses
+              </CardTitle>
+              <CardDescription>Crescimento de obras, clientes e gruas</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={dashboardData?.evolucaoMensal || []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="obras" stroke="#3b82f6" strokeWidth={2} name="Obras" />
+                  <Line type="monotone" dataKey="clientes" stroke="#10b981" strokeWidth={2} name="Clientes" />
+                  <Line type="monotone" dataKey="gruas" stroke="#f59e0b" strokeWidth={2} name="Gruas" />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-              {canAccessObras() && (
-                <Link href="/dashboard/gruas" className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-left transition-colors block">
-                  <TrendingUp className="w-6 h-6 text-green-600 mb-2" />
-                  <p className="font-medium text-gray-900">Gruas</p>
-                  <p className="text-xs text-gray-600">Gerenciar equipamentos</p>
-                </Link>
+          {/* Gráfico de Obras por Status */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="w-5 h-5" />
+                Distribuição de Obras por Status
+              </CardTitle>
+              <CardDescription>Status atual das obras no sistema</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {Object.keys(dashboardData?.obrasPorStatus || {}).length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={Object.entries(dashboardData?.obrasPorStatus || {}).map(([name, value]) => ({ name, value: value as number }))}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {Object.entries(dashboardData?.obrasPorStatus || {}).map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  <p>Nenhum dado disponível</p>
+                </div>
               )}
+            </CardContent>
+          </Card>
 
-              {canAccessClientes() && (
-                <Link href="/dashboard/clientes" className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-left transition-colors block">
-                  <Users className="w-6 h-6 text-purple-600 mb-2" />
-                  <p className="font-medium text-gray-900">Clientes</p>
-                  <p className="text-xs text-gray-600">Gerenciar clientes</p>
-                </Link>
+          {/* Gráfico de Gruas por Tipo */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
+                Distribuição de Gruas por Tipo
+              </CardTitle>
+              <CardDescription>Quantidade de gruas por tipo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {Object.keys(dashboardData?.gruasPorTipo || {}).length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={Object.entries(dashboardData?.gruasPorTipo || {}).map(([name, value]) => ({ name, quantidade: value as number }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="quantidade" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  <p>Nenhum dado disponível</p>
+                </div>
               )}
+            </CardContent>
+          </Card>
 
-              {canAccessFinanceiro() && (
-                <Link href="/dashboard/financeiro" className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-left transition-colors block">
-                  <DollarSign className="w-6 h-6 text-yellow-600 mb-2" />
-                  <p className="font-medium text-gray-900">Financeiro</p>
-                  <p className="text-xs text-gray-600">Ver relatórios</p>
-                </Link>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+          {/* Gráfico de Área - Atividade Mensal */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5" />
+                Atividade Mensal
+              </CardTitle>
+              <CardDescription>Evolução da atividade ao longo dos meses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={dashboardData?.evolucaoMensal || []}>
+                  <defs>
+                    <linearGradient id="colorObras" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorClientes" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Area type="monotone" dataKey="obras" stroke="#3b82f6" fillOpacity={1} fill="url(#colorObras)" name="Obras" />
+                  <Area type="monotone" dataKey="clientes" stroke="#10b981" fillOpacity={1} fill="url(#colorClientes)" name="Clientes" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Módulos do Sistema */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

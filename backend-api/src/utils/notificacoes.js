@@ -1,20 +1,67 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } from '../services/whatsapp-service.js';
 
 /**
  * Cria uma notificação de aprovação de horas extras para o gestor
  * @param {Object} registro - Dados do registro de ponto
  * @param {Object} gestor - Dados do gestor
  */
+/**
+ * Função auxiliar para enviar notificação via WhatsApp
+ * @param {number} usuario_id - ID do usuário destinatário
+ * @param {string} titulo - Título da notificação
+ * @param {string} mensagem - Mensagem da notificação
+ * @param {string} link - Link opcional
+ */
+async function enviarNotificacaoWhatsApp(usuario_id, titulo, mensagem, link = null) {
+  try {
+    const telefone = await buscarTelefoneWhatsAppUsuario(usuario_id);
+    
+    if (telefone) {
+      const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+      const linkCompleto = link 
+        ? (link.startsWith('http') ? link : `${FRONTEND_URL}${link}`)
+        : null;
+      
+      const mensagemWhatsApp = `🔔 *${titulo}*
+
+${mensagem}
+
+${linkCompleto ? `\n🔗 Acesse: ${linkCompleto}` : ''}
+
+---
+_Sistema de Gestão de Gruas_`;
+
+      await enviarMensagemWebhook(
+        telefone,
+        mensagemWhatsApp,
+        linkCompleto,
+        {
+          tipo: 'notificacao',
+          destinatario_nome: `Usuário ${usuario_id}`
+        }
+      );
+    }
+  } catch (error) {
+    // Não falhar a criação da notificação se WhatsApp falhar
+    console.warn(`[notificacoes] Erro ao enviar WhatsApp para usuário ${usuario_id}:`, error.message);
+  }
+}
+
 export async function criarNotificacaoAprovacao(registro, gestor) {
   try {
+    const titulo = 'Aprovação de Horas Extras';
+    const mensagem = `${registro.funcionario.nome} tem ${registro.horas_extras}h extras para aprovar`;
+    const link = `/pwa/aprovacoes/${registro.id}`;
+
     const { error } = await supabaseAdmin
       .from('notificacoes')
       .insert({
         usuario_id: gestor.id,
         tipo: 'warning',
-        titulo: 'Aprovação de Horas Extras',
-        mensagem: `${registro.funcionario.nome} tem ${registro.horas_extras}h extras para aprovar`,
-        link: `/pwa/aprovacoes/${registro.id}`,
+        titulo,
+        mensagem,
+        link,
         lida: false,
         created_at: new Date().toISOString()
       });
@@ -25,6 +72,9 @@ export async function criarNotificacaoAprovacao(registro, gestor) {
     }
 
     console.log(`Notificação de aprovação criada para gestor ${gestor.nome}`);
+    
+    // Enviar via WhatsApp
+    await enviarNotificacaoWhatsApp(gestor.id, titulo, mensagem, link);
   } catch (error) {
     console.error('Erro na função criarNotificacaoAprovacao:', error);
     throw error;
@@ -44,6 +94,7 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
     const mensagem = resultado === 'aprovado' 
       ? `Suas horas extras de ${registro.data} foram aprovadas por ${gestor.nome}`
       : `Suas horas extras de ${registro.data} foram rejeitadas por ${gestor.nome}`;
+    const link = `/dashboard/ponto`;
 
     const { error } = await supabaseAdmin
       .from('notificacoes')
@@ -52,7 +103,7 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
         tipo,
         titulo,
         mensagem,
-        link: `/dashboard/ponto`,
+        link,
         lida: false,
         created_at: new Date().toISOString()
       });
@@ -63,6 +114,9 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
     }
 
     console.log(`Notificação de resultado criada para funcionário ${registro.funcionario.nome}`);
+    
+    // Enviar via WhatsApp
+    await enviarNotificacaoWhatsApp(registro.funcionario_id, titulo, mensagem, link);
   } catch (error) {
     console.error('Erro na função criarNotificacaoResultado:', error);
     throw error;
@@ -76,14 +130,18 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
  */
 export async function criarNotificacaoLembrete(registro, gestor) {
   try {
+    const titulo = 'Lembrete: Aprovação Pendente';
+    const mensagem = `Lembrete: ${registro.funcionario.nome} ainda tem ${registro.horas_extras}h extras aguardando aprovação há mais de 1 dia`;
+    const link = `/pwa/aprovacoes/${registro.id}`;
+
     const { error } = await supabaseAdmin
       .from('notificacoes')
       .insert({
         usuario_id: gestor.id,
         tipo: 'info',
-        titulo: 'Lembrete: Aprovação Pendente',
-        mensagem: `Lembrete: ${registro.funcionario.nome} ainda tem ${registro.horas_extras}h extras aguardando aprovação há mais de 1 dia`,
-        link: `/pwa/aprovacoes/${registro.id}`,
+        titulo,
+        mensagem,
+        link,
         lida: false,
         created_at: new Date().toISOString()
       });
@@ -94,6 +152,9 @@ export async function criarNotificacaoLembrete(registro, gestor) {
     }
 
     console.log(`Notificação de lembrete criada para gestor ${gestor.nome}`);
+    
+    // Enviar via WhatsApp
+    await enviarNotificacaoWhatsApp(gestor.id, titulo, mensagem, link);
   } catch (error) {
     console.error('Erro na função criarNotificacaoLembrete:', error);
     throw error;
