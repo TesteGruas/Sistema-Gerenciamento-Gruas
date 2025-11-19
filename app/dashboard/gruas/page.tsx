@@ -91,6 +91,16 @@ export default function GruasPage() {
     capacity: string
     status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
     tipo: string
+    lanca: string
+    altura_final: string
+    ano: string
+    tipo_base: string
+    capacidade_1_cabo: string
+    capacidade_2_cabos: string
+    potencia_instalada: string
+    voltagem: string
+    velocidade_rotacao: string
+    velocidade_elevacao: string
     observacoes: string
     createdAt: string
   }>({
@@ -100,6 +110,16 @@ export default function GruasPage() {
     capacity: '',
     status: 'disponivel',
     tipo: '',
+    lanca: '',
+    altura_final: '',
+    ano: '',
+    tipo_base: '',
+    capacidade_1_cabo: '',
+    capacidade_2_cabos: '',
+    potencia_instalada: '',
+    voltagem: '',
+    velocidade_rotacao: '',
+    velocidade_elevacao: '',
     observacoes: '',
     createdAt: ''
   })
@@ -319,6 +339,46 @@ export default function GruasPage() {
 
   const handleTipoChange = (value: string) => {
     setGruaFormData(prev => ({ ...prev, tipo: value }))
+  }
+
+  const handleLancaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, lanca: e.target.value }))
+  }
+
+  const handleAlturaFinalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, altura_final: e.target.value }))
+  }
+
+  const handleAnoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, ano: e.target.value }))
+  }
+
+  const handleTipoBaseChange = (value: string) => {
+    setGruaFormData(prev => ({ ...prev, tipo_base: value }))
+  }
+
+  const handleCapacidade1CaboChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, capacidade_1_cabo: e.target.value }))
+  }
+
+  const handleCapacidade2CabosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, capacidade_2_cabos: e.target.value }))
+  }
+
+  const handlePotenciaInstaladaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, potencia_instalada: e.target.value }))
+  }
+
+  const handleVoltagemChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, voltagem: e.target.value }))
+  }
+
+  const handleVelocidadeRotacaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, velocidade_rotacao: e.target.value }))
+  }
+
+  const handleVelocidadeElevacaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGruaFormData(prev => ({ ...prev, velocidade_elevacao: e.target.value }))
   }
 
   const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -581,8 +641,18 @@ export default function GruasPage() {
         model: gruaFormData.model,
         capacity: gruaFormData.capacity,
         status: gruaFormData.status,
-        fabricante: gruaFormData.fabricante || undefined,
-        tipo: gruaFormData.tipo || undefined,
+        fabricante: gruaFormData.fabricante,
+        tipo: gruaFormData.tipo,
+        lanca: gruaFormData.lanca,
+        altura_final: parseFloat(gruaFormData.altura_final) || 0,
+        ano: parseInt(gruaFormData.ano) || new Date().getFullYear(),
+        tipo_base: gruaFormData.tipo_base,
+        capacidade_1_cabo: parseFloat(gruaFormData.capacidade_1_cabo) || 0,
+        capacidade_2_cabos: parseFloat(gruaFormData.capacidade_2_cabos) || 0,
+        potencia_instalada: parseFloat(gruaFormData.potencia_instalada) || 0,
+        voltagem: gruaFormData.voltagem,
+        velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
+        velocidade_elevacao: parseFloat(gruaFormData.velocidade_elevacao) || 0,
         observacoes: gruaFormData.observacoes || undefined,
       }
       
@@ -600,6 +670,16 @@ export default function GruasPage() {
           capacity: '',
           status: 'disponivel',
           tipo: '',
+          lanca: '',
+          altura_final: '',
+          ano: '',
+          tipo_base: '',
+          capacidade_1_cabo: '',
+          capacidade_2_cabos: '',
+          potencia_instalada: '',
+          voltagem: '',
+          velocidade_rotacao: '',
+          velocidade_elevacao: '',
           observacoes: '',
           createdAt: ''
         })
@@ -1111,7 +1191,7 @@ export default function GruasPage() {
 
       {/* Dialog de Criação de Grua */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Crane className="w-5 h-5" />
@@ -1144,19 +1224,21 @@ export default function GruasPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="fabricante">Fabricante</Label>
+                <Label htmlFor="fabricante">Fabricante *</Label>
                 <Input
                   id="fabricante"
                   value={gruaFormData.fabricante}
                   onChange={handleFabricanteChange}
                   placeholder="Ex: Liebherr, Potain, etc."
+                  required
                 />
               </div>
               <div>
-                <Label htmlFor="tipo">Tipo</Label>
+                <Label htmlFor="tipo">Tipo *</Label>
                 <Select
                   value={gruaFormData.tipo}
                   onValueChange={handleTipoChange}
+                  required
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
@@ -1169,6 +1251,153 @@ export default function GruasPage() {
                     <SelectItem value="Outros">Outros</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="lanca">Lança (metros) *</Label>
+                <Input
+                  id="lanca"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.lanca}
+                  onChange={handleLancaChange}
+                  placeholder="Ex: 50.00"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="altura_final">Altura Final (metros) *</Label>
+                <Input
+                  id="altura_final"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.altura_final}
+                  onChange={handleAlturaFinalChange}
+                  placeholder="Ex: 100.00"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="ano">Ano *</Label>
+                <Input
+                  id="ano"
+                  type="number"
+                  min="1900"
+                  max={new Date().getFullYear()}
+                  value={gruaFormData.ano}
+                  onChange={handleAnoChange}
+                  placeholder={`Ex: ${new Date().getFullYear()}`}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="tipo_base">Tipo de Base *</Label>
+                <Select
+                  value={gruaFormData.tipo_base}
+                  onValueChange={handleTipoBaseChange}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo de base" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Chumbador">Chumbador</SelectItem>
+                    <SelectItem value="Fixa">Fixa</SelectItem>
+                    <SelectItem value="Móvel">Móvel</SelectItem>
+                    <SelectItem value="Outros">Outros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="capacidade_1_cabo">Capacidade 1 cabo (kg) *</Label>
+                <Input
+                  id="capacidade_1_cabo"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.capacidade_1_cabo}
+                  onChange={handleCapacidade1CaboChange}
+                  placeholder="Ex: 5000"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="capacidade_2_cabos">Capacidade 2 cabos (kg) *</Label>
+                <Input
+                  id="capacidade_2_cabos"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.capacidade_2_cabos}
+                  onChange={handleCapacidade2CabosChange}
+                  placeholder="Ex: 10000"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="potencia_instalada">Potência Instalada (KVA) *</Label>
+                <Input
+                  id="potencia_instalada"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.potencia_instalada}
+                  onChange={handlePotenciaInstaladaChange}
+                  placeholder="Ex: 50.00"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="voltagem">Voltagem *</Label>
+                <Input
+                  id="voltagem"
+                  value={gruaFormData.voltagem}
+                  onChange={handleVoltagemChange}
+                  placeholder="Ex: 380"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="velocidade_rotacao">Velocidade de Rotação (rpm) *</Label>
+                <Input
+                  id="velocidade_rotacao"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.velocidade_rotacao}
+                  onChange={handleVelocidadeRotacaoChange}
+                  placeholder="Ex: 0.5"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="velocidade_elevacao">Velocidade de Elevação (m/min) *</Label>
+                <Input
+                  id="velocidade_elevacao"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={gruaFormData.velocidade_elevacao}
+                  onChange={handleVelocidadeElevacaoChange}
+                  placeholder="Ex: 60.00"
+                  required
+                />
               </div>
             </div>
 
@@ -1239,7 +1468,7 @@ export default function GruasPage() {
 
       {/* Dialog de Edição de Grua */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5" />

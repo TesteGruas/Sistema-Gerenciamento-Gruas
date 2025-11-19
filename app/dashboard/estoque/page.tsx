@@ -59,6 +59,7 @@ export default function EstoquePage() {
   const [filtros, setFiltros] = useState({
     categoria_id: "todas",
     status: "todos",
+    tipo_item: "todos",
     page: 1,
     limit: 10
   })
@@ -174,6 +175,10 @@ export default function EstoquePage() {
       if (filtros.status && filtros.status !== "todos") {
         params.status = filtros.status
       }
+      
+      if (filtros.tipo_item && filtros.tipo_item !== "todos") {
+        params.tipo_item = filtros.tipo_item
+      }
 
       const [produtosResponse, categoriasResponse] = await Promise.all([
         estoqueAPI.listarProdutos(params),
@@ -251,6 +256,7 @@ export default function EstoquePage() {
     setFiltros({
       categoria_id: "todas",
       status: "todos",
+      tipo_item: "todos",
       page: 1,
       limit: 10
     })
@@ -938,6 +944,20 @@ export default function EstoquePage() {
                         <SelectItem value="todos">Todos</SelectItem>
                         <SelectItem value="Ativo">Ativo</SelectItem>
                         <SelectItem value="Inativo">Inativo</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={filtros.tipo_item}
+                      onValueChange={(value) => handleFiltroChange('tipo_item', value)}
+                    >
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Tipo de Item" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="produto">Produto</SelectItem>
+                        <SelectItem value="componente">Componente</SelectItem>
                       </SelectContent>
                     </Select>
 

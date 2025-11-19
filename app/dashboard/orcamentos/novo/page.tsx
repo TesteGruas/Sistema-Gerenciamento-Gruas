@@ -141,6 +141,52 @@ export default function NovoOrcamentoPage() {
   const [complementosSelecionados, setComplementosSelecionados] = useState<any[]>([])
   const [searchComplemento, setSearchComplemento] = useState("")
   const [selectComplementoValue, setSelectComplementoValue] = useState("")
+  const [valoresFixos, setValoresFixos] = useState<Array<{
+    id?: string
+    tipo: 'Locação' | 'Serviço'
+    descricao: string
+    quantidade: number
+    valor_unitario: number
+    valor_total: number
+    observacoes?: string
+  }>>([])
+  const [custosMensais, setCustosMensais] = useState<Array<{
+    id?: string
+    tipo: string
+    descricao: string
+    valor_mensal: number
+    obrigatorio: boolean
+    observacoes?: string
+  }>>([
+    {
+      id: 'cm_1',
+      tipo: 'Locação',
+      descricao: 'Locação da grua',
+      valor_mensal: 0,
+      obrigatorio: true
+    },
+    {
+      id: 'cm_2',
+      tipo: 'Operador',
+      descricao: 'Operador',
+      valor_mensal: 0,
+      obrigatorio: true
+    },
+    {
+      id: 'cm_3',
+      tipo: 'Sinaleiro',
+      descricao: 'Sinaleiro',
+      valor_mensal: 0,
+      obrigatorio: true
+    },
+    {
+      id: 'cm_4',
+      tipo: 'Manutenção',
+      descricao: 'Manutenção preventiva',
+      valor_mensal: 0,
+      obrigatorio: true
+    }
+  ])
   const [clienteFormData, setClienteFormData] = useState({
     nome: '',
     email: '',
@@ -160,11 +206,7 @@ export default function NovoOrcamentoPage() {
   })
 
   const calcularTotalMensal = () => {
-    const locacao = parseCurrency(formData.valor_locacao_mensal) || 0
-    const operador = parseCurrency(formData.valor_operador) || 0
-    const sinaleiro = parseCurrency(formData.valor_sinaleiro) || 0
-    const manutencao = parseCurrency(formData.valor_manutencao) || 0
-    return locacao + operador + sinaleiro + manutencao
+    return custosMensais.reduce((sum, cm) => sum + (cm.valor_mensal || 0), 0)
   }
 
   // Informações da empresa do hook (não precisa mais definir aqui)
@@ -197,12 +239,8 @@ export default function NovoOrcamentoPage() {
         }
       }
 
-      // Converter valores monetários
-      const valorLocacao = parseCurrency(formData.valor_locacao_mensal) || 0
-      const valorOperador = parseCurrency(formData.valor_operador) || 0
-      const valorSinaleiro = parseCurrency(formData.valor_sinaleiro) || 0
-      const valorManutencao = parseCurrency(formData.valor_manutencao) || 0
-      const totalMensal = valorLocacao + valorOperador + valorSinaleiro + valorManutencao
+      // Calcular total mensal dos custos mensais
+      const totalMensal = calcularTotalMensal()
 
       // Gerar número do orçamento (formato: ORC-YYYYMMDD-XXX)
       const hoje = new Date()
@@ -252,7 +290,10 @@ export default function NovoOrcamentoPage() {
         }
       })
       
-      const valorTotalOrcamento = (totalMensal * prazoMeses) + valorTotalComplementos
+      // Calcular valor total dos valores fixos
+      const valorTotalValoresFixos = valoresFixos.reduce((sum, vf) => sum + (vf.quantidade * vf.valor_unitario), 0)
+      
+      const valorTotalOrcamento = (totalMensal * prazoMeses) + valorTotalComplementos + valorTotalValoresFixos
       
       const orcamentoData = {
         numero,
@@ -268,47 +309,33 @@ export default function NovoOrcamentoPage() {
         condicoes_pagamento: formData.condicoes_comerciais || '',
         prazo_entrega: formData.prazo_locacao_meses ? `${formData.prazo_locacao_meses} meses` : '',
         observacoes: formData.observacoes || '',
+        valores_fixos: valoresFixos.map(vf => ({
+          tipo: vf.tipo,
+          descricao: vf.descricao,
+          quantidade: vf.quantidade,
+          valor_unitario: vf.valor_unitario,
+          valor_total: vf.quantidade * vf.valor_unitario,
+          observacoes: vf.observacoes || ''
+        })),
+        custos_mensais: custosMensais.map(cm => ({
+          tipo: cm.tipo,
+          descricao: cm.descricao,
+          valor_mensal: cm.valor_mensal,
+          obrigatorio: cm.obrigatorio,
+          observacoes: cm.observacoes || ''
+        })),
         itens: [
-          {
-            produto_servico: 'Locação da Grua',
-            descricao: formData.equipamento || 'Grua Torre',
+          // Incluir custos mensais como itens para compatibilidade
+          ...custosMensais.map(cm => ({
+            produto_servico: cm.tipo,
+            descricao: cm.descricao,
             quantidade: prazoMeses,
-            valor_unitario: valorLocacao,
-            valor_total: valorLocacao * prazoMeses,
-            tipo: 'equipamento',
+            valor_unitario: cm.valor_mensal,
+            valor_total: cm.valor_mensal * prazoMeses,
+            tipo: cm.tipo === 'Locação' ? 'equipamento' : 'servico',
             unidade: 'mês',
-            observacoes: ''
-          },
-          {
-            produto_servico: 'Operador',
-            descricao: 'Serviço de operador de grua',
-            quantidade: prazoMeses,
-            valor_unitario: valorOperador,
-            valor_total: valorOperador * prazoMeses,
-            tipo: 'servico',
-            unidade: 'mês',
-            observacoes: ''
-          },
-          {
-            produto_servico: 'Sinaleiro',
-            descricao: 'Serviço de sinaleiro',
-            quantidade: prazoMeses,
-            valor_unitario: valorSinaleiro,
-            valor_total: valorSinaleiro * prazoMeses,
-            tipo: 'servico',
-            unidade: 'mês',
-            observacoes: ''
-          },
-          {
-            produto_servico: 'Manutenção Preventiva',
-            descricao: 'Manutenção preventiva do equipamento',
-            quantidade: prazoMeses,
-            valor_unitario: valorManutencao,
-            valor_total: valorManutencao * prazoMeses,
-            tipo: 'servico',
-            unidade: 'mês',
-            observacoes: ''
-          },
+            observacoes: cm.observacoes || ''
+          })),
           ...itensComplementos
         ]
       }
@@ -662,56 +689,155 @@ export default function NovoOrcamentoPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Locacao da grua (R$/mês) *</Label>
-                  <Input
-                    type="text"
-                    value={formData.valor_locacao_mensal}
-                    onChange={(e) => {
-                      const formatted = formatCurrency(e.target.value)
-                      setFormData({ ...formData, valor_locacao_mensal: formatted })
-                    }}
-                    placeholder="0,00"
-                  />
+              {/* Botão para adicionar novo custo mensal */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCustosMensais([
+                    ...custosMensais,
+                    {
+                      id: `cm_${Date.now()}`,
+                      tipo: '',
+                      descricao: '',
+                      valor_mensal: 0,
+                      obrigatorio: false,
+                      observacoes: ''
+                    }
+                  ])
+                }}
+                className="w-full"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Adicionar Custo Mensal
+              </Button>
+
+              {/* Lista de custos mensais */}
+              {custosMensais.length > 0 ? (
+                <div className="space-y-4">
+                  {custosMensais.map((custoMensal, index) => (
+                    <Card key={custoMensal.id || index} className="border-l-4 border-l-green-500">
+                      <CardContent className="pt-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            {custoMensal.tipo && ['Locação', 'Operador', 'Sinaleiro', 'Manutenção'].includes(custoMensal.tipo) ? (
+                              <Select
+                                value={custoMensal.tipo}
+                                onValueChange={(value) => {
+                                  const updated = custosMensais.map((cm, i) =>
+                                    i === index ? { ...cm, tipo: value === 'Outro' ? '' : value } : cm
+                                  )
+                                  setCustosMensais(updated)
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Locação">Locação</SelectItem>
+                                  <SelectItem value="Operador">Operador</SelectItem>
+                                  <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
+                                  <SelectItem value="Manutenção">Manutenção</SelectItem>
+                                  <SelectItem value="Outro">Outro</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <>
+                                <Label>Tipo *</Label>
+                                <Input
+                                  value={custoMensal.tipo}
+                                  onChange={(e) => {
+                                    const updated = custosMensais.map((cm, i) =>
+                                      i === index ? { ...cm, tipo: e.target.value } : cm
+                                    )
+                                    setCustosMensais(updated)
+                                  }}
+                                  placeholder="Ex: Locação, Operador, Sinaleiro"
+                                />
+                              </>
+                            )}
+                          </div>
+                          <div>
+                            <Label>Descrição *</Label>
+                            <Input
+                              value={custoMensal.descricao}
+                              onChange={(e) => {
+                                const updated = custosMensais.map((cm, i) =>
+                                  i === index ? { ...cm, descricao: e.target.value } : cm
+                                )
+                                setCustosMensais(updated)
+                              }}
+                              placeholder="Ex: Locação da grua"
+                            />
+                          </div>
+                          <div>
+                            <Label>Valor Mensal (R$/mês) *</Label>
+                            <Input
+                              type="text"
+                              value={custoMensal.valor_mensal > 0 ? formatCurrency((custoMensal.valor_mensal * 100).toString()) : ''}
+                              onChange={(e) => {
+                                const formatted = formatCurrency(e.target.value)
+                                const valor = parseCurrency(formatted)
+                                const updated = custosMensais.map((cm, i) =>
+                                  i === index ? { ...cm, valor_mensal: valor } : cm
+                                )
+                                setCustosMensais(updated)
+                              }}
+                              placeholder="0,00"
+                            />
+                          </div>
+                          <div className="flex items-end">
+                            <div className="flex items-center space-x-2 w-full">
+                              <input
+                                type="checkbox"
+                                id={`obrigatorio-${index}`}
+                                checked={custoMensal.obrigatorio}
+                                onChange={(e) => {
+                                  const updated = custosMensais.map((cm, i) =>
+                                    i === index ? { ...cm, obrigatorio: e.target.checked } : cm
+                                  )
+                                  setCustosMensais(updated)
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <Label htmlFor={`obrigatorio-${index}`} className="cursor-pointer">
+                                Obrigatório
+                              </Label>
+                            </div>
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label>Observações</Label>
+                            <Input
+                              value={custoMensal.observacoes || ''}
+                              onChange={(e) => {
+                                const updated = custosMensais.map((cm, i) =>
+                                  i === index ? { ...cm, observacoes: e.target.value } : cm
+                                )
+                                setCustosMensais(updated)
+                              }}
+                              placeholder="Observações adicionais..."
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end mt-4">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setCustosMensais(custosMensais.filter((_, i) => i !== index))
+                            }}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Remover
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-                <div>
-                  <Label>Operador (R$/mês) *</Label>
-                  <Input
-                    type="text"
-                    value={formData.valor_operador}
-                    onChange={(e) => {
-                      const formatted = formatCurrency(e.target.value)
-                      setFormData({ ...formData, valor_operador: formatted })
-                    }}
-                    placeholder="0,00"
-                  />
-                </div>
-                <div>
-                  <Label>Sinaleiro (R$/mês) *</Label>
-                  <Input
-                    type="text"
-                    value={formData.valor_sinaleiro}
-                    onChange={(e) => {
-                      const formatted = formatCurrency(e.target.value)
-                      setFormData({ ...formData, valor_sinaleiro: formatted })
-                    }}
-                    placeholder="0,00"
-                  />
-                </div>
-                <div>
-                  <Label>Manutenção preventiva (R$/mês) *</Label>
-                  <Input
-                    type="text"
-                    value={formData.valor_manutencao}
-                    onChange={(e) => {
-                      const formatted = formatCurrency(e.target.value)
-                      setFormData({ ...formData, valor_manutencao: formatted })
-                    }}
-                    placeholder="0,00"
-                  />
-                </div>
-              </div>
+              ) : null}
 
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center">
@@ -998,13 +1124,167 @@ export default function NovoOrcamentoPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhum complemento adicionado</p>
-                  <p className="text-sm">Use o campo acima para adicionar complementos ao orçamento</p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Seção de Valores Fixos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Valores Fixos</CardTitle>
+              <CardDescription>
+                Adicione itens de locação ou serviço com valores fixos
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Botão para adicionar novo valor fixo */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setValoresFixos([
+                    ...valoresFixos,
+                    {
+                      id: `vf_${Date.now()}`,
+                      tipo: 'Locação',
+                      descricao: '',
+                      quantidade: 1,
+                      valor_unitario: 0,
+                      valor_total: 0,
+                      observacoes: ''
+                    }
+                  ])
+                }}
+                className="w-full"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Adicionar Valor Fixo
+              </Button>
+
+              {/* Lista de valores fixos */}
+              {valoresFixos.length > 0 ? (
+                <div className="space-y-4">
+                  {valoresFixos.map((valorFixo, index) => (
+                    <Card key={valorFixo.id || index} className="border-l-4 border-l-blue-500">
+                      <CardContent className="pt-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label>Tipo *</Label>
+                            <Select
+                              value={valorFixo.tipo}
+                              onValueChange={(value: 'Locação' | 'Serviço') => {
+                                const updated = valoresFixos.map((vf, i) =>
+                                  i === index ? { ...vf, tipo: value } : vf
+                                )
+                                setValoresFixos(updated)
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Locação">Locação</SelectItem>
+                                <SelectItem value="Serviço">Serviço</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Descrição *</Label>
+                            <Input
+                              value={valorFixo.descricao}
+                              onChange={(e) => {
+                                const updated = valoresFixos.map((vf, i) =>
+                                  i === index ? { ...vf, descricao: e.target.value } : vf
+                                )
+                                setValoresFixos(updated)
+                              }}
+                              placeholder="Ex: Locação de grua torre"
+                            />
+                          </div>
+                          <div>
+                            <Label>Quantidade *</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={valorFixo.quantidade}
+                              onChange={(e) => {
+                                const qty = parseFloat(e.target.value) || 0
+                                const valorTotal = qty * valorFixo.valor_unitario
+                                const updated = valoresFixos.map((vf, i) =>
+                                  i === index ? { ...vf, quantidade: qty, valor_total: valorTotal } : vf
+                                )
+                                setValoresFixos(updated)
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label>Valor Unitário (R$) *</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={valorFixo.valor_unitario}
+                              onChange={(e) => {
+                                const valorUnit = parseFloat(e.target.value) || 0
+                                const valorTotal = valorUnit * valorFixo.quantidade
+                                const updated = valoresFixos.map((vf, i) =>
+                                  i === index ? { ...vf, valor_unitario: valorUnit, valor_total: valorTotal } : vf
+                                )
+                                setValoresFixos(updated)
+                              }}
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div>
+                            <Label>Valor Total (R$)</Label>
+                            <Input
+                              value={(valorFixo.quantidade * valorFixo.valor_unitario).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              disabled
+                              className="bg-gray-50 font-semibold"
+                            />
+                          </div>
+                          <div>
+                            <Label>Observações</Label>
+                            <Input
+                              value={valorFixo.observacoes || ''}
+                              onChange={(e) => {
+                                const updated = valoresFixos.map((vf, i) =>
+                                  i === index ? { ...vf, observacoes: e.target.value } : vf
+                                )
+                                setValoresFixos(updated)
+                              }}
+                              placeholder="Observações adicionais..."
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end mt-4">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setValoresFixos(valoresFixos.filter((_, i) => i !== index))
+                            }}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Remover
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  <div className="flex justify-end pt-2 border-t">
+                    <div className="text-right">
+                      <div className="text-sm text-gray-600">Total dos Valores Fixos:</div>
+                      <div className="text-xl font-bold text-green-600">
+                        R$ {valoresFixos.reduce((sum, vf) => sum + (vf.quantidade * vf.valor_unitario), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>

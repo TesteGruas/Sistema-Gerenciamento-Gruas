@@ -122,12 +122,14 @@ class EstoqueAPI {
     limit?: number
     categoria_id?: number
     status?: string
+    tipo_item?: string
   } = {}): Promise<EstoqueResponse> {
     const queryParams = new URLSearchParams()
     
     if (params.page) queryParams.append('page', params.page.toString())
     if (params.limit) queryParams.append('limit', params.limit.toString())
     if (params.categoria_id) queryParams.append('categoria_id', params.categoria_id.toString())
+    if (params.tipo_item) queryParams.append('tipo_item', params.tipo_item)
     if (params.status) queryParams.append('status', params.status)
 
     const queryString = queryParams.toString()

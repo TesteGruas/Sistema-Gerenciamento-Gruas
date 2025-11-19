@@ -720,7 +720,7 @@ export default function ComponentesGruaPage() {
 
       {/* Dialog de Criação de Componente */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar Componente</DialogTitle>
             <DialogDescription>
@@ -858,7 +858,7 @@ export default function ComponentesGruaPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div>
                 <Label htmlFor="quantidade_total">Quantidade Total *</Label>
                 <Input
@@ -889,6 +889,16 @@ export default function ComponentesGruaPage() {
                   min="0"
                   value={componenteForm.quantidade_em_uso}
                   onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_em_uso: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="quantidade_danificada">Danificada</Label>
+                <Input
+                  id="quantidade_danificada"
+                  type="number"
+                  min="0"
+                  value={componenteForm.quantidade_danificada}
+                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_danificada: parseInt(e.target.value) || 0 })}
                 />
               </div>
             </div>

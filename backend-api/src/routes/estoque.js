@@ -1168,6 +1168,7 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
     const offset = (page - 1) * limit
     const { produto_id, componente_id, tipo, data_inicio, data_fim } = req.query
 
+    // Primeiro, buscar as movimentações sem o join de componentes
     let query = supabaseAdmin
       .from('movimentacoes_estoque')
       .select(`
@@ -1180,20 +1181,6 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
           categorias (
             id,
             nome
-          )
-        ),
-        componente:grua_componentes (
-          id,
-          nome,
-          tipo,
-          modelo,
-          fabricante,
-          unidade_medida,
-          valor_unitario,
-          grua:gruas (
-            id,
-            name,
-            modelo
           )
         )
       `, { count: 'exact' })
@@ -1226,11 +1213,85 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
       })
     }
 
+    // Buscar componentes relacionados separadamente
+    const componenteIds = (data || [])
+      .filter(m => m.componente_id)
+      .map(m => m.componente_id)
+      .filter((id, index, self) => self.indexOf(id) === index) // remover duplicatas
+
+    let componentesData = {}
+    if (componenteIds.length > 0) {
+      const { data: componentes, error: componentesError } = await supabaseAdmin
+        .from('grua_componentes')
+        .select(`
+          id,
+          nome,
+          tipo,
+          modelo,
+          fabricante,
+          unidade_medida,
+          valor_unitario,
+          grua_id
+        `)
+        .in('id', componenteIds)
+
+      if (!componentesError && componentes) {
+        // Buscar gruas separadamente
+        const gruaIds = componentes
+          .filter(c => c.grua_id)
+          .map(c => c.grua_id)
+          .filter((id, index, self) => self.indexOf(id) === index)
+
+        let gruasData = {}
+        if (gruaIds.length > 0) {
+          // Converter IDs para números se necessário (grua_id é VARCHAR mas id da tabela gruas é INTEGER)
+          const gruaIdsNumeric = gruaIds.map(id => {
+            const num = parseInt(id)
+            return isNaN(num) ? null : num
+          }).filter(id => id !== null)
+
+          if (gruaIdsNumeric.length > 0) {
+            const { data: gruas, error: gruasError } = await supabaseAdmin
+              .from('gruas')
+              .select('id, nome, modelo')
+              .in('id', gruaIdsNumeric)
+
+            if (!gruasError && gruas) {
+              gruas.forEach(grua => {
+                // Usar tanto o ID numérico quanto string para compatibilidade
+                gruasData[grua.id] = grua
+                gruasData[String(grua.id)] = grua
+              })
+            }
+          }
+        }
+
+        // Combinar dados de componentes com gruas
+        componentes.forEach(comp => {
+          componentesData[comp.id] = {
+            ...comp,
+            grua: comp.grua_id ? gruasData[comp.grua_id] : null
+          }
+        })
+      }
+    }
+
+    // Adicionar dados dos componentes às movimentações
+    const dataWithComponentes = (data || []).map(mov => {
+      if (mov.componente_id && componentesData[mov.componente_id]) {
+        return {
+          ...mov,
+          componente: componentesData[mov.componente_id]
+        }
+      }
+      return mov
+    })
+
     const totalPages = Math.ceil(count / limit)
 
     res.json({
       success: true,
-      data: data || [],
+      data: dataWithComponentes,
       pagination: {
         page,
         limit,
