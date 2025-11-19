@@ -28,6 +28,9 @@ const router = express.Router()
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authenticateToken)
 
+// Log para debug - verificar se as rotas estão sendo registradas
+console.log('✅ Rotas de funcionários registradas')
+
 // Schema de validação para funcionários
 const funcionarioSchema = Joi.object({
   nome: Joi.string().min(2).max(255).required(),
@@ -1436,23 +1439,46 @@ router.delete('/:id', async (req, res) => {
  * Resetar senha do funcionário e enviar senha temporária por email e WhatsApp
  * IMPORTANTE: Esta rota deve estar ANTES das rotas genéricas /:id para evitar conflitos
  */
-router.post('/:id/reset-password', authenticateToken, requirePermission('rh:editar'), async (req, res) => {
+router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, res) => {
+  console.log('🔐 Rota reset-password chamada para funcionário ID:', req.params.id)
   try {
     const { id } = req.params
 
-    // Buscar funcionário
+    // Buscar funcionário (usando ID como string, como nas outras rotas)
     const { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome, email, telefone, telefone_whatsapp, user_id')
       .eq('id', id)
       .single()
 
-    if (funcionarioError || !funcionario) {
+    if (funcionarioError) {
+      console.error('❌ Erro ao buscar funcionário:', {
+        id: id,
+        error: funcionarioError,
+        code: funcionarioError.code
+      })
+      if (funcionarioError.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          message: 'Funcionário não encontrado'
+        })
+      }
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar funcionário',
+        error: funcionarioError.message
+      })
+    }
+
+    if (!funcionario) {
+      console.error('❌ Funcionário não encontrado (data é null):', { id })
       return res.status(404).json({
         success: false,
         message: 'Funcionário não encontrado'
       })
     }
+
+    console.log('✅ Funcionário encontrado:', { id: funcionario.id, nome: funcionario.nome, user_id: funcionario.user_id })
 
     // Verificar se o funcionário tem usuário vinculado
     if (!funcionario.user_id) {
