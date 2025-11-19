@@ -164,6 +164,7 @@ export default function FuncionarioDetalhesPage() {
   const [isDocumentoDialogOpen, setIsDocumentoDialogOpen] = useState(false)
   const [isEditDocumentoDialogOpen, setIsEditDocumentoDialogOpen] = useState(false)
   const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFuncionario | null>(null)
+  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   
   // Formulário de edição
@@ -985,7 +986,7 @@ export default function FuncionarioDetalhesPage() {
     }
   }
 
-  const handleResetPassword = async () => {
+  const handleResetPasswordClick = () => {
     if (!funcionario) return
 
     if (!funcionario.usuario) {
@@ -997,9 +998,11 @@ export default function FuncionarioDetalhesPage() {
       return
     }
 
-    if (!confirm(`Tem certeza que deseja resetar a senha de ${funcionario.nome}?\n\nUma senha temporária será gerada e enviada por email e WhatsApp.`)) {
-      return
-    }
+    setIsResetPasswordDialogOpen(true)
+  }
+
+  const handleConfirmResetPassword = async () => {
+    if (!funcionario) return
 
     setSubmitting(true)
     try {
@@ -1021,6 +1024,7 @@ export default function FuncionarioDetalhesPage() {
           title: "Sucesso",
           description: `Senha resetada com sucesso! ${data.data?.email_enviado ? 'Email enviado.' : ''} ${data.data?.whatsapp_enviado ? 'WhatsApp enviado.' : ''} O funcionário receberá uma senha temporária para acessar o sistema.`,
         })
+        setIsResetPasswordDialogOpen(false)
       } else {
         throw new Error(data.message || 'Erro ao resetar senha')
       }
@@ -1736,7 +1740,7 @@ export default function FuncionarioDetalhesPage() {
           {funcionario.usuario && !isEditMode && (
             <Button 
               variant="outline" 
-              onClick={handleResetPassword}
+              onClick={handleResetPasswordClick}
               disabled={submitting}
               className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
             >
@@ -3104,6 +3108,58 @@ export default function FuncionarioDetalhesPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação de Reset de Senha */}
+      <Dialog open={isResetPasswordDialogOpen} onOpenChange={setIsResetPasswordDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-orange-600" />
+              Confirmar Reset de Senha
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-gray-600">
+              Tem certeza que deseja resetar a senha de <strong>{funcionario?.nome}</strong>?
+            </p>
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-2">
+              <p className="text-sm font-semibold text-orange-900">O que acontecerá:</p>
+              <ul className="text-sm text-orange-800 space-y-1 list-disc list-inside">
+                <li>Uma senha temporária será gerada automaticamente</li>
+                <li>A senha será enviada por <strong>email</strong> para {funcionario?.email || 'o email cadastrado'}</li>
+                <li>A senha será enviada por <strong>WhatsApp</strong> para {funcionario?.telefone || 'o telefone cadastrado'}</li>
+                <li>O funcionário precisará alterar a senha no primeiro acesso</li>
+              </ul>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsResetPasswordDialogOpen(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmResetPassword}
+              disabled={submitting}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Resetando...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Confirmar Reset
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
