@@ -8,7 +8,7 @@ import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
-import { sendWelcomeEmail } from '../services/email.service.js'
+import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/email.service.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -1444,10 +1444,22 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
   try {
     const { id } = req.params
 
-    // Buscar funcionário (usando ID como string, como nas outras rotas)
+    // Buscar funcionário com relação ao usuário
     const { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
-      .select('id, nome, email, telefone, telefone_whatsapp, user_id')
+      .select(`
+        id, 
+        nome, 
+        email, 
+        telefone, 
+        telefone_whatsapp,
+        usuario:usuarios!funcionario_id(
+          id,
+          nome,
+          email,
+          status
+        )
+      `)
       .eq('id', id)
       .single()
 
@@ -1478,10 +1490,19 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
       })
     }
 
-    console.log('✅ Funcionário encontrado:', { id: funcionario.id, nome: funcionario.nome, user_id: funcionario.user_id })
-
     // Verificar se o funcionário tem usuário vinculado
-    if (!funcionario.user_id) {
+    // O usuário pode vir como objeto (array) ou null
+    const usuario = Array.isArray(funcionario.usuario) 
+      ? funcionario.usuario[0] 
+      : funcionario.usuario
+
+    console.log('✅ Funcionário encontrado:', { 
+      id: funcionario.id, 
+      nome: funcionario.nome, 
+      usuario_id: usuario?.id 
+    })
+
+    if (!usuario || !usuario.id) {
       return res.status(400).json({
         success: false,
         message: 'Funcionário não possui usuário vinculado. Crie um usuário primeiro.'
@@ -1491,10 +1512,55 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
     // Gerar senha temporária
     const senhaTemporaria = generateSecurePassword(12)
 
-    // Atualizar senha no Supabase Auth
+    // Usar email do funcionário ou do usuário vinculado
+    const emailParaEnvio = funcionario.email || usuario.email
+
+    if (!emailParaEnvio) {
+      return res.status(400).json({
+        success: false,
+        message: 'Funcionário não possui email cadastrado. Não é possível resetar a senha.'
+      })
+    }
+
+    // Buscar usuário no Supabase Auth pelo email
+    // O ID da tabela usuarios pode não ser o mesmo UUID do Auth
+    let authUserId = null
+    try {
+      const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
+      
+      if (authListError) {
+        console.error('Erro ao listar usuários do Auth:', authListError)
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao buscar usuário no sistema de autenticação',
+          error: authListError.message
+        })
+      }
+
+      const authUser = users.find(u => u.email === emailParaEnvio)
+      
+      if (!authUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Usuário não encontrado no sistema de autenticação. O email pode não estar cadastrado no Auth.'
+        })
+      }
+
+      authUserId = authUser.id
+      console.log('✅ Usuário encontrado no Auth:', { email: emailParaEnvio, authUserId })
+    } catch (listError) {
+      console.error('Erro ao buscar usuário no Auth:', listError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar usuário no sistema de autenticação',
+        error: listError.message
+      })
+    }
+
+    // Atualizar senha no Supabase Auth usando o UUID correto
     try {
       const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-        funcionario.user_id.toString(),
+        authUserId,
         { password: senhaTemporaria }
       )
 
@@ -1506,6 +1572,8 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
           error: authError.message
         })
       }
+      
+      console.log('✅ Senha atualizada com sucesso no Auth')
     } catch (authError) {
       console.error('Erro ao atualizar senha:', authError)
       return res.status(500).json({
@@ -1517,15 +1585,15 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
 
     // Enviar email com senha temporária
     let emailEnviado = false
-    if (funcionario.email) {
+    if (emailParaEnvio) {
       try {
-        await sendWelcomeEmail({
+        await sendPasswordResetEmail({
           nome: funcionario.nome,
-          email: funcionario.email,
+          email: emailParaEnvio,
           senha_temporaria: senhaTemporaria
         })
         emailEnviado = true
-        console.log(`✅ Email de reset de senha enviado com sucesso para ${funcionario.email}`)
+        console.log(`✅ Email de reset de senha enviado com sucesso para ${emailParaEnvio}`)
       } catch (emailError) {
         console.error('❌ Erro ao enviar email de reset de senha:', emailError)
         // Não falha a operação se o email falhar
@@ -1534,18 +1602,20 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
 
     // Enviar WhatsApp com senha temporária
     let whatsappEnviado = false
-    try {
-      const { enviarMensagemNovoUsuarioFuncionario } = await import('../services/whatsapp-service.js')
-      await enviarMensagemNovoUsuarioFuncionario(
-        funcionario,
-        funcionario.email,
-        senhaTemporaria
-      )
-      whatsappEnviado = true
-      console.log(`✅ WhatsApp de reset de senha enviado com sucesso para ${funcionario.nome}`)
-    } catch (whatsappError) {
-      console.error('❌ Erro ao enviar WhatsApp de reset de senha:', whatsappError)
-      // Não falha a operação se o WhatsApp falhar
+    if (emailParaEnvio) {
+      try {
+        const { enviarMensagemResetSenhaFuncionario } = await import('../services/whatsapp-service.js')
+        await enviarMensagemResetSenhaFuncionario(
+          funcionario,
+          emailParaEnvio,
+          senhaTemporaria
+        )
+        whatsappEnviado = true
+        console.log(`✅ WhatsApp de reset de senha enviado com sucesso para ${funcionario.nome}`)
+      } catch (whatsappError) {
+        console.error('❌ Erro ao enviar WhatsApp de reset de senha:', whatsappError)
+        // Não falha a operação se o WhatsApp falhar
+      }
     }
 
     // Retornar sucesso mesmo se algum envio falhar (senha foi resetada)

@@ -736,6 +736,36 @@ _Sistema de Gestão de Gruas_`;
 }
 
 /**
+ * Formata mensagem de reset de senha para WhatsApp
+ * @param {Object} funcionario - Dados do funcionário
+ * @param {string} email - Email do usuário
+ * @param {string} senhaTemporaria - Senha temporária
+ * @returns {string} - Mensagem formatada
+ */
+function formatarMensagemResetSenhaFuncionario(funcionario, email, senhaTemporaria) {
+  const nomeFuncionario = funcionario?.nome || 'Funcionário';
+  
+  const mensagem = `🔒 *Redefinição de Senha*
+
+Olá ${nomeFuncionario},
+
+Sua senha foi redefinida com sucesso!
+
+📧 *Email:* ${email}
+🔑 *Nova Senha Temporária:* ${senhaTemporaria}
+
+⚠️ *Importante:* Altere sua senha no primeiro acesso.
+
+🔗 *Link de Acesso:*
+${FRONTEND_URL}/login
+
+---
+_Sistema de Gestão de Gruas_`;
+
+  return mensagem;
+}
+
+/**
  * Envia mensagem de nova obra para cliente e gestores responsáveis
  * @param {Object} obra - Dados da obra criada
  * @returns {Promise<Object>} - { sucesso: boolean, enviados: number, erros: Array }
@@ -934,6 +964,79 @@ export async function enviarMensagemNovaObra(obra) {
 }
 
 /**
+ * Envia mensagem de reset de senha para funcionário
+ * @param {Object} funcionario - Dados do funcionário
+ * @param {string} email - Email do usuário
+ * @param {string} senhaTemporaria - Senha temporária gerada
+ * @returns {Promise<Object>} - { sucesso: boolean, erro: string|null }
+ */
+export async function enviarMensagemResetSenhaFuncionario(funcionario, email, senhaTemporaria) {
+  try {
+    console.log(`[whatsapp-service] Iniciando envio de mensagem de reset de senha para funcionário ${funcionario.id}`);
+    
+    // Buscar telefone do funcionário
+    let telefone = null;
+    
+    // Tentar buscar telefone_whatsapp ou telefone do funcionário
+    if (funcionario.telefone_whatsapp) {
+      telefone = formatarTelefone(funcionario.telefone_whatsapp);
+    } else if (funcionario.telefone) {
+      telefone = formatarTelefone(funcionario.telefone);
+    }
+    
+    // Se não encontrou no funcionário, tentar buscar no usuário vinculado
+    if (!telefone && funcionario.user_id) {
+      const { data: usuario, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('telefone')
+        .eq('id', funcionario.user_id)
+        .single();
+      
+      if (!userError && usuario && usuario.telefone) {
+        telefone = formatarTelefone(usuario.telefone);
+      }
+    }
+    
+    if (!telefone) {
+      console.warn(`[whatsapp-service] Telefone WhatsApp não disponível para funcionário ${funcionario.id}`);
+      return {
+        sucesso: false,
+        erro: 'Telefone WhatsApp do funcionário não cadastrado'
+      };
+    }
+    
+    // Formatar mensagem
+    const mensagem = formatarMensagemResetSenhaFuncionario(funcionario, email, senhaTemporaria);
+    const linkLogin = `${FRONTEND_URL}/login`;
+    
+    // Enviar mensagem
+    const resultado = await enviarMensagemWebhook(
+      telefone, 
+      mensagem, 
+      linkLogin,
+      {
+        tipo: 'reset_senha',
+        destinatario_nome: funcionario.nome
+      }
+    );
+    
+    if (resultado.sucesso) {
+      console.log(`[whatsapp-service] Mensagem de reset de senha enviada com sucesso para ${telefone}`);
+    } else {
+      console.error(`[whatsapp-service] Erro ao enviar mensagem de reset de senha: ${resultado.erro}`);
+    }
+    
+    return resultado;
+  } catch (error) {
+    console.error('[whatsapp-service] Erro ao enviar mensagem de reset de senha:', error);
+    return {
+      sucesso: false,
+      erro: error.message || 'Erro desconhecido'
+    };
+  }
+}
+
+/**
  * Envia mensagem de novo usuário funcionário com instruções de acesso
  * @param {Object} funcionario - Dados do funcionário
  * @param {string} email - Email do usuário criado
@@ -1123,6 +1226,89 @@ export async function enviarMensagemAprovacao(aprovacao, supervisor = null) {
     return {
       sucesso: false,
       token: null,
+      erro: error.message || 'Erro desconhecido'
+    };
+  }
+}
+
+/**
+ * Formata mensagem de forgot-password (solicitação de redefinição) para WhatsApp
+ * @param {Object} usuario - Dados do usuário
+ * @param {string} resetLink - Link para redefinir senha
+ * @returns {string} - Mensagem formatada
+ */
+function formatarMensagemForgotPassword(usuario, resetLink) {
+  const nomeUsuario = usuario?.nome || 'Usuário';
+  
+  const mensagem = `🔒 *Solicitação de Redefinição de Senha*
+
+Olá ${nomeUsuario},
+
+Você solicitou a redefinição de senha no Sistema de Gestão de Gruas.
+
+Clique no link abaixo para redefinir sua senha:
+
+${resetLink}
+
+⏰ *Importante:* Este link expira em 1 hora.
+
+Se você não solicitou esta redefinição, ignore esta mensagem.
+
+---
+_Sistema de Gestão de Gruas_`;
+
+  return mensagem;
+}
+
+/**
+ * Envia mensagem de forgot-password (solicitação de redefinição) via WhatsApp
+ * @param {Object} usuario - Dados do usuário { id, nome, email }
+ * @param {string} token - Token de redefinição
+ * @returns {Promise<Object>} - { sucesso: boolean, erro: string|null }
+ */
+export async function enviarMensagemForgotPassword(usuario, token) {
+  try {
+    console.log(`[whatsapp-service] Iniciando envio de mensagem de forgot-password para usuário ${usuario.id}`);
+    
+    // Buscar telefone WhatsApp do usuário
+    const telefone = await buscarTelefoneWhatsAppUsuario(usuario.id);
+    
+    if (!telefone) {
+      console.warn(`[whatsapp-service] Telefone WhatsApp não disponível para usuário ${usuario.id}`);
+      return {
+        sucesso: false,
+        erro: 'Telefone WhatsApp do usuário não cadastrado'
+      };
+    }
+    
+    // Gerar link de reset
+    const resetLink = `${FRONTEND_URL}/auth/reset-password/${token}`;
+    
+    // Formatar mensagem
+    const mensagem = formatarMensagemForgotPassword(usuario, resetLink);
+    
+    // Enviar mensagem
+    const resultado = await enviarMensagemWebhook(
+      telefone, 
+      mensagem, 
+      resetLink,
+      {
+        tipo: 'forgot_password',
+        destinatario_nome: usuario.nome
+      }
+    );
+    
+    if (resultado.sucesso) {
+      console.log(`[whatsapp-service] Mensagem de forgot-password enviada com sucesso para ${telefone}`);
+    } else {
+      console.error(`[whatsapp-service] Erro ao enviar mensagem de forgot-password: ${resultado.erro}`);
+    }
+    
+    return resultado;
+  } catch (error) {
+    console.error('[whatsapp-service] Erro ao enviar mensagem de forgot-password:', error);
+    return {
+      sucesso: false,
       erro: error.message || 'Erro desconhecido'
     };
   }

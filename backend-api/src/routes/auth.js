@@ -1,9 +1,10 @@
 import express from 'express'
 import Joi from 'joi'
-import { supabase } from '../config/supabase.js'
+import { supabase, supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { generateToken, hashToken, isTokenExpired, getTokenExpiry } from '../utils/token.js'
 import { sendResetPasswordEmail, sendPasswordChangedEmail } from '../services/email.service.js'
+import { enviarMensagemForgotPassword } from '../services/whatsapp-service.js'
 import { getRolePermissions, getRoleLevel } from '../config/roles.js'
 
 const router = express.Router()
@@ -693,14 +694,45 @@ router.post('/forgot-password', async (req, res) => {
     }
 
     // Enviar email com token (usar token original, não o hash)
+    let emailEnviado = false
     try {
+      console.log(`📧 Tentando enviar email de forgot-password para ${usuario.email}...`)
       await sendResetPasswordEmail({
         nome: usuario.nome,
         email: usuario.email,
         token: token // Token original para o link
       })
+      emailEnviado = true
+      console.log(`✅ Email de forgot-password enviado com sucesso para ${usuario.email}`)
     } catch (emailError) {
-      console.error('Erro ao enviar email:', emailError)
+      console.error('❌ Erro ao enviar email de forgot-password:', emailError)
+      console.error('❌ Detalhes do erro:', {
+        message: emailError.message,
+        stack: emailError.stack,
+        email: usuario.email
+      })
+      // Não retornar erro para o usuário por segurança
+    }
+
+    // Enviar WhatsApp com link de reset
+    let whatsappEnviado = false
+    try {
+      const resultadoWhatsapp = await enviarMensagemForgotPassword(
+        {
+          id: usuario.id,
+          nome: usuario.nome,
+          email: usuario.email
+        },
+        token
+      )
+      if (resultadoWhatsapp.sucesso) {
+        whatsappEnviado = true
+        console.log(`✅ WhatsApp de forgot-password enviado com sucesso para usuário ${usuario.id}`)
+      } else {
+        console.warn(`⚠️ WhatsApp não enviado: ${resultadoWhatsapp.erro}`)
+      }
+    } catch (whatsappError) {
+      console.error('❌ Erro ao enviar WhatsApp de forgot-password:', whatsappError)
       // Não retornar erro para o usuário por segurança
     }
 
@@ -869,27 +901,71 @@ router.post('/reset-password', async (req, res) => {
       .single()
 
     if (usuarioError || !usuario) {
+      console.error('❌ Erro ao buscar usuário:', usuarioError)
       return res.status(404).json({
         success: false,
         error: 'Usuário não encontrado'
       })
     }
 
-    // Atualizar senha no Supabase Auth
+    console.log(`🔍 Buscando usuário no Auth pelo email: ${usuario.email}`)
+
+    // Buscar usuário no Supabase Auth pelo email
+    let authUserId = null
     try {
-      const { data: authData, error: authError } = await supabase.auth.admin.updateUserById(
-        usuario.id.toString(),
+      const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
+      
+      if (authListError) {
+        console.error('❌ Erro ao listar usuários do Auth:', authListError)
+        throw authListError
+      }
+
+      const authUser = users.find(u => u.email === usuario.email)
+      
+      if (!authUser) {
+        console.error(`❌ Usuário não encontrado no Auth para o email: ${usuario.email}`)
+        return res.status(404).json({
+          success: false,
+          error: 'Usuário não encontrado no sistema de autenticação'
+        })
+      }
+
+      authUserId = authUser.id
+      console.log(`✅ Usuário encontrado no Auth: ${authUserId}`)
+    } catch (authListError) {
+      console.error('❌ Erro ao buscar usuário no Auth:', authListError)
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar usuário no sistema de autenticação',
+        details: authListError.message
+      })
+    }
+
+    // Atualizar senha no Supabase Auth usando o UUID correto
+    try {
+      console.log(`🔐 Atualizando senha no Auth para usuário: ${authUserId}`)
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+        authUserId,
         { password: password }
       )
 
       if (authError) {
+        console.error('❌ Erro ao atualizar senha no Supabase Auth:', authError)
         throw authError
       }
+
+      console.log('✅ Senha atualizada com sucesso no Auth')
     } catch (authError) {
-      console.error('Erro ao atualizar senha no Supabase Auth:', authError)
+      console.error('❌ Erro ao atualizar senha no Supabase Auth:', authError)
+      console.error('❌ Detalhes do erro:', {
+        message: authError.message,
+        status: authError.status,
+        name: authError.name
+      })
       return res.status(500).json({
         success: false,
-        error: 'Erro ao atualizar senha'
+        error: 'Erro ao atualizar senha',
+        details: authError.message
       })
     }
 

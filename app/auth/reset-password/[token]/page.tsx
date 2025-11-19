@@ -139,7 +139,7 @@ export default function ResetPasswordPage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => router.push('/login')}
+              onClick={() => router.push('/')}
             >
               Voltar para Login
             </Button>
@@ -173,7 +173,7 @@ export default function ResetPasswordPage() {
           <CardFooter>
             <Button
               className="w-full"
-              onClick={() => router.push('/login')}
+              onClick={() => router.push('/')}
             >
               Ir para Login Agora
             </Button>
@@ -311,7 +311,7 @@ export default function ResetPasswordPage() {
             </Button>
 
             <p className="text-sm text-center text-muted-foreground pt-4">
-              <Link href="/login" className="text-blue-600 hover:underline font-medium">
+              <Link href="/" className="text-blue-600 hover:underline font-medium">
                 Voltar para Login
               </Link>
             </p>
