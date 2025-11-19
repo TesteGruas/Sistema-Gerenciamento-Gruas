@@ -4,23 +4,61 @@ import { supabase } from '../config/supabase.js';
 
 const router = express.Router();
 
-// Schema de validação para orçamento
+// Schema de validação para orçamento (básico - usado em updates parciais)
 const orcamentoSchema = Joi.object({
-  cliente_id: Joi.number().integer().required(),
-  data_orcamento: Joi.date().required(),
-  data_validade: Joi.date().required(),
-  valor_total: Joi.number().precision(2).required(),
-  desconto: Joi.number().precision(2).default(0),
-  observacoes: Joi.string().allow(''),
-  status: Joi.string().valid('rascunho', 'enviado', 'aprovado', 'rejeitado', 'vencido', 'convertido').default('rascunho'),
-  vendedor_id: Joi.number().integer().allow(null),
-  condicoes_pagamento: Joi.string().allow(''),
-  prazo_entrega: Joi.string().allow(''),
-  tipo_orcamento: Joi.string().valid('equipamento', 'servico', 'locacao', 'venda').required()
+  cliente_id: Joi.number().integer().optional(),
+  data_orcamento: Joi.date().optional(),
+  data_validade: Joi.date().optional(),
+  valor_total: Joi.number().precision(2).optional(),
+  desconto: Joi.number().precision(2).optional(),
+  observacoes: Joi.string().allow('').optional(),
+  status: Joi.string().valid('rascunho', 'enviado', 'aprovado', 'rejeitado', 'vencido', 'convertido').optional(),
+  vendedor_id: Joi.number().integer().allow(null).optional(),
+  condicoes_pagamento: Joi.string().allow('').optional(),
+  prazo_entrega: Joi.string().allow('').optional(),
+  tipo_orcamento: Joi.string().valid('equipamento', 'servico', 'locacao', 'venda').optional(),
+  numero: Joi.string().allow('').optional(),
+  obra_id: Joi.number().integer().allow(null).optional(),
+  obra_nome: Joi.string().allow('').optional(),
+  obra_tipo: Joi.string().allow('').optional(),
+  obra_endereco: Joi.string().allow('').optional(),
+  obra_cidade: Joi.string().allow('').optional(),
+  obra_bairro: Joi.string().allow('').optional(),
+  obra_cep: Joi.string().allow('').optional(),
+  obra_engenheiro_responsavel: Joi.string().allow('').optional(),
+  obra_contato: Joi.string().allow('').optional(),
+  grua_id: Joi.number().integer().allow(null).optional(),
+  grua_modelo: Joi.string().allow('').optional(),
+  grua_lanca: Joi.number().precision(2).allow(null).optional(),
+  grua_altura_final: Joi.number().precision(2).allow(null).optional(),
+  grua_tipo_base: Joi.string().allow('').optional(),
+  grua_ano: Joi.number().integer().allow(null).optional(),
+  grua_potencia: Joi.number().precision(2).allow(null).optional(),
+  grua_capacidade_1_cabo: Joi.number().precision(2).allow(null).optional(),
+  grua_capacidade_2_cabos: Joi.number().precision(2).allow(null).optional(),
+  grua_voltagem: Joi.string().allow('').optional(),
+  cliente_endereco: Joi.string().allow('').optional(),
+  cliente_bairro: Joi.string().allow('').optional(),
+  cliente_cep: Joi.string().allow('').optional(),
+  cliente_cidade: Joi.string().allow('').optional(),
+  cliente_estado: Joi.string().allow('').optional(),
+  cliente_telefone: Joi.string().allow('').optional(),
+  cliente_email: Joi.string().email().allow('').optional(),
+  cliente_contato: Joi.string().allow('').optional(),
+  prazo_locacao_meses: Joi.number().integer().allow(null).optional(),
+  data_inicio_estimada: Joi.date().allow(null).optional(),
+  tolerancia_dias: Joi.number().integer().optional(),
+  escopo_incluso: Joi.string().allow('').optional(),
+  responsabilidades_cliente: Joi.string().allow('').optional(),
+  condicoes_comerciais: Joi.string().allow('').optional(),
+  condicoes_gerais: Joi.string().allow('').optional(),
+  logistica: Joi.string().allow('').optional(),
+  garantias: Joi.string().allow('').optional()
 });
 
-// Schema de validação para criação de orçamento (inclui itens)
+// Schema de validação para criação de orçamento (inclui itens e novos campos)
 const criarOrcamentoSchema = Joi.object({
+  // Campos básicos
   cliente_id: Joi.number().integer().required(),
   data_orcamento: Joi.date().required(),
   data_validade: Joi.date().required(),
@@ -32,6 +70,94 @@ const criarOrcamentoSchema = Joi.object({
   condicoes_pagamento: Joi.string().allow(''),
   prazo_entrega: Joi.string().allow(''),
   tipo_orcamento: Joi.string().valid('equipamento', 'servico', 'locacao', 'venda').required(),
+  numero: Joi.string().allow(''),
+  
+  // Campos de obra
+  obra_id: Joi.number().integer().allow(null),
+  obra_nome: Joi.string().allow(''),
+  obra_tipo: Joi.string().allow(''),
+  obra_endereco: Joi.string().allow(''),
+  obra_cidade: Joi.string().allow(''),
+  obra_bairro: Joi.string().allow(''),
+  obra_cep: Joi.string().allow(''),
+  obra_engenheiro_responsavel: Joi.string().allow(''),
+  obra_contato: Joi.string().allow(''),
+  
+  // Campos de grua
+  grua_id: Joi.number().integer().allow(null),
+  grua_modelo: Joi.string().allow(''),
+  grua_lanca: Joi.number().precision(2).allow(null),
+  grua_altura_final: Joi.number().precision(2).allow(null),
+  grua_tipo_base: Joi.string().allow(''),
+  grua_ano: Joi.number().integer().allow(null),
+  grua_potencia: Joi.number().precision(2).allow(null),
+  grua_capacidade_1_cabo: Joi.number().precision(2).allow(null),
+  grua_capacidade_2_cabos: Joi.number().precision(2).allow(null),
+  grua_voltagem: Joi.string().allow(''),
+  
+  // Campos de cliente expandidos
+  cliente_endereco: Joi.string().allow(''),
+  cliente_bairro: Joi.string().allow(''),
+  cliente_cep: Joi.string().allow(''),
+  cliente_cidade: Joi.string().allow(''),
+  cliente_estado: Joi.string().allow(''),
+  cliente_telefone: Joi.string().allow(''),
+  cliente_email: Joi.string().email().allow(''),
+  cliente_contato: Joi.string().allow(''),
+  
+  // Campos gerais
+  prazo_locacao_meses: Joi.number().integer().allow(null),
+  data_inicio_estimada: Joi.date().allow(null),
+  tolerancia_dias: Joi.number().integer().default(15),
+  escopo_incluso: Joi.string().allow(''),
+  responsabilidades_cliente: Joi.string().allow(''),
+  condicoes_comerciais: Joi.string().allow(''),
+  condicoes_gerais: Joi.string().allow(''),
+  logistica: Joi.string().allow(''),
+  garantias: Joi.string().allow(''),
+  
+  // Arrays de itens relacionados
+  valores_fixos: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().valid('Locação', 'Serviço').required(),
+      descricao: Joi.string().required(),
+      quantidade: Joi.number().precision(2).default(1),
+      valor_unitario: Joi.number().precision(2).required(),
+      valor_total: Joi.number().precision(2).required(),
+      observacoes: Joi.string().allow('')
+    })
+  ).optional(),
+  
+  custos_mensais: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().required(),
+      descricao: Joi.string().required(),
+      valor_mensal: Joi.number().precision(2).required(),
+      obrigatorio: Joi.boolean().default(true),
+      observacoes: Joi.string().allow('')
+    })
+  ).optional(),
+  
+  horas_extras: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().valid('operador', 'sinaleiro', 'equipamento').required(),
+      dia_semana: Joi.string().valid('sabado', 'domingo_feriado', 'normal').required(),
+      valor_hora: Joi.number().precision(2).required()
+    })
+  ).optional(),
+  
+  servicos_adicionais: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().required(),
+      descricao: Joi.string().required(),
+      quantidade: Joi.number().precision(2).default(1),
+      valor_unitario: Joi.number().precision(2).required(),
+      valor_total: Joi.number().precision(2).required(),
+      observacoes: Joi.string().allow('')
+    })
+  ).optional(),
+  
+  // Itens originais (mantidos para compatibilidade)
   itens: Joi.array().items(
     Joi.object({
       produto_id: Joi.string().allow('').optional(),
@@ -44,7 +170,7 @@ const criarOrcamentoSchema = Joi.object({
       unidade: Joi.string().allow(''),
       observacoes: Joi.string().allow('')
     })
-  ).min(1).required()
+  ).optional()
 });
 
 // Schema de validação para item do orçamento
@@ -232,13 +358,31 @@ router.get('/', async (req, res) => {
           id,
           nome,
           email,
-          telefone
+          telefone,
+          cnpj_cpf,
+          endereco
         ),
         funcionarios:vendedor_id (
           id,
-          nome
+          nome,
+          email
         ),
-        orcamento_itens (*)
+        obras:obra_id (
+          id,
+          nome,
+          endereco
+        ),
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante
+        ),
+        orcamento_itens (*),
+        orcamento_valores_fixos (*),
+        orcamento_custos_mensais (*),
+        orcamento_horas_extras (*),
+        orcamento_servicos_adicionais (*)
       `)
       .order('created_at', { ascending: false });
 
@@ -417,7 +561,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Buscar orçamento
+    // Buscar orçamento com todos os relacionamentos
     const { data: orcamento, error: orcamentoError } = await supabase
       .from('orcamentos')
       .select(`
@@ -434,6 +578,17 @@ router.get('/:id', async (req, res) => {
           id,
           nome,
           email
+        ),
+        obras:obra_id (
+          id,
+          nome,
+          endereco
+        ),
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante
         )
       `)
       .eq('id', id)
@@ -441,20 +596,36 @@ router.get('/:id', async (req, res) => {
 
     if (orcamentoError) throw orcamentoError;
 
-    // Buscar itens do orçamento
-    const { data: itens, error: itensError } = await supabase
-      .from('orcamento_itens')
-      .select('*')
-      .eq('orcamento_id', id)
-      .order('id');
+    // Buscar todos os itens relacionados
+    const [
+      { data: itens, error: itensError },
+      { data: valoresFixos, error: valoresFixosError },
+      { data: custosMensais, error: custosMensaisError },
+      { data: horasExtras, error: horasExtrasError },
+      { data: servicosAdicionais, error: servicosAdicionaisError }
+    ] = await Promise.all([
+      supabase.from('orcamento_itens').select('*').eq('orcamento_id', id).order('id'),
+      supabase.from('orcamento_valores_fixos').select('*').eq('orcamento_id', id).order('id'),
+      supabase.from('orcamento_custos_mensais').select('*').eq('orcamento_id', id).order('id'),
+      supabase.from('orcamento_horas_extras').select('*').eq('orcamento_id', id).order('id'),
+      supabase.from('orcamento_servicos_adicionais').select('*').eq('orcamento_id', id).order('id')
+    ]);
 
     if (itensError) throw itensError;
+    if (valoresFixosError) throw valoresFixosError;
+    if (custosMensaisError) throw custosMensaisError;
+    if (horasExtrasError) throw horasExtrasError;
+    if (servicosAdicionaisError) throw servicosAdicionaisError;
 
     res.json({
       success: true,
       data: {
         ...orcamento,
-        itens
+        itens: itens || [],
+        valores_fixos: valoresFixos || [],
+        custos_mensais: custosMensais || [],
+        horas_extras: horasExtras || [],
+        servicos_adicionais: servicosAdicionais || []
       }
     });
   } catch (error) {
@@ -644,7 +815,23 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const { itens, ...orcamentoData } = req.body;
+    const { 
+      itens, 
+      valores_fixos, 
+      custos_mensais, 
+      horas_extras, 
+      servicos_adicionais,
+      ...orcamentoData 
+    } = req.body;
+
+    // Gerar número do orçamento se não fornecido
+    if (!orcamentoData.numero) {
+      const hoje = new Date();
+      const ano = hoje.getFullYear();
+      const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+      const timestamp = Date.now().toString().slice(-4);
+      orcamentoData.numero = `GR${ano}${mes}${timestamp}`;
+    }
 
     // Criar orçamento
     const { data: orcamento, error: orcamentoError } = await supabase
@@ -655,7 +842,63 @@ router.post('/', async (req, res) => {
 
     if (orcamentoError) throw orcamentoError;
 
-    // Criar itens do orçamento se fornecidos
+    // Criar valores fixos se fornecidos
+    if (valores_fixos && valores_fixos.length > 0) {
+      const valoresFixosData = valores_fixos.map(item => ({
+        ...item,
+        orcamento_id: orcamento.id
+      }));
+
+      const { error: valoresFixosError } = await supabase
+        .from('orcamento_valores_fixos')
+        .insert(valoresFixosData);
+
+      if (valoresFixosError) throw valoresFixosError;
+    }
+
+    // Criar custos mensais se fornecidos
+    if (custos_mensais && custos_mensais.length > 0) {
+      const custosMensaisData = custos_mensais.map(item => ({
+        ...item,
+        orcamento_id: orcamento.id
+      }));
+
+      const { error: custosMensaisError } = await supabase
+        .from('orcamento_custos_mensais')
+        .insert(custosMensaisData);
+
+      if (custosMensaisError) throw custosMensaisError;
+    }
+
+    // Criar tabela de horas extras se fornecida
+    if (horas_extras && horas_extras.length > 0) {
+      const horasExtrasData = horas_extras.map(item => ({
+        ...item,
+        orcamento_id: orcamento.id
+      }));
+
+      const { error: horasExtrasError } = await supabase
+        .from('orcamento_horas_extras')
+        .insert(horasExtrasData);
+
+      if (horasExtrasError) throw horasExtrasError;
+    }
+
+    // Criar serviços adicionais se fornecidos
+    if (servicos_adicionais && servicos_adicionais.length > 0) {
+      const servicosAdicionaisData = servicos_adicionais.map(item => ({
+        ...item,
+        orcamento_id: orcamento.id
+      }));
+
+      const { error: servicosAdicionaisError } = await supabase
+        .from('orcamento_servicos_adicionais')
+        .insert(servicosAdicionaisData);
+
+      if (servicosAdicionaisError) throw servicosAdicionaisError;
+    }
+
+    // Criar itens do orçamento se fornecidos (mantido para compatibilidade)
     if (itens && itens.length > 0) {
       const itensData = itens.map(item => ({
         ...item,
@@ -844,7 +1087,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { error: validationError, value } = orcamentoSchema.validate(req.body);
+    const { error: validationError, value } = criarOrcamentoSchema.validate(req.body, { abortEarly: false });
     
     if (validationError) {
       return res.status(400).json({
@@ -854,7 +1097,14 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    const { itens, ...orcamentoData } = req.body;
+    const { 
+      itens, 
+      valores_fixos, 
+      custos_mensais, 
+      horas_extras, 
+      servicos_adicionais,
+      ...orcamentoData 
+    } = req.body;
 
     // Atualizar orçamento
     const { data: orcamento, error: orcamentoError } = await supabase
@@ -866,28 +1116,39 @@ router.put('/:id', async (req, res) => {
 
     if (orcamentoError) throw orcamentoError;
 
-    // Atualizar itens se fornecidos
-    if (itens) {
-      // Remover itens existentes
+    // Função auxiliar para atualizar arrays relacionados
+    const atualizarArrayRelacionado = async (tabela, dados, orcamentoId) => {
+      if (dados === undefined) return; // Se não foi fornecido, não atualiza
+      
+      // Remover registros existentes
       await supabase
-        .from('orcamento_itens')
+        .from(tabela)
         .delete()
-        .eq('orcamento_id', id);
+        .eq('orcamento_id', orcamentoId);
 
-      // Inserir novos itens
-      if (itens.length > 0) {
-        const itensData = itens.map(item => ({
+      // Inserir novos registros se houver
+      if (dados && dados.length > 0) {
+        const dadosComOrcamentoId = dados.map(item => ({
           ...item,
-          orcamento_id: id
+          orcamento_id: orcamentoId
         }));
 
-        const { error: itensError } = await supabase
-          .from('orcamento_itens')
-          .insert(itensData);
+        const { error } = await supabase
+          .from(tabela)
+          .insert(dadosComOrcamentoId);
 
-        if (itensError) throw itensError;
+        if (error) throw error;
       }
-    }
+    };
+
+    // Atualizar todos os arrays relacionados
+    await Promise.all([
+      atualizarArrayRelacionado('orcamento_valores_fixos', valores_fixos, id),
+      atualizarArrayRelacionado('orcamento_custos_mensais', custos_mensais, id),
+      atualizarArrayRelacionado('orcamento_horas_extras', horas_extras, id),
+      atualizarArrayRelacionado('orcamento_servicos_adicionais', servicos_adicionais, id),
+      atualizarArrayRelacionado('orcamento_itens', itens, id) // Mantido para compatibilidade
+    ]);
 
     res.json({
       success: true,
@@ -957,11 +1218,14 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    // Excluir itens primeiro
-    await supabase
-      .from('orcamento_itens')
-      .delete()
-      .eq('orcamento_id', id);
+    // Excluir todos os registros relacionados primeiro (CASCADE)
+    await Promise.all([
+      supabase.from('orcamento_itens').delete().eq('orcamento_id', id),
+      supabase.from('orcamento_valores_fixos').delete().eq('orcamento_id', id),
+      supabase.from('orcamento_custos_mensais').delete().eq('orcamento_id', id),
+      supabase.from('orcamento_horas_extras').delete().eq('orcamento_id', id),
+      supabase.from('orcamento_servicos_adicionais').delete().eq('orcamento_id', id)
+    ]);
 
     // Excluir orçamento
     const { error } = await supabase

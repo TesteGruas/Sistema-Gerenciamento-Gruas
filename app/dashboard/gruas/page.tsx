@@ -991,7 +991,7 @@ export default function GruasPage() {
                         className="flex-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
                       >
                         <Settings className="w-4 h-4 mr-1" />
-                        Configurações
+                        Especificações Técnicas
                       </Button>
                     </div>
                   </div>

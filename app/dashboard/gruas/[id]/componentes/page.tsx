@@ -31,6 +31,8 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { apiComponentes, ComponenteGrua, MovimentacaoComponente } from "@/lib/api-componentes"
 import { gruasApi } from "@/lib/api-gruas"
+import { obrasApi } from "@/lib/api-obras"
+import { Slider } from "@/components/ui/slider"
 
 interface ConfiguracaoGrua {
   id: string
@@ -82,12 +84,23 @@ export default function ComponentesGruaPage() {
     quantidade_danificada: 0,
     status: 'Disponível' as ComponenteGrua['status'],
     localizacao: '',
+    localizacao_tipo: 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
+    obra_id: undefined as number | undefined,
+    dimensoes_altura: undefined as number | undefined,
+    dimensoes_largura: undefined as number | undefined,
+    dimensoes_comprimento: undefined as number | undefined,
+    dimensoes_peso: undefined as number | undefined,
+    vida_util_percentual: 100,
     valor_unitario: 0,
     data_instalacao: '',
     data_ultima_manutencao: '',
     data_proxima_manutencao: '',
     observacoes: ''
   })
+
+  // Estado para lista de obras (para dropdown quando localização for "Obra X")
+  const [obras, setObras] = useState<any[]>([])
+  const [loadingObras, setLoadingObras] = useState(false)
 
   // Formulário para movimentação
   const [movimentacaoForm, setMovimentacaoForm] = useState({
@@ -285,6 +298,27 @@ export default function ComponentesGruaPage() {
     }
   }
 
+  // Carregar obras quando necessário
+  useEffect(() => {
+    if (componenteForm.localizacao_tipo === 'Obra X' && obras.length === 0 && !loadingObras) {
+      carregarObras()
+    }
+  }, [componenteForm.localizacao_tipo])
+
+  const carregarObras = async () => {
+    try {
+      setLoadingObras(true)
+      const response = await obrasApi.listarObras({ page: 1, limit: 100 })
+      if (response.success && response.data) {
+        setObras(response.data)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar obras:', error)
+    } finally {
+      setLoadingObras(false)
+    }
+  }
+
   // Funções auxiliares
   const resetComponenteForm = () => {
     setComponenteForm({
@@ -301,6 +335,13 @@ export default function ComponentesGruaPage() {
       quantidade_danificada: 0,
       status: 'Disponível' as ComponenteGrua['status'],
       localizacao: '',
+      localizacao_tipo: 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
+      obra_id: undefined,
+      dimensoes_altura: undefined,
+      dimensoes_largura: undefined,
+      dimensoes_comprimento: undefined,
+      dimensoes_peso: undefined,
+      vida_util_percentual: 100,
       valor_unitario: 0,
       data_instalacao: '',
       data_ultima_manutencao: '',
@@ -338,6 +379,13 @@ export default function ComponentesGruaPage() {
       quantidade_danificada: componente.quantidade_danificada,
       status: componente.status,
       localizacao: componente.localizacao || '',
+      localizacao_tipo: componente.localizacao_tipo || 'Almoxarifado',
+      obra_id: componente.obra_id,
+      dimensoes_altura: componente.dimensoes_altura,
+      dimensoes_largura: componente.dimensoes_largura,
+      dimensoes_comprimento: componente.dimensoes_comprimento,
+      dimensoes_peso: componente.dimensoes_peso,
+      vida_util_percentual: componente.vida_util_percentual || 100,
       valor_unitario: componente.valor_unitario,
       data_instalacao: componente.data_instalacao || '',
       data_ultima_manutencao: componente.data_ultima_manutencao || '',
@@ -411,7 +459,7 @@ export default function ComponentesGruaPage() {
         <div className="flex gap-2">
           <Button onClick={() => router.push(`/dashboard/gruas/${gruaId}/configuracoes`)}>
             <Settings className="w-4 h-4 mr-2" />
-            Configurações
+            Especificações Técnicas
           </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
@@ -769,17 +817,48 @@ export default function ComponentesGruaPage() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="localizacao">Localização</Label>
-                <Input
-                  id="localizacao"
-                  value={componenteForm.localizacao}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, localizacao: e.target.value })}
-                  placeholder="Ex: Torre principal"
-                />
+                <Label htmlFor="localizacao_tipo">Localização *</Label>
+                <Select 
+                  value={componenteForm.localizacao_tipo} 
+                  onValueChange={(value) => setComponenteForm({ ...componenteForm, localizacao_tipo: value as ComponenteGrua['localizacao_tipo'], obra_id: value !== 'Obra X' ? undefined : componenteForm.obra_id })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Obra X">Obra X</SelectItem>
+                    <SelectItem value="Almoxarifado">Almoxarifado</SelectItem>
+                    <SelectItem value="Oficina">Oficina</SelectItem>
+                    <SelectItem value="Em trânsito">Em trânsito</SelectItem>
+                    <SelectItem value="Em manutenção">Em manutenção</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            {componenteForm.localizacao_tipo === 'Obra X' && (
+              <div>
+                <Label htmlFor="obra_id">Selecione a Obra *</Label>
+                <Select 
+                  value={componenteForm.obra_id?.toString() || ''} 
+                  onValueChange={(value) => setComponenteForm({ ...componenteForm, obra_id: parseInt(value) })}
+                  disabled={loadingObras}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingObras ? "Carregando obras..." : "Selecione a obra"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {obras.map((obra) => (
+                      <SelectItem key={obra.id} value={obra.id.toString()}>
+                        {obra.nome || obra.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="quantidade_total">Quantidade Total *</Label>
                 <Input
@@ -812,15 +891,87 @@ export default function ComponentesGruaPage() {
                   onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_em_uso: parseInt(e.target.value) || 0 })}
                 />
               </div>
+            </div>
+
+            <div className="space-y-4">
               <div>
-                <Label htmlFor="quantidade_danificada">Danificada</Label>
-                <Input
-                  id="quantidade_danificada"
-                  type="number"
-                  min="0"
-                  value={componenteForm.quantidade_danificada}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_danificada: parseInt(e.target.value) || 0 })}
-                />
+                <Label htmlFor="vida_util_percentual">Vida Útil: {componenteForm.vida_util_percentual}%</Label>
+                <div className="flex items-center gap-4 mt-2">
+                  <Slider
+                    value={[componenteForm.vida_util_percentual]}
+                    onValueChange={(value) => setComponenteForm({ ...componenteForm, vida_util_percentual: value[0] })}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <Input
+                    id="vida_util_percentual"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={componenteForm.vida_util_percentual}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0
+                      setComponenteForm({ ...componenteForm, vida_util_percentual: Math.min(100, Math.max(0, val)) })
+                    }}
+                    className="w-20"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Dimensões (opcional)</Label>
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="dimensoes_altura">Altura (m)</Label>
+                  <Input
+                    id="dimensoes_altura"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_altura || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_altura: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="dimensoes_largura">Largura (m)</Label>
+                  <Input
+                    id="dimensoes_largura"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_largura || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_largura: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="dimensoes_comprimento">Comprimento (m)</Label>
+                  <Input
+                    id="dimensoes_comprimento"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_comprimento || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_comprimento: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="dimensoes_peso">Peso (kg)</Label>
+                  <Input
+                    id="dimensoes_peso"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_peso || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_peso: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
             </div>
 
@@ -857,16 +1008,7 @@ export default function ComponentesGruaPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="data_instalacao">Data de Instalação</Label>
-                <Input
-                  id="data_instalacao"
-                  type="date"
-                  value={componenteForm.data_instalacao}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, data_instalacao: e.target.value })}
-                />
-              </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="data_ultima_manutencao">Última Manutenção</Label>
                 <Input
@@ -980,7 +1122,49 @@ export default function ComponentesGruaPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_localizacao_tipo">Localização *</Label>
+                <Select 
+                  value={componenteForm.localizacao_tipo} 
+                  onValueChange={(value) => setComponenteForm({ ...componenteForm, localizacao_tipo: value as ComponenteGrua['localizacao_tipo'], obra_id: value !== 'Obra X' ? undefined : componenteForm.obra_id })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Obra X">Obra X</SelectItem>
+                    <SelectItem value="Almoxarifado">Almoxarifado</SelectItem>
+                    <SelectItem value="Oficina">Oficina</SelectItem>
+                    <SelectItem value="Em trânsito">Em trânsito</SelectItem>
+                    <SelectItem value="Em manutenção">Em manutenção</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {componenteForm.localizacao_tipo === 'Obra X' && (
+                <div>
+                  <Label htmlFor="edit_obra_id">Selecione a Obra *</Label>
+                  <Select 
+                    value={componenteForm.obra_id?.toString() || ''} 
+                    onValueChange={(value) => setComponenteForm({ ...componenteForm, obra_id: parseInt(value) })}
+                    disabled={loadingObras}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingObras ? "Carregando obras..." : "Selecione a obra"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {obras.map((obra) => (
+                        <SelectItem key={obra.id} value={obra.id.toString()}>
+                          {obra.nome || obra.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="edit_quantidade_total">Quantidade Total *</Label>
                 <Input
@@ -1013,15 +1197,87 @@ export default function ComponentesGruaPage() {
                   onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_em_uso: parseInt(e.target.value) || 0 })}
                 />
               </div>
+            </div>
+
+            <div className="space-y-4">
               <div>
-                <Label htmlFor="edit_quantidade_danificada">Danificada</Label>
-                <Input
-                  id="edit_quantidade_danificada"
-                  type="number"
-                  min="0"
-                  value={componenteForm.quantidade_danificada}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_danificada: parseInt(e.target.value) || 0 })}
-                />
+                <Label htmlFor="edit_vida_util_percentual">Vida Útil: {componenteForm.vida_util_percentual}%</Label>
+                <div className="flex items-center gap-4 mt-2">
+                  <Slider
+                    value={[componenteForm.vida_util_percentual]}
+                    onValueChange={(value) => setComponenteForm({ ...componenteForm, vida_util_percentual: value[0] })}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <Input
+                    id="edit_vida_util_percentual"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={componenteForm.vida_util_percentual}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0
+                      setComponenteForm({ ...componenteForm, vida_util_percentual: Math.min(100, Math.max(0, val)) })
+                    }}
+                    className="w-20"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Dimensões (opcional)</Label>
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="edit_dimensoes_altura">Altura (m)</Label>
+                  <Input
+                    id="edit_dimensoes_altura"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_altura || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_altura: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_dimensoes_largura">Largura (m)</Label>
+                  <Input
+                    id="edit_dimensoes_largura"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_largura || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_largura: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_dimensoes_comprimento">Comprimento (m)</Label>
+                  <Input
+                    id="edit_dimensoes_comprimento"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_comprimento || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_comprimento: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_dimensoes_peso">Peso (kg)</Label>
+                  <Input
+                    id="edit_dimensoes_peso"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={componenteForm.dimensoes_peso || ''}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_peso: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
             </div>
 

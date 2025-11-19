@@ -61,6 +61,7 @@ import financialDataRoutes from './routes/financial-data.js'
 import orcamentosRoutes from './routes/orcamentos.js'
 import locacoesRoutes from './routes/locacoes.js'
 import medicoesRoutes from './routes/medicoes.js'
+import medicoesMensaisRoutes from './routes/medicoes-mensais.js'
 import aditivosRoutes from './routes/aditivos.js'
 import orcamentosLocacaoRoutes from './routes/orcamentos-locacao.js'
 import notasDebitoRoutes from './routes/notas-debito.js'
@@ -98,6 +99,9 @@ import projecoesRoutes from './routes/projecoes.js'
 import exportarRelatoriosRoutes from './routes/exportar-relatorios.js'
 import relatoriosFaturamentoRoutes from './routes/relatorios-faturamento.js'
 import relatoriosImpostosRoutes from './routes/relatorios-impostos.js'
+import relatoriosOrcamentosRoutes from './routes/relatorios-orcamentos.js'
+import relatoriosMedicoesRoutes from './routes/relatorios-medicoes.js'
+import relatoriosComponentesRoutes from './routes/relatorios-componentes.js'
 import aprovacoesHorasExtrasRoutes from './routes/aprovacoes-horas-extras.js'
 import aprovacaoPublicaRoutes from './routes/aprovacao-publica.js'
 import buscaGlobalRoutes from './routes/busca-global.js'
@@ -294,6 +298,7 @@ app.use('/api/financial-data', financialDataRoutes)
 app.use('/api/orcamentos', orcamentosRoutes)
 app.use('/api/locacoes', locacoesRoutes)
 app.use('/api/medicoes', medicoesRoutes)
+app.use('/api/medicoes-mensais', medicoesMensaisRoutes)
 app.use('/api/aditivos', aditivosRoutes)
 app.use('/api/orcamentos-locacao', orcamentosLocacaoRoutes)
 app.use('/api/notas-debito', notasDebitoRoutes)
@@ -331,6 +336,9 @@ app.use('/api/projecoes', projecoesRoutes)
 app.use('/api/exportar-relatorios', exportarRelatoriosRoutes)
 app.use('/api/relatorios-faturamento', relatoriosFaturamentoRoutes)
 app.use('/api/relatorios-impostos', relatoriosImpostosRoutes)
+app.use('/api/relatorios', relatoriosOrcamentosRoutes)
+app.use('/api/relatorios', relatoriosMedicoesRoutes)
+app.use('/api/relatorios', relatoriosComponentesRoutes)
 app.use('/api/aprovacoes-horas-extras', aprovacoesHorasExtrasRoutes)
 app.use('/api/busca-global', buscaGlobalRoutes)
 app.use('/api/colaboradores', colaboradoresDocumentosRoutes)

@@ -215,17 +215,70 @@ const gruaSchema = Joi.object({
   capacity: Joi.string().required(), // Capacidade da grua
   status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
   
+  // Campos técnicos obrigatórios
+  fabricante: Joi.string().min(2).required().messages({
+    'string.min': 'Fabricante é obrigatório',
+    'any.required': 'Fabricante é obrigatório'
+  }),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').required().messages({
+    'any.only': 'Tipo deve ser: Grua Torre, Grua Torre Auto Estável ou Grua Móvel',
+    'any.required': 'Tipo é obrigatório'
+  }),
+  lanca: Joi.string().min(1).required().messages({
+    'string.min': 'Lança é obrigatória',
+    'any.required': 'Lança é obrigatória'
+  }),
+  altura_final: Joi.number().min(0).required().messages({
+    'number.base': 'Altura final deve ser um número',
+    'number.min': 'Altura final não pode ser negativa',
+    'any.required': 'Altura final é obrigatória'
+  }),
+  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).required().messages({
+    'number.base': 'Ano deve ser um número',
+    'number.integer': 'Ano deve ser um número inteiro',
+    'number.min': 'Ano deve ser maior ou igual a 1900',
+    'number.max': `Ano deve ser menor ou igual a ${new Date().getFullYear()}`,
+    'any.required': 'Ano é obrigatório'
+  }),
+  tipo_base: Joi.string().min(2).required().messages({
+    'string.min': 'Tipo de base é obrigatório',
+    'any.required': 'Tipo de base é obrigatório'
+  }),
+  capacidade_1_cabo: Joi.number().min(0).required().messages({
+    'number.base': 'Capacidade com 1 cabo deve ser um número',
+    'number.min': 'Capacidade com 1 cabo não pode ser negativa',
+    'any.required': 'Capacidade com 1 cabo é obrigatória'
+  }),
+  capacidade_2_cabos: Joi.number().min(0).required().messages({
+    'number.base': 'Capacidade com 2 cabos deve ser um número',
+    'number.min': 'Capacidade com 2 cabos não pode ser negativa',
+    'any.required': 'Capacidade com 2 cabos é obrigatória'
+  }),
+  potencia_instalada: Joi.number().min(0).required().messages({
+    'number.base': 'Potência instalada deve ser um número',
+    'number.min': 'Potência instalada não pode ser negativa',
+    'any.required': 'Potência instalada é obrigatória'
+  }),
+  voltagem: Joi.string().min(1).required().messages({
+    'string.min': 'Voltagem é obrigatória',
+    'any.required': 'Voltagem é obrigatória'
+  }),
+  velocidade_rotacao: Joi.number().min(0).required().messages({
+    'number.base': 'Velocidade de rotação deve ser um número',
+    'number.min': 'Velocidade de rotação não pode ser negativa',
+    'any.required': 'Velocidade de rotação é obrigatória'
+  }),
+  velocidade_elevacao: Joi.number().min(0).required().messages({
+    'number.base': 'Velocidade de elevação deve ser um número',
+    'number.min': 'Velocidade de elevação não pode ser negativa',
+    'any.required': 'Velocidade de elevação é obrigatória'
+  }),
+  
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
   observacoes: Joi.string().allow(null, '').optional(), // Observações (opcional)
-  
-  // Campos opcionais adicionais (para compatibilidade com banco)
-  fabricante: Joi.string().allow(null, '').optional(),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').allow(null, '').optional(),
   capacidade_ponta: Joi.string().allow(null, '').optional(),
-  lanca: Joi.string().allow(null, '').optional(),
   altura_trabalho: Joi.string().allow(null, '').optional(),
-  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
   localizacao: Joi.string().allow(null, '').optional(),
   horas_operacao: Joi.number().integer().min(0).default(0),
   valor_locacao: Joi.number().min(0).allow(null).optional(),
@@ -249,17 +302,70 @@ const gruaInputSchema = Joi.object({
   capacity: Joi.string().required(), // Capacidade da grua
   status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
   
+  // Campos técnicos obrigatórios
+  fabricante: Joi.string().min(2).required().messages({
+    'string.min': 'Fabricante é obrigatório',
+    'any.required': 'Fabricante é obrigatório'
+  }),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').required().messages({
+    'any.only': 'Tipo deve ser: Grua Torre, Grua Torre Auto Estável ou Grua Móvel',
+    'any.required': 'Tipo é obrigatório'
+  }),
+  lanca: Joi.string().min(1).required().messages({
+    'string.min': 'Lança é obrigatória',
+    'any.required': 'Lança é obrigatória'
+  }),
+  altura_final: Joi.number().min(0).required().messages({
+    'number.base': 'Altura final deve ser um número',
+    'number.min': 'Altura final não pode ser negativa',
+    'any.required': 'Altura final é obrigatória'
+  }),
+  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).required().messages({
+    'number.base': 'Ano deve ser um número',
+    'number.integer': 'Ano deve ser um número inteiro',
+    'number.min': 'Ano deve ser maior ou igual a 1900',
+    'number.max': `Ano deve ser menor ou igual a ${new Date().getFullYear()}`,
+    'any.required': 'Ano é obrigatório'
+  }),
+  tipo_base: Joi.string().min(2).required().messages({
+    'string.min': 'Tipo de base é obrigatório',
+    'any.required': 'Tipo de base é obrigatório'
+  }),
+  capacidade_1_cabo: Joi.number().min(0).required().messages({
+    'number.base': 'Capacidade com 1 cabo deve ser um número',
+    'number.min': 'Capacidade com 1 cabo não pode ser negativa',
+    'any.required': 'Capacidade com 1 cabo é obrigatória'
+  }),
+  capacidade_2_cabos: Joi.number().min(0).required().messages({
+    'number.base': 'Capacidade com 2 cabos deve ser um número',
+    'number.min': 'Capacidade com 2 cabos não pode ser negativa',
+    'any.required': 'Capacidade com 2 cabos é obrigatória'
+  }),
+  potencia_instalada: Joi.number().min(0).required().messages({
+    'number.base': 'Potência instalada deve ser um número',
+    'number.min': 'Potência instalada não pode ser negativa',
+    'any.required': 'Potência instalada é obrigatória'
+  }),
+  voltagem: Joi.string().min(1).required().messages({
+    'string.min': 'Voltagem é obrigatória',
+    'any.required': 'Voltagem é obrigatória'
+  }),
+  velocidade_rotacao: Joi.number().min(0).required().messages({
+    'number.base': 'Velocidade de rotação deve ser um número',
+    'number.min': 'Velocidade de rotação não pode ser negativa',
+    'any.required': 'Velocidade de rotação é obrigatória'
+  }),
+  velocidade_elevacao: Joi.number().min(0).required().messages({
+    'number.base': 'Velocidade de elevação deve ser um número',
+    'number.min': 'Velocidade de elevação não pode ser negativa',
+    'any.required': 'Velocidade de elevação é obrigatória'
+  }),
+  
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
   observacoes: Joi.string().allow(null, '').optional(), // Observações (opcional)
-  
-  // Campos opcionais adicionais (para compatibilidade com banco)
-  fabricante: Joi.string().allow(null, '').optional(),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').allow(null, '').optional(),
   capacidade_ponta: Joi.string().allow(null, '').optional(),
-  lanca: Joi.string().allow(null, '').optional(),
   altura_trabalho: Joi.string().allow(null, '').optional(),
-  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
   localizacao: Joi.string().allow(null, '').optional(),
   horas_operacao: Joi.number().integer().min(0).default(0),
   valor_locacao: Joi.number().min(0).allow(null).optional(),
@@ -810,13 +916,21 @@ router.post('/', async (req, res) => {
       // Campos obrigatórios do frontend
       name: value.name, // Nome da grua
       modelo: value.model, // model -> modelo
-      fabricante: value.fabricante || 'Não informado',
-      tipo: value.tipo || 'Grua Torre',
+      fabricante: value.fabricante,
+      tipo: value.tipo,
       capacidade: value.capacity, // capacity -> capacidade
       capacidade_ponta: value.capacidade_ponta || value.capacity || 'Não informado', // garantir que não seja null
-      lanca: value.lanca || 'Não informado',
+      lanca: value.lanca,
       altura_trabalho: value.altura_trabalho || 'Não informado',
-      ano: value.ano || new Date().getFullYear(),
+      altura_final: value.altura_final,
+      ano: value.ano,
+      tipo_base: value.tipo_base,
+      capacidade_1_cabo: value.capacidade_1_cabo,
+      capacidade_2_cabos: value.capacidade_2_cabos,
+      potencia_instalada: value.potencia_instalada,
+      voltagem: value.voltagem,
+      velocidade_rotacao: value.velocidade_rotacao,
+      velocidade_elevacao: value.velocidade_elevacao,
       status: value.status,
       localizacao: value.localizacao || 'Não informado',
       horas_operacao: value.horas_operacao || 0,
@@ -922,13 +1036,21 @@ router.put('/:id', async (req, res) => {
       // Campos obrigatórios do frontend
       name: value.name, // Nome da grua
       modelo: value.model, // model -> modelo
-      fabricante: value.fabricante || 'Não informado',
-      tipo: value.tipo || 'Grua Torre',
+      fabricante: value.fabricante,
+      tipo: value.tipo,
       capacidade: value.capacity, // capacity -> capacidade
       capacidade_ponta: value.capacidade_ponta || value.capacity || 'Não informado', // garantir que não seja null
-      lanca: value.lanca || 'Não informado',
+      lanca: value.lanca,
       altura_trabalho: value.altura_trabalho || 'Não informado',
-      ano: value.ano || new Date().getFullYear(),
+      altura_final: value.altura_final,
+      ano: value.ano,
+      tipo_base: value.tipo_base,
+      capacidade_1_cabo: value.capacidade_1_cabo,
+      capacidade_2_cabos: value.capacidade_2_cabos,
+      potencia_instalada: value.potencia_instalada,
+      voltagem: value.voltagem,
+      velocidade_rotacao: value.velocidade_rotacao,
+      velocidade_elevacao: value.velocidade_elevacao,
       status: value.status,
       localizacao: value.localizacao || 'Não informado',
       horas_operacao: value.horas_operacao || 0,

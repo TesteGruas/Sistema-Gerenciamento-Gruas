@@ -17,6 +17,13 @@ export interface ComponenteGrua {
   quantidade_danificada: number
   status: 'Disponível' | 'Em uso' | 'Danificado' | 'Manutenção' | 'Descontinuado'
   localizacao?: string
+  localizacao_tipo?: 'Obra X' | 'Almoxarifado' | 'Oficina' | 'Em trânsito' | 'Em manutenção'
+  obra_id?: number
+  dimensoes_altura?: number
+  dimensoes_largura?: number
+  dimensoes_comprimento?: number
+  dimensoes_peso?: number
+  vida_util_percentual?: number
   valor_unitario: number
   data_instalacao?: string
   data_ultima_manutencao?: string
@@ -32,6 +39,10 @@ export interface ComponenteGrua {
     name: string
     modelo: string
     fabricante: string
+  }
+  obra?: {
+    id: number
+    nome: string
   }
 }
 

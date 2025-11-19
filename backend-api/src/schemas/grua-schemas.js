@@ -60,6 +60,35 @@ export const componenteSchema = Joi.object({
   localizacao: Joi.string().max(200).allow(null, '').messages({
     'string.max': 'Localização deve ter no máximo 200 caracteres'
   }),
+  localizacao_tipo: Joi.string().valid('Obra X', 'Almoxarifado', 'Oficina', 'Em trânsito', 'Em manutenção').default('Almoxarifado').messages({
+    'any.only': 'Tipo de localização deve ser: Obra X, Almoxarifado, Oficina, Em trânsito ou Em manutenção'
+  }),
+  obra_id: Joi.number().integer().allow(null).messages({
+    'number.base': 'ID da obra deve ser um número',
+    'number.integer': 'ID da obra deve ser um número inteiro'
+  }),
+  dimensoes_altura: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Altura deve ser um número',
+    'number.min': 'Altura não pode ser negativa'
+  }),
+  dimensoes_largura: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Largura deve ser um número',
+    'number.min': 'Largura não pode ser negativa'
+  }),
+  dimensoes_comprimento: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Comprimento deve ser um número',
+    'number.min': 'Comprimento não pode ser negativa'
+  }),
+  dimensoes_peso: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Peso deve ser um número',
+    'number.min': 'Peso não pode ser negativa'
+  }),
+  vida_util_percentual: Joi.number().integer().min(0).max(100).default(100).messages({
+    'number.base': 'Vida útil deve ser um número',
+    'number.integer': 'Vida útil deve ser um número inteiro',
+    'number.min': 'Vida útil não pode ser menor que 0%',
+    'number.max': 'Vida útil não pode ser maior que 100%'
+  }),
   valor_unitario: Joi.number().min(0).default(0).messages({
     'number.base': 'Valor unitário deve ser um número',
     'number.min': 'Valor unitário não pode ser negativo'
@@ -131,6 +160,35 @@ export const componenteUpdateSchema = Joi.object({
   }),
   localizacao: Joi.string().max(100).allow(null, '').messages({
     'string.max': 'Localização deve ter no máximo 100 caracteres'
+  }),
+  localizacao_tipo: Joi.string().valid('Obra X', 'Almoxarifado', 'Oficina', 'Em trânsito', 'Em manutenção').messages({
+    'any.only': 'Tipo de localização deve ser: Obra X, Almoxarifado, Oficina, Em trânsito ou Em manutenção'
+  }),
+  obra_id: Joi.number().integer().allow(null).messages({
+    'number.base': 'ID da obra deve ser um número',
+    'number.integer': 'ID da obra deve ser um número inteiro'
+  }),
+  dimensoes_altura: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Altura deve ser um número',
+    'number.min': 'Altura não pode ser negativa'
+  }),
+  dimensoes_largura: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Largura deve ser um número',
+    'number.min': 'Largura não pode ser negativa'
+  }),
+  dimensoes_comprimento: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Comprimento deve ser um número',
+    'number.min': 'Comprimento não pode ser negativa'
+  }),
+  dimensoes_peso: Joi.number().min(0).allow(null).messages({
+    'number.base': 'Peso deve ser um número',
+    'number.min': 'Peso não pode ser negativa'
+  }),
+  vida_util_percentual: Joi.number().integer().min(0).max(100).messages({
+    'number.base': 'Vida útil deve ser um número',
+    'number.integer': 'Vida útil deve ser um número inteiro',
+    'number.min': 'Vida útil não pode ser menor que 0%',
+    'number.max': 'Vida útil não pode ser maior que 100%'
   }),
   valor_unitario: Joi.number().precision(2).min(0).messages({
     'number.base': 'Valor unitário deve ser um número',

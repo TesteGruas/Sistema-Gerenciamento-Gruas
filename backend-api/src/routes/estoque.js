@@ -86,8 +86,58 @@ router.get('/', authenticateToken, requirePermission('estoque:visualizar'), asyn
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
-    const { categoria_id, status } = req.query
+    const { categoria_id, status, tipo_item, localizacao_tipo } = req.query
 
+    // Se tipo_item for 'componente', buscar componentes
+    if (tipo_item === 'componente') {
+      let query = supabaseAdmin
+        .from('grua_componentes')
+        .select(`
+          *,
+          grua:gruas(id, name, modelo, fabricante),
+          obra:obras(id, nome),
+          estoque:estoque!estoque_componente_id_fkey(
+            quantidade_atual,
+            quantidade_reservada,
+            quantidade_disponivel,
+            valor_total,
+            ultima_movimentacao
+          )
+        `, { count: 'exact' })
+
+      if (status) {
+        query = query.eq('status', status)
+      }
+      if (localizacao_tipo) {
+        query = query.eq('localizacao_tipo', localizacao_tipo)
+      }
+
+      query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+
+      const { data, error, count } = await query
+
+      if (error) {
+        return res.status(500).json({
+          error: 'Erro ao buscar componentes',
+          message: error.message
+        })
+      }
+
+      const totalPages = Math.ceil(count / limit)
+
+      return res.json({
+        success: true,
+        data: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count,
+          pages: totalPages
+        }
+      })
+    }
+
+    // Buscar produtos (comportamento padrão)
     let query = supabaseAdmin
       .from('produtos')
       .select(`
@@ -136,7 +186,7 @@ router.get('/', authenticateToken, requirePermission('estoque:visualizar'), asyn
       }
     })
   } catch (error) {
-    console.error('Erro ao listar produtos:', error)
+    console.error('Erro ao listar itens do estoque:', error)
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message
@@ -1116,7 +1166,7 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 50
     const offset = (page - 1) * limit
-    const { produto_id, tipo, data_inicio, data_fim } = req.query
+    const { produto_id, componente_id, tipo, data_inicio, data_fim } = req.query
 
     let query = supabaseAdmin
       .from('movimentacoes_estoque')
@@ -1131,12 +1181,29 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
             id,
             nome
           )
+        ),
+        componente:grua_componentes (
+          id,
+          nome,
+          tipo,
+          modelo,
+          fabricante,
+          unidade_medida,
+          valor_unitario,
+          grua:gruas (
+            id,
+            name,
+            modelo
+          )
         )
       `, { count: 'exact' })
       .order('data_movimentacao', { ascending: false })
 
     if (produto_id) {
       query = query.eq('produto_id', produto_id)
+    }
+    if (componente_id) {
+      query = query.eq('componente_id', componente_id)
     }
     if (tipo) {
       query = query.eq('tipo', tipo)
