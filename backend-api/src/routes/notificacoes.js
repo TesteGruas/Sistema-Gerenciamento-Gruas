@@ -318,6 +318,9 @@ router.get('/count/nao-lidas', authenticateToken, async (req, res) => {
  *         description: Notificação criada com sucesso
  */
 router.post('/', authenticateToken, requirePermission('notificacoes:criar'), async (req, res) => {
+  console.log(`[notificacoes] 🆕 Nova requisição de criação de notificação recebida`)
+  console.log(`[notificacoes] 📋 Dados recebidos:`, JSON.stringify(req.body))
+  
   try {
     const { error: validationError, value } = notificacaoSchema.validate(req.body)
     
@@ -429,18 +432,28 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
       })
     }
 
-    // Enviar notificações via WhatsApp
+    // Inicializar variáveis de WhatsApp ANTES de qualquer processamento
     let whatsappEnviados = 0
     let whatsappErros = 0
     
-    if (data && data.length > 0) {
-      // Formatar mensagem para WhatsApp
-      const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000'
-      const linkNotificacao = value.link 
-        ? (value.link.startsWith('http') ? value.link : `${FRONTEND_URL}${value.link}`)
-        : null
-      
-      const mensagemWhatsApp = `🔔 *${value.titulo}*
+    console.log(`[notificacoes] ✅ Notificações criadas no banco: ${data?.length || 0}`)
+    console.log(`[notificacoes] 👥 Usuários únicos para WhatsApp: ${usuariosUnicos.length}`)
+    console.log(`[notificacoes] 📋 IDs dos usuários:`, usuariosUnicos)
+    
+    // Enviar notificações via WhatsApp (não bloqueia a resposta)
+    if (data && data.length > 0 && usuariosUnicos.length > 0) {
+      // Executar envio de WhatsApp de forma assíncrona (não bloqueia a resposta)
+      (async () => {
+        try {
+          console.log(`[notificacoes] 🚀 Iniciando envio de WhatsApp para ${usuariosUnicos.length} usuário(s)`)
+          
+          // Formatar mensagem para WhatsApp
+          const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000'
+          const linkNotificacao = value.link 
+            ? (value.link.startsWith('http') ? value.link : `${FRONTEND_URL}${value.link}`)
+            : null
+          
+          const mensagemWhatsApp = `🔔 *${value.titulo}*
 
 ${value.mensagem}
 
@@ -449,55 +462,80 @@ ${linkNotificacao ? `\n🔗 Acesse: ${linkNotificacao}` : ''}
 ---
 _Enviado por: ${value.remetente || 'Sistema'}_`
 
-      // Enviar WhatsApp para cada destinatário único
-      for (const usuarioId of usuariosUnicos) {
-        try {
-          const telefone = await buscarTelefoneWhatsAppUsuario(usuarioId)
-          
-          if (telefone) {
-            const resultado = await enviarMensagemWebhook(
-              telefone,
-              mensagemWhatsApp,
-              linkNotificacao,
-              {
-                tipo: 'notificacao',
-                destinatario_nome: `Usuário ${usuarioId}`
+          console.log(`[notificacoes] 📝 Mensagem WhatsApp formatada (primeiros 100 chars):`, mensagemWhatsApp.substring(0, 100) + '...')
+
+          // Enviar WhatsApp para cada destinatário único
+          for (const usuarioId of usuariosUnicos) {
+            try {
+              console.log(`[notificacoes] 🔍 [${usuarioId}] Buscando telefone WhatsApp...`)
+              const telefone = await buscarTelefoneWhatsAppUsuario(usuarioId)
+              
+              if (telefone) {
+                console.log(`[notificacoes] 📞 [${usuarioId}] Telefone encontrado: ${telefone}`)
+                const resultado = await enviarMensagemWebhook(
+                  telefone,
+                  mensagemWhatsApp,
+                  linkNotificacao,
+                  {
+                    tipo: 'notificacao',
+                    destinatario_nome: `Usuário ${usuarioId}`
+                  }
+                )
+                
+                if (resultado.sucesso) {
+                  whatsappEnviados++
+                  console.log(`[notificacoes] ✅ [${usuarioId}] WhatsApp enviado com sucesso`)
+                } else {
+                  whatsappErros++
+                  console.warn(`[notificacoes] ❌ [${usuarioId}] Erro ao enviar WhatsApp:`, resultado.erro)
+                }
+              } else {
+                console.warn(`[notificacoes] ⚠️ [${usuarioId}] Telefone WhatsApp não encontrado`)
               }
-            )
-            
-            if (resultado.sucesso) {
-              whatsappEnviados++
-            } else {
+            } catch (error) {
               whatsappErros++
-              console.warn(`[notificacoes] Erro ao enviar WhatsApp para usuário ${usuarioId}:`, resultado.erro)
+              console.error(`[notificacoes] ❌ [${usuarioId}] Erro ao processar WhatsApp:`, error.message)
+              console.error(`[notificacoes] Stack trace:`, error.stack)
             }
-          } else {
-            console.warn(`[notificacoes] Telefone WhatsApp não encontrado para usuário ${usuarioId}`)
           }
+          
+          console.log(`[notificacoes] 📊 Resumo WhatsApp: ${whatsappEnviados} enviados, ${whatsappErros} erros, ${usuariosUnicos.length} total`)
         } catch (error) {
-          whatsappErros++
-          console.error(`[notificacoes] Erro ao processar WhatsApp para usuário ${usuarioId}:`, error)
+          console.error(`[notificacoes] ❌ Erro geral ao processar WhatsApp:`, error.message)
+          console.error(`[notificacoes] Stack trace:`, error.stack)
         }
-      }
+      })()
+    } else {
+      console.warn(`[notificacoes] ⚠️ Não há dados ou usuários para enviar WhatsApp. Data: ${data?.length || 0}, Usuários: ${usuariosUnicos.length}`)
     }
 
+    // Retornar resposta imediatamente (não esperar WhatsApp)
     const mensagemResposta = `Notificação criada com sucesso para ${usuariosUnicos.length} usuário(s)`
-    const mensagemWhatsAppInfo = whatsappEnviados > 0 
-      ? ` ${whatsappEnviados} mensagem(ns) enviada(s) via WhatsApp${whatsappErros > 0 ? `, ${whatsappErros} erro(s)` : ''}`
-      : whatsappErros > 0 
-        ? ` (${whatsappErros} erro(s) ao enviar WhatsApp)`
-        : ''
-
-    res.status(201).json({
+    
+    // Garantir que o campo whatsapp sempre seja retornado
+    const resposta = {
       success: true,
       data: data,
-      message: mensagemResposta + mensagemWhatsAppInfo,
+      message: mensagemResposta,
       whatsapp: {
-        enviados: whatsappEnviados,
-        erros: whatsappErros,
-        total: usuariosUnicos.length
+        enviados: 0, // Será atualizado assincronamente
+        erros: 0,
+        total: usuariosUnicos.length,
+        status: 'processando' // Indica que está sendo processado
       }
-    })
+    }
+    
+    console.log(`[notificacoes] 📤 Preparando resposta completa:`)
+    console.log(`[notificacoes]    - success: ${resposta.success}`)
+    console.log(`[notificacoes]    - data: ${resposta.data?.length || 0} notificação(ões)`)
+    console.log(`[notificacoes]    - message: ${resposta.message}`)
+    console.log(`[notificacoes]    - whatsapp.enviados: ${resposta.whatsapp.enviados}`)
+    console.log(`[notificacoes]    - whatsapp.erros: ${resposta.whatsapp.erros}`)
+    console.log(`[notificacoes]    - whatsapp.total: ${resposta.whatsapp.total}`)
+    console.log(`[notificacoes]    - whatsapp.status: ${resposta.whatsapp.status}`)
+    console.log(`[notificacoes] 📤 Resposta completa:`, JSON.stringify(resposta, null, 2))
+    
+    res.status(201).json(resposta)
   } catch (error) {
     console.error('Erro ao criar notificação:', error)
     res.status(500).json({

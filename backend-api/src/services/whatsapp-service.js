@@ -85,35 +85,77 @@ async function buscarConfiguracaoEvolutionAPI() {
  */
 async function buscarTelefoneWhatsAppUsuario(usuario_id) {
   try {
-    // Primeiro, tentar buscar em funcionarios (se o usuário for um funcionário)
-    const { data: funcionario, error: funcError } = await supabaseAdmin
-      .from('funcionarios')
-      .select('telefone_whatsapp, telefone')
-      .eq('user_id', usuario_id)
-      .single();
+    console.log(`[whatsapp-service] 🔍 Buscando telefone WhatsApp para usuário ${usuario_id}...`);
     
-    if (!funcError && funcionario) {
-      // Priorizar telefone_whatsapp, senão usar telefone comum
-      const telefone = funcionario.telefone_whatsapp || funcionario.telefone;
-      if (telefone) {
-        return formatarTelefone(telefone);
-      }
-    }
-    
-    // Se não encontrou em funcionarios, buscar em usuarios (pode ter telefone direto)
+    // Primeiro, buscar o usuário para verificar se tem funcionario_id
     const { data: usuario, error: userError } = await supabaseAdmin
       .from('usuarios')
-      .select('telefone')
+      .select('telefone, nome, funcionario_id')
       .eq('id', usuario_id)
       .single();
     
-    if (!userError && usuario && usuario.telefone) {
-      return formatarTelefone(usuario.telefone);
+    if (!userError && usuario) {
+      console.log(`[whatsapp-service] ✅ Usuário encontrado: ${usuario.nome || usuario_id}`);
+      console.log(`[whatsapp-service] 📋 Funcionário ID vinculado: ${usuario.funcionario_id || 'nenhum'}`);
+      console.log(`[whatsapp-service] 📞 Telefone do usuário: ${usuario.telefone || 'não informado'}`);
+      
+      // Se o usuário tem funcionario_id, buscar telefone do funcionário (prioridade)
+      if (usuario.funcionario_id) {
+        const { data: funcionario, error: funcError } = await supabaseAdmin
+          .from('funcionarios')
+          .select('telefone_whatsapp, telefone, id, nome')
+          .eq('id', usuario.funcionario_id)
+          .single();
+        
+        if (!funcError && funcionario) {
+          console.log(`[whatsapp-service] ✅ Funcionário encontrado: ${funcionario.nome || funcionario.id}`);
+          console.log(`[whatsapp-service] 📞 Telefone WhatsApp do funcionário: ${funcionario.telefone_whatsapp || 'não informado'}`);
+          console.log(`[whatsapp-service] 📞 Telefone comum do funcionário: ${funcionario.telefone || 'não informado'}`);
+          
+          // Priorizar telefone_whatsapp, senão usar telefone comum
+          const telefone = funcionario.telefone_whatsapp || funcionario.telefone;
+          if (telefone) {
+            const telefoneFormatado = formatarTelefone(telefone);
+            console.log(`[whatsapp-service] ✅ Telefone formatado do funcionário: ${telefone} -> ${telefoneFormatado}`);
+            return telefoneFormatado;
+          }
+        } else {
+          console.log(`[whatsapp-service] ⚠️ Funcionário ${usuario.funcionario_id} não encontrado ou erro:`, funcError?.message);
+        }
+      }
+      
+      // Se não encontrou telefone do funcionário, usar telefone do usuário
+      if (usuario.telefone) {
+        const telefoneFormatado = formatarTelefone(usuario.telefone);
+        console.log(`[whatsapp-service] ✅ Telefone formatado do usuário: ${usuario.telefone} -> ${telefoneFormatado}`);
+        return telefoneFormatado;
+      }
+    } else {
+      console.log(`[whatsapp-service] ⚠️ Usuário não encontrado ou erro:`, userError?.message);
+      
+      // Fallback: tentar buscar funcionário por user_id (caso o funcionário tenha user_id apontando para usuarios.id)
+      const { data: funcionario, error: funcError } = await supabaseAdmin
+        .from('funcionarios')
+        .select('telefone_whatsapp, telefone, id, nome')
+        .eq('user_id', usuario_id)
+        .single();
+      
+      if (!funcError && funcionario) {
+        console.log(`[whatsapp-service] ✅ Funcionário encontrado via user_id: ${funcionario.nome || funcionario.id}`);
+        const telefone = funcionario.telefone_whatsapp || funcionario.telefone;
+        if (telefone) {
+          const telefoneFormatado = formatarTelefone(telefone);
+          console.log(`[whatsapp-service] ✅ Telefone formatado: ${telefone} -> ${telefoneFormatado}`);
+          return telefoneFormatado;
+        }
+      }
     }
     
+    console.warn(`[whatsapp-service] ❌ Telefone WhatsApp não encontrado para usuário ${usuario_id}`);
     return null;
   } catch (error) {
-    console.error('[whatsapp-service] Erro ao buscar telefone WhatsApp do usuário:', error);
+    console.error('[whatsapp-service] ❌ Erro ao buscar telefone WhatsApp do usuário:', error);
+    console.error('[whatsapp-service] Stack trace:', error.stack);
     return null;
   }
 }
