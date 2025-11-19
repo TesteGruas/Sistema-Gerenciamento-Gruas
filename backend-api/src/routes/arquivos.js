@@ -55,6 +55,129 @@ const getFileType = (mimetype) => {
 
 /**
  * @swagger
+ * /api/arquivos/upload:
+ *   post:
+ *     summary: Upload genérico de arquivo
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - arquivo
+ *             properties:
+ *               arquivo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo a ser enviado (PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, TXT)
+ *               categoria:
+ *                 type: string
+ *                 description: Categoria do arquivo (opcional)
+ *     responses:
+ *       200:
+ *         description: Arquivo enviado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     caminho:
+ *                       type: string
+ *                       description: Caminho do arquivo no storage
+ *                     arquivo:
+ *                       type: string
+ *                       description: URL do arquivo
+ *                     nome_original:
+ *                       type: string
+ *                     tamanho:
+ *                       type: integer
+ *                     tipo_mime:
+ *                       type: string
+ *       400:
+ *         description: Nenhum arquivo enviado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/upload', authenticateToken, upload.single('arquivo'), async (req, res) => {
+  try {
+    const { categoria } = req.body
+    const file = req.file
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum arquivo enviado'
+      })
+    }
+
+    // Gerar nome único para o arquivo
+    const timestamp = Date.now()
+    const randomString = Math.random().toString(36).substring(2, 15)
+    const extension = file.originalname.split('.').pop()
+    const fileName = `upload_${timestamp}_${randomString}.${extension}`
+    
+    // Determinar o caminho baseado na categoria ou usar 'geral'
+    const categoriaPath = categoria || 'geral'
+    const filePath = `${categoriaPath}/${fileName}`
+
+    // Upload para o Supabase Storage (usar o bucket 'arquivos-obras' que é o principal)
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      })
+
+    if (uploadError) {
+      console.error('Erro no upload:', uploadError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao fazer upload do arquivo',
+        error: uploadError.message
+      })
+    }
+
+    // Obter URL pública do arquivo
+    const { data: urlData } = supabaseAdmin.storage
+      .from('arquivos-obras')
+      .getPublicUrl(filePath)
+
+    res.json({
+      success: true,
+      message: 'Arquivo enviado com sucesso',
+      data: {
+        caminho: filePath,
+        arquivo: urlData?.publicUrl || filePath,
+        nome_original: file.originalname,
+        tamanho: file.size,
+        tipo_mime: file.mimetype
+      }
+    })
+
+  } catch (error) {
+    console.error('Erro no upload genérico:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
  * /api/arquivos/upload/grua/{gruaId}:
  *   post:
  *     summary: Upload de arquivo para uma grua específica

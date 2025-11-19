@@ -808,8 +808,10 @@ router.post('/', async (req, res) => {
         })
       }
 
-      // Adicionar cargo_id ao funcionarioData
+      // Adicionar cargo_id ao funcionarioData e remover o campo cargo (string)
+      // para evitar violação da constraint CHECK no banco de dados
       funcionarioData.cargo_id = cargoExiste.id
+      delete funcionarioData.cargo
     }
 
     // Verificar se CPF já existe (se fornecido)
@@ -1159,8 +1161,10 @@ router.put('/:id', async (req, res) => {
         })
       }
 
-      // Adicionar cargo_id ao funcionarioData
+      // Adicionar cargo_id ao funcionarioData e remover o campo cargo (string)
+      // para evitar violação da constraint CHECK no banco de dados
       funcionarioData.cargo_id = cargoExiste.id
+      delete funcionarioData.cargo
     }
 
     // Verificar se CPF já existe em outro funcionário (se fornecido)

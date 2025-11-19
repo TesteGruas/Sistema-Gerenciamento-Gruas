@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SignaturePad } from "./signature-pad"
-import { Download, Eye, FileText, CheckCircle2, Clock, AlertCircle } from "lucide-react"
+import { Download, Eye, FileText, CheckCircle2, Clock, AlertCircle, Upload, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { DocumentoUpload } from "./documento-upload"
 
 export interface Holerite {
   id?: number
@@ -39,6 +40,12 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   const [isAssinaturaDialogOpen, setIsAssinaturaDialogOpen] = useState(false)
   const [holeriteSelecionado, setHoleriteSelecionado] = useState<Holerite | null>(null)
   const [assinaturaDataUrl, setAssinaturaDataUrl] = useState<string>('')
+  
+  // Estados para upload de holerite
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [arquivoHolerite, setArquivoHolerite] = useState<File | null>(null)
+  const [mesReferencia, setMesReferencia] = useState('')
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     loadHolerites()
@@ -152,6 +159,105 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   // Verificar se o usuário pode assinar (apenas funcionário pode assinar seu próprio holerite)
   const podeAssinar = isFuncionario && !readOnly
 
+  const handleUploadHolerite = async () => {
+    if (!arquivoHolerite) {
+      toast({
+        title: "Erro",
+        description: "Selecione um arquivo para upload",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!mesReferencia) {
+      toast({
+        title: "Erro",
+        description: "A data (mês/ano) é obrigatória",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Validar formato do mês (YYYY-MM)
+    const mesRegex = /^\d{4}-\d{2}$/
+    if (!mesRegex.test(mesReferencia)) {
+      toast({
+        title: "Erro",
+        description: "Formato de data inválido. Use o formato YYYY-MM (ex: 2025-01)",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setUploading(true)
+    try {
+      // Fazer upload do arquivo primeiro
+      const formData = new FormData()
+      formData.append('arquivo', arquivoHolerite)
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+      
+      if (!uploadResponse.ok) {
+        throw new Error('Erro ao fazer upload do arquivo')
+      }
+      
+      const uploadResult = await uploadResponse.json()
+      const arquivoUrl = uploadResult.data?.caminho || uploadResult.data?.arquivo || uploadResult.caminho || uploadResult.arquivo
+      
+      // Salvar holerite usando a API de colaboradores-documentos
+      const holeriteResponse = await fetch(
+        `${apiUrl}/api/colaboradores/${colaboradorId}/holerites`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            mes_referencia: mesReferencia,
+            arquivo: arquivoUrl
+          })
+        }
+      )
+      
+      if (!holeriteResponse.ok) {
+        const errorData = await holeriteResponse.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || 'Erro ao salvar holerite')
+      }
+      
+      toast({
+        title: "Sucesso",
+        description: "Holerite enviado com sucesso!",
+      })
+      
+      // Recarregar holerites
+      await loadHolerites()
+      
+      // Fechar dialog e limpar
+      setIsUploadDialogOpen(false)
+      setArquivoHolerite(null)
+      setMesReferencia('')
+    } catch (error: any) {
+      console.error('Erro ao fazer upload de holerite:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao fazer upload do holerite",
+        variant: "destructive"
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -163,6 +269,15 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                 {holerites.length} holerite(s) disponível(is)
               </CardDescription>
             </div>
+            {!readOnly && (
+              <Button
+                onClick={() => setIsUploadDialogOpen(true)}
+                variant="default"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Enviar Holerite
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -272,6 +387,81 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
               title="Assinar Holerite"
               description={`Assine digitalmente o holerite de ${holeriteSelecionado?.mes} / ${holeriteSelecionado?.ano}`}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Upload de Holerite */}
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Enviar Holerite</DialogTitle>
+            <DialogDescription>
+              Faça upload do holerite em PDF. A data (mês/ano) é obrigatória.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="mes-referencia">
+                Mês/Ano de Referência <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="mes-referencia"
+                type="month"
+                value={mesReferencia}
+                onChange={(e) => setMesReferencia(e.target.value)}
+                required
+                className="mt-1"
+                placeholder="YYYY-MM"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Selecione o mês e ano de referência do holerite (formato: YYYY-MM)
+              </p>
+            </div>
+
+            <div>
+              <DocumentoUpload
+                accept="application/pdf"
+                maxSize={10 * 1024 * 1024} // 10MB
+                onUpload={(file) => setArquivoHolerite(file)}
+                onRemove={() => setArquivoHolerite(null)}
+                label="Arquivo do Holerite (PDF)"
+                required={true}
+                currentFile={arquivoHolerite}
+                disabled={uploading}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsUploadDialogOpen(false)
+                  setArquivoHolerite(null)
+                  setMesReferencia('')
+                }}
+                disabled={uploading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleUploadHolerite}
+                disabled={!arquivoHolerite || !mesReferencia || uploading}
+              >
+                {uploading ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Enviar Holerite
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

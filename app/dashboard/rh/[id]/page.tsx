@@ -49,10 +49,12 @@ import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { rhApi } from "@/lib/api-rh-completo"
+import { apiRegistrosPonto } from "@/lib/api-ponto-eletronico"
 import { ColaboradorCertificados } from "@/components/colaborador-certificados"
 import { ColaboradorDocumentosAdmissionais } from "@/components/colaborador-documentos-admissionais"
 import { ColaboradorHolerites } from "@/components/colaborador-holerites"
 import { DocumentoUpload } from "@/components/documento-upload"
+import { Upload as UploadIcon } from "lucide-react"
 import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
 
 interface FuncionarioRH {
@@ -96,11 +98,16 @@ interface SalarioDetalhado {
   mes: string
   ano: number
   salario_base: number
+  horas_trabalhadas?: number
+  horas_extras?: number
+  valor_hora_extra?: number
   total_proventos: number
   total_descontos: number
   salario_liquido: number
   status: string
   data_pagamento?: string
+  arquivo_holerite?: string
+  holerite_url?: string
   created_at: string
   updated_at: string
   funcionario?: {
@@ -195,6 +202,24 @@ export default function FuncionarioDetalhesPage() {
   const [beneficios, setBeneficios] = useState<BeneficioFuncionario[]>([])
   const [tiposBeneficios, setTiposBeneficios] = useState<any[]>([])
   const [obrasFuncionario, setObrasFuncionario] = useState<any[]>([])
+  const [holerites, setHolerites] = useState<any[]>([])
+  
+  // Estados para cálculo de salário
+  const [mesCalculo, setMesCalculo] = useState(() => {
+    const agora = new Date()
+    return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [calculandoSalario, setCalculandoSalario] = useState(false)
+  
+  // Estados para visualização de folha
+  const [folhaSelecionada, setFolhaSelecionada] = useState<SalarioDetalhado | null>(null)
+  const [isFolhaDialogOpen, setIsFolhaDialogOpen] = useState(false)
+  
+  // Estados para upload de holerite
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [folhaParaUpload, setFolhaParaUpload] = useState<SalarioDetalhado | null>(null)
+  const [arquivoHolerite, setArquivoHolerite] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   // Documentos
   const [documentos, setDocumentos] = useState<DocumentoFuncionario[]>([])
@@ -206,7 +231,74 @@ export default function FuncionarioDetalhesPage() {
       const salariosResponse = await rhApi.listarFolhasPagamento({ 
         funcionario_id: funcionarioId
       })
-      setSalarios(salariosResponse.data || [])
+      let salariosData = salariosResponse.data || []
+
+      // Carregar holerites
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      try {
+        const holeritesResponse = await fetch(
+          `${apiUrl}/api/colaboradores/${funcionarioId}/holerites`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        
+        if (holeritesResponse.ok) {
+          const holeritesData = await holeritesResponse.json()
+          setHolerites(holeritesData.data || [])
+          
+          // Associar holerites às folhas de pagamento
+          salariosData = salariosData.map((salario: SalarioDetalhado) => {
+            // Formatar mes_referencia para comparar (formato YYYY-MM)
+            let mesReferencia = ''
+            
+            // Se mes já está no formato YYYY-MM (string com hífen)
+            if (typeof salario.mes === 'string' && salario.mes.includes('-')) {
+              mesReferencia = salario.mes
+            } 
+            // Se mes é apenas o número do mês (1-12) ou string sem hífen
+            else {
+              let mesNum: number
+              if (typeof salario.mes === 'number') {
+                mesNum = salario.mes
+              } else {
+                // Se for string, tentar extrair o número do mês
+                const mesStr = String(salario.mes)
+                // Se for algo como "11" ou "2025-11", extrair o mês
+                if (mesStr.includes('-')) {
+                  mesNum = parseInt(mesStr.split('-')[1])
+                } else {
+                  mesNum = parseInt(mesStr) || 1
+                }
+              }
+              mesReferencia = `${salario.ano}-${String(mesNum).padStart(2, '0')}`
+            }
+            
+            // Buscar holerite correspondente
+            const holerite = (holeritesData.data || []).find((h: any) => h.mes_referencia === mesReferencia)
+            
+            if (holerite) {
+              return {
+                ...salario,
+                arquivo_holerite: holerite.arquivo,
+                holerite_url: holerite.arquivo
+              }
+            }
+            
+            return salario
+          })
+        }
+      } catch (holeritesError) {
+        console.warn('Erro ao carregar holerites:', holeritesError)
+        // Continuar sem holerites
+      }
+      
+      setSalarios(salariosData)
 
       // Carregar benefícios
       const beneficiosResponse = await rhApi.listarBeneficiosFuncionarios({ 
@@ -233,8 +325,6 @@ export default function FuncionarioDetalhesPage() {
       }
 
       // Carregar histórico de obras
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
-      const token = localStorage.getItem('access_token')
       if (token) {
         try {
           const obrasResponse = await fetch(
@@ -724,23 +814,490 @@ export default function FuncionarioDetalhesPage() {
     }
   }
 
-  const calcularSalario = async () => {
-    setLoading(true)
+  const handleVisualizarFolha = async (salario: SalarioDetalhado) => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Buscar detalhes completos da folha
+      const folhaDetalhes = await rhApi.obterFolhaPagamento(salario.id)
       
-      toast({
-        title: "Salário Calculado",
-        description: "Cálculo de salário realizado com sucesso!",
-      })
-    } catch (error) {
+      if (folhaDetalhes.success && folhaDetalhes.data) {
+        setFolhaSelecionada(folhaDetalhes.data as any)
+        setIsFolhaDialogOpen(true)
+      } else {
+        // Se não conseguir buscar detalhes, usar os dados básicos
+        setFolhaSelecionada(salario)
+        setIsFolhaDialogOpen(true)
+      }
+    } catch (error: any) {
+      console.error('Erro ao buscar detalhes da folha:', error)
+      // Mesmo com erro, mostrar os dados básicos
+      setFolhaSelecionada(salario)
+      setIsFolhaDialogOpen(true)
+    }
+  }
+
+  const handleUploadHolerite = async () => {
+    if (!folhaParaUpload || !arquivoHolerite || !funcionario) {
       toast({
         title: "Erro",
-        description: "Erro ao calcular salário",
+        description: "Selecione um arquivo para upload",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setUploading(true)
+    try {
+      // Fazer upload do arquivo primeiro
+      const formData = new FormData()
+      formData.append('arquivo', arquivoHolerite)
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+      
+      if (!uploadResponse.ok) {
+        throw new Error('Erro ao fazer upload do arquivo')
+      }
+      
+      const uploadResult = await uploadResponse.json()
+      const arquivoUrl = uploadResult.data?.caminho || uploadResult.data?.arquivo || uploadResult.caminho || uploadResult.arquivo
+      
+      // Formatar mes_referencia no formato YYYY-MM
+      let mesReferencia = folhaParaUpload.mes
+      if (typeof folhaParaUpload.mes === 'string' && !folhaParaUpload.mes.includes('-')) {
+        // Se for apenas o número do mês, construir YYYY-MM
+        mesReferencia = `${folhaParaUpload.ano}-${String(folhaParaUpload.mes).padStart(2, '0')}`
+      } else if (typeof folhaParaUpload.mes === 'number') {
+        mesReferencia = `${folhaParaUpload.ano}-${String(folhaParaUpload.mes).padStart(2, '0')}`
+      }
+      
+      // Salvar holerite usando a API de colaboradores-documentos
+      const holeriteResponse = await fetch(
+        `${apiUrl}/api/colaboradores/${funcionario.id}/holerites`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            mes_referencia: mesReferencia,
+            arquivo: arquivoUrl
+          })
+        }
+      )
+      
+      if (!holeriteResponse.ok) {
+        const errorData = await holeriteResponse.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Erro ao salvar holerite')
+      }
+      
+      toast({
+        title: "Sucesso",
+        description: "Holerite enviado com sucesso!",
+      })
+      
+      // Recarregar dados
+      await carregarDadosTabs(funcionario.id)
+      
+      // Fechar dialog e limpar
+      setIsUploadDialogOpen(false)
+      setFolhaParaUpload(null)
+      setArquivoHolerite(null)
+    } catch (error: any) {
+      console.error('Erro ao fazer upload de holerite:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao fazer upload do holerite",
         variant: "destructive"
       })
     } finally {
-      setLoading(false)
+      setUploading(false)
+    }
+  }
+
+  const handleDownloadFolha = async (salario: SalarioDetalhado) => {
+    try {
+      // Se tiver arquivo de holerite, baixar o arquivo enviado
+      if (salario.arquivo_holerite || salario.holerite_url) {
+        const arquivoUrl = salario.arquivo_holerite || salario.holerite_url
+        
+        // Se for URL completa, abrir diretamente
+        if (arquivoUrl.startsWith('http')) {
+          window.open(arquivoUrl, '_blank')
+        } else {
+          // Se for caminho relativo, construir URL completa
+          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+          
+          // Tentar obter URL assinada
+          try {
+            const urlResponse = await fetch(
+              `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(arquivoUrl)}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              }
+            )
+            
+            if (urlResponse.ok) {
+              const urlData = await urlResponse.json()
+              window.open(urlData.url || urlData.data?.url || arquivoUrl, '_blank')
+            } else {
+              window.open(`${apiUrl}/uploads/${arquivoUrl}`, '_blank')
+            }
+          } catch {
+            window.open(`${apiUrl}/uploads/${arquivoUrl}`, '_blank')
+          }
+        }
+        
+        toast({
+          title: "Download Iniciado",
+          description: "O holerite está sendo baixado.",
+        })
+        return
+      }
+      
+      // Se não tiver arquivo, gerar HTML (fallback)
+      // Buscar detalhes completos da folha
+      const folhaDetalhes = await rhApi.obterFolhaPagamento(salario.id)
+      
+      if (!folhaDetalhes.success || !folhaDetalhes.data) {
+        throw new Error('Folha de pagamento não encontrada')
+      }
+      
+      const folha = folhaDetalhes.data as any
+      const horasExtras = folha.horas_extras || salario.horas_extras || 0
+      const valorHoraExtra = folha.valor_hora_extra || salario.valor_hora_extra || 0
+      
+      // Formatar datas antes de inserir no template string
+      const dataPagamentoFormatada = salario.data_pagamento 
+        ? format(new Date(salario.data_pagamento), 'dd/MM/yyyy', { locale: ptBR })
+        : ''
+      const dataGeracaoFormatada = format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })
+      
+      // Extrair mês e ano para exibição
+      let mesExib = salario.mes
+      let anoExib = salario.ano
+      if (typeof salario.mes === 'string' && salario.mes.includes('-')) {
+        const [ano, mes] = salario.mes.split('-')
+        mesExib = mes
+        anoExib = parseInt(ano)
+      }
+      
+      // Criar conteúdo HTML para o PDF
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Holerite - ${funcionario?.nome || 'Funcionário'}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 20px;
+              max-width: 800px;
+              margin: 0 auto;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #333;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .header h1 {
+              margin: 0;
+              color: #333;
+            }
+            .info-section {
+              margin-bottom: 30px;
+            }
+            .info-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 8px 0;
+              border-bottom: 1px solid #eee;
+            }
+            .info-label {
+              font-weight: bold;
+              color: #666;
+            }
+            .info-value {
+              color: #333;
+            }
+            .table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 20px 0;
+            }
+            .table th, .table td {
+              padding: 12px;
+              text-align: left;
+              border-bottom: 1px solid #ddd;
+            }
+            .table th {
+              background-color: #f5f5f5;
+              font-weight: bold;
+            }
+            .total-row {
+              font-weight: bold;
+              background-color: #f9f9f9;
+            }
+            .valor {
+              text-align: right;
+            }
+            .provento {
+              color: #28a745;
+            }
+            .desconto {
+              color: #dc3545;
+            }
+            .footer {
+              margin-top: 40px;
+              padding-top: 20px;
+              border-top: 2px solid #333;
+              text-align: center;
+              color: #666;
+              font-size: 12px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>HOLERITE DE PAGAMENTO</h1>
+            <p>Mês/Ano: ${String(mesExib).padStart(2, '0')}/${anoExib}</p>
+          </div>
+          
+          <div class="info-section">
+            <div class="info-row">
+              <span class="info-label">Funcionário:</span>
+              <span class="info-value">${funcionario?.nome || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">CPF:</span>
+              <span class="info-value">${funcionario?.cpf || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Cargo:</span>
+              <span class="info-value">${funcionario?.cargo || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Status:</span>
+              <span class="info-value">${salario.status || 'N/A'}</span>
+            </div>
+            ${dataPagamentoFormatada ? `
+            <div class="info-row">
+              <span class="info-label">Data de Pagamento:</span>
+              <span class="info-value">${dataPagamentoFormatada}</span>
+            </div>
+            ` : ''}
+          </div>
+          
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Descrição</th>
+                <th class="valor">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Salário Base</td>
+                <td class="valor">R$ ${(salario.salario_base || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              ${horasExtras > 0 ? `
+              <tr>
+                <td>Horas Extras (${horasExtras}h × R$ ${valorHoraExtra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</td>
+                <td class="valor provento">R$ ${(horasExtras * valorHoraExtra).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              ` : ''}
+              <tr class="total-row">
+                <td>Total de Proventos</td>
+                <td class="valor provento">R$ ${(salario.total_proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr>
+                <td>Descontos</td>
+                <td class="valor desconto">R$ ${(salario.total_descontos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr class="total-row">
+                <td><strong>Salário Líquido</strong></td>
+                <td class="valor"><strong>R$ ${(salario.salario_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div class="footer">
+            <p>Documento gerado em ${dataGeracaoFormatada}</p>
+            <p>Sistema de Gerenciamento de Gruas - IRBANA</p>
+          </div>
+        </body>
+        </html>
+      `
+      
+      // Criar blob e fazer download
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      // Formatar nome do arquivo
+      const nomeArquivo = `holerite-${(funcionario?.nome || 'funcionario').replace(/\s+/g, '-')}-${String(mesExib).padStart(2, '0')}-${anoExib}.html`
+      link.download = nomeArquivo
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Download Iniciado",
+        description: "O holerite foi gerado e o download foi iniciado.",
+      })
+    } catch (error: any) {
+      console.error('Erro ao gerar holerite:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao gerar holerite para download",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const calcularSalario = async () => {
+    if (!funcionario) return
+    
+    setCalculandoSalario(true)
+    try {
+      // Extrair ano e mês do formato YYYY-MM
+      const [ano, mesNum] = mesCalculo.split('-')
+      const mes = parseInt(mesNum)
+      
+      // Calcular data de início e fim do mês
+      const dataInicio = `${ano}-${mesNum}-01`
+      const ultimoDia = new Date(parseInt(ano), mes, 0).getDate()
+      const dataFim = `${ano}-${mesNum}-${String(ultimoDia).padStart(2, '0')}`
+      
+      // Buscar registros de ponto do funcionário para o mês
+      let totalHorasTrabalhadas = 0
+      let totalHorasExtras = 0
+      
+      try {
+        const registrosPonto = await apiRegistrosPonto.listar({
+          funcionario_id: funcionario.id,
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        })
+        
+        // Calcular totais de horas trabalhadas e horas extras
+        if (registrosPonto.data && registrosPonto.data.length > 0) {
+          totalHorasTrabalhadas = registrosPonto.data.reduce((sum, registro) => {
+            return sum + (parseFloat(String(registro.horas_trabalhadas || 0)))
+          }, 0)
+          
+          totalHorasExtras = registrosPonto.data.reduce((sum, registro) => {
+            return sum + (parseFloat(String(registro.horas_extras || 0)))
+          }, 0)
+        }
+      } catch (pontoError) {
+        console.warn('Erro ao buscar registros de ponto, continuando sem horas extras:', pontoError)
+        // Continuar sem horas extras se não conseguir buscar
+      }
+      
+      // Calcular valor da hora extra (50% adicional sobre o valor da hora normal)
+      // Valor da hora = salário base / 220 horas (jornada mensal padrão)
+      const valorHora = (funcionario.salario || 0) / 220
+      const valorHoraExtra = valorHora * 1.5 // 50% adicional
+      const valorTotalHorasExtras = Math.round((totalHorasExtras * valorHoraExtra) * 100) / 100 // Arredondar para 2 casas decimais
+      
+      // Tentar usar o endpoint específico de calcular salário
+      try {
+        const response = await rhApi.calcularSalario(
+          funcionario.id, 
+          String(mes), 
+          ano
+        )
+        
+        if (response.success) {
+          toast({
+            title: "Salário Calculado",
+            description: `Cálculo realizado com ${totalHorasExtras.toFixed(2)}h extras do ponto eletrônico!`,
+          })
+          
+          // Recarregar dados das tabs para mostrar o novo salário calculado
+          await carregarDadosTabs(funcionario.id)
+          return
+        }
+      } catch (apiError) {
+        // Se o endpoint não existir, usar a API de folha de pagamento como alternativa
+        console.log('Endpoint calcular-salario não disponível, usando folha de pagamento')
+      }
+      
+      // Verificar se já existe folha para este mês
+      const folhaResponse = await rhApi.listarFolhasPagamento({
+        funcionario_id: funcionario.id,
+        mes: mesCalculo
+      })
+      
+      let folhaId: number | null = null
+      
+      // Se já existe folha, atualizar
+      if (folhaResponse.data && folhaResponse.data.length > 0) {
+        folhaId = folhaResponse.data[0].id
+        
+        // Atualizar folha existente com os dados calculados
+        const atualizarFolhaResponse = await rhApi.atualizarFolhaPagamento(folhaId, {
+          horas_trabalhadas: Math.round(totalHorasTrabalhadas * 100) / 100,
+          horas_extras: Math.round(totalHorasExtras * 100) / 100,
+          valor_hora_extra: Math.round(valorHoraExtra * 100) / 100
+        })
+        
+        if (atualizarFolhaResponse.success) {
+          toast({
+            title: "Folha de Pagamento Atualizada",
+            description: `Folha atualizada com ${totalHorasExtras.toFixed(2)}h extras calculadas do ponto eletrônico!`,
+          })
+          
+          await carregarDadosTabs(funcionario.id)
+          return
+        }
+      }
+      
+      // Criar nova folha de pagamento com os dados calculados
+      const criarFolhaResponse = await rhApi.criarFolhaPagamento({
+        funcionario_id: funcionario.id,
+        mes: mesCalculo,
+        salario_base: funcionario.salario || 0,
+        horas_trabalhadas: Math.round(totalHorasTrabalhadas * 100) / 100,
+        horas_extras: Math.round(totalHorasExtras * 100) / 100,
+        valor_hora_extra: Math.round(valorHoraExtra * 100) / 100
+      })
+      
+      if (criarFolhaResponse.success) {
+        toast({
+          title: "Folha de Pagamento Criada",
+          description: `Folha criada com ${totalHorasExtras.toFixed(2)}h extras calculadas do ponto eletrônico!`,
+        })
+        
+        // Recarregar dados das tabs
+        await carregarDadosTabs(funcionario.id)
+      } else {
+        throw new Error(criarFolhaResponse.message || 'Erro ao criar folha de pagamento')
+      }
+    } catch (error: any) {
+      console.error('Erro ao calcular salário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao calcular salário. Verifique se o funcionário tem salário base cadastrado.",
+        variant: "destructive"
+      })
+    } finally {
+      setCalculandoSalario(false)
     }
   }
 
@@ -1175,10 +1732,33 @@ export default function FuncionarioDetalhesPage() {
                   <CardTitle>Histórico de Salários</CardTitle>
                   <CardDescription>Controle de salários e pagamentos</CardDescription>
                 </div>
-                <Button onClick={calcularSalario} disabled={loading}>
-                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Calculator className="w-4 h-4 mr-2" />}
-                  Calcular Salário
-                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="mes-calculo" className="text-xs text-muted-foreground">
+                      Mês/Ano para Cálculo
+                    </Label>
+                    <Input
+                      id="mes-calculo"
+                      type="month"
+                      value={mesCalculo}
+                      onChange={(e) => setMesCalculo(e.target.value)}
+                      className="w-40"
+                    />
+                  </div>
+                  <Button onClick={calcularSalario} disabled={calculandoSalario || loading}>
+                    {calculandoSalario ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Calculando...
+                      </>
+                    ) : (
+                      <>
+                        <Calculator className="w-4 h-4 mr-2" />
+                        Calcular Salário
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -1197,54 +1777,91 @@ export default function FuncionarioDetalhesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salarios.map((salario) => (
-                      <TableRow key={salario.id}>
-                        <TableCell>
-                          <span className="font-medium">
-                            {salario.mes}/{salario.ano}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium">R$ {(salario.salario_base || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium text-green-600">
-                            R$ {(salario.total_proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium text-red-600">
-                            R$ {(salario.total_descontos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-bold text-blue-600">
-                            R$ {(salario.salario_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${getStatusColor(salario.status)} border`}>
-                            {getStatusIcon(salario.status)}
-                            <span className="ml-1">{salario.status}</span>
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm">
-                            {salario.data_pagamento ? format(new Date(salario.data_pagamento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
+                    {salarios.map((salario) => {
+                      // Extrair mês e ano do formato YYYY-MM ou usar mes/ano separados
+                      let mesExibicao = salario.mes
+                      let anoExibicao = salario.ano
+                      
+                      // Se mes está no formato YYYY-MM, extrair
+                      if (typeof salario.mes === 'string' && salario.mes.includes('-')) {
+                        const [ano, mes] = salario.mes.split('-')
+                        mesExibicao = mes
+                        anoExibicao = parseInt(ano)
+                      }
+                      
+                      return (
+                        <TableRow key={salario.id}>
+                          <TableCell>
+                            <span className="font-medium">
+                              {String(mesExibicao).padStart(2, '0')}/{anoExibicao}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium">R$ {(salario.salario_base || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium text-green-600">
+                              R$ {(salario.total_proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium text-red-600">
+                              R$ {(salario.total_descontos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-bold text-blue-600">
+                              R$ {(salario.salario_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`${getStatusColor(salario.status)} border`}>
+                              {getStatusIcon(salario.status)}
+                              <span className="ml-1">{salario.status}</span>
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">
+                              {salario.data_pagamento ? format(new Date(salario.data_pagamento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleVisualizarFolha(salario)}
+                              title="Visualizar detalhes"
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button variant="outline" size="sm">
+                            {!salario.arquivo_holerite && !salario.holerite_url && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  setFolhaParaUpload(salario)
+                                  setIsUploadDialogOpen(true)
+                                }}
+                                title="Enviar holerite"
+                              >
+                                <UploadIcon className="w-4 h-4" />
+                              </Button>
+                            )}
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleDownloadFolha(salario)}
+                              title="Baixar holerite"
+                              disabled={!salario.arquivo_holerite && !salario.holerite_url}
+                            >
                               <Download className="w-4 h-4" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               ) : (
@@ -1717,6 +2334,186 @@ export default function FuncionarioDetalhesPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog de Visualização de Folha de Pagamento */}
+      <Dialog open={isFolhaDialogOpen} onOpenChange={setIsFolhaDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Folha de Pagamento</DialogTitle>
+          </DialogHeader>
+          {folhaSelecionada && (
+            <div className="space-y-6">
+              {/* Informações do Funcionário */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Funcionário</Label>
+                  <p className="text-sm font-semibold">{funcionario?.nome || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">CPF</Label>
+                  <p className="text-sm">{funcionario?.cpf || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Cargo</Label>
+                  <p className="text-sm">{funcionario?.cargo || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Mês/Ano</Label>
+                  <p className="text-sm font-semibold">
+                    {(() => {
+                      let mesExib = folhaSelecionada.mes
+                      let anoExib = folhaSelecionada.ano
+                      if (typeof folhaSelecionada.mes === 'string' && folhaSelecionada.mes.includes('-')) {
+                        const [ano, mes] = folhaSelecionada.mes.split('-')
+                        mesExib = mes
+                        anoExib = parseInt(ano)
+                      }
+                      return `${String(mesExib).padStart(2, '0')}/${anoExib}`
+                    })()}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Status</Label>
+                  <Badge className={`${getStatusColor(folhaSelecionada.status)} border`}>
+                    {getStatusIcon(folhaSelecionada.status)}
+                    <span className="ml-1">{folhaSelecionada.status}</span>
+                  </Badge>
+                </div>
+                {folhaSelecionada.data_pagamento && (
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Data de Pagamento</Label>
+                    <p className="text-sm">{format(new Date(folhaSelecionada.data_pagamento), 'dd/MM/yyyy', { locale: ptBR })}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Resumo Financeiro */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resumo Financeiro</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Salário Base</span>
+                      <span className="font-semibold">R$ {(folhaSelecionada.salario_base || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {(folhaSelecionada as any).horas_extras > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">
+                          Horas Extras ({(folhaSelecionada as any).horas_extras}h × R$ {((folhaSelecionada as any).valor_hora_extra || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                        </span>
+                        <span className="font-semibold text-green-600">
+                          R$ {(((folhaSelecionada as any).horas_extras || 0) * ((folhaSelecionada as any).valor_hora_extra || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-2 border-t">
+                      <span className="text-sm font-semibold text-gray-700">Total de Proventos</span>
+                      <span className="font-bold text-green-600">R$ {(folhaSelecionada.total_proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Descontos</span>
+                      <span className="font-semibold text-red-600">R$ {(folhaSelecionada.total_descontos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t">
+                      <span className="text-lg font-bold text-gray-900">Salário Líquido</span>
+                      <span className="text-xl font-bold text-blue-600">R$ {(folhaSelecionada.salario_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Botões de Ação */}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsFolhaDialogOpen(false)}>
+                  Fechar
+                </Button>
+                <Button onClick={() => {
+                  setIsFolhaDialogOpen(false)
+                  handleDownloadFolha(folhaSelecionada)
+                }}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Baixar Holerite
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Upload de Holerite */}
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Enviar Holerite</DialogTitle>
+          </DialogHeader>
+          {folhaParaUpload && (
+            <div className="space-y-4">
+              <div className="bg-muted p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Funcionário:</p>
+                <p className="font-semibold">{funcionario?.nome || 'N/A'}</p>
+                <p className="text-sm text-muted-foreground mt-2 mb-1">Mês/Ano:</p>
+                <p className="font-semibold">
+                  {(() => {
+                    let mesExib = folhaParaUpload.mes
+                    let anoExib = folhaParaUpload.ano
+                    if (typeof folhaParaUpload.mes === 'string' && folhaParaUpload.mes.includes('-')) {
+                      const [ano, mes] = folhaParaUpload.mes.split('-')
+                      mesExib = mes
+                      anoExib = parseInt(ano)
+                    }
+                    return `${String(mesExib).padStart(2, '0')}/${anoExib}`
+                  })()}
+                </p>
+              </div>
+              
+              <div>
+                <DocumentoUpload
+                  accept="application/pdf"
+                  maxSize={10 * 1024 * 1024} // 10MB
+                  onUpload={(file) => setArquivoHolerite(file)}
+                  onRemove={() => setArquivoHolerite(null)}
+                  label="Arquivo do Holerite (PDF)"
+                  required={true}
+                  currentFile={arquivoHolerite}
+                  disabled={uploading}
+                />
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsUploadDialogOpen(false)
+                    setFolhaParaUpload(null)
+                    setArquivoHolerite(null)
+                  }}
+                  disabled={uploading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleUploadHolerite}
+                  disabled={!arquivoHolerite || uploading}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <UploadIcon className="w-4 h-4 mr-2" />
+                      Enviar Holerite
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
