@@ -11,9 +11,11 @@ interface ObraStore {
   startDate: string
   endDate?: string // Tornando opcional para compatibilidade
   orcamento?: number // Orçamento original da obra
+  budget?: number // Alias para orcamento
   valorTotalObra?: number // Valor total acumulado dos custos (deve ser usado para exibição)
   status: string
   responsavelName?: string // Propriedade adicional
+  location?: string // Localização da obra
   cliente?: {
     id: string
     nome: string
@@ -28,8 +30,27 @@ interface ObraStore {
   custosIniciais?: number
   custosAdicionais?: number
   totalCustos?: number
+  // Campos obrigatórios (CNO, ART, Apólice)
+  cno?: string
+  art_numero?: string
+  art_arquivo?: string
+  apolice_numero?: string
+  apolice_arquivo?: string
+  observations?: string // Observações da obra
   // Preservar sinaleiros_obra do backend
   sinaleiros_obra?: Array<{
+    id: string
+    obra_id: number
+    nome: string
+    rg_cpf: string
+    telefone?: string
+    email?: string
+    tipo: 'principal' | 'reserva'
+    created_at: string
+    updated_at: string
+  }>
+  // Alias para compatibilidade
+  sinaleiros?: Array<{
     id: string
     obra_id: number
     nome: string

@@ -40,7 +40,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       
       try {
         loadingRef.current = true
-        console.log('⏳ [Preload] Carregando dados do usuário...')
         // Procurar por 'access_token' (usado pelo AuthService) ou 'token' (compatibilidade)
         const token = typeof window !== 'undefined' 
           ? (localStorage.getItem('access_token') || localStorage.getItem('token'))
@@ -48,7 +47,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         
         if (token) {
           const user = await AuthService.getCurrentUser()
-          console.log('✅ [Preload] Usuário carregado com sucesso')
           
           const userObject = {
             id: user.id.toString(),
@@ -71,18 +69,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
           }
           
           setCurrentUser(userObject)
-        } else {
-          console.log('⚠️ [Preload] Nenhum token encontrado')
         }
       } catch (error) {
-        console.error('❌ [Preload] Erro ao carregar usuário:', error instanceof Error ? error.message : 'Erro desconhecido')
+        console.error('Erro ao carregar usuário:', error instanceof Error ? error.message : 'Erro desconhecido')
         // Se falhar, limpar token inválido
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token')
           localStorage.removeItem('access_token')
         }
       } finally {
-        console.log('✅ [Preload] Finalizado carregamento do usuário')
         setLoading(false)
         setDadosIniciaisCarregados(true)
         loadingRef.current = false

@@ -18,13 +18,9 @@ export class ServiceWorkerManager {
     }
 
     try {
-      console.log('[SW Manager] Registrando service worker...');
-      
       this.registration = await navigator.serviceWorker.register('/sw.js', {
         scope: '/'
       });
-
-      console.log('[SW Manager] Service worker registrado:', this.registration);
 
       // Configurar listeners
       this.setupListeners();
@@ -53,11 +49,8 @@ export class ServiceWorkerManager {
       const newWorker = this.registration!.installing;
       
       if (newWorker) {
-        console.log('[SW Manager] Nova versão do service worker detectada');
-        
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            console.log('[SW Manager] Nova versão instalada');
             
             // Notificar callback de atualização
             if (this.onUpdateCallback && this.registration) {
@@ -70,8 +63,6 @@ export class ServiceWorkerManager {
 
     // Listener para mensagens do service worker
     navigator.serviceWorker.addEventListener('message', (event) => {
-      console.log('[SW Manager] Mensagem do SW:', event.data);
-      
       if (event.data.type === 'SYNC_APROVACOES') {
         this.handleSyncAprovacoes();
       } else if (event.data.type === 'SYNC_ASSINATURAS') {
@@ -83,7 +74,7 @@ export class ServiceWorkerManager {
 
     // Listener para quando o SW toma controle
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      console.log('[SW Manager] Service worker tomou controle');
+      // Service worker tomou controle
     });
   }
 
@@ -94,7 +85,6 @@ export class ServiceWorkerManager {
     if (!this.registration) return;
 
     try {
-      console.log('[SW Manager] Verificando atualizações...');
       await this.registration.update();
     } catch (error) {
       console.error('[SW Manager] Erro ao verificar atualizações:', error);
@@ -130,14 +120,11 @@ export class ServiceWorkerManager {
       return;
     }
 
-    console.log('[SW Manager] Ativando nova versão...');
-    
     // Enviar mensagem para o SW pular espera
     this.registration.waiting.postMessage({ type: 'SKIP_WAITING' });
 
     // Recarregar página quando o novo SW estiver ativo
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      console.log('[SW Manager] Recarregando página para nova versão...');
       window.location.reload();
     });
   }
@@ -160,7 +147,6 @@ export class ServiceWorkerManager {
 
     try {
       await this.registration.sync.register(tag);
-      console.log('[SW Manager] Sincronização registrada:', tag);
       return true;
     } catch (error) {
       console.error('[SW Manager] Erro ao registrar sincronização:', error);
@@ -208,45 +194,30 @@ export class ServiceWorkerManager {
    * Handlers de sincronização
    */
   private handleSyncAprovacoes() {
-    console.log('[SW Manager] Sincronizando aprovações...');
-    
     // Disparar evento customizado para os componentes
     window.dispatchEvent(new CustomEvent('sw-sync-aprovacoes'));
     
     // Buscar fila do localStorage e sincronizar
     const fila = JSON.parse(localStorage.getItem('fila_aprovacoes') || '[]');
-    if (fila.length > 0) {
-      // Os componentes devem ter listeners para este evento
-      console.log(`[SW Manager] ${fila.length} aprovações na fila`);
-    }
+    // Os componentes devem ter listeners para este evento
   }
 
   private handleSyncAssinaturas() {
-    console.log('[SW Manager] Sincronizando assinaturas...');
     window.dispatchEvent(new CustomEvent('sw-sync-assinaturas'));
     
     const fila = JSON.parse(localStorage.getItem('fila_assinaturas_documentos') || '[]');
-    if (fila.length > 0) {
-      console.log(`[SW Manager] ${fila.length} assinaturas na fila`);
-    }
   }
 
   private handleSyncPonto() {
-    console.log('[SW Manager] Sincronizando registros de ponto...');
     window.dispatchEvent(new CustomEvent('sw-sync-ponto'));
     
     const fila = JSON.parse(localStorage.getItem('fila_registros_ponto') || '[]');
-    if (fila.length > 0) {
-      console.log(`[SW Manager] ${fila.length} registros na fila`);
-    }
   }
 
   /**
    * Registrar todas as sincronizações pendentes
    */
   async syncAll() {
-    console.log('[SW Manager] Registrando todas as sincronizações...');
-    
     const tags = ['sync-aprovacoes', 'sync-assinaturas', 'sync-ponto'];
     
     for (const tag of tags) {
@@ -262,7 +233,6 @@ export class ServiceWorkerManager {
 
     try {
       await this.registration.unregister();
-      console.log('[SW Manager] Service worker desregistrado');
       this.stopUpdateChecks();
     } catch (error) {
       console.error('[SW Manager] Erro ao desregistrar service worker:', error);
@@ -294,8 +264,6 @@ export async function initServiceWorker() {
 
   // Configurar notificação de atualização
   manager.onUpdate((reg) => {
-    console.log('[SW Manager] Nova versão disponível!');
-    
     // Você pode mostrar um toast ou modal aqui
     const shouldUpdate = confirm(
       'Uma nova versão do aplicativo está disponível. Deseja atualizar agora?'
@@ -308,7 +276,6 @@ export async function initServiceWorker() {
 
   // Registrar sincronizações quando voltar online
   window.addEventListener('online', () => {
-    console.log('[SW Manager] Conexão restaurada, iniciando sincronização...');
     manager.syncAll();
   });
 

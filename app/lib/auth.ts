@@ -127,15 +127,9 @@ export class AuthService {
   // Obter dados do usuário atual
   static async getCurrentUser(): Promise<any> {
     try {
-      console.log('⏳ [Preload] Buscando dados do usuário (API /auth/me)...')
-      const startTime = performance.now()
-      
       const response = await this.authenticatedRequest(`${this.API_BASE_URL}/api/auth/me`, {
         method: 'GET'
       })
-      
-      const duration = Math.round(performance.now() - startTime)
-      console.log(`✅ [Preload] Dados do usuário recebidos (${duration}ms)`)
       
       // Retornar dados do usuário
       // Normalizar o nome do perfil para lowercase e mapear alguns perfis específicos

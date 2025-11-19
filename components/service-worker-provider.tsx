@@ -13,7 +13,6 @@ export function ServiceWorkerProvider({ children }: { children: React.ReactNode 
     initServiceWorker()
       .then((registration) => {
         if (registration) {
-          console.log('✅ Service Worker inicializado com sucesso')
           setSwReady(true)
         }
       })
@@ -23,17 +22,14 @@ export function ServiceWorkerProvider({ children }: { children: React.ReactNode 
 
     // Configurar listeners de sincronização
     const handleSyncAprovacoes = () => {
-      console.log('🔄 Evento de sincronização de aprovações recebido')
       // O componente de encarregador deve ter seu próprio listener
     }
 
     const handleSyncAssinaturas = () => {
-      console.log('🔄 Evento de sincronização de assinaturas recebido')
       // O componente de assinaturas deve ter seu próprio listener
     }
 
     const handleSyncPonto = () => {
-      console.log('🔄 Evento de sincronização de ponto recebido')
       // O componente de ponto deve ter seu próprio listener
     }
 
@@ -43,8 +39,6 @@ export function ServiceWorkerProvider({ children }: { children: React.ReactNode 
 
     // Listener para quando voltar online
     const handleOnline = () => {
-      console.log('🌐 Conexão restaurada')
-      
       toast({
         title: "Conexão restaurada",
         description: "Sincronizando dados pendentes...",
@@ -57,8 +51,6 @@ export function ServiceWorkerProvider({ children }: { children: React.ReactNode 
     }
 
     const handleOffline = () => {
-      console.log('📴 Conexão perdida')
-      
       toast({
         title: "Modo Offline",
         description: "Você está sem conexão. As alterações serão sincronizadas quando reconectar.",

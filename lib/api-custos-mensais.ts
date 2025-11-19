@@ -2,7 +2,7 @@
 
 import api from './api'
 
-// Interfaces
+// Interfaces para custos mensais gerais
 export interface CustoMensal {
   id: number
   mes: string // formato YYYY-MM
@@ -47,6 +47,59 @@ export interface CustoMensalUpdate {
   data_pagamento?: string
   forma_pagamento?: string
   observacoes?: string
+}
+
+// Interfaces para custos mensais de obras (estrutura diferente)
+export interface CustoMensalObra {
+  id: number
+  obra_id: number
+  item: string
+  descricao: string
+  unidade: string
+  quantidade_orcamento: number
+  valor_unitario: number
+  total_orcamento: number
+  mes: string
+  quantidade_realizada: number
+  valor_realizado: number
+  quantidade_acumulada: number
+  valor_acumulado: number
+  quantidade_saldo: number
+  valor_saldo: number
+  tipo: 'contrato' | 'aditivo'
+  created_at: string
+  updated_at: string
+  obras?: {
+    id: number
+    nome: string
+    status: string
+  }
+}
+
+export interface CustoMensalObraCreate {
+  obra_id: number
+  item: string
+  descricao: string
+  unidade: string
+  quantidade_orcamento: number
+  valor_unitario: number
+  mes: string
+  quantidade_realizada?: number
+  quantidade_acumulada?: number
+  valor_acumulado?: number
+  tipo: 'contrato' | 'aditivo'
+}
+
+export interface CustoMensalObraUpdate {
+  item?: string
+  descricao?: string
+  unidade?: string
+  quantidade_orcamento?: number
+  valor_unitario?: number
+  quantidade_realizada?: number
+  quantidade_acumulada?: number
+  valor_acumulado?: number
+  tipo?: 'contrato' | 'aditivo'
 }
 
 export interface CustoMensalFilters {
@@ -256,6 +309,27 @@ export const apiCustosMensais = {
     mes_destino: string
   }) {
     const response = await api.post('/custos-mensais/replicar', dados)
+    return response.data
+  },
+
+  // Métodos específicos para custos mensais de obras
+  // Criar custo mensal de obra
+  async criarCustoObra(dados: CustoMensalObraCreate) {
+    const response = await api.post('/custos-mensais', dados)
+    return response.data
+  },
+
+  // Atualizar custo mensal de obra
+  async atualizarCustoObra(id: number, dados: CustoMensalObraUpdate) {
+    const response = await api.put(`/custos-mensais/${id}`, dados)
+    return response.data
+  },
+
+  // Atualizar quantidade realizada
+  async atualizarQuantidadeRealizada(custoId: number, novaQuantidade: number) {
+    const response = await api.patch(`/custos-mensais/${custoId}/quantidade`, {
+      quantidade_realizada: novaQuantidade
+    })
     return response.data
   }
 }

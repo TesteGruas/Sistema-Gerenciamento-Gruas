@@ -568,13 +568,6 @@ export const obrasApi = {
 
 // Funções utilitárias para converter dados entre frontend e backend
 export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relacionamentos?: { gruasVinculadas?: any[], funcionariosVinculados?: any[] }) => {
-  // Debug: verificar se grua_obra está presente
-  if (obraBackend.grua_obra) {
-    console.log(`🔍 [CONVERSOR] Obra ${obraBackend.id} - grua_obra encontrado:`, obraBackend.grua_obra.length, 'relações')
-  } else {
-    console.log(`⚠️ [CONVERSOR] Obra ${obraBackend.id} - grua_obra não encontrado ou vazio`)
-  }
-  
   // Converter relacionamentos que vêm diretamente do backend
   const gruasVinculadas = obraBackend.grua_obra?.map(relacao => ({
     id: relacao.id.toString(),
@@ -595,11 +588,6 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
       tipo: relacao.grua.tipo
     } : null
   })) || []
-  
-  // Debug: verificar resultado da conversão
-  if (gruasVinculadas.length > 0) {
-    console.log(`✅ [CONVERSOR] Obra ${obraBackend.id} - ${gruasVinculadas.length} grua(s) convertida(s)`)
-  }
 
   const funcionariosVinculados = obraBackend.grua_funcionario?.map(relacao => ({
     id: relacao.id.toString(),

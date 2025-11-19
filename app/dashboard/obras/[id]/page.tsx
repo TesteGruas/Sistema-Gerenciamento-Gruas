@@ -44,7 +44,7 @@ import {
   X,
   Shield
 } from "lucide-react"
-import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalCreate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
+import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalObra, CustoMensalObraCreate, CustoMensalObraUpdate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
 import { obrasDocumentosApi, DocumentoObra, DocumentoCreate } from "@/lib/api-obras-documentos"
 import { obrasArquivosApi, ArquivoObra, ArquivoCreate } from "@/lib/api-obras-arquivos"
@@ -120,12 +120,12 @@ function ObraDetailsPageContent() {
       status: obra.status || 'Em Andamento',
       data_inicio: obra.startDate ? new Date(obra.startDate).toISOString().split('T')[0] : '',
       data_fim: obra.endDate ? new Date(obra.endDate).toISOString().split('T')[0] : '',
-      orcamento: obra.budget || 0,
-      endereco: obra.location || '',
-      cno: obra.cno || '',
-      art_numero: obra.art_numero || '',
-      apolice_numero: obra.apolice_numero || '',
-      observacoes: obra.observations || ''
+      orcamento: obra?.budget || 0,
+      endereco: obra?.location || '',
+      cno: obra?.cno || '',
+      art_numero: obra?.art_numero || '',
+      apolice_numero: obra?.apolice_numero || '',
+      observacoes: obra?.observations || ''
     })
     setIsEditing(true)
   }
@@ -146,8 +146,8 @@ function ObraDetailsPageContent() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-      let artArquivoUrl = obra.art_arquivo || ''
-      let apoliceArquivoUrl = obra.apolice_arquivo || ''
+      let artArquivoUrl = obra?.art_arquivo || ''
+      let apoliceArquivoUrl = obra?.apolice_arquivo || ''
       
       // 1. Fazer upload dos arquivos ART e Apólice se houver novos arquivos
       if (artArquivo) {
@@ -237,7 +237,7 @@ function ObraDetailsPageContent() {
         })
         
         // Recarregar obra atualizada
-        await carregarObra(parseInt(obraId))
+        await carregarObra(obraId)
         setIsEditing(false)
         setEditingData({})
         setArtArquivo(null)
@@ -452,10 +452,10 @@ function ObraDetailsPageContent() {
   const [novoMesData, setNovoMesData] = useState({
     mes: ''
   })
-  const [mesesDisponiveis, setMesesDisponiveis] = useState<string[]>([])
+  const [mesesDisponiveis, setMesesDisponiveis] = useState<Array<{value: string, label: string}>>([])
   const [isNovoCustoOpen, setIsNovoCustoOpen] = useState(false)
   const [isEditandoCusto, setIsEditandoCusto] = useState(false)
-  const [custoSelecionado, setCustoSelecionado] = useState<CustoMensalApi | null>(null)
+  const [custoSelecionado, setCustoSelecionado] = useState<CustoMensalObra | null>(null)
   const [novoCustoData, setNovoCustoData] = useState({
     item: '',
     descricao: '',
@@ -781,7 +781,7 @@ function ObraDetailsPageContent() {
   const gerarMesesDisponiveis = () => {
     if (!obra) return []
     
-    const mesesExistentes = getMesesDisponiveis(obra.id)
+    const mesesExistentes = getMesesDisponiveisDaAPI()
     const mesesDisponiveis: string[] = []
     
     // Gerar próximos 12 meses a partir do mês atual
@@ -843,7 +843,7 @@ function ObraDetailsPageContent() {
         return
       }
       
-      const ultimoMes = mesesExistentes[mesesExistentes.length - 1]
+      const ultimoMes = mesesExistentes[mesesExistentes.length - 1] as string
       
       await custosMensaisApi.replicar({
         obra_id: parseInt(obra.id),
@@ -874,12 +874,16 @@ function ObraDetailsPageContent() {
     
     try {
       const mesesExistentes = await custosMensaisApi.obterMesesDisponiveis(parseInt(obra.id))
-      const meses = custosMensaisApi.gerarProximosMeses(mesesExistentes)
+      const meses = custosMensaisApi.gerarProximosMeses(mesesExistentes as string[])
       setMesesDisponiveis(meses)
       setIsNovoMesOpen(true)
     } catch (error: any) {
       // Fallback para função mockada
-      const meses = gerarMesesDisponiveis()
+      const mesesStrings = gerarMesesDisponiveis()
+      const meses = mesesStrings.map(mes => ({
+        value: mes,
+        label: formatarMes(mes.split('-')[1]) + ' ' + mes.split('-')[0]
+      }))
       setMesesDisponiveis(meses)
       setIsNovoMesOpen(true)
     }
@@ -909,7 +913,7 @@ function ObraDetailsPageContent() {
     if (!obra) return
 
     try {
-      const dadosCusto: CustoMensalCreate = {
+      const dadosCusto: CustoMensalObraCreate = {
         obra_id: parseInt(obra.id),
         item: novoCustoData.item,
         descricao: novoCustoData.descricao,
@@ -920,10 +924,10 @@ function ObraDetailsPageContent() {
         quantidade_realizada: novoCustoData.quantidade_realizada,
         quantidade_acumulada: novoCustoData.quantidade_acumulada,
         valor_acumulado: novoCustoData.valor_acumulado,
-        tipo: novoCustoData.tipo
+        tipo: novoCustoData.tipo as 'contrato' | 'aditivo'
       }
 
-      await custosMensaisApi.criar(dadosCusto)
+      await custosMensaisApi.criarCustoObra(dadosCusto)
       await carregarCustosMensais(obraId)
       
       // Refresh da página para garantir que todos os dados sejam atualizados
@@ -952,7 +956,7 @@ function ObraDetailsPageContent() {
       if (error.response?.status === 409 || error.message?.includes('já existe')) {
         toast({
           title: "Item duplicado",
-          description: `O item ${dadosCusto.item} já existe para esta obra no mês ${mesSelecionado ? formatarMes(mesSelecionado) : 'selecionado'}. Use outro código ou edite o item existente.`,
+          description: `O item ${novoCustoData.item} já existe para esta obra no mês ${mesSelecionado ? formatarMes(mesSelecionado.split('-')[1]) + ' ' + mesSelecionado.split('-')[0] : 'selecionado'}. Use outro código ou edite o item existente.`,
           variant: "destructive"
         })
       } else {
@@ -965,7 +969,7 @@ function ObraDetailsPageContent() {
     }
   }
 
-  const handleEditarCusto = (custo: CustoMensalApi) => {
+  const handleEditarCusto = (custo: CustoMensalObra | any) => {
     setCustoSelecionado(custo)
     setNovoCustoData({
       item: custo.item,
@@ -987,7 +991,18 @@ function ObraDetailsPageContent() {
     if (!custoSelecionado) return
 
     try {
-      await custosMensaisApi.atualizar(custoSelecionado.id, novoCustoData)
+      const dadosAtualizacao: CustoMensalObraUpdate = {
+        item: novoCustoData.item,
+        descricao: novoCustoData.descricao,
+        unidade: novoCustoData.unidade,
+        quantidade_orcamento: novoCustoData.quantidade_orcamento,
+        valor_unitario: novoCustoData.valor_unitario,
+        quantidade_realizada: novoCustoData.quantidade_realizada,
+        quantidade_acumulada: novoCustoData.quantidade_acumulada,
+        valor_acumulado: novoCustoData.valor_acumulado,
+        tipo: novoCustoData.tipo as 'contrato' | 'aditivo'
+      }
+      await custosMensaisApi.atualizarCustoObra(custoSelecionado.id, dadosAtualizacao)
       await carregarCustosMensais(obraId)
       
       // Refresh da página para garantir que todos os dados sejam atualizados
@@ -1116,7 +1131,7 @@ function ObraDetailsPageContent() {
 
       // Criar cada custo
       for (const custo of custosValidos) {
-        const dadosCusto: CustoMensalCreate = {
+        const dadosCusto: CustoMensalObraCreate = {
           obra_id: parseInt(obra.id),
           item: custo.item,
           descricao: custo.descricao,
@@ -1127,10 +1142,10 @@ function ObraDetailsPageContent() {
           quantidade_realizada: 0,
           quantidade_acumulada: 0,
           valor_acumulado: 0,
-          tipo: custo.tipo
+          tipo: custo.tipo as 'contrato' | 'aditivo'
         }
 
-        await custosMensaisApi.criar(dadosCusto)
+        await custosMensaisApi.criarCustoObra(dadosCusto)
       }
 
       await carregarCustosMensais(obraId)
@@ -1256,16 +1271,11 @@ function ObraDetailsPageContent() {
     try {
       setLoadingFuncionarios(true)
       
-      console.log('🔍 Buscando funcionários para obra ID:', obra.id)
-      
       const response = await obrasApi.buscarFuncionariosVinculados(parseInt(obra.id))
-      console.log('🔍 Resposta da API funcionários:', response)
       
       if (response.success && response.data) {
         setFuncionariosVinculados(response.data)
-        console.log('✅ Funcionários carregados:', response.data)
       } else {
-        console.log('⚠️ Nenhum funcionário encontrado para esta obra')
         setFuncionariosVinculados([])
       }
     } catch (err) {
@@ -1564,23 +1574,17 @@ function ObraDetailsPageContent() {
     try {
       setLoadingGruas(true)
       
-      console.log('🔍 Buscando gruas para obra ID:', obra.id)
-      
       // Usar grua_obra como fonte única de verdade
       const response = await obrasApi.buscarGruasVinculadas(parseInt(obra.id))
-      console.log('🔍 Resposta da API buscarGruasVinculadas:', response)
       
       if (response.success && response.data) {
         const gruasVinculadas = response.data
-        console.log('🔍 Gruas encontradas em grua_obra:', gruasVinculadas)
         
         if (gruasVinculadas.length > 0) {
           // Converter dados das gruas vinculadas de grua_obra
           // Os dados já vêm convertidos de buscarGruasVinculadas, mas precisamos ajustar para o formato esperado
           const gruasConvertidas = gruasVinculadas.map((relacao: any, index: number) => {
-            console.log(`🔍 Processando relação ${index}:`, relacao)
             const gruaData = relacao.grua || {}
-            console.log(`🔍 Dados da grua ${index}:`, gruaData)
             
             // Converter status de 'ativa'/'concluida'/'suspensa' para 'Ativa'/'Concluída'/'Suspensa'
             const statusLegacy = relacao.status === 'ativa' ? 'Ativa' : 
@@ -1621,8 +1625,6 @@ function ObraDetailsPageContent() {
           try {
             const configResponse = await obraGruasApi.listarGruasObra(parseInt(obra.id))
             if (configResponse.success && configResponse.data && configResponse.data.length > 0) {
-              console.log('🔍 Dados técnicos encontrados em obra_gruas_configuracao:', configResponse.data)
-              
               // Enriquecer gruas com dados técnicos quando disponível
               gruasConvertidas.forEach((grua: any) => {
                 const configTecnica = configResponse.data.find((c: any) => c.grua_id === grua.id)
@@ -1637,11 +1639,8 @@ function ObraDetailsPageContent() {
               })
             }
           } catch (configError) {
-            console.log('ℹ️ Dados técnicos não disponíveis (opcional):', configError)
             // Não é crítico, continuar sem dados técnicos
           }
-          
-          console.log('✅ Gruas convertidas:', gruasConvertidas)
           setGruasReais(gruasConvertidas)
           
           // Carregar históricos das gruas
@@ -1664,11 +1663,9 @@ function ObraDetailsPageContent() {
           }
           setHistoricosGruas(historicosCarregados)
         } else {
-          console.log('⚠️ Nenhuma grua encontrada para esta obra em grua_obra')
           setGruasReais([])
         }
       } else {
-        console.log('❌ Erro na resposta da API:', response)
         setGruasReais([])
       }
     } catch (err) {
@@ -2112,8 +2109,8 @@ function ObraDetailsPageContent() {
               </div>
             ) : (
               <>
-                <h1 className="text-3xl font-bold text-gray-900">{obra.name}</h1>
-                <p className="text-gray-600">{obra.description}</p>
+                <h1 className="text-3xl font-bold text-gray-900">{obra?.name || ''}</h1>
+                <p className="text-gray-600">{obra?.description || ''}</p>
               </>
             )}
           </div>
@@ -2174,7 +2171,7 @@ function ObraDetailsPageContent() {
 
               setNotificandoEnvolvidos(true)
               try {
-                const resultado = await obrasApi.notificarEnvolvidos(obra.id)
+                const resultado = await obrasApi.notificarEnvolvidos(parseInt(obra.id))
 
                 if (resultado.success) {
                   if (resultado.enviados > 0) {
@@ -2277,10 +2274,10 @@ function ObraDetailsPageContent() {
                 }
 
                 await exportTabToPDF(tabElement, {
-                  titulo: `Relatório - ${obra.name}`,
+                  titulo: `Relatório - ${obra?.name || 'Obra'}`,
                   subtitulo: `Aba: ${getTabName(activeTab)}`,
-                  obraNome: obra.name,
-                  obraId: obra.id?.toString(),
+                  obraNome: obra?.name || 'Obra',
+                  obraId: obra?.id?.toString() || '',
                   tabName: getTabName(activeTab)
                 })
 
@@ -2337,7 +2334,7 @@ function ObraDetailsPageContent() {
                     <Label className="text-sm text-gray-600">Status:</Label>
                     {isEditing ? (
                       <Select
-                        value={editingData.status || obra.status}
+                        value={editingData.status || obra?.status || 'Em Andamento'}
                         onValueChange={(value) => setEditingData({ ...editingData, status: value })}
                       >
                         <SelectTrigger>
@@ -2352,9 +2349,9 @@ function ObraDetailsPageContent() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Badge className={getStatusColor(obra.status)}>
-                        {getStatusIcon(obra.status)}
-                        <span className="ml-1 capitalize">{obra.status}</span>
+                      <Badge className={getStatusColor(obra?.status || 'Em Andamento')}>
+                        {getStatusIcon(obra?.status || 'Em Andamento')}
+                        <span className="ml-1 capitalize">{obra?.status || 'Em Andamento'}</span>
                       </Badge>
                     )}
                   </div>
@@ -2367,7 +2364,7 @@ function ObraDetailsPageContent() {
                         onChange={(e) => setEditingData({ ...editingData, data_inicio: e.target.value })}
                       />
                     ) : (
-                      <span className="text-sm block mt-1">{new Date(obra.startDate).toLocaleDateString('pt-BR')}</span>
+                      <span className="text-sm block mt-1">{obra?.startDate ? new Date(obra.startDate).toLocaleDateString('pt-BR') : 'Não informado'}</span>
                     )}
                   </div>
                   <div>
@@ -2379,7 +2376,7 @@ function ObraDetailsPageContent() {
                         onChange={(e) => setEditingData({ ...editingData, data_fim: e.target.value })}
                       />
                     ) : (
-                      <span className="text-sm block mt-1">{obra.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}</span>
+                      <span className="text-sm block mt-1">{obra?.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}</span>
                     )}
                   </div>
                   <div>
@@ -2394,7 +2391,7 @@ function ObraDetailsPageContent() {
                       />
                     ) : (
                       <span className="text-sm block mt-1">
-                        {obra.budget ? (
+                        {obra?.budget ? (
                           <ValorMonetarioOculto valor={obra.budget} />
                         ) : (
                           'Não informado'
@@ -2411,12 +2408,12 @@ function ObraDetailsPageContent() {
                         placeholder="Endereço da obra"
                       />
                     ) : (
-                      <span className="text-sm block mt-1">{obra.location || 'Não informado'}</span>
+                      <span className="text-sm block mt-1">{obra?.location || 'Não informado'}</span>
                     )}
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Responsável:</Label>
-                    <span className="text-sm block mt-1">{obra.responsavelName || 'Não informado'}</span>
+                    <span className="text-sm block mt-1">{obra?.responsavelName || 'Não informado'}</span>
                   </div>
                 </div>
                 {isEditing && (
@@ -2442,7 +2439,7 @@ function ObraDetailsPageContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {obra.cliente ? (
+                {obra?.cliente ? (
                   <>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Nome:</span>
@@ -2489,7 +2486,7 @@ function ObraDetailsPageContent() {
                       className="mt-1"
                     />
                   ) : (
-                    <span className="text-sm block mt-1">{obra.cno || <span className="text-gray-400 italic">Não informado</span>}</span>
+                    <span className="text-sm block mt-1">{obra?.cno || <span className="text-gray-400 italic">Não informado</span>}</span>
                   )}
                 </div>
 
@@ -2511,19 +2508,19 @@ function ObraDetailsPageContent() {
                         onUpload={(file) => setArtArquivo(file)}
                         onRemove={() => setArtArquivo(null)}
                         currentFile={artArquivo}
-                        fileUrl={obra.art_arquivo || null}
+                        fileUrl={obra?.art_arquivo || null}
                       />
                     </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2 mt-1">
-                        {obra.art_numero ? (
+                        {obra?.art_numero ? (
                           <span className="text-sm">{obra.art_numero}</span>
                         ) : (
                           <span className="text-sm text-gray-400 italic">Não informado</span>
                         )}
                       </div>
-                      {obra.art_arquivo && (
+                      {obra?.art_arquivo && (
                         <div className="flex justify-end mt-1">
                           <Button
                             variant="outline"
@@ -2534,7 +2531,7 @@ function ObraDetailsPageContent() {
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 // Gerar URL assinada usando o endpoint do backend
-                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.art_arquivo)}`, {
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.art_arquivo || '')}`, {
                                   headers: {
                                     'Authorization': `Bearer ${token}`
                                   }
@@ -2587,19 +2584,19 @@ function ObraDetailsPageContent() {
                         onUpload={(file) => setApoliceArquivo(file)}
                         onRemove={() => setApoliceArquivo(null)}
                         currentFile={apoliceArquivo}
-                        fileUrl={obra.apolice_arquivo || null}
+                        fileUrl={obra?.apolice_arquivo || null}
                       />
                     </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2 mt-1">
-                        {obra.apolice_numero ? (
+                        {obra?.apolice_numero ? (
                           <span className="text-sm">{obra.apolice_numero}</span>
                         ) : (
                           <span className="text-sm text-gray-400 italic">Não informado</span>
                         )}
                       </div>
-                      {obra.apolice_arquivo && (
+                      {obra?.apolice_arquivo && (
                         <div className="flex justify-end mt-1">
                           <Button
                             variant="outline"
@@ -2610,7 +2607,7 @@ function ObraDetailsPageContent() {
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 // Gerar URL assinada usando o endpoint do backend
-                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra.apolice_arquivo)}`, {
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.apolice_arquivo || '')}`, {
                                   headers: {
                                     'Authorization': `Bearer ${token}`
                                   }
@@ -2655,7 +2652,7 @@ function ObraDetailsPageContent() {
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Valor Total da Obra:</span>
                   <span className="text-sm font-medium text-blue-600">
-                    <ValorMonetarioOculto valor={obra.valorTotalObra || 0} />
+                    <ValorMonetarioOculto valor={obra?.valorTotalObra || 0} />
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -2673,11 +2670,11 @@ function ObraDetailsPageContent() {
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-sm font-semibold">Saldo Restante:</span>
                   <span className={`text-sm font-bold ${
-                    (obra.orcamento || 0) - totalTodosCustos >= 0 
+                    (obra?.orcamento || 0) - totalTodosCustos >= 0
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    <ValorMonetarioOculto valor={(obra.orcamento || 0) - totalTodosCustos} />
+                    <ValorMonetarioOculto valor={(obra?.orcamento || 0) - totalTodosCustos} />
                   </span>
                 </div>
               </CardContent>
@@ -2693,11 +2690,6 @@ function ObraDetailsPageContent() {
               </CardHeader>
               <CardContent>
                 {(() => {
-                  // Debug: verificar o que está chegando
-                  console.log('🔍 [SINALEIROS] Debug - obra?.sinaleiros_obra:', obra?.sinaleiros_obra)
-                  console.log('🔍 [SINALEIROS] Debug - sinaleirosReais:', sinaleirosReais)
-                  console.log('🔍 [SINALEIROS] Debug - obra?.sinaleiros:', obra?.sinaleiros)
-                  
                   // Prioridade: 1) sinaleiros_obra da API /obras/:id, 2) sinaleirosReais carregados separadamente, 3) obra.sinaleiros (fallback)
                   const sinaleirosDaObra = obra?.sinaleiros_obra ? obra.sinaleiros_obra.map((s: any) => ({
                     id: s.id,
@@ -2715,13 +2707,9 @@ function ObraDetailsPageContent() {
                     certificados: []
                   })) : []
                   
-                  console.log('🔍 [SINALEIROS] Debug - sinaleirosDaObra convertidos:', sinaleirosDaObra)
-                  
                   const sinaleirosDisponiveis = sinaleirosDaObra.length > 0 
                     ? sinaleirosDaObra 
                     : (sinaleirosReais.length > 0 ? sinaleirosReais : (obra?.sinaleiros || []))
-                  
-                  console.log('🔍 [SINALEIROS] Debug - sinaleirosDisponiveis:', sinaleirosDisponiveis)
                   
                   // Garantir que sempre existam 2 sinaleiros (principal e reserva)
                   const sinaleiroPrincipal = sinaleirosDisponiveis.find((s: any) => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
@@ -3090,9 +3078,9 @@ function ObraDetailsPageContent() {
                             <div className="space-y-2">
                               {historico.slice(0, 5).map((entry) => {
                                 // Mapear propriedades da API para o formato esperado
-                                const status = entry.status_entrada || entry.status || 'ok'
+                                const status = (entry as any).status_entrada || (entry as any).status || 'ok'
                                 const observacoes = entry.observacoes || entry.descricao || 'Sem observações'
-                                const data = entry.data_entrada || entry.data || entry.created_at || new Date().toISOString()
+                                const data = entry.data_entrada || (entry as any).data || entry.created_at || new Date().toISOString()
                                 
                                 return (
                                   <div key={entry.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
@@ -3346,7 +3334,7 @@ function ObraDetailsPageContent() {
               <div className="flex justify-between items-center">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="w-5 h-5" />
-                  Custos Mensais - {obra.name}
+                  Custos Mensais - {obra?.name || 'Obra'}
                 </CardTitle>
                 <div className="flex gap-2">
                   <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
@@ -3415,7 +3403,7 @@ function ObraDetailsPageContent() {
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Valor Total da Obra</Label>
                   <p className="text-lg font-bold text-blue-600">
-                    <ValorMonetarioOculto valor={obra.valorTotalObra || 0} />
+                    <ValorMonetarioOculto valor={obra?.valorTotalObra || 0} />
                   </p>
                 </div>
                 <div className="text-center p-4 bg-orange-50 rounded-lg">
@@ -3433,11 +3421,11 @@ function ObraDetailsPageContent() {
                 <div className="text-center p-4 bg-red-50 rounded-lg">
                   <Label className="text-sm font-medium text-gray-600">Saldo Restante</Label>
                   <p className={`text-lg font-bold ${
-                    (obra.orcamento || 0) - totalTodosCustos >= 0 
+                    (obra?.orcamento || 0) - totalTodosCustos >= 0 
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    <ValorMonetarioOculto valor={(obra.orcamento || 0) - totalTodosCustos} />
+                    <ValorMonetarioOculto valor={(obra?.orcamento || 0) - totalTodosCustos} />
                   </p>
                 </div>
               </div>
@@ -3841,7 +3829,7 @@ function ObraDetailsPageContent() {
                             <div className="flex items-center gap-2">
                               <CheckCircle className="w-4 h-4 text-gray-500" />
                               <span className="text-gray-600">Progresso:</span>
-                              <span>{documento.assinaturas?.length > 0 ? Math.round((documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100) : 0}%</span>
+                              <span>{documento.assinaturas?.length > 0 ? Math.round((documento.assinaturas.filter((a: any) => a.status === 'assinado').length / documento.assinaturas.length) * 100) : 0}%</span>
                             </div>
                           </div>
 
@@ -3850,10 +3838,10 @@ function ObraDetailsPageContent() {
                             <div className="space-y-2">
                               <div className="flex justify-between text-sm">
                                 <span>Progresso das Assinaturas</span>
-                                <span>{Math.round((documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100)}%</span>
+                                <span>{Math.round((documento.assinaturas.filter((a: any) => a.status === 'assinado').length / documento.assinaturas.length) * 100)}%</span>
                               </div>
                               <Progress 
-                                value={(documento.assinaturas.filter(a => a.status === 'assinado').length / documento.assinaturas.length) * 100} 
+                                value={(documento.assinaturas.filter((a: any) => a.status === 'assinado').length / documento.assinaturas.length) * 100} 
                                 className="h-2" 
                               />
                             </div>
@@ -3865,8 +3853,8 @@ function ObraDetailsPageContent() {
                               <h4 className="font-medium text-sm text-gray-700">Ordem de Assinaturas</h4>
                               <div className="space-y-2">
                                 {documento.assinaturas
-                                  .sort((a, b) => a.ordem - b.ordem)
-                                  .map((assinatura, index) => (
+                                  .sort((a: any, b: any) => a.ordem - b.ordem)
+                                  .map((assinatura: any, index: number) => (
                                   <div key={assinatura.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                     <div className="flex items-center gap-3">
                                       <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium">
@@ -3909,7 +3897,7 @@ function ObraDetailsPageContent() {
                             <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
                               <Clock className="w-4 h-4 text-blue-600" />
                               <span className="text-sm text-blue-800">
-                                Próximo a assinar: <strong>{documento.assinaturas.find(a => a.user_id === documento.proximo_assinante_id)?.usuario?.nome || 'Usuário'}</strong>
+                                Próximo a assinar: <strong>{documento.assinaturas.find((a: any) => a.user_id === documento.proximo_assinante_id)?.usuario?.nome || 'Usuário'}</strong>
                               </span>
                             </div>
                           )}
@@ -3992,7 +3980,9 @@ function ObraDetailsPageContent() {
                               variant="outline"
                               onClick={async () => {
                                 try {
-                                  await obrasArquivosApi.baixar(parseInt(obra.id), arquivo.id)
+                                  if (obra?.id) {
+                                    await obrasArquivosApi.baixar(parseInt(obra.id), arquivo.id)
+                                  }
                                 } catch (error: any) {
                                   toast({
         title: "Informação",
@@ -5995,7 +5985,7 @@ function ObraDetailsPageContent() {
         onSave={async (sinaleiroAtualizado) => {
           // Atualizar o sinaleiro na obra
           if (obra) {
-            const sinaleirosAtualizados = obra.sinaleiros?.map((s: any) => 
+            const sinaleirosAtualizados = obra?.sinaleiros?.map((s: any) => 
               s.id === sinaleiroAtualizado.id ? sinaleiroAtualizado : s
             ) || [sinaleiroAtualizado]
             
@@ -6011,7 +6001,7 @@ function ObraDetailsPageContent() {
           // Recarregar a obra e sinaleiros para atualizar os dados
           if (obraId) {
             await Promise.all([
-              carregarObra(parseInt(obraId)),
+              carregarObra(obraId),
               carregarSinaleiros()
             ])
           }
