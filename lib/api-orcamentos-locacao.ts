@@ -1,5 +1,30 @@
 import { api } from './api'
 
+export interface OrcamentoValorFixoLocacao {
+  id: number
+  orcamento_id: number
+  tipo: 'Locação' | 'Serviço'
+  descricao: string
+  quantidade: number
+  valor_unitario: number
+  valor_total: number
+  observacoes?: string
+  created_at: string
+  updated_at?: string
+}
+
+export interface OrcamentoCustoMensalLocacao {
+  id: number
+  orcamento_id: number
+  tipo: string
+  descricao: string
+  valor_mensal: number
+  obrigatorio: boolean
+  observacoes?: string
+  created_at: string
+  updated_at?: string
+}
+
 export interface OrcamentoLocacao {
   id: number
   numero: string
@@ -12,6 +37,9 @@ export interface OrcamentoLocacao {
   tipo_orcamento: 'locacao_grua' | 'locacao_plataforma'
   vendedor_id?: number
   condicoes_pagamento?: string
+  condicoes_gerais?: string
+  logistica?: string
+  garantias?: string
   prazo_entrega?: string
   observacoes?: string
   created_at: string
@@ -30,6 +58,8 @@ export interface OrcamentoLocacao {
     email?: string
   }
   orcamento_itens_locacao?: Array<OrcamentoItemLocacao>
+  orcamento_valores_fixos_locacao?: Array<OrcamentoValorFixoLocacao>
+  orcamento_custos_mensais_locacao?: Array<OrcamentoCustoMensalLocacao>
 }
 
 export interface OrcamentoItemLocacao {
@@ -57,8 +87,26 @@ export interface OrcamentoLocacaoFormData {
   tipo_orcamento: 'locacao_grua' | 'locacao_plataforma'
   vendedor_id?: number
   condicoes_pagamento?: string
+  condicoes_gerais?: string
+  logistica?: string
+  garantias?: string
   prazo_entrega?: string
   observacoes?: string
+  valores_fixos?: Array<{
+    tipo: 'Locação' | 'Serviço'
+    descricao: string
+    quantidade: number
+    valor_unitario: number
+    valor_total: number
+    observacoes?: string
+  }>
+  custos_mensais?: Array<{
+    tipo: string
+    descricao: string
+    valor_mensal: number
+    obrigatorio?: boolean
+    observacoes?: string
+  }>
   itens?: Array<{
     produto_servico: string
     descricao?: string

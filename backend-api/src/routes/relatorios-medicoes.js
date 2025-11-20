@@ -48,7 +48,8 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
         clientes:cliente_id (
           id,
           nome,
-          cnpj_cpf
+          cnpj,
+          contato_cpf
         )
       `)
       .eq('id', orcamento_id)
@@ -122,7 +123,8 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
     yPos += 15;
     doc.text(`Cliente: ${orcamento.clientes?.nome || '-'}`, 40, yPos, { align: 'center' });
     yPos += 15;
-    doc.text(`CNPJ/CPF: ${orcamento.clientes?.cnpj_cpf || '-'}`, 40, yPos, { align: 'center' });
+    const documento = orcamento.clientes?.cnpj || orcamento.clientes?.contato_cpf || '-';
+    doc.text(`CNPJ/CPF: ${documento}`, 40, yPos, { align: 'center' });
     yPos += 20;
 
     // Linha separadora

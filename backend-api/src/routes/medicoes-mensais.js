@@ -42,7 +42,8 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
           clientes:cliente_id (
             id,
             nome,
-            cnpj_cpf
+            cnpj,
+            contato_cpf
           )
         )
       `, { count: 'exact' });
@@ -111,7 +112,8 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
           clientes:cliente_id (
             id,
             nome,
-            cnpj_cpf
+            cnpj,
+            contato_cpf
           )
         )
       `)

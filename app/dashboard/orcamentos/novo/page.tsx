@@ -228,73 +228,101 @@ export default function NovoOrcamentoPage() {
   const loadOrcamentoForEdit = async (id: string) => {
     setIsLoadingOrcamento(true)
     try {
-      const { getOrcamento } = await import('@/lib/api-orcamentos')
-      const response = await getOrcamento(parseInt(id))
-      const orcamento = response.data
+      // Usar a API de orçamentos de locação
+      const response = await orcamentosLocacaoApi.get(parseInt(id))
       
-      if (orcamento) {
-        setIsEditMode(true)
-        
-        // Mapear dados da API para o formato do formulário
-        const clienteNome = orcamento.clientes?.nome || ''
-        const obraNome = orcamento.obras?.nome || orcamento.obra_nome || ''
-        const obraEndereco = orcamento.obras?.endereco || orcamento.obra_endereco || ''
-        const equipamento = orcamento.gruas ? `${orcamento.gruas.name || ''} / ${orcamento.gruas.modelo || ''}` : orcamento.grua_modelo || ''
-        
-        // Preencher formData
-        setFormData({
-          cliente_id: orcamento.cliente_id?.toString() || '',
-          cliente_nome: clienteNome,
-          obra_nome: obraNome,
-          obra_endereco: obraEndereco,
-          obra_cidade: orcamento.obra_cidade || '',
-          obra_estado: orcamento.obra_estado || '',
-          tipo_obra: orcamento.obra_tipo || orcamento.tipo_obra || '',
-          equipamento: equipamento,
-          altura_inicial: '',
-          altura_final: orcamento.grua_altura_final?.toString() || '',
-          comprimento_lanca: orcamento.grua_lanca?.toString() || '',
-          carga_maxima: orcamento.grua_capacidade_1_cabo?.toString() || '',
-          carga_ponta: orcamento.grua_capacidade_2_cabos?.toString() || '',
-          potencia_eletrica: orcamento.grua_potencia?.toString() || '',
-          energia_necessaria: orcamento.grua_voltagem || '',
-          valor_locacao_mensal: '',
-          valor_operador: '',
-          valor_sinaleiro: '',
-          valor_manutencao: '',
-          prazo_locacao_meses: orcamento.prazo_locacao_meses?.toString() || '',
-          data_inicio_estimada: orcamento.data_inicio_estimada || '',
-          tolerancia_dias: orcamento.tolerancia_dias?.toString() || '15',
-          escopo_incluso: orcamento.escopo_incluso || '',
-          responsabilidades_cliente: orcamento.responsabilidades_cliente || '',
-          condicoes_comerciais: orcamento.condicoes_comerciais || '',
-          condicoes_gerais: orcamento.condicoes_gerais || '',
-          logistica: orcamento.logistica || '',
-          garantias: orcamento.garantias || '',
-          observacoes: orcamento.observacoes || ''
+      if (!response.success || !response.data) {
+        toast({
+          title: "Erro",
+          description: response.message || "Orçamento não encontrado",
+          variant: "destructive"
         })
+        router.push('/dashboard/orcamentos')
+        return
+      }
 
-        // Preencher cliente selecionado
-        if (orcamento.cliente_id && orcamento.clientes) {
-          setClienteSelecionado({
-            id: orcamento.cliente_id,
-            nome: clienteNome
-          })
+      const orcamento = response.data
+      setIsEditMode(true)
+      
+      // Mapear dados da API para o formato do formulário
+      const clienteNome = orcamento.clientes?.nome || ''
+      const obraNome = orcamento.obra_nome || ''
+      const obraEndereco = orcamento.obra_endereco || ''
+      const equipamento = orcamento.equipamento || ''
+      
+      // Preencher formData
+      setFormData({
+        cliente_id: orcamento.cliente_id?.toString() || '',
+        cliente_nome: clienteNome,
+        obra_nome: obraNome,
+        obra_endereco: obraEndereco,
+        obra_cidade: orcamento.obra_cidade || '',
+        obra_estado: orcamento.obra_estado || '',
+        tipo_obra: orcamento.tipo_obra || '',
+        equipamento: equipamento,
+        altura_inicial: orcamento.altura_inicial?.toString() || '',
+        altura_final: orcamento.altura_final?.toString() || '',
+        comprimento_lanca: orcamento.comprimento_lanca?.toString() || '',
+        carga_maxima: orcamento.carga_maxima?.toString() || '',
+        carga_ponta: orcamento.carga_ponta?.toString() || '',
+        potencia_eletrica: orcamento.potencia_eletrica || '',
+        energia_necessaria: orcamento.energia_necessaria || '',
+        valor_locacao_mensal: orcamento.valor_locacao_mensal?.toString() || '',
+        valor_operador: orcamento.valor_operador?.toString() || '',
+        valor_sinaleiro: orcamento.valor_sinaleiro?.toString() || '',
+        valor_manutencao: orcamento.valor_manutencao?.toString() || '',
+        prazo_locacao_meses: orcamento.prazo_locacao_meses?.toString() || '',
+        data_inicio_estimada: orcamento.data_inicio_estimada || '',
+        tolerancia_dias: orcamento.tolerancia_dias?.toString() || '15',
+        escopo_incluso: orcamento.escopo_incluso || '',
+        responsabilidades_cliente: orcamento.responsabilidades_cliente || '',
+        condicoes_comerciais: orcamento.condicoes_comerciais || '',
+        condicoes_gerais: orcamento.condicoes_gerais || '',
+        logistica: orcamento.logistica || '',
+        garantias: orcamento.garantias || '',
+        observacoes: orcamento.observacoes || ''
+      })
+
+      // Preencher cliente selecionado
+      if (orcamento.cliente_id && orcamento.clientes) {
+        setClienteSelecionado({
+          id: orcamento.cliente_id,
+          name: clienteNome,
+          nome: clienteNome
+        })
+      }
+
+      // Preencher custos mensais a partir dos dados da API
+      const custosMensaisData = orcamento.orcamento_custos_mensais_locacao || []
+      if (custosMensaisData.length > 0) {
+        setCustosMensais(custosMensaisData.map((cm: any, index: number) => ({
+          id: `cm_${index + 1}`,
+          tipo: cm.tipo || '',
+          descricao: cm.descricao || '',
+          valor_mensal: cm.valor_mensal || 0,
+          obrigatorio: cm.obrigatorio || false,
+          observacoes: cm.observacoes || ''
+        })))
+      } else {
+        // Se não houver custos mensais, tentar usar os valores diretos do orçamento
+        const custosPadrao = []
+        if (orcamento.valor_locacao_mensal) {
+          custosPadrao.push({ id: 'cm_1', tipo: 'Locação', descricao: 'Locação da grua', valor_mensal: orcamento.valor_locacao_mensal, obrigatorio: true })
         }
-
-        // Preencher custos mensais a partir dos dados da API
-        const custosMensaisData = orcamento.custos_mensais || []
-        if (custosMensaisData.length > 0) {
-          setCustosMensais(custosMensaisData.map((cm: any, index: number) => ({
-            id: `cm_${index + 1}`,
-            tipo: cm.tipo || '',
-            descricao: cm.descricao || '',
-            valor_mensal: cm.valor_mensal || 0,
-            obrigatorio: cm.obrigatorio || false,
-            observacoes: cm.observacoes || ''
-          })))
+        if (orcamento.valor_operador) {
+          custosPadrao.push({ id: 'cm_2', tipo: 'Operador', descricao: 'Operador', valor_mensal: orcamento.valor_operador, obrigatorio: true })
+        }
+        if (orcamento.valor_sinaleiro) {
+          custosPadrao.push({ id: 'cm_3', tipo: 'Sinaleiro', descricao: 'Sinaleiro', valor_mensal: orcamento.valor_sinaleiro, obrigatorio: true })
+        }
+        if (orcamento.valor_manutencao) {
+          custosPadrao.push({ id: 'cm_4', tipo: 'Manutenção', descricao: 'Manutenção preventiva', valor_mensal: orcamento.valor_manutencao, obrigatorio: true })
+        }
+        
+        if (custosPadrao.length > 0) {
+          setCustosMensais(custosPadrao)
         } else {
-          // Se não houver custos mensais, usar valores padrão vazios
+          // Se não houver nenhum valor, usar valores padrão vazios
           setCustosMensais([
             { id: 'cm_1', tipo: 'Locação', descricao: 'Locação da grua', valor_mensal: 0, obrigatorio: true },
             { id: 'cm_2', tipo: 'Operador', descricao: 'Operador', valor_mensal: 0, obrigatorio: true },
@@ -302,19 +330,34 @@ export default function NovoOrcamentoPage() {
             { id: 'cm_4', tipo: 'Manutenção', descricao: 'Manutenção preventiva', valor_mensal: 0, obrigatorio: true }
           ])
         }
-      } else {
-        toast({
-          title: "Erro",
-          description: "Orçamento não encontrado",
-          variant: "destructive"
-        })
-        router.push('/dashboard/orcamentos')
       }
-    } catch (error) {
+
+      // Preencher valores fixos
+      const valoresFixosData = orcamento.orcamento_valores_fixos_locacao || []
+      if (valoresFixosData.length > 0) {
+        setValoresFixos(valoresFixosData.map((vf: any, index: number) => ({
+          id: `vf_${index + 1}`,
+          tipo: vf.tipo || 'Locação',
+          descricao: vf.descricao || '',
+          quantidade: vf.quantidade || 1,
+          valor_unitario: vf.valor_unitario || 0,
+          valor_total: (vf.quantidade || 1) * (vf.valor_unitario || 0),
+          observacoes: vf.observacoes || ''
+        })))
+      }
+
+      // Preencher complementos/itens
+      const itensData = orcamento.orcamento_itens_locacao || []
+      if (itensData.length > 0) {
+        // Mapear itens para complementos (se necessário)
+        // Por enquanto, apenas logamos para debug
+        console.log('Itens encontrados:', itensData)
+      }
+    } catch (error: any) {
       console.error('Erro ao carregar orçamento:', error)
       toast({
         title: "Erro",
-        description: "Erro ao carregar dados do orçamento",
+        description: error.response?.data?.message || error.message || "Erro ao carregar dados do orçamento",
         variant: "destructive"
       })
     } finally {
@@ -400,7 +443,7 @@ export default function NovoOrcamentoPage() {
           quantidade: complemento.tipo_precificacao === 'mensal' ? quantidade * prazoMeses : quantidade,
           valor_unitario: complemento.preco_unitario_centavos / 100,
           valor_total: valorItem,
-          tipo: complemento.sku?.startsWith('ACESS') ? 'equipamento' : 'servico',
+            tipo: (complemento.sku?.startsWith('ACESS') ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
           unidade: complemento.unidade || 'unidade',
           observacoes: complemento.descricao || ''
         }
@@ -421,8 +464,8 @@ export default function NovoOrcamentoPage() {
           : new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         valor_total: valorTotalOrcamento,
         desconto: 0,
-        status: isDraft ? 'rascunho' : 'enviado',
-        tipo_orcamento: 'locacao_grua',
+        status: (isDraft ? 'rascunho' : 'enviado') as 'rascunho' | 'enviado',
+        tipo_orcamento: 'locacao_grua' as 'locacao_grua' | 'locacao_plataforma',
         condicoes_pagamento: formData.condicoes_comerciais || '',
         condicoes_gerais: formData.condicoes_gerais || '',
         logistica: formData.logistica || '',
@@ -452,7 +495,7 @@ export default function NovoOrcamentoPage() {
             quantidade: prazoMeses,
             valor_unitario: cm.valor_mensal,
             valor_total: cm.valor_mensal * prazoMeses,
-            tipo: cm.tipo === 'Locação' ? 'equipamento' : 'servico',
+            tipo: (cm.tipo === 'Locação' ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
             unidade: 'mês',
             observacoes: cm.observacoes || ''
           })),

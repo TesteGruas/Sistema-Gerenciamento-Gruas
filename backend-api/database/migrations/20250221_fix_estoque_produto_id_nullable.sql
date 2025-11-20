@@ -2,9 +2,8 @@
 -- Data: 2025-02-21
 -- Descrição: Permite produto_id ser NULL quando tipo_item = 'componente'
 
--- Adicionar campo produto_id se não existir (como nullable)
-ALTER TABLE estoque 
-ADD COLUMN IF NOT EXISTS produto_id UUID REFERENCES produtos(id) ON DELETE CASCADE;
+-- Nota: A coluna produto_id já existe como VARCHAR, não precisamos adicioná-la
+-- Apenas vamos torná-la nullable e criar a constraint CHECK
 
 -- Se a coluna já existir com NOT NULL, precisamos alterá-la para nullable
 -- PostgreSQL não permite ALTER COLUMN ... DROP NOT NULL diretamente se houver constraint

@@ -38,18 +38,20 @@ const formatarDataHora = (data) => {
 router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params;
+    let orcamento = null;
+    let isLocacao = false;
 
-    // Buscar orçamento completo com todos os relacionamentos
-    const { data: orcamento, error: orcamentoError } = await supabaseAdmin
+    // Primeiro tentar buscar em orcamentos normais
+    const { data: orcamentoNormal, error: orcamentoNormalError } = await supabaseAdmin
       .from('orcamentos')
       .select(`
         *,
         clientes:cliente_id (
           id,
           nome,
-          cnpj_cpf,
+          cnpj,
+          contato_cpf,
           endereco,
-          bairro,
           cidade,
           estado,
           cep,
@@ -61,31 +63,134 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
           id,
           nome,
           email
+        ),
+        obras:obra_id (
+          id,
+          nome,
+          tipo,
+          endereco,
+          cidade,
+          cep,
+          contato_obra
+        ),
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante,
+          tipo,
+          lanca,
+          altura_final,
+          tipo_base,
+          ano,
+          potencia_instalada,
+          capacidade_1_cabo,
+          capacidade_2_cabos,
+          voltagem
         )
       `)
       .eq('id', id)
       .single();
 
-    if (orcamentoError || !orcamento) {
-      return res.status(404).json({
-        success: false,
-        error: 'Orçamento não encontrado',
-        message: orcamentoError?.message || 'Orçamento não encontrado'
-      });
+    // Se não encontrou, tentar em orcamentos_locacao
+    if (orcamentoNormalError || !orcamentoNormal) {
+      console.log(`[PDF] Orçamento ${id} não encontrado em orcamentos, buscando em orcamentos_locacao...`);
+      
+      const { data: orcamentoLocacao, error: orcamentoLocacaoError } = await supabaseAdmin
+        .from('orcamentos_locacao')
+        .select(`
+          *,
+          clientes:cliente_id (
+            id,
+            nome,
+            cnpj,
+            contato_cpf,
+            endereco,
+            cidade,
+            estado,
+            cep,
+            telefone,
+            email,
+            contato
+          ),
+          funcionarios:vendedor_id (
+            id,
+            nome,
+            email
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (orcamentoLocacaoError || !orcamentoLocacao) {
+        console.error(`[PDF] Erro ao buscar orçamento de locação ${id}:`, orcamentoLocacaoError);
+        return res.status(404).json({
+          success: false,
+          error: 'Orçamento não encontrado',
+          message: orcamentoLocacaoError?.message || 'Orçamento não encontrado'
+        });
+      }
+
+      console.log(`[PDF] Orçamento de locação encontrado:`, JSON.stringify(orcamentoLocacao, null, 2));
+      orcamento = orcamentoLocacao;
+      isLocacao = true;
+    } else {
+      console.log(`[PDF] Orçamento normal encontrado:`, JSON.stringify(orcamentoNormal, null, 2));
+      orcamento = orcamentoNormal;
+      isLocacao = false;
     }
 
-    // Buscar todos os itens relacionados
-    const [
-      { data: valoresFixos },
-      { data: custosMensais },
-      { data: horasExtras },
-      { data: servicosAdicionais }
-    ] = await Promise.all([
-      supabaseAdmin.from('orcamento_valores_fixos').select('*').eq('orcamento_id', id).order('id'),
-      supabaseAdmin.from('orcamento_custos_mensais').select('*').eq('orcamento_id', id).order('id'),
-      supabaseAdmin.from('orcamento_horas_extras').select('*').eq('orcamento_id', id).order('id'),
-      supabaseAdmin.from('orcamento_servicos_adicionais').select('*').eq('orcamento_id', id).order('id')
-    ]);
+    // Buscar todos os itens relacionados conforme o tipo
+    let itens = [];
+    let valoresFixos = [];
+    let custosMensais = [];
+    let horasExtras = [];
+    let servicosAdicionais = [];
+
+    if (isLocacao) {
+      // Buscar dados de orçamentos de locação
+      const [
+        { data: itensLocacao },
+        { data: valoresFixosLocacao },
+        { data: custosMensaisLocacao }
+      ] = await Promise.all([
+        supabaseAdmin.from('orcamento_itens_locacao').select('*').eq('orcamento_id', id).order('id'),
+        supabaseAdmin.from('orcamento_valores_fixos_locacao').select('*').eq('orcamento_id', id).order('id'),
+        supabaseAdmin.from('orcamento_custos_mensais_locacao').select('*').eq('orcamento_id', id).order('id')
+      ]);
+
+      itens = itensLocacao || [];
+      valoresFixos = valoresFixosLocacao || [];
+      custosMensais = custosMensaisLocacao || [];
+      
+      // Debug: verificar se os dados foram encontrados
+      console.log(`[PDF Locação] Orçamento ID: ${id}`);
+      console.log(`[PDF Locação] Orçamento:`, JSON.stringify(orcamento, null, 2));
+      console.log(`[PDF Locação] Itens encontrados: ${itens.length}`, itens);
+      console.log(`[PDF Locação] Valores Fixos: ${valoresFixos.length}`, valoresFixos);
+      console.log(`[PDF Locação] Custos Mensais: ${custosMensais.length}`, custosMensais);
+    } else {
+      // Buscar dados de orçamentos normais
+      const [
+        { data: itensNormal },
+        { data: valoresFixosNormal },
+        { data: custosMensaisNormal },
+        { data: horasExtrasNormal },
+        { data: servicosAdicionaisNormal }
+      ] = await Promise.all([
+        supabaseAdmin.from('orcamento_itens').select('*').eq('orcamento_id', id).order('id'),
+        supabaseAdmin.from('orcamento_valores_fixos').select('*').eq('orcamento_id', id).order('id'),
+        supabaseAdmin.from('orcamento_custos_mensais').select('*').eq('orcamento_id', id).order('id'),
+        supabaseAdmin.from('orcamento_horas_extras').select('*').eq('orcamento_id', id).order('id'),
+        supabaseAdmin.from('orcamento_servicos_adicionais').select('*').eq('orcamento_id', id).order('id')
+      ]);
+
+      itens = itensNormal || [];
+      valoresFixos = valoresFixosNormal || [];
+      custosMensais = custosMensaisNormal || [];
+      horasExtras = horasExtrasNormal || [];
+      servicosAdicionais = servicosAdicionaisNormal || [];
+    }
 
     // Criar documento PDF
     const doc = new PDFDocument({ 
@@ -112,7 +217,9 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     doc.fontSize(16).font('Helvetica-Bold').text('ORÇAMENTO DE LOCAÇÃO DE GRUA', 40, yPos, { align: 'center' });
     yPos += 25;
     
-    doc.fontSize(12).font('Helvetica').text(`Nº ${orcamento.numero || `GR${id}`}`, 40, yPos, { align: 'center' });
+    // Usar o número correto do orçamento
+    const numeroOrcamento = orcamento.numero || (isLocacao ? `LOC-${id}` : `ORC-${id}`);
+    doc.fontSize(12).font('Helvetica').text(`Nº ${numeroOrcamento}`, 40, yPos, { align: 'center' });
     yPos += 20;
 
     // Linha separadora
@@ -124,18 +231,47 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     yPos += 15;
     doc.fontSize(10).font('Helvetica');
     
+    // Buscar dados do cliente - pode estar em clientes (relacionamento) ou em campos diretos
     const cliente = orcamento.clientes || {};
+    
+    // Debug: verificar dados do cliente
+    console.log(`[PDF] Cliente relacionamento:`, JSON.stringify(cliente, null, 2));
+    console.log(`[PDF] Cliente ID do orçamento:`, orcamento.cliente_id);
+    console.log(`[PDF] Orçamento completo:`, JSON.stringify(orcamento, null, 2));
+    
     doc.text(`Nome: ${cliente.nome || '-'}`, 40, yPos);
     yPos += 12;
-    doc.text(`CNPJ/CPF: ${cliente.cnpj_cpf || '-'}`, 40, yPos);
+    
+    // Formatar CNPJ/CPF
+    const cnpj = cliente.cnpj || '';
+    const cpf = cliente.contato_cpf || '';
+    let documento = '-';
+    if (cnpj) {
+      // Formatar CNPJ: 00.000.000/0000-00
+      const cnpjLimpo = cnpj.replace(/\D/g, '');
+      if (cnpjLimpo.length === 14) {
+        documento = cnpjLimpo.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+      } else {
+        documento = cnpj;
+      }
+    } else if (cpf) {
+      // Formatar CPF: 000.000.000-00
+      const cpfLimpo = cpf.replace(/\D/g, '');
+      if (cpfLimpo.length === 11) {
+        documento = cpfLimpo.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+      } else {
+        documento = cpf;
+      }
+    }
+    
+    doc.text(`CNPJ/CPF: ${documento}`, 40, yPos);
     yPos += 12;
     
     const enderecoCliente = [
-      orcamento.cliente_endereco || cliente.endereco,
-      orcamento.cliente_bairro || cliente.bairro,
-      orcamento.cliente_cidade || cliente.cidade,
-      orcamento.cliente_estado || cliente.estado,
-      orcamento.cliente_cep || cliente.cep
+      cliente.endereco,
+      cliente.cidade,
+      cliente.estado,
+      cliente.cep
     ].filter(Boolean).join(', ');
     
     if (enderecoCliente) {
@@ -143,63 +279,156 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       yPos += 12;
     }
     
-    doc.text(`Telefone: ${orcamento.cliente_telefone || cliente.telefone || '-'}`, 40, yPos);
+    doc.text(`Telefone: ${cliente.telefone || '-'}`, 40, yPos);
     yPos += 12;
-    doc.text(`Email: ${orcamento.cliente_email || cliente.email || '-'}`, 40, yPos);
+    doc.text(`Email: ${cliente.email || '-'}`, 40, yPos);
     yPos += 12;
-    doc.text(`Contato: ${orcamento.cliente_contato || cliente.contato || '-'}`, 40, yPos);
+    doc.text(`Contato: ${cliente.contato || '-'}`, 40, yPos);
     yPos += 20;
 
     // ===== DADOS DA OBRA =====
-    doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA OBRA', 40, yPos);
-    yPos += 15;
-    doc.fontSize(10).font('Helvetica');
+    // Para orçamentos de locação, os dados de obra podem estar em campos diretos ou não existir
+    // Só exibir se houver dados relevantes
+    const temDadosObra = !isLocacao 
+      ? (orcamento.obra_nome || orcamento.obras?.nome)
+      : (orcamento.obra_nome && orcamento.obra_nome !== '-');
     
-    doc.text(`Nome da Obra: ${orcamento.obra_nome || '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Tipo: ${orcamento.obra_tipo || '-'}`, 40, yPos);
-    yPos += 12;
-    
-    const enderecoObra = [
-      orcamento.obra_endereco,
-      orcamento.obra_bairro,
-      orcamento.obra_cidade,
-      orcamento.obra_cep
-    ].filter(Boolean).join(', ');
-    
-    if (enderecoObra) {
-      doc.text(`Endereço: ${enderecoObra}`, 40, yPos);
-      yPos += 12;
+    if (temDadosObra) {
+      doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA OBRA', 40, yPos);
+      yPos += 15;
+      doc.fontSize(10).font('Helvetica');
+      
+      if (isLocacao) {
+        // Para orçamentos de locação, usar campos diretos se existirem
+        const obraNome = orcamento.obra_nome || '-';
+        const obraTipo = orcamento.tipo_obra || '-';
+        const obraEndereco = orcamento.obra_endereco;
+        const obraCidade = orcamento.obra_cidade;
+        const obraEstado = orcamento.obra_estado;
+        
+        doc.text(`Nome da Obra: ${obraNome}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Tipo: ${obraTipo}`, 40, yPos);
+        yPos += 12;
+        
+        const enderecoObra = [obraEndereco, obraCidade, obraEstado].filter(Boolean).join(', ');
+        if (enderecoObra) {
+          doc.text(`Endereço: ${enderecoObra}`, 40, yPos);
+          yPos += 12;
+        }
+      } else {
+        // Para orçamentos normais, usar relacionamento ou campos diretos
+        const obra = orcamento.obras || {};
+        const obraNome = orcamento.obra_nome || obra.nome || '-';
+        const obraTipo = orcamento.obra_tipo || obra.tipo || '-';
+        const obraEndereco = orcamento.obra_endereco || obra.endereco;
+        const obraCidade = orcamento.obra_cidade || obra.cidade;
+        const obraCep = orcamento.obra_cep || obra.cep;
+        const obraEngenheiro = orcamento.obra_engenheiro_responsavel || '-';
+        const obraContato = orcamento.obra_contato || obra.contato_obra || '-';
+        
+        doc.text(`Nome da Obra: ${obraNome}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Tipo: ${obraTipo}`, 40, yPos);
+        yPos += 12;
+        
+        const enderecoObra = [
+          obraEndereco,
+          orcamento.obra_bairro,
+          obraCidade,
+          obraCep
+        ].filter(Boolean).join(', ');
+        
+        if (enderecoObra) {
+          doc.text(`Endereço: ${enderecoObra}`, 40, yPos);
+          yPos += 12;
+        }
+        
+        doc.text(`Engenheiro Responsável: ${obraEngenheiro}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Contato: ${obraContato}`, 40, yPos);
+        yPos += 12;
+      }
+      yPos += 8;
     }
-    
-    doc.text(`Engenheiro Responsável: ${orcamento.obra_engenheiro_responsavel || '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Contato: ${orcamento.obra_contato || '-'}`, 40, yPos);
-    yPos += 20;
 
     // ===== DADOS DA GRUA =====
-    doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA GRUA', 40, yPos);
-    yPos += 15;
-    doc.fontSize(10).font('Helvetica');
+    // Para orçamentos de locação, os dados de grua podem estar em campos diretos ou no campo equipamento
+    // Só exibir se houver dados relevantes
+    const temDadosGrua = !isLocacao
+      ? (orcamento.grua_modelo || orcamento.gruas?.modelo || orcamento.gruas?.name)
+      : (orcamento.equipamento && orcamento.equipamento !== '-');
     
-    doc.text(`Modelo: ${orcamento.grua_modelo || '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Lança: ${orcamento.grua_lanca ? `${orcamento.grua_lanca}m` : '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Altura Final: ${orcamento.grua_altura_final ? `${orcamento.grua_altura_final}m` : '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Base: ${orcamento.grua_tipo_base || '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Ano: ${orcamento.grua_ano || '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Potência: ${orcamento.grua_potencia ? `${orcamento.grua_potencia} KVA` : '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Capacidade 1 cabo: ${orcamento.grua_capacidade_1_cabo ? `${orcamento.grua_capacidade_1_cabo}kg` : '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Capacidade 2 cabos: ${orcamento.grua_capacidade_2_cabos ? `${orcamento.grua_capacidade_2_cabos}kg` : '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Voltagem: ${orcamento.grua_voltagem || '-'}`, 40, yPos);
-    yPos += 20;
+    if (temDadosGrua) {
+      doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA GRUA', 40, yPos);
+      yPos += 15;
+      doc.fontSize(10).font('Helvetica');
+      
+      if (isLocacao) {
+        // Para orçamentos de locação, usar campos diretos se existirem
+        const equipamento = orcamento.equipamento || '-';
+        const gruaModelo = orcamento.grua_modelo || equipamento || '-';
+        const gruaLanca = orcamento.comprimento_lanca || orcamento.grua_lanca;
+        const gruaAlturaFinal = orcamento.altura_final || orcamento.grua_altura_final;
+        const gruaTipoBase = orcamento.grua_tipo_base || '-';
+        const gruaAno = orcamento.grua_ano;
+        const gruaPotencia = orcamento.potencia_eletrica || orcamento.grua_potencia;
+        const gruaCapacidade1 = orcamento.carga_maxima || orcamento.grua_capacidade_1_cabo;
+        const gruaCapacidade2 = orcamento.carga_ponta || orcamento.grua_capacidade_2_cabos;
+        const gruaVoltagem = orcamento.energia_necessaria || orcamento.grua_voltagem || '-';
+        
+        doc.text(`Modelo: ${gruaModelo}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Lança: ${gruaLanca ? `${gruaLanca}m` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Altura Final: ${gruaAlturaFinal ? `${gruaAlturaFinal}m` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Base: ${gruaTipoBase}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Ano: ${gruaAno || '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Potência: ${gruaPotencia ? `${gruaPotencia}` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Capacidade 1 cabo: ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Capacidade 2 cabos: ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Voltagem: ${gruaVoltagem}`, 40, yPos);
+        yPos += 12;
+      } else {
+        // Para orçamentos normais, usar relacionamento ou campos diretos
+        const grua = orcamento.gruas || {};
+        const gruaModelo = orcamento.grua_modelo || grua.modelo || grua.name || '-';
+        const gruaLanca = orcamento.grua_lanca || grua.lanca;
+        const gruaAlturaFinal = orcamento.grua_altura_final || grua.altura_final;
+        const gruaTipoBase = orcamento.grua_tipo_base || grua.tipo_base || grua.tipo || '-';
+        const gruaAno = orcamento.grua_ano || grua.ano;
+        const gruaPotencia = orcamento.grua_potencia || grua.potencia_instalada;
+        const gruaCapacidade1 = orcamento.grua_capacidade_1_cabo || grua.capacidade_1_cabo;
+        const gruaCapacidade2 = orcamento.grua_capacidade_2_cabos || grua.capacidade_2_cabos;
+        const gruaVoltagem = orcamento.grua_voltagem || grua.voltagem || '-';
+        
+        doc.text(`Modelo: ${gruaModelo}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Lança: ${gruaLanca ? `${gruaLanca}m` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Altura Final: ${gruaAlturaFinal ? `${gruaAlturaFinal}m` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Base: ${gruaTipoBase}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Ano: ${gruaAno || '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Potência: ${gruaPotencia ? `${gruaPotencia} KVA` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Capacidade 1 cabo: ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Capacidade 2 cabos: ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
+        yPos += 12;
+        doc.text(`Voltagem: ${gruaVoltagem}`, 40, yPos);
+        yPos += 12;
+      }
+      yPos += 8;
+    }
 
     // Verificar se precisa de nova página
     if (yPos > 700) {
@@ -207,8 +436,110 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       yPos = 40;
     }
 
+    // ===== ITENS DO ORÇAMENTO =====
+    // Para orçamentos de locação, usar apenas os itens de orcamento_itens_locacao
+    // Não incluir valores fixos e custos mensais duplicados, pois já estão nos itens
+    let todosItens = [];
+    
+    if (isLocacao) {
+      // Para orçamentos de locação, usar apenas os itens de orcamento_itens_locacao
+      // Os custos mensais já foram convertidos para itens quando o orçamento foi criado
+      todosItens = itens || [];
+      
+      console.log(`[PDF Locação] Usando ${todosItens.length} itens de orcamento_itens_locacao`);
+      console.log(`[PDF Locação] Itens:`, JSON.stringify(todosItens, null, 2));
+      
+      // Se não houver itens, mas houver valores fixos ou custos mensais, converter
+      if (todosItens.length === 0 && (valoresFixos.length > 0 || custosMensais.length > 0)) {
+        console.log(`[PDF Locação] Nenhum item encontrado, convertendo valores fixos e custos mensais`);
+        todosItens = [
+          ...valoresFixos.map(vf => ({
+            produto_servico: vf.tipo || 'Valor Fixo',
+            descricao: vf.descricao || '-',
+            quantidade: parseFloat(vf.quantidade) || 1,
+            valor_unitario: parseFloat(vf.valor_unitario) || 0,
+            valor_total: parseFloat(vf.valor_total) || 0,
+            unidade: 'unidade',
+            observacoes: vf.observacoes
+          })),
+          ...custosMensais.map(cm => {
+            const prazoMeses = parseInt(orcamento.prazo_locacao_meses) || 1;
+            return {
+              produto_servico: cm.tipo || 'Custo Mensal',
+              descricao: cm.descricao || '-',
+              quantidade: prazoMeses,
+              valor_unitario: parseFloat(cm.valor_mensal) || 0,
+              valor_total: (parseFloat(cm.valor_mensal) || 0) * prazoMeses,
+              unidade: 'mês',
+              observacoes: cm.observacoes
+            };
+          })
+        ];
+      }
+    } else {
+      // Para orçamentos normais, usar apenas itens
+      todosItens = itens || [];
+    }
+    
+    if (todosItens && todosItens.length > 0) {
+      doc.fontSize(11).font('Helvetica-Bold').text('ITENS DO ORÇAMENTO', 40, yPos);
+      yPos += 15;
+      
+      // Cabeçalho da tabela
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.text('Produto/Serviço', 40, yPos);
+      doc.text('Descrição', 150, yPos);
+      doc.text('Qtd', 300, yPos);
+      doc.text('Valor Unit.', 350, yPos);
+      doc.text('Valor Total', 450, yPos);
+      yPos += 12;
+      
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      
+      doc.fontSize(9).font('Helvetica');
+      todosItens.forEach(item => {
+        if (yPos > 750) {
+          doc.addPage();
+          yPos = 40;
+        }
+        
+        // Garantir que os valores sejam numéricos
+        const quantidade = parseFloat(item.quantidade) || 0;
+        const valorUnitario = parseFloat(item.valor_unitario) || 0;
+        const valorTotal = parseFloat(item.valor_total) || 0;
+        const unidade = item.unidade || '';
+        
+        doc.text(item.produto_servico || '-', 40, yPos, { width: 100 });
+        doc.text(item.descricao || '-', 150, yPos, { width: 140 });
+        doc.text(`${quantidade} ${unidade}`.trim(), 300, yPos);
+        doc.text(formatarMoeda(valorUnitario), 350, yPos);
+        doc.text(formatarMoeda(valorTotal), 450, yPos);
+        yPos += 15;
+        
+        if (item.observacoes) {
+          doc.fontSize(8).font('Helvetica-Oblique').text(`Obs: ${item.observacoes}`, 150, yPos, { width: 400 });
+          yPos += 12;
+          doc.fontSize(9).font('Helvetica');
+        }
+      });
+      
+      // Total dos itens - garantir que os valores sejam numéricos
+      const totalItens = todosItens.reduce((sum, item) => {
+        const valorTotal = parseFloat(item.valor_total) || 0;
+        return sum + valorTotal;
+      }, 0);
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      doc.fontSize(10).font('Helvetica-Bold');
+      doc.text('TOTAL ITENS:', 300, yPos);
+      doc.text(formatarMoeda(totalItens), 450, yPos);
+      yPos += 20;
+    }
+
     // ===== VALORES FIXOS =====
-    if (valoresFixos && valoresFixos.length > 0) {
+    // Para orçamentos de locação, valores fixos já foram incluídos nos itens
+    if (!isLocacao && valoresFixos && valoresFixos.length > 0) {
       doc.fontSize(11).font('Helvetica-Bold').text('VALORES FIXOS', 40, yPos);
       yPos += 15;
       
@@ -302,7 +633,8 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     }
 
     // ===== TABELA DE HORAS EXTRAS =====
-    if (horasExtras && horasExtras.length > 0) {
+    // Apenas para orçamentos normais (não locação)
+    if (!isLocacao && horasExtras && horasExtras.length > 0) {
       if (yPos > 700) {
         doc.addPage();
         yPos = 40;
@@ -350,7 +682,8 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     }
 
     // ===== SERVIÇOS ADICIONAIS =====
-    if (servicosAdicionais && servicosAdicionais.length > 0) {
+    // Apenas para orçamentos normais (não locação)
+    if (!isLocacao && servicosAdicionais && servicosAdicionais.length > 0) {
       if (yPos > 700) {
         doc.addPage();
         yPos = 40;
@@ -475,6 +808,360 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
 
   } catch (error) {
     console.error('Erro ao gerar PDF do orçamento:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao gerar PDF',
+        message: error.message
+      });
+    }
+  }
+});
+
+/**
+ * GET /api/relatorios/orcamentos-locacao/:id/pdf
+ * Gerar PDF do orçamento de locação
+ */
+router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Buscar orçamento de locação diretamente
+    const { data: orcamento, error: orcamentoError } = await supabaseAdmin
+      .from('orcamentos_locacao')
+      .select(`
+        *,
+        clientes:cliente_id (
+          id,
+          nome,
+          cnpj,
+          contato_cpf,
+          endereco,
+          cidade,
+          estado,
+          cep,
+          telefone,
+          email,
+          contato
+        ),
+        funcionarios:vendedor_id (
+          id,
+          nome,
+          email
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (orcamentoError || !orcamento) {
+      console.error(`[PDF Locação] Erro ao buscar orçamento ${id}:`, orcamentoError);
+      return res.status(404).json({
+        success: false,
+        error: 'Orçamento de locação não encontrado',
+        message: orcamentoError?.message || 'Orçamento de locação não encontrado'
+      });
+    }
+
+    console.log(`[PDF Locação] Orçamento encontrado:`, JSON.stringify(orcamento, null, 2));
+
+    // Buscar dados relacionados de orçamentos de locação
+    const [
+      { data: itensLocacao },
+      { data: valoresFixosLocacao },
+      { data: custosMensaisLocacao }
+    ] = await Promise.all([
+      supabaseAdmin.from('orcamento_itens_locacao').select('*').eq('orcamento_id', id).order('id'),
+      supabaseAdmin.from('orcamento_valores_fixos_locacao').select('*').eq('orcamento_id', id).order('id'),
+      supabaseAdmin.from('orcamento_custos_mensais_locacao').select('*').eq('orcamento_id', id).order('id')
+    ]);
+
+    const itens = itensLocacao || [];
+    const valoresFixos = valoresFixosLocacao || [];
+    const custosMensais = custosMensaisLocacao || [];
+    
+    console.log(`[PDF Locação] Itens encontrados: ${itens.length}`, itens);
+    console.log(`[PDF Locação] Valores Fixos: ${valoresFixos.length}`, valoresFixos);
+    console.log(`[PDF Locação] Custos Mensais: ${custosMensais.length}`, custosMensais);
+
+    // Criar documento PDF
+    const doc = new PDFDocument({ 
+      size: 'A4', 
+      margin: 40,
+      info: {
+        Title: `Orçamento de Locação ${orcamento.numero || id}`,
+        Author: 'Sistema de Gerenciamento de Gruas',
+        Subject: 'Orçamento de Locação de Grua',
+        Creator: 'Sistema IRBANA'
+      }
+    });
+
+    // Configurar headers da resposta
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=orcamento-locacao-${orcamento.numero || id}.pdf`);
+
+    // Pipe do documento para a resposta
+    doc.pipe(res);
+
+    let yPos = 40;
+
+    // ===== CABEÇALHO =====
+    doc.fontSize(16).font('Helvetica-Bold').text('ORÇAMENTO DE LOCAÇÃO DE GRUA', 40, yPos, { align: 'center' });
+    yPos += 25;
+    
+    const numeroOrcamento = orcamento.numero || `LOC-${id}`;
+    doc.fontSize(12).font('Helvetica').text(`Nº ${numeroOrcamento}`, 40, yPos, { align: 'center' });
+    yPos += 20;
+
+    // Linha separadora
+    doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+    yPos += 15;
+
+    // ===== DADOS DO CLIENTE =====
+    doc.fontSize(11).font('Helvetica-Bold').text('DADOS DO CLIENTE', 40, yPos);
+    yPos += 15;
+    doc.fontSize(10).font('Helvetica');
+    
+    const cliente = orcamento.clientes || {};
+    
+    doc.text(`Nome: ${cliente.nome || '-'}`, 40, yPos);
+    yPos += 12;
+    
+    // Formatar CNPJ/CPF
+    const cnpj = cliente.cnpj || '';
+    const cpf = cliente.contato_cpf || '';
+    let documento = '-';
+    if (cnpj) {
+      const cnpjLimpo = cnpj.replace(/\D/g, '');
+      if (cnpjLimpo.length === 14) {
+        documento = cnpjLimpo.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+      } else {
+        documento = cnpj;
+      }
+    } else if (cpf) {
+      const cpfLimpo = cpf.replace(/\D/g, '');
+      if (cpfLimpo.length === 11) {
+        documento = cpfLimpo.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+      } else {
+        documento = cpf;
+      }
+    }
+    
+    doc.text(`CNPJ/CPF: ${documento}`, 40, yPos);
+    yPos += 12;
+    
+    const enderecoCliente = [
+      cliente.endereco,
+      cliente.cidade,
+      cliente.estado,
+      cliente.cep
+    ].filter(Boolean).join(', ');
+    
+    if (enderecoCliente) {
+      doc.text(`Endereço: ${enderecoCliente}`, 40, yPos);
+      yPos += 12;
+    }
+    
+    doc.text(`Telefone: ${cliente.telefone || '-'}`, 40, yPos);
+    yPos += 12;
+    doc.text(`Email: ${cliente.email || '-'}`, 40, yPos);
+    yPos += 12;
+    doc.text(`Contato: ${cliente.contato || '-'}`, 40, yPos);
+    yPos += 20;
+
+    // ===== DADOS DA OBRA =====
+    const temDadosObra = orcamento.obra_nome && orcamento.obra_nome !== '-';
+    
+    if (temDadosObra) {
+      doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA OBRA', 40, yPos);
+      yPos += 15;
+      doc.fontSize(10).font('Helvetica');
+      
+      const obraNome = orcamento.obra_nome || '-';
+      const obraTipo = orcamento.tipo_obra || '-';
+      const obraEndereco = orcamento.obra_endereco;
+      const obraCidade = orcamento.obra_cidade;
+      const obraEstado = orcamento.obra_estado;
+      
+      doc.text(`Nome da Obra: ${obraNome}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Tipo: ${obraTipo}`, 40, yPos);
+      yPos += 12;
+      
+      const enderecoObra = [obraEndereco, obraCidade, obraEstado].filter(Boolean).join(', ');
+      if (enderecoObra) {
+        doc.text(`Endereço: ${enderecoObra}`, 40, yPos);
+        yPos += 12;
+      }
+      yPos += 8;
+    }
+
+    // ===== DADOS DA GRUA =====
+    const temDadosGrua = orcamento.equipamento && orcamento.equipamento !== '-';
+    
+    if (temDadosGrua) {
+      doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA GRUA', 40, yPos);
+      yPos += 15;
+      doc.fontSize(10).font('Helvetica');
+      
+      const equipamento = orcamento.equipamento || '-';
+      const gruaModelo = orcamento.grua_modelo || equipamento || '-';
+      const gruaLanca = orcamento.comprimento_lanca || orcamento.grua_lanca;
+      const gruaAlturaFinal = orcamento.altura_final || orcamento.grua_altura_final;
+      const gruaTipoBase = orcamento.grua_tipo_base || '-';
+      const gruaAno = orcamento.grua_ano;
+      const gruaPotencia = orcamento.potencia_eletrica || orcamento.grua_potencia;
+      const gruaCapacidade1 = orcamento.carga_maxima || orcamento.grua_capacidade_1_cabo;
+      const gruaCapacidade2 = orcamento.carga_ponta || orcamento.grua_capacidade_2_cabos;
+      const gruaVoltagem = orcamento.energia_necessaria || orcamento.grua_voltagem || '-';
+      
+      doc.text(`Modelo: ${gruaModelo}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Lança: ${gruaLanca ? `${gruaLanca}m` : '-'}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Altura Final: ${gruaAlturaFinal ? `${gruaAlturaFinal}m` : '-'}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Base: ${gruaTipoBase}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Ano: ${gruaAno || '-'}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Potência: ${gruaPotencia ? `${gruaPotencia}` : '-'}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Capacidade 1 cabo: ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Capacidade 2 cabos: ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
+      yPos += 12;
+      doc.text(`Voltagem: ${gruaVoltagem}`, 40, yPos);
+      yPos += 12;
+      yPos += 8;
+    }
+
+    // Verificar se precisa de nova página
+    if (yPos > 700) {
+      doc.addPage();
+      yPos = 40;
+    }
+
+    // ===== ITENS DO ORÇAMENTO =====
+    // Para orçamentos de locação, usar apenas os itens de orcamento_itens_locacao
+    let todosItens = itens || [];
+    
+    // Se não houver itens, mas houver valores fixos ou custos mensais, converter
+    if (todosItens.length === 0 && (valoresFixos.length > 0 || custosMensais.length > 0)) {
+      todosItens = [
+        ...valoresFixos.map(vf => ({
+          produto_servico: vf.tipo || 'Valor Fixo',
+          descricao: vf.descricao || '-',
+          quantidade: parseFloat(vf.quantidade) || 1,
+          valor_unitario: parseFloat(vf.valor_unitario) || 0,
+          valor_total: parseFloat(vf.valor_total) || 0,
+          unidade: 'unidade',
+          observacoes: vf.observacoes
+        })),
+        ...custosMensais.map(cm => {
+          const prazoMeses = parseInt(orcamento.prazo_locacao_meses) || 1;
+          return {
+            produto_servico: cm.tipo || 'Custo Mensal',
+            descricao: cm.descricao || '-',
+            quantidade: prazoMeses,
+            valor_unitario: parseFloat(cm.valor_mensal) || 0,
+            valor_total: (parseFloat(cm.valor_mensal) || 0) * prazoMeses,
+            unidade: 'mês',
+            observacoes: cm.observacoes
+          };
+        })
+      ];
+    }
+    
+    if (todosItens && todosItens.length > 0) {
+      doc.fontSize(11).font('Helvetica-Bold').text('ITENS DO ORÇAMENTO', 40, yPos);
+      yPos += 15;
+      
+      // Cabeçalho da tabela
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.text('Produto/Serviço', 40, yPos);
+      doc.text('Descrição', 150, yPos);
+      doc.text('Qtd', 300, yPos);
+      doc.text('Valor Unit.', 350, yPos);
+      doc.text('Valor Total', 450, yPos);
+      yPos += 12;
+      
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      
+      doc.fontSize(9).font('Helvetica');
+      todosItens.forEach(item => {
+        if (yPos > 750) {
+          doc.addPage();
+          yPos = 40;
+        }
+        
+        // Garantir que os valores sejam numéricos
+        const quantidade = parseFloat(item.quantidade) || 0;
+        const valorUnitario = parseFloat(item.valor_unitario) || 0;
+        const valorTotal = parseFloat(item.valor_total) || 0;
+        const unidade = item.unidade || '';
+        
+        doc.text(item.produto_servico || '-', 40, yPos, { width: 100 });
+        doc.text(item.descricao || '-', 150, yPos, { width: 140 });
+        doc.text(`${quantidade} ${unidade}`.trim(), 300, yPos);
+        doc.text(formatarMoeda(valorUnitario), 350, yPos);
+        doc.text(formatarMoeda(valorTotal), 450, yPos);
+        yPos += 15;
+        
+        if (item.observacoes) {
+          doc.fontSize(8).font('Helvetica-Oblique').text(`Obs: ${item.observacoes}`, 150, yPos, { width: 400 });
+          yPos += 12;
+          doc.fontSize(9).font('Helvetica');
+        }
+      });
+      
+      // Total dos itens
+      const totalItens = todosItens.reduce((sum, item) => {
+        const valorTotal = parseFloat(item.valor_total) || 0;
+        return sum + valorTotal;
+      }, 0);
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      doc.fontSize(10).font('Helvetica-Bold');
+      doc.text(`TOTAL ITENS: ${formatarMoeda(totalItens)}`, 350, yPos, { align: 'right' });
+      yPos += 20;
+    }
+
+    // Verificar se precisa de nova página
+    if (yPos > 700) {
+      doc.addPage();
+      yPos = 40;
+    }
+
+    // ===== ASSINATURAS =====
+    doc.fontSize(11).font('Helvetica-Bold').text('ASSINATURAS', 40, yPos);
+    yPos += 20;
+    doc.fontSize(10).font('Helvetica');
+    
+    const dataAtual = formatarData(new Date());
+    doc.text(`Cliente: ${dataAtual}`, 40, yPos);
+    yPos += 15;
+    doc.text(`Empresa: ${dataAtual}`, 40, yPos);
+    yPos += 20;
+
+    // Rodapé
+    const totalPages = doc.bufferedPageRange().count;
+    for (let i = 0; i < totalPages; i++) {
+      doc.switchToPage(i);
+      doc.fontSize(8).font('Helvetica');
+      doc.text(
+        `Página ${i + 1} de ${totalPages} | Gerado em ${formatarDataHora(new Date())}`,
+        40,
+        doc.page.height - 30,
+        { align: 'center', width: 515 }
+      );
+    }
+
+    // Finalizar documento
+    doc.end();
+
+  } catch (error) {
+    console.error('Erro ao gerar PDF do orçamento de locação:', error);
     if (!res.headersSent) {
       res.status(500).json({
         success: false,

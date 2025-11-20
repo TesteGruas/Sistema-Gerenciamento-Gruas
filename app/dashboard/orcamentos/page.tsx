@@ -34,11 +34,12 @@ import { ExportButton } from "@/components/export-button"
 import { CardLoader } from "@/components/ui/loader"
 import { OrcamentoPDFDocument } from "@/components/orcamento-pdf"
 import { pdf } from "@react-pdf/renderer"
-import { getOrcamentos, type Orcamento as OrcamentoAPI } from "@/lib/api-orcamentos"
+import { getOrcamentos, getOrcamento, type Orcamento as OrcamentoAPI } from "@/lib/api-orcamentos"
 import { api, API_BASE_URL } from "@/lib/api"
 import { orcamentosLocacaoApi, OrcamentoLocacao } from "@/lib/api-orcamentos-locacao"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado'
+type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado' | 'vencido' | 'convertido'
 
 interface Orcamento {
   id: string
@@ -81,17 +82,24 @@ interface Orcamento {
 export default function OrcamentosPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const [activeTab, setActiveTab] = useState<'obra' | 'locacao'>('obra')
   const [searchTerm, setSearchTerm] = useState("")
   const [filtroStatus, setFiltroStatus] = useState<StatusOrcamento | "todos">("todos")
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
+  const [orcamentosLocacao, setOrcamentosLocacao] = useState<OrcamentoLocacao[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingLocacao, setLoadingLocacao] = useState(true)
   const [selectedOrcamento, setSelectedOrcamento] = useState<Orcamento | null>(null)
+  const [selectedOrcamentoLocacao, setSelectedOrcamentoLocacao] = useState<OrcamentoLocacao | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [isViewLocacaoDialogOpen, setIsViewLocacaoDialogOpen] = useState(false)
   const [editedOrcamento, setEditedOrcamento] = useState<Orcamento | null>(null)
   
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const [dadosLocacaoCarregados, setDadosLocacaoCarregados] = useState(false)
   const loadingRef = useRef(false)
+  const loadingLocacaoRef = useRef(false)
 
   useEffect(() => {
     if (!dadosIniciaisCarregados && !loadingRef.current) {
@@ -111,6 +119,26 @@ export default function OrcamentosPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroStatus])
+
+  // Carregar orçamentos de locação
+  useEffect(() => {
+    if (!dadosLocacaoCarregados && !loadingLocacaoRef.current && activeTab === 'locacao') {
+      loadingLocacaoRef.current = true
+      loadOrcamentosLocacao().finally(() => {
+        setDadosLocacaoCarregados(true)
+        loadingLocacaoRef.current = false
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosLocacaoCarregados, activeTab])
+
+  // Recarregar orçamentos de locação quando tab mudar
+  useEffect(() => {
+    if (activeTab === 'locacao' && dadosLocacaoCarregados) {
+      loadOrcamentosLocacao()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, filtroStatus])
 
   // Debounce para busca (aguarda 500ms após parar de digitar)
   useEffect(() => {
@@ -186,6 +214,30 @@ export default function OrcamentosPage() {
     }
   }
 
+  const loadOrcamentosLocacao = async () => {
+    setLoadingLocacao(true)
+    try {
+      const response = await orcamentosLocacaoApi.list({
+        page: 1,
+        limit: 100,
+        status: filtroStatus !== "todos" ? filtroStatus : undefined,
+        search: searchTerm || undefined
+      })
+
+      setOrcamentosLocacao(response.data || [])
+    } catch (error: any) {
+      console.error('Erro ao carregar orçamentos de locação:', error)
+      toast({
+        title: "Erro",
+        description: error?.message || "Erro ao carregar orçamentos de locação",
+        variant: "destructive"
+      })
+      setOrcamentosLocacao([])
+    } finally {
+      setLoadingLocacao(false)
+    }
+  }
+
   // A filtragem já é feita pela API, mas mantemos filtro local apenas para status
   // caso o usuário mude o filtro sem recarregar os dados
   const filteredOrcamentos = orcamentos.filter(item => {
@@ -198,10 +250,23 @@ export default function OrcamentosPage() {
       rascunho: { label: 'Rascunho', variant: 'secondary', icon: FileText },
       enviado: { label: 'Enviado', variant: 'default', icon: Clock },
       aprovado: { label: 'Aprovado', variant: 'default', icon: CheckCircle2, className: 'bg-green-500 text-white' },
-      rejeitado: { label: 'Rejeitado', variant: 'destructive', icon: XCircle }
+      rejeitado: { label: 'Rejeitado', variant: 'destructive', icon: XCircle },
+      vencido: { label: 'Vencido', variant: 'destructive', icon: AlertCircle, className: 'bg-orange-500 text-white' },
+      convertido: { label: 'Convertido', variant: 'default', icon: CheckCircle, className: 'bg-blue-500 text-white' }
     }
     
     const config = configs[status]
+    
+    // Fallback para status desconhecido
+    if (!config) {
+      return (
+        <Badge variant="secondary" className="flex items-center gap-1">
+          <FileText className="w-3 h-3" />
+          {status}
+        </Badge>
+      )
+    }
+    
     const Icon = config.icon
     
     return (
@@ -212,10 +277,50 @@ export default function OrcamentosPage() {
     )
   }
 
-  const handleView = (orcamento: Orcamento) => {
-    setSelectedOrcamento(orcamento)
-    setEditedOrcamento({ ...orcamento })
-    setIsViewDialogOpen(true)
+  const handleView = async (orcamento: Orcamento) => {
+    try {
+      // Buscar dados completos do orçamento com todos os relacionamentos
+      const response = await getOrcamento(Number(orcamento.id))
+      
+      if (response.success && response.data) {
+        // Garantir que os itens estejam mapeados corretamente
+        const data = response.data as any
+        const orcamentoCompleto = {
+          ...data,
+          // Mapear cliente_nome do relacionamento clientes se disponível
+          cliente_nome: data.clientes?.nome || data.cliente_nome || '',
+          itens: data.itens || data.orcamento_itens || [],
+          valores_fixos: data.valores_fixos || data.orcamento_valores_fixos || [],
+          custos_mensais: data.custos_mensais || data.orcamento_custos_mensais || [],
+          horas_extras: data.horas_extras || data.orcamento_horas_extras || [],
+          servicos_adicionais: data.servicos_adicionais || data.orcamento_servicos_adicionais || []
+        }
+        setSelectedOrcamento(orcamentoCompleto as any)
+        setEditedOrcamento({ ...orcamentoCompleto as any })
+        setIsViewDialogOpen(true)
+      } else {
+        // Se falhar, usar dados da listagem
+        setSelectedOrcamento(orcamento)
+        setEditedOrcamento({ ...orcamento })
+        setIsViewDialogOpen(true)
+        toast({
+          title: "Aviso",
+          description: "Alguns dados podem estar incompletos",
+          variant: "default"
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao buscar detalhes do orçamento:', error)
+      // Se falhar, usar dados da listagem
+      setSelectedOrcamento(orcamento)
+      setEditedOrcamento({ ...orcamento })
+      setIsViewDialogOpen(true)
+      toast({
+        title: "Aviso",
+        description: "Erro ao carregar detalhes completos. Exibindo dados disponíveis.",
+        variant: "default"
+      })
+    }
   }
 
   // Garantir que editedOrcamento está sincronizado quando o dialog abrir
@@ -376,6 +481,48 @@ export default function OrcamentosPage() {
       })
     } catch (error: any) {
       console.error('Erro ao exportar PDF:', error)
+      toast({
+        title: "Erro",
+        description: error?.response?.data?.message || "Erro ao exportar PDF do orçamento",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleExportPDFLocacao = async (orcamento: OrcamentoLocacao | null) => {
+    if (!orcamento) return
+    
+    try {
+      // Usar axios com responseType blob para receber o PDF
+      // O interceptor do axios já adiciona o token automaticamente
+      // Usar rota específica para orçamentos de locação
+      const response = await api.get(
+        `/relatorios/orcamentos-locacao/${orcamento.id}/pdf`,
+        {
+          responseType: 'blob',
+        }
+      )
+
+      // Criar blob do PDF
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      
+      // Criar link de download
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const clienteNome = orcamento.clientes?.nome?.replace(/\s+/g, '-') || 'cliente'
+      link.download = `Orcamento-${orcamento.numero}-${clienteNome}-${new Date().toISOString().split('T')[0]}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: "Sucesso",
+        description: "Orçamento exportado em PDF com sucesso!",
+      })
+    } catch (error: any) {
+      console.error('Erro ao exportar PDF:', error)
       
       // Tentar ler mensagem de erro do blob se for erro do servidor
       let errorMessage = "Erro ao exportar orçamento. Tente novamente."
@@ -411,13 +558,58 @@ export default function OrcamentosPage() {
     }
   }
 
+  const handleViewLocacao = async (orcamento: OrcamentoLocacao) => {
+    try {
+      // Buscar dados completos do orçamento com todos os relacionamentos
+      const response = await orcamentosLocacaoApi.get(orcamento.id)
+      if (response.success && response.data) {
+        setSelectedOrcamentoLocacao(response.data)
+        setIsViewLocacaoDialogOpen(true)
+      } else {
+        // Se falhar, usar dados da listagem
+        setSelectedOrcamentoLocacao(orcamento)
+        setIsViewLocacaoDialogOpen(true)
+        toast({
+          title: "Aviso",
+          description: "Alguns dados podem estar incompletos",
+          variant: "default"
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao buscar detalhes do orçamento:', error)
+      // Se falhar, usar dados da listagem
+      setSelectedOrcamentoLocacao(orcamento)
+      setIsViewLocacaoDialogOpen(true)
+      toast({
+        title: "Aviso",
+        description: "Erro ao carregar detalhes completos. Exibindo dados disponíveis.",
+        variant: "default"
+      })
+    }
+  }
+
+  const handleEditLocacao = (id: number) => {
+    router.push(`/dashboard/orcamentos/novo?id=${id}`)
+  }
+
+  const getTipoColor = (tipo: string) => {
+    switch (tipo) {
+      case 'locacao_grua':
+        return 'bg-blue-100 text-blue-800'
+      case 'locacao_plataforma':
+        return 'bg-green-100 text-green-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Orçamentos de Obra</h1>
+          <h1 className="text-3xl font-bold">Orçamentos</h1>
           <p className="text-gray-600 mt-1">
-            Gerencie orçamentos que podem ser aprovados para criar obras
+            Gerencie orçamentos de obra e locação
           </p>
         </div>
         <Button onClick={handleCreate}>
@@ -426,6 +618,19 @@ export default function OrcamentosPage() {
         </Button>
       </div>
 
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'obra' | 'locacao')} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="obra">
+            <Building2 className="w-4 h-4 mr-2" />
+            Orçamentos de Obra
+          </TabsTrigger>
+          <TabsTrigger value="locacao">
+            <FileText className="w-4 h-4 mr-2" />
+            Orçamentos de Locação
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="obra" className="space-y-6">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -582,6 +787,133 @@ export default function OrcamentosPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="locacao" className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Lista de Orçamentos de Locação</CardTitle>
+              <CardDescription>
+                Visualize e gerencie todos os orçamentos de locação
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Pesquisar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <select
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value as StatusOrcamento | "todos")}
+                className="px-3 py-2 border rounded-md text-sm"
+              >
+                <option value="todos">Todos os Status</option>
+                <option value="rascunho">Rascunho</option>
+                <option value="enviado">Enviado</option>
+                <option value="aprovado">Aprovado</option>
+                <option value="rejeitado">Rejeitado</option>
+                <option value="vencido">Vencido</option>
+                <option value="convertido">Convertido</option>
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingLocacao ? (
+            <CardLoader text="Carregando orçamentos de locação..." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nº Orçamento</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Valor Total</TableHead>
+                  <TableHead>Validade</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orcamentosLocacao.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                      Nenhum orçamento de locação encontrado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  orcamentosLocacao
+                    .filter((item) => {
+                      const matchesSearch = !searchTerm || 
+                        item.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        item.clientes?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
+                      const matchesStatus = filtroStatus === "todos" || item.status === filtroStatus
+                      return matchesSearch && matchesStatus
+                    })
+                    .map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-mono font-medium">{item.numero}</TableCell>
+                        <TableCell>{item.clientes?.nome || '-'}</TableCell>
+                        <TableCell>{new Date(item.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell className="font-semibold">
+                          R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell>{new Date(item.data_validade).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell>
+                          <Badge className={getTipoColor(item.tipo_orcamento)}>
+                            {item.tipo_orcamento === 'locacao_grua' ? 'Locação de Grua' : 'Locação de Plataforma'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(item.status as StatusOrcamento)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleExportPDFLocacao(item)}
+                              title="Exportar PDF"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Download className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewLocacao(item)}
+                              title="Visualizar"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            {item.status === 'rascunho' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditLocacao(item.id)}
+                                title="Editar"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Dialog de Visualização */}
       {isViewDialogOpen && selectedOrcamento && (() => {
@@ -627,9 +959,10 @@ export default function OrcamentosPage() {
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-700">Cliente</label>
                       <Input
-                        value={orcamentoAtual?.cliente_nome || ''}
+                        value={(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || ''}
                         onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, cliente_nome: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, cliente_nome: e.target.value } : null)}
                         className="text-gray-900 font-medium"
+                        readOnly
                       />
                     </div>
                     <div className="space-y-2">
@@ -956,6 +1289,172 @@ export default function OrcamentosPage() {
                 </div>
               </div>
 
+              {/* Itens do Orçamento */}
+              {orcamentoAtual && ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens) && 
+               ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens).length > 0 && (
+                <div className="space-y-2 border-t border-gray-200 pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto/Serviço</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens || []).map((item: any) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.produto_servico}</TableCell>
+                          <TableCell>{item.descricao || '-'}</TableCell>
+                          <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
+                          <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Valores Fixos */}
+              {orcamentoAtual && ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos) && 
+               ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos).length > 0 && (
+                <div className="space-y-2 border-t border-gray-200 pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Valores Fixos</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos || []).map((vf: any) => (
+                        <TableRow key={vf.id}>
+                          <TableCell>{vf.tipo}</TableCell>
+                          <TableCell>{vf.descricao}</TableCell>
+                          <TableCell>{vf.quantidade}</TableCell>
+                          <TableCell>R$ {vf.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {vf.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Custos Mensais */}
+              {orcamentoAtual && ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais) && 
+               ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais).length > 0 && (
+                <div className="space-y-2 border-t border-gray-200 pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Valor Mensal</TableHead>
+                        <TableHead>Obrigatório</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais || []).map((cm: any) => (
+                        <TableRow key={cm.id}>
+                          <TableCell>{cm.tipo}</TableCell>
+                          <TableCell>{cm.descricao}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {cm.valor_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={cm.obrigatorio ? "default" : "secondary"}>
+                              {cm.obrigatorio ? "Sim" : "Não"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Horas Extras */}
+              {orcamentoAtual && ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras) && 
+               ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras).length > 0 && (
+                <div className="space-y-2 border-t border-gray-200 pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Horas Extras</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Dia da Semana</TableHead>
+                        <TableHead>Valor/Hora</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras || []).map((he: any) => (
+                        <TableRow key={he.id}>
+                          <TableCell>
+                            {he.tipo === 'operador' ? 'Operador' : 
+                             he.tipo === 'sinaleiro' ? 'Sinaleiro' : 
+                             he.tipo === 'equipamento' ? 'Equipamento' : he.tipo}
+                          </TableCell>
+                          <TableCell>
+                            {he.dia_semana === 'sabado' ? 'Sábado' : 
+                             he.dia_semana === 'domingo_feriado' ? 'Domingo/Feriado' : 
+                             he.dia_semana === 'normal' ? 'Normal' : he.dia_semana}
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {he.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Serviços Adicionais */}
+              {orcamentoAtual && ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais) && 
+               ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais).length > 0 && (
+                <div className="space-y-2 border-t border-gray-200 pt-6">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Serviços Adicionais</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais || []).map((sa: any) => (
+                        <TableRow key={sa.id}>
+                          <TableCell>{sa.tipo}</TableCell>
+                          <TableCell>{sa.descricao}</TableCell>
+                          <TableCell>{sa.quantidade}</TableCell>
+                          <TableCell>R$ {sa.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {sa.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
               <div className="border-t border-gray-200 pt-6 flex justify-between items-center">
                 <div className="flex gap-2">
                   <Button 
@@ -999,6 +1498,248 @@ export default function OrcamentosPage() {
         </div>
         )
       })()}
+
+      {/* Dialog de Visualização de Orçamento de Locação */}
+      {isViewLocacaoDialogOpen && selectedOrcamentoLocacao && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsViewLocacaoDialogOpen(false)
+              setSelectedOrcamentoLocacao(null)
+            }
+          }}
+        >
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Orçamento de Locação - {selectedOrcamentoLocacao.numero}</CardTitle>
+                  <CardDescription>{selectedOrcamentoLocacao.clientes?.nome || 'Cliente não informado'}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExportPDFLocacao(selectedOrcamentoLocacao)}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Exportar PDF
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      setIsViewLocacaoDialogOpen(false)
+                      setSelectedOrcamentoLocacao(null)
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Informações Básicas */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Cliente</label>
+                    <p className="text-sm font-medium">{selectedOrcamentoLocacao.clientes?.nome || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Status</label>
+                    <div className="mt-1">{getStatusBadge(selectedOrcamentoLocacao.status as StatusOrcamento)}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Data do Orçamento</label>
+                    <p className="text-sm">{new Date(selectedOrcamentoLocacao.data_orcamento).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Data de Validade</label>
+                    <p className="text-sm">{new Date(selectedOrcamentoLocacao.data_validade).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Valor Total</label>
+                    <p className="text-lg font-bold text-green-600">
+                      R$ {selectedOrcamentoLocacao.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Tipo</label>
+                    <Badge className={getTipoColor(selectedOrcamentoLocacao.tipo_orcamento)}>
+                      {selectedOrcamentoLocacao.tipo_orcamento === 'locacao_grua' ? 'Locação de Grua' : 'Locação de Plataforma'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Condições Gerais */}
+              {selectedOrcamentoLocacao.condicoes_gerais && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições Gerais</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamentoLocacao.condicoes_gerais}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              {/* Logística */}
+              {selectedOrcamentoLocacao.logistica && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Logística</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamentoLocacao.logistica}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              {/* Garantias */}
+              {selectedOrcamentoLocacao.garantias && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Garantias</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamentoLocacao.garantias}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              {/* Valores Fixos */}
+              {selectedOrcamentoLocacao.orcamento_valores_fixos_locacao && selectedOrcamentoLocacao.orcamento_valores_fixos_locacao.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Valores Fixos</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrcamentoLocacao.orcamento_valores_fixos_locacao.map((vf) => (
+                        <TableRow key={vf.id}>
+                          <TableCell>{vf.tipo}</TableCell>
+                          <TableCell>{vf.descricao}</TableCell>
+                          <TableCell>{vf.quantidade}</TableCell>
+                          <TableCell>R$ {vf.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {vf.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Custos Mensais */}
+              {selectedOrcamentoLocacao.orcamento_custos_mensais_locacao && selectedOrcamentoLocacao.orcamento_custos_mensais_locacao.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Valor Mensal</TableHead>
+                        <TableHead>Obrigatório</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrcamentoLocacao.orcamento_custos_mensais_locacao.map((cm) => (
+                        <TableRow key={cm.id}>
+                          <TableCell>{cm.tipo}</TableCell>
+                          <TableCell>{cm.descricao}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {cm.valor_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={cm.obrigatorio ? "default" : "secondary"}>
+                              {cm.obrigatorio ? "Sim" : "Não"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Itens */}
+              {selectedOrcamentoLocacao.orcamento_itens_locacao && selectedOrcamentoLocacao.orcamento_itens_locacao.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto/Serviço</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrcamentoLocacao.orcamento_itens_locacao.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.produto_servico}</TableCell>
+                          <TableCell>{item.descricao || '-'}</TableCell>
+                          <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
+                          <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Observações */}
+              {selectedOrcamentoLocacao.observacoes && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Observações</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamentoLocacao.observacoes}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => {
+                  setIsViewLocacaoDialogOpen(false)
+                  setSelectedOrcamentoLocacao(null)
+                }}>
+                  Fechar
+                </Button>
+                {selectedOrcamentoLocacao.status === 'rascunho' && (
+                  <Button onClick={() => {
+                    setIsViewLocacaoDialogOpen(false)
+                    handleEditLocacao(selectedOrcamentoLocacao.id)
+                  }}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Editar
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

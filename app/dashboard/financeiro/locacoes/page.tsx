@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -60,6 +61,8 @@ export default function LocacoesPage() {
   const [selectedLocacao, setSelectedLocacao] = useState<any>(null)
   const [isViewLocacaoDialogOpen, setIsViewLocacaoDialogOpen] = useState(false)
   const [isEditLocacaoDialogOpen, setIsEditLocacaoDialogOpen] = useState(false)
+  const [selectedOrcamento, setSelectedOrcamento] = useState<OrcamentoLocacao | null>(null)
+  const [isViewOrcamentoDialogOpen, setIsViewOrcamentoDialogOpen] = useState(false)
   
   // Estados para dados da API
   const [locacoes, setLocacoes] = useState<Locacao[]>([])
@@ -702,10 +705,21 @@ export default function LocacoesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                setSelectedOrcamento(orcamento)
+                                setIsViewOrcamentoDialogOpen(true)
+                              }}
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => router.push(`/dashboard/orcamentos/novo?id=${orcamento.id}`)}
+                            >
                               <Edit className="w-4 h-4" />
                             </Button>
                           </div>
@@ -955,6 +969,214 @@ export default function LocacoesPage() {
           })
         }}
       />
+
+      {/* Dialog de Visualização de Orçamento */}
+      <Dialog open={isViewOrcamentoDialogOpen} onOpenChange={setIsViewOrcamentoDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Orçamento de Locação - {selectedOrcamento?.numero}</DialogTitle>
+            <DialogDescription>
+              Detalhes completos do orçamento
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrcamento && (
+            <div className="space-y-6">
+              {/* Informações Básicas */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Informações Básicas</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Cliente</Label>
+                    <p className="text-sm font-medium">{selectedOrcamento.clientes?.nome || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Status</Label>
+                    <Badge className={getStatusColor(selectedOrcamento.status)}>
+                      {selectedOrcamento.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Data do Orçamento</Label>
+                    <p className="text-sm">{new Date(selectedOrcamento.data_orcamento).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Data de Validade</Label>
+                    <p className="text-sm">{new Date(selectedOrcamento.data_validade).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Valor Total</Label>
+                    <p className="text-lg font-bold text-green-600">
+                      R$ {selectedOrcamento.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Tipo</Label>
+                    <Badge className={getTipoColor(selectedOrcamento.tipo_orcamento)}>
+                      {selectedOrcamento.tipo_orcamento}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Condições Gerais */}
+              {selectedOrcamento.condicoes_gerais && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold border-b pb-2">Condições Gerais</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamento.condicoes_gerais}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              {/* Logística */}
+              {selectedOrcamento.logistica && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold border-b pb-2">Logística</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamento.logistica}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              {/* Garantias */}
+              {selectedOrcamento.garantias && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold border-b pb-2">Garantias</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamento.garantias}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              {/* Valores Fixos */}
+              {selectedOrcamento.orcamento_valores_fixos_locacao && selectedOrcamento.orcamento_valores_fixos_locacao.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold border-b pb-2">Valores Fixos</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrcamento.orcamento_valores_fixos_locacao.map((vf) => (
+                        <TableRow key={vf.id}>
+                          <TableCell>{vf.tipo}</TableCell>
+                          <TableCell>{vf.descricao}</TableCell>
+                          <TableCell>{vf.quantidade}</TableCell>
+                          <TableCell>R$ {vf.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {vf.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Custos Mensais */}
+              {selectedOrcamento.orcamento_custos_mensais_locacao && selectedOrcamento.orcamento_custos_mensais_locacao.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold border-b pb-2">Custos Mensais</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Valor Mensal</TableHead>
+                        <TableHead>Obrigatório</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrcamento.orcamento_custos_mensais_locacao.map((cm) => (
+                        <TableRow key={cm.id}>
+                          <TableCell>{cm.tipo}</TableCell>
+                          <TableCell>{cm.descricao}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {cm.valor_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={cm.obrigatorio ? "default" : "secondary"}>
+                              {cm.obrigatorio ? "Sim" : "Não"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Itens */}
+              {selectedOrcamento.orcamento_itens_locacao && selectedOrcamento.orcamento_itens_locacao.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold border-b pb-2">Itens do Orçamento</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto/Serviço</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrcamento.orcamento_itens_locacao.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.produto_servico}</TableCell>
+                          <TableCell>{item.descricao || '-'}</TableCell>
+                          <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
+                          <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Observações */}
+              {selectedOrcamento.observacoes && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold border-b pb-2">Observações</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamento.observacoes}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setIsViewOrcamentoDialogOpen(false)}>
+                  Fechar
+                </Button>
+                <Button onClick={() => {
+                  setIsViewOrcamentoDialogOpen(false)
+                  router.push(`/dashboard/orcamentos/novo?id=${selectedOrcamento.id}`)
+                }}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

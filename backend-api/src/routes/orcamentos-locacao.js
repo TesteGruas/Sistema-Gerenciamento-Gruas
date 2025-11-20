@@ -152,7 +152,10 @@ router.get('/', async (req, res) => {
       .select(`
         *,
         clientes!inner(nome, cnpj),
-        funcionarios!vendedor_id(nome)
+        funcionarios!vendedor_id(nome),
+        orcamento_itens_locacao (*),
+        orcamento_valores_fixos_locacao (*),
+        orcamento_custos_mensais_locacao (*)
       `);
 
     // Aplicar filtros

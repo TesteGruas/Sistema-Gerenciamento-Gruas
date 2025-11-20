@@ -90,9 +90,19 @@ export function ClienteSearch({
     setShowResults(false)
   }
 
-  const formatCNPJ = (cnpj: string) => {
+  const formatCNPJ = (cnpj: string | undefined | null) => {
+    // Verificar se CNPJ existe e é uma string
+    if (!cnpj || typeof cnpj !== 'string') {
+      return '-'
+    }
+    // Remover caracteres não numéricos antes de formatar
+    const cnpjLimpo = cnpj.replace(/\D/g, '')
     // Formatar CNPJ: 00.000.000/0000-00
-    return cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+    if (cnpjLimpo.length === 14) {
+      return cnpjLimpo.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+    }
+    // Se não tiver 14 dígitos, retornar como está (pode ser CPF ou formato diferente)
+    return cnpj
   }
 
   return (
@@ -135,9 +145,11 @@ export function ClienteSearch({
                   <Building2 className="w-5 h-5 text-green-600" />
                   <div>
                     <p className="font-medium text-green-900">{selectedCliente.name}</p>
-                    <p className="text-sm text-green-700">
-                      CNPJ: {formatCNPJ(selectedCliente.cnpj)}
-                    </p>
+                    {selectedCliente.cnpj && (
+                      <p className="text-sm text-green-700">
+                        CNPJ: {formatCNPJ(selectedCliente.cnpj)}
+                      </p>
+                    )}
                     {selectedCliente.email && (
                       <p className="text-xs text-green-600">{selectedCliente.email}</p>
                     )}
@@ -178,9 +190,11 @@ export function ClienteSearch({
                       <Building2 className="w-4 h-4 text-gray-500" />
                       <div className="flex-1">
                         <p className="font-medium text-gray-900">{cliente.name}</p>
-                        <p className="text-sm text-gray-600">
-                          CNPJ: {formatCNPJ(cliente.cnpj)}
-                        </p>
+                        {cliente.cnpj && (
+                          <p className="text-sm text-gray-600">
+                            CNPJ: {formatCNPJ(cliente.cnpj)}
+                          </p>
+                        )}
                         {cliente.email && (
                           <p className="text-xs text-gray-500">{cliente.email}</p>
                         )}

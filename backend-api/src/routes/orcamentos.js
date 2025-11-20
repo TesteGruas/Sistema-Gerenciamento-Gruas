@@ -359,7 +359,8 @@ router.get('/', async (req, res) => {
           nome,
           email,
           telefone,
-          cnpj_cpf,
+          cnpj,
+          contato_cpf,
           endereco
         ),
         funcionarios:vendedor_id (
@@ -522,7 +523,9 @@ router.get('/', async (req, res) => {
  *                           type: string
  *                         endereco:
  *                           type: string
- *                         cnpj_cpf:
+ *                         cnpj:
+ *                           type: string
+ *                         contato_cpf:
  *                           type: string
  *                     funcionarios:
  *                       type: object
@@ -575,7 +578,8 @@ router.get('/:id', async (req, res) => {
           email,
           telefone,
           endereco,
-          cnpj_cpf
+          cnpj,
+          contato_cpf
         ),
         funcionarios:vendedor_id (
           id,
@@ -1601,7 +1605,9 @@ router.post('/:id/rejeitar', async (req, res) => {
  *                               type: string
  *                             endereco:
  *                               type: string
- *                             cnpj_cpf:
+ *                             cnpj:
+ *                               type: string
+ *                             contato_cpf:
  *                               type: string
  *                         funcionarios:
  *                           type: object
@@ -1657,7 +1663,8 @@ router.get('/:id/pdf', async (req, res) => {
           email,
           telefone,
           endereco,
-          cnpj_cpf
+          cnpj,
+          contato_cpf
         ),
         funcionarios:vendedor_id (
           id,
