@@ -174,13 +174,16 @@ export const gruasApi = {
 
   /**
    * Buscar uma grua específica por ID
+   * Retorna todos os campos do backend preservados
    */
-  obterGrua: async (gruaId: string | number): Promise<{ success: boolean; data: Grua }> => {
+  obterGrua: async (gruaId: string | number): Promise<{ success: boolean; data: any }> => {
     const response = await api.get(`/gruas/${gruaId}`);
     const gruaBackend = response.data.data || response.data;
+    // Retornar dados completos sem conversão que perde campos
+    // A conversão será feita no componente se necessário
     return {
       success: true,
-      data: converterGruaBackendParaFrontend(gruaBackend),
+      data: gruaBackend,
     };
   },
 

@@ -313,8 +313,14 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    // Converter strings vazias em campos de data para null
+    const bodyData = { ...req.body }
+    if (bodyData.data_instalacao === '') bodyData.data_instalacao = null
+    if (bodyData.data_ultima_manutencao === '') bodyData.data_ultima_manutencao = null
+    if (bodyData.data_proxima_manutencao === '') bodyData.data_proxima_manutencao = null
+
     // Validar dados
-    const { error, value } = componenteSchema.validate(req.body)
+    const { error, value } = componenteSchema.validate(bodyData)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -412,8 +418,14 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
+    // Converter strings vazias em campos de data para null
+    const bodyData = { ...req.body }
+    if (bodyData.data_instalacao === '') bodyData.data_instalacao = null
+    if (bodyData.data_ultima_manutencao === '') bodyData.data_ultima_manutencao = null
+    if (bodyData.data_proxima_manutencao === '') bodyData.data_proxima_manutencao = null
+
     // Validar dados
-    const { error, value } = componenteUpdateSchema.validate(req.body)
+    const { error, value } = componenteUpdateSchema.validate(bodyData)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',

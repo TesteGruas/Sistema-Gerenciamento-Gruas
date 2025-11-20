@@ -35,6 +35,8 @@ import { CardLoader } from "@/components/ui/loader"
 import { OrcamentoPDFDocument } from "@/components/orcamento-pdf"
 import { pdf } from "@react-pdf/renderer"
 import { getOrcamentos, type Orcamento as OrcamentoAPI } from "@/lib/api-orcamentos"
+import { api, API_BASE_URL } from "@/lib/api"
+import { orcamentosLocacaoApi, OrcamentoLocacao } from "@/lib/api-orcamentos-locacao"
 
 type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado'
 
@@ -102,6 +104,26 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosIniciaisCarregados])
 
+  // Recarregar quando filtro de status mudar
+  useEffect(() => {
+    if (dadosIniciaisCarregados) {
+      loadOrcamentos()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroStatus])
+
+  // Debounce para busca (aguarda 500ms após parar de digitar)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timeoutId = setTimeout(() => {
+      loadOrcamentos()
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm])
+
   const loadOrcamentos = async () => {
     setLoading(true)
     try {
@@ -158,21 +180,17 @@ export default function OrcamentosPage() {
         description: error?.message || "Erro ao carregar orçamentos",
         variant: "destructive"
       })
+      setOrcamentos([])
     } finally {
       setLoading(false)
     }
   }
 
+  // A filtragem já é feita pela API, mas mantemos filtro local apenas para status
+  // caso o usuário mude o filtro sem recarregar os dados
   const filteredOrcamentos = orcamentos.filter(item => {
-    const matchesSearch = !searchTerm || 
-      item.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.obra_nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.cliente_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.equipamento.toLowerCase().includes(searchTerm.toLowerCase())
-    
     const matchesStatus = filtroStatus === "todos" || item.status === filtroStatus
-    
-    return matchesSearch && matchesStatus
+    return matchesStatus
   })
 
   const getStatusBadge = (status: StatusOrcamento) => {
@@ -330,59 +348,17 @@ export default function OrcamentosPage() {
     if (!orcamento) return
     
     try {
-      // Preparar dados no formato esperado pelo componente PDF
-      const enderecoObra = orcamento.obra_endereco 
-        ? `${orcamento.obra_endereco}${orcamento.obra_cidade ? `, ${orcamento.obra_cidade}` : ''}${orcamento.obra_estado ? `/${orcamento.obra_estado.toUpperCase()}` : ''}`
-        : undefined
+      // Usar axios com responseType blob para receber o PDF
+      // O interceptor do axios já adiciona o token automaticamente
+      const response = await api.get(
+        `/relatorios/orcamentos/${orcamento.id}/pdf`,
+        {
+          responseType: 'blob',
+        }
+      )
 
-      const pdfData = {
-        empresa: {
-          nome: empresa.razao_social || empresa.nome,
-          cnpj: empresa.cnpj,
-          endereco: getEnderecoCompleto(),
-          contato: getContatoCompleto(),
-          logo: empresa.logo
-        },
-        documento: {
-          titulo: "ORÇAMENTO DE LOCAÇÃO DE GRUA",
-          numero: orcamento.numero,
-          geradoEm: new Date().toISOString()
-        },
-        cliente: {
-          nome: orcamento.cliente_nome || '',
-          obra: orcamento.obra_nome,
-          endereco: enderecoObra,
-          tipo: orcamento.tipo_obra,
-          equipamento: orcamento.equipamento
-        },
-        especificacoes: {
-          alturaInicial: orcamento.altura_inicial ? `${orcamento.altura_inicial} m` : undefined,
-          alturaFinal: orcamento.altura_final ? `${orcamento.altura_final} m` : undefined,
-          lanca: orcamento.comprimento_lanca ? `${orcamento.comprimento_lanca} m` : undefined,
-          cargaMax: orcamento.carga_maxima ? `${orcamento.carga_maxima.toLocaleString('pt-BR')} kg` : undefined,
-          cargaPonta: orcamento.carga_ponta ? `${orcamento.carga_ponta.toLocaleString('pt-BR')} kg` : undefined,
-          potencia: orcamento.potencia_eletrica,
-          energia: orcamento.energia_necessaria
-        },
-        custosMensais: [
-          { nome: "Locação da Grua", valor: orcamento.valor_locacao_mensal },
-          { nome: "Operador", valor: orcamento.valor_operador },
-          { nome: "Sinaleiro", valor: orcamento.valor_sinaleiro },
-          { nome: "Manutenção Preventiva", valor: orcamento.valor_manutencao }
-        ],
-        prazo: {
-          meses: orcamento.prazo_locacao_meses,
-          inicioEstimado: orcamento.data_inicio_estimada,
-          tolerancia: orcamento.tolerancia_dias ? `±${orcamento.tolerancia_dias} dias` : undefined
-        },
-        escopoIncluso: orcamento.escopo_incluso,
-        responsabilidadesCliente: orcamento.responsabilidades_cliente,
-        condicoesComerciais: orcamento.condicoes_comerciais
-      }
-
-      // Gerar PDF usando @react-pdf/renderer
-      // @ts-ignore - @react-pdf/renderer aceita componentes React
-      const blob = await pdf(<OrcamentoPDFDocument data={pdfData} />).toBlob()
+      // Criar blob do PDF
+      const blob = new Blob([response.data], { type: 'application/pdf' })
       
       // Criar link de download
       const url = URL.createObjectURL(blob)
@@ -398,13 +374,40 @@ export default function OrcamentosPage() {
         title: "Sucesso",
         description: "Orçamento exportado em PDF com sucesso!",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao exportar PDF:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao exportar orçamento. Tente novamente.",
-        variant: "destructive"
-      })
+      
+      // Tentar ler mensagem de erro do blob se for erro do servidor
+      let errorMessage = "Erro ao exportar orçamento. Tente novamente."
+      
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text()
+          const errorData = JSON.parse(text)
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch {
+          // Se não conseguir parsear, usar mensagem padrão
+        }
+      } else if (error.response?.data?.message || error.response?.data?.error) {
+        errorMessage = error.response.data.message || error.response.data.error
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      // Se for erro de token, mostrar mensagem mais específica
+      if (errorMessage.includes('Token') || errorMessage.includes('token') || errorMessage.includes('inválido') || errorMessage.includes('expirado')) {
+        toast({
+          title: "Erro de Autenticação",
+          description: "Sua sessão expirou. Por favor, faça login novamente.",
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Erro",
+          description: errorMessage,
+          variant: "destructive"
+        })
+      }
     }
   }
 

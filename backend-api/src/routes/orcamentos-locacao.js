@@ -345,7 +345,9 @@ router.get('/:id', async (req, res) => {
         *,
         clientes!inner(nome, cnpj, contato, telefone, email),
         funcionarios!vendedor_id(nome, telefone, email),
-        orcamento_itens_locacao(*)
+        orcamento_itens_locacao(*),
+        orcamento_valores_fixos_locacao(*),
+        orcamento_custos_mensais_locacao(*)
       `)
       .eq('id', id)
       .single();
@@ -586,8 +588,13 @@ router.post('/', async (req, res) => {
       tipo_orcamento,
       vendedor_id,
       condicoes_pagamento,
+      condicoes_gerais,
+      logistica,
+      garantias,
       prazo_entrega,
       observacoes,
+      valores_fixos = [],
+      custos_mensais = [],
       itens = []
     } = req.body;
 
@@ -641,6 +648,9 @@ router.post('/', async (req, res) => {
         tipo_orcamento,
         vendedor_id,
         condicoes_pagamento,
+        condicoes_gerais,
+        logistica,
+        garantias,
         prazo_entrega,
         observacoes
       })
@@ -654,6 +664,73 @@ router.post('/', async (req, res) => {
         message: 'Erro interno do servidor',
         error: orcamentoError.message 
       });
+    }
+
+    // Criar valores fixos se fornecidos
+    if (valores_fixos && valores_fixos.length > 0) {
+      const valoresFixosData = valores_fixos.map(item => ({
+        orcamento_id: orcamento.id,
+        tipo: item.tipo,
+        descricao: item.descricao,
+        quantidade: item.quantidade,
+        valor_unitario: item.valor_unitario,
+        valor_total: item.valor_total,
+        observacoes: item.observacoes || ''
+      }));
+
+      const { error: valoresFixosError } = await supabase
+        .from('orcamento_valores_fixos_locacao')
+        .insert(valoresFixosData);
+
+      if (valoresFixosError) {
+        console.error('Erro ao criar valores fixos do orçamento:', valoresFixosError);
+        // Se falhar ao criar valores fixos, excluir o orçamento
+        await supabase
+          .from('orcamentos_locacao')
+          .delete()
+          .eq('id', orcamento.id);
+        
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Erro ao criar valores fixos do orçamento',
+          error: valoresFixosError.message 
+        });
+      }
+    }
+
+    // Criar custos mensais se fornecidos
+    if (custos_mensais && custos_mensais.length > 0) {
+      const custosMensaisData = custos_mensais.map(item => ({
+        orcamento_id: orcamento.id,
+        tipo: item.tipo,
+        descricao: item.descricao,
+        valor_mensal: item.valor_mensal,
+        obrigatorio: item.obrigatorio !== undefined ? item.obrigatorio : true,
+        observacoes: item.observacoes || ''
+      }));
+
+      const { error: custosMensaisError } = await supabase
+        .from('orcamento_custos_mensais_locacao')
+        .insert(custosMensaisData);
+
+      if (custosMensaisError) {
+        console.error('Erro ao criar custos mensais do orçamento:', custosMensaisError);
+        // Se falhar ao criar custos mensais, excluir o orçamento e valores fixos
+        await supabase
+          .from('orcamento_valores_fixos_locacao')
+          .delete()
+          .eq('orcamento_id', orcamento.id);
+        await supabase
+          .from('orcamentos_locacao')
+          .delete()
+          .eq('id', orcamento.id);
+        
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Erro ao criar custos mensais do orçamento',
+          error: custosMensaisError.message 
+        });
+      }
     }
 
     // Criar os itens do orçamento
@@ -676,7 +753,15 @@ router.post('/', async (req, res) => {
 
       if (itensError) {
         console.error('Erro ao criar itens do orçamento:', itensError);
-        // Se falhar ao criar itens, excluir o orçamento
+        // Se falhar ao criar itens, excluir o orçamento e dados relacionados
+        await supabase
+          .from('orcamento_valores_fixos_locacao')
+          .delete()
+          .eq('orcamento_id', orcamento.id);
+        await supabase
+          .from('orcamento_custos_mensais_locacao')
+          .delete()
+          .eq('orcamento_id', orcamento.id);
         await supabase
           .from('orcamentos_locacao')
           .delete()
@@ -690,14 +775,16 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Buscar o orçamento completo com itens
+    // Buscar o orçamento completo com itens, valores fixos e custos mensais
     const { data: orcamentoCompleto } = await supabase
       .from('orcamentos_locacao')
       .select(`
         *,
         clientes!inner(nome, cnpj),
         funcionarios!vendedor_id(nome),
-        orcamento_itens_locacao(*)
+        orcamento_itens_locacao(*),
+        orcamento_valores_fixos_locacao(*),
+        orcamento_custos_mensais_locacao(*)
       `)
       .eq('id', orcamento.id)
       .single();
@@ -915,12 +1002,14 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
-    const { itens } = updateData;
+    const { itens, valores_fixos, custos_mensais } = updateData;
 
-    // Remover campos que não devem ser atualizados
+    // Remover campos que não devem ser atualizados diretamente
     delete updateData.id;
     delete updateData.created_at;
     delete updateData.itens;
+    delete updateData.valores_fixos;
+    delete updateData.custos_mensais;
 
     // Verificar se o orçamento existe
     const { data: existingOrcamento } = await supabase
@@ -978,8 +1067,77 @@ router.put('/:id', async (req, res) => {
       });
     }
 
+    // Atualizar valores fixos se fornecidos
+    if (valores_fixos !== undefined) {
+      // Excluir valores fixos existentes
+      await supabase
+        .from('orcamento_valores_fixos_locacao')
+        .delete()
+        .eq('orcamento_id', id);
+
+      // Inserir novos valores fixos
+      if (valores_fixos.length > 0) {
+        const valoresFixosData = valores_fixos.map(item => ({
+          orcamento_id: id,
+          tipo: item.tipo,
+          descricao: item.descricao,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          valor_total: item.valor_total,
+          observacoes: item.observacoes || ''
+        }));
+
+        const { error: valoresFixosError } = await supabase
+          .from('orcamento_valores_fixos_locacao')
+          .insert(valoresFixosData);
+
+        if (valoresFixosError) {
+          console.error('Erro ao atualizar valores fixos do orçamento:', valoresFixosError);
+          return res.status(500).json({ 
+            success: false, 
+            message: 'Erro ao atualizar valores fixos do orçamento',
+            error: valoresFixosError.message 
+          });
+        }
+      }
+    }
+
+    // Atualizar custos mensais se fornecidos
+    if (custos_mensais !== undefined) {
+      // Excluir custos mensais existentes
+      await supabase
+        .from('orcamento_custos_mensais_locacao')
+        .delete()
+        .eq('orcamento_id', id);
+
+      // Inserir novos custos mensais
+      if (custos_mensais.length > 0) {
+        const custosMensaisData = custos_mensais.map(item => ({
+          orcamento_id: id,
+          tipo: item.tipo,
+          descricao: item.descricao,
+          valor_mensal: item.valor_mensal,
+          obrigatorio: item.obrigatorio !== undefined ? item.obrigatorio : true,
+          observacoes: item.observacoes || ''
+        }));
+
+        const { error: custosMensaisError } = await supabase
+          .from('orcamento_custos_mensais_locacao')
+          .insert(custosMensaisData);
+
+        if (custosMensaisError) {
+          console.error('Erro ao atualizar custos mensais do orçamento:', custosMensaisError);
+          return res.status(500).json({ 
+            success: false, 
+            message: 'Erro ao atualizar custos mensais do orçamento',
+            error: custosMensaisError.message 
+          });
+        }
+      }
+    }
+
     // Atualizar itens se fornecidos
-    if (itens) {
+    if (itens !== undefined) {
       // Excluir itens existentes
       await supabase
         .from('orcamento_itens_locacao')
@@ -1015,14 +1173,16 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    // Buscar o orçamento completo com itens
+    // Buscar o orçamento completo com itens, valores fixos e custos mensais
     const { data: orcamentoCompleto } = await supabase
       .from('orcamentos_locacao')
       .select(`
         *,
         clientes!inner(nome, cnpj),
         funcionarios!vendedor_id(nome),
-        orcamento_itens_locacao(*)
+        orcamento_itens_locacao(*),
+        orcamento_valores_fixos_locacao(*),
+        orcamento_custos_mensais_locacao(*)
       `)
       .eq('id', id)
       .single();
