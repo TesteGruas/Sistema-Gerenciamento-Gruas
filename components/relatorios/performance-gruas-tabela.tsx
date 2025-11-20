@@ -10,7 +10,7 @@ import { Eye, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react"
 import type { GruaPerformance } from "@/lib/mocks/performance-gruas-mocks"
 
 interface PerformanceGruasTabelaProps {
-  dados: GruaPerformance[]
+  dados?: GruaPerformance[] | null
   pagina?: number
   totalPaginas?: number
   limite?: number
@@ -19,7 +19,7 @@ interface PerformanceGruasTabelaProps {
 }
 
 export function PerformanceGruasTabela({
-  dados,
+  dados = [],
   pagina = 1,
   totalPaginas = 1,
   limite = 10,
@@ -28,6 +28,9 @@ export function PerformanceGruasTabela({
 }: PerformanceGruasTabelaProps) {
   const [gruaDetalhes, setGruaDetalhes] = useState<GruaPerformance | null>(null)
   const [showDetalhes, setShowDetalhes] = useState(false)
+
+  // Garantir que dados é um array válido
+  const dadosArray = Array.isArray(dados) ? dados : []
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { color: string; label: string }> = {
@@ -67,7 +70,7 @@ export function PerformanceGruasTabela({
 
   const inicio = (pagina - 1) * limite
   const fim = inicio + limite
-  const dadosPagina = dados.slice(inicio, fim)
+  const dadosPagina = dadosArray.slice(inicio, fim)
 
   return (
     <>
@@ -102,39 +105,39 @@ export function PerformanceGruasTabela({
                   </TableRow>
                 ) : (
                   dadosPagina.map((item, index) => (
-                    <TableRow key={item.grua.id}>
+                    <TableRow key={item?.grua?.id || index}>
                       <TableCell className="font-medium">
                         <div>
-                          <div className="font-semibold">{item.grua.nome}</div>
+                          <div className="font-semibold">{item?.grua?.nome || 'N/A'}</div>
                           <div className="text-sm text-gray-500">
-                            {item.grua.modelo} - {item.grua.fabricante}
+                            {item?.grua?.modelo || ''} - {item?.grua?.fabricante || ''}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>{getStatusBadge(item.grua.status)}</TableCell>
+                      <TableCell>{getStatusBadge(item?.grua?.status || 'N/A')}</TableCell>
                       <TableCell className="text-right">
-                        {item.metricas.horas_trabalhadas.toLocaleString('pt-BR')}h
+                        {(item?.metricas?.horas_trabalhadas || 0).toLocaleString('pt-BR')}h
                       </TableCell>
                       <TableCell className="text-right">
-                        {getUtilizacaoBadge(item.metricas.taxa_utilizacao)}
+                        {getUtilizacaoBadge(item?.metricas?.taxa_utilizacao || 0)}
                       </TableCell>
                       <TableCell className="text-right font-semibold text-green-600">
-                        R$ {item.financeiro.receita_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {(item?.financeiro?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right font-semibold text-red-600">
-                        R$ {item.financeiro.custo_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {(item?.financeiro?.custo_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell className={`text-right font-bold ${item.financeiro.lucro_bruto >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                        R$ {item.financeiro.lucro_bruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {item.financeiro.margem_lucro.toFixed(1)}%
+                      <TableCell className={`text-right font-bold ${(item?.financeiro?.lucro_bruto || 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                        R$ {(item?.financeiro?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right">
-                        {getROIBadge(item.roi.roi_percentual)}
+                        {(item?.financeiro?.margem_lucro || 0).toFixed(1)}%
                       </TableCell>
                       <TableCell className="text-right">
-                        R$ {item.financeiro.receita_por_hora.toFixed(2)}
+                        {getROIBadge(item?.roi?.roi_percentual || 0)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        R$ {(item?.financeiro?.receita_por_hora || 0).toFixed(2)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Button
@@ -153,10 +156,10 @@ export function PerformanceGruasTabela({
           </div>
 
           {/* Paginação */}
-          {dados.length > limite && (
+          {dadosArray.length > limite && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-gray-600">
-                Mostrando {inicio + 1} a {Math.min(fim, dados.length)} de {dados.length} resultados
+                Mostrando {inicio + 1} a {Math.min(fim, dadosArray.length)} de {dadosArray.length} resultados
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -168,13 +171,13 @@ export function PerformanceGruasTabela({
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
                 <span className="text-sm text-gray-600">
-                  Página {pagina} de {Math.ceil(dados.length / limite)}
+                  Página {pagina} de {Math.ceil(dadosArray.length / limite)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => onPaginaChange?.(pagina + 1)}
-                  disabled={pagina >= Math.ceil(dados.length / limite)}
+                  disabled={pagina >= Math.ceil(dadosArray.length / limite)}
                 >
                   <ChevronRight className="w-4 h-4" />
                 </Button>
@@ -188,7 +191,7 @@ export function PerformanceGruasTabela({
       <Dialog open={showDetalhes} onOpenChange={setShowDetalhes}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalhes da Performance - {gruaDetalhes?.grua.nome}</DialogTitle>
+            <DialogTitle>Detalhes da Performance - {gruaDetalhes?.grua?.nome || 'N/A'}</DialogTitle>
           </DialogHeader>
           {gruaDetalhes && (
             <div className="space-y-6">
@@ -197,11 +200,11 @@ export function PerformanceGruasTabela({
                 <div>
                   <h4 className="font-semibold mb-2">Informações da Grua</h4>
                   <div className="space-y-1 text-sm">
-                    <p><span className="font-medium">Modelo:</span> {gruaDetalhes.grua.modelo}</p>
-                    <p><span className="font-medium">Fabricante:</span> {gruaDetalhes.grua.fabricante}</p>
-                    <p><span className="font-medium">Tipo:</span> {gruaDetalhes.grua.tipo}</p>
-                    <p><span className="font-medium">Status:</span> {gruaDetalhes.grua.status}</p>
-                    {gruaDetalhes.grua.numero_serie && (
+                    <p><span className="font-medium">Modelo:</span> {gruaDetalhes?.grua?.modelo || 'N/A'}</p>
+                    <p><span className="font-medium">Fabricante:</span> {gruaDetalhes?.grua?.fabricante || 'N/A'}</p>
+                    <p><span className="font-medium">Tipo:</span> {gruaDetalhes?.grua?.tipo || 'N/A'}</p>
+                    <p><span className="font-medium">Status:</span> {gruaDetalhes?.grua?.status || 'N/A'}</p>
+                    {gruaDetalhes?.grua?.numero_serie && (
                       <p><span className="font-medium">Nº Série:</span> {gruaDetalhes.grua.numero_serie}</p>
                     )}
                   </div>
@@ -209,11 +212,11 @@ export function PerformanceGruasTabela({
                 <div>
                   <h4 className="font-semibold mb-2">Métricas Operacionais</h4>
                   <div className="space-y-1 text-sm">
-                    <p><span className="font-medium">Horas Trabalhadas:</span> {gruaDetalhes.metricas.horas_trabalhadas.toLocaleString('pt-BR')}h</p>
-                    <p><span className="font-medium">Horas Disponíveis:</span> {gruaDetalhes.metricas.horas_disponiveis.toLocaleString('pt-BR')}h</p>
-                    <p><span className="font-medium">Horas Ociosas:</span> {gruaDetalhes.metricas.horas_ociosas.toLocaleString('pt-BR')}h</p>
-                    <p><span className="font-medium">Taxa de Utilização:</span> {gruaDetalhes.metricas.taxa_utilizacao.toFixed(1)}%</p>
-                    <p><span className="font-medium">Dias em Operação:</span> {gruaDetalhes.metricas.dias_em_operacao} dias</p>
+                    <p><span className="font-medium">Horas Trabalhadas:</span> {(gruaDetalhes?.metricas?.horas_trabalhadas || 0).toLocaleString('pt-BR')}h</p>
+                    <p><span className="font-medium">Horas Disponíveis:</span> {(gruaDetalhes?.metricas?.horas_disponiveis || 0).toLocaleString('pt-BR')}h</p>
+                    <p><span className="font-medium">Horas Ociosas:</span> {(gruaDetalhes?.metricas?.horas_ociosas || 0).toLocaleString('pt-BR')}h</p>
+                    <p><span className="font-medium">Taxa de Utilização:</span> {(gruaDetalhes?.metricas?.taxa_utilizacao || 0).toFixed(1)}%</p>
+                    <p><span className="font-medium">Dias em Operação:</span> {gruaDetalhes?.metricas?.dias_em_operacao || 0} dias</p>
                   </div>
                 </div>
               </div>
@@ -225,32 +228,32 @@ export function PerformanceGruasTabela({
                   <div>
                     <p className="text-gray-600">Receita Total</p>
                     <p className="font-bold text-green-600">
-                      R$ {gruaDetalhes.financeiro.receita_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {(gruaDetalhes?.financeiro?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
                     <p className="text-gray-600">Custo Total</p>
                     <p className="font-bold text-red-600">
-                      R$ {gruaDetalhes.financeiro.custo_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {(gruaDetalhes?.financeiro?.custo_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
                     <p className="text-gray-600">Lucro Bruto</p>
-                    <p className={`font-bold ${gruaDetalhes.financeiro.lucro_bruto >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      R$ {gruaDetalhes.financeiro.lucro_bruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    <p className={`font-bold ${(gruaDetalhes?.financeiro?.lucro_bruto || 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      R$ {(gruaDetalhes?.financeiro?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
                     <p className="text-gray-600">Margem de Lucro</p>
-                    <p className="font-bold">{gruaDetalhes.financeiro.margem_lucro.toFixed(1)}%</p>
+                    <p className="font-bold">{(gruaDetalhes?.financeiro?.margem_lucro || 0).toFixed(1)}%</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Receita por Hora</p>
-                    <p className="font-bold">R$ {gruaDetalhes.financeiro.receita_por_hora.toFixed(2)}</p>
+                    <p className="font-bold">R$ {(gruaDetalhes?.financeiro?.receita_por_hora || 0).toFixed(2)}</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Lucro por Hora</p>
-                    <p className="font-bold">R$ {gruaDetalhes.financeiro.lucro_por_hora.toFixed(2)}</p>
+                    <p className="font-bold">R$ {(gruaDetalhes?.financeiro?.lucro_por_hora || 0).toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -262,17 +265,17 @@ export function PerformanceGruasTabela({
                   <div>
                     <p className="text-gray-600">Investimento Inicial</p>
                     <p className="font-bold">
-                      R$ {gruaDetalhes.roi.investimento_inicial.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {(gruaDetalhes?.roi?.investimento_inicial || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
                     <p className="text-gray-600">ROI Percentual</p>
-                    <p className="font-bold">{gruaDetalhes.roi.roi_percentual.toFixed(1)}%</p>
+                    <p className="font-bold">{(gruaDetalhes?.roi?.roi_percentual || 0).toFixed(1)}%</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Tempo de Retorno</p>
                     <p className="font-bold">
-                      {gruaDetalhes.roi.tempo_retorno_meses > 0 
+                      {(gruaDetalhes?.roi?.tempo_retorno_meses || 0) > 0 
                         ? `${gruaDetalhes.roi.tempo_retorno_meses} meses`
                         : 'Não calculável'}
                     </p>
@@ -282,16 +285,16 @@ export function PerformanceGruasTabela({
 
               {/* Obras */}
               <div>
-                <h4 className="font-semibold mb-2">Obras ({gruaDetalhes.obras.total_obras})</h4>
+                <h4 className="font-semibold mb-2">Obras ({gruaDetalhes?.obras?.total_obras || 0})</h4>
                 <div className="space-y-2">
-                  {gruaDetalhes.obras.obras_visitadas.map((obra, idx) => (
+                  {(gruaDetalhes?.obras?.obras_visitadas || []).map((obra, idx) => (
                     <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                       <div>
-                        <p className="font-medium">{obra.obra_nome}</p>
-                        <p className="text-sm text-gray-600">{obra.dias_permanencia} dias</p>
+                        <p className="font-medium">{obra?.obra_nome || 'N/A'}</p>
+                        <p className="text-sm text-gray-600">{obra?.dias_permanencia || 0} dias</p>
                       </div>
                       <p className="font-semibold text-green-600">
-                        R$ {obra.receita_gerada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {(obra?.receita_gerada || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </p>
                     </div>
                   ))}
@@ -299,29 +302,29 @@ export function PerformanceGruasTabela({
               </div>
 
               {/* Comparativo */}
-              {gruaDetalhes.comparativo_periodo_anterior && (
+              {gruaDetalhes?.comparativo_periodo_anterior && (
                 <div>
                   <h4 className="font-semibold mb-2">Comparativo com Período Anterior</h4>
                   <div className="grid grid-cols-3 gap-4 text-sm">
                     <div>
                       <p className="text-gray-600">Variação Horas Trabalhadas</p>
-                      <p className={`font-bold ${gruaDetalhes.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {gruaDetalhes.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? '+' : ''}
-                        {gruaDetalhes.comparativo_periodo_anterior.horas_trabalhadas_variacao.toFixed(1)}%
+                      <p className={`font-bold ${(gruaDetalhes.comparativo_periodo_anterior?.horas_trabalhadas_variacao || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(gruaDetalhes.comparativo_periodo_anterior?.horas_trabalhadas_variacao || 0) >= 0 ? '+' : ''}
+                        {(gruaDetalhes.comparativo_periodo_anterior?.horas_trabalhadas_variacao || 0).toFixed(1)}%
                       </p>
                     </div>
                     <div>
                       <p className="text-gray-600">Variação Receita</p>
-                      <p className={`font-bold ${gruaDetalhes.comparativo_periodo_anterior.receita_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {gruaDetalhes.comparativo_periodo_anterior.receita_variacao >= 0 ? '+' : ''}
-                        {gruaDetalhes.comparativo_periodo_anterior.receita_variacao.toFixed(1)}%
+                      <p className={`font-bold ${(gruaDetalhes.comparativo_periodo_anterior?.receita_variacao || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(gruaDetalhes.comparativo_periodo_anterior?.receita_variacao || 0) >= 0 ? '+' : ''}
+                        {(gruaDetalhes.comparativo_periodo_anterior?.receita_variacao || 0).toFixed(1)}%
                       </p>
                     </div>
                     <div>
                       <p className="text-gray-600">Variação Utilização</p>
-                      <p className={`font-bold ${gruaDetalhes.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {gruaDetalhes.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? '+' : ''}
-                        {gruaDetalhes.comparativo_periodo_anterior.utilizacao_variacao.toFixed(1)}%
+                      <p className={`font-bold ${(gruaDetalhes.comparativo_periodo_anterior?.utilizacao_variacao || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(gruaDetalhes.comparativo_periodo_anterior?.utilizacao_variacao || 0) >= 0 ? '+' : ''}
+                        {(gruaDetalhes.comparativo_periodo_anterior?.utilizacao_variacao || 0).toFixed(1)}%
                       </p>
                     </div>
                   </div>

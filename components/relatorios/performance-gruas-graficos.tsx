@@ -19,45 +19,56 @@ import {
 import type { GruaPerformance } from "@/lib/mocks/performance-gruas-mocks"
 
 interface PerformanceGruasGraficosProps {
-  dados: GruaPerformance[]
+  dados?: GruaPerformance[] | null
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProps) {
+  // Se não houver dados, mostrar estado vazio
+  if (!dados || !Array.isArray(dados) || dados.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <p>Nenhum dado disponível para exibir gráficos</p>
+      </div>
+    )
+  }
+
   // Preparar dados para gráfico de taxa de utilização
   const dadosUtilizacao = dados
-    .sort((a, b) => b.metricas.taxa_utilizacao - a.metricas.taxa_utilizacao)
+    .filter(item => item?.metricas?.taxa_utilizacao !== undefined)
+    .sort((a, b) => (b.metricas?.taxa_utilizacao || 0) - (a.metricas?.taxa_utilizacao || 0))
     .slice(0, 10)
     .map(item => ({
-      grua: item.grua.nome.substring(0, 15),
-      utilizacao: Number(item.metricas.taxa_utilizacao.toFixed(1))
+      grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
+      utilizacao: Number((item.metricas?.taxa_utilizacao || 0).toFixed(1))
     }))
 
   // Preparar dados para gráfico de receita vs custo
   const dadosFinanceiro = dados
-    .sort((a, b) => b.financeiro.receita_total - a.financeiro.receita_total)
+    .filter(item => item?.financeiro?.receita_total !== undefined)
+    .sort((a, b) => (b.financeiro?.receita_total || 0) - (a.financeiro?.receita_total || 0))
     .slice(0, 10)
     .map(item => ({
-      grua: item.grua.nome.substring(0, 15),
-      receita: Number((item.financeiro.receita_total / 1000).toFixed(1)),
-      custo: Number((item.financeiro.custo_total / 1000).toFixed(1)),
-      lucro: Number((item.financeiro.lucro_bruto / 1000).toFixed(1))
+      grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
+      receita: Number(((item.financeiro?.receita_total || 0) / 1000).toFixed(1)),
+      custo: Number(((item.financeiro?.custo_total || 0) / 1000).toFixed(1)),
+      lucro: Number(((item.financeiro?.lucro_bruto || 0) / 1000).toFixed(1))
     }))
 
   // Preparar dados para gráfico de ROI
   const dadosROI = dados
-    .filter(item => item.roi.roi_percentual > 0)
-    .sort((a, b) => b.roi.roi_percentual - a.roi.roi_percentual)
+    .filter(item => item?.roi?.roi_percentual !== undefined && (item.roi?.roi_percentual || 0) > 0)
+    .sort((a, b) => (b.roi?.roi_percentual || 0) - (a.roi?.roi_percentual || 0))
     .slice(0, 10)
     .map(item => ({
-      grua: item.grua.nome.substring(0, 15),
-      roi: Number(item.roi.roi_percentual.toFixed(1))
+      grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
+      roi: Number((item.roi?.roi_percentual || 0).toFixed(1))
     }))
 
   // Preparar dados para gráfico de distribuição de horas
-  const totalHorasTrabalhadas = dados.reduce((sum, item) => sum + item.metricas.horas_trabalhadas, 0)
-  const totalHorasOciosas = dados.reduce((sum, item) => sum + item.metricas.horas_ociosas, 0)
+  const totalHorasTrabalhadas = dados.reduce((sum, item) => sum + (item?.metricas?.horas_trabalhadas || 0), 0)
+  const totalHorasOciosas = dados.reduce((sum, item) => sum + (item?.metricas?.horas_ociosas || 0), 0)
   const dadosDistribuicaoHoras = [
     { name: 'Trabalhadas', value: totalHorasTrabalhadas },
     { name: 'Ociosas', value: totalHorasOciosas }
@@ -65,11 +76,12 @@ export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProp
 
   // Preparar dados para top 10 por lucro
   const dadosTopLucro = dados
-    .sort((a, b) => b.financeiro.lucro_bruto - a.financeiro.lucro_bruto)
+    .filter(item => item?.financeiro?.lucro_bruto !== undefined)
+    .sort((a, b) => (b.financeiro?.lucro_bruto || 0) - (a.financeiro?.lucro_bruto || 0))
     .slice(0, 10)
     .map(item => ({
-      grua: item.grua.nome.substring(0, 15),
-      lucro: Number((item.financeiro.lucro_bruto / 1000).toFixed(1))
+      grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
+      lucro: Number(((item.financeiro?.lucro_bruto || 0) / 1000).toFixed(1))
     }))
 
   return (
@@ -195,11 +207,12 @@ export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProp
           <ResponsiveContainer width="100%" height={300}>
             <RechartsBarChart
               data={dados
-                .sort((a, b) => b.financeiro.margem_lucro - a.financeiro.margem_lucro)
+                .filter(item => item?.financeiro?.margem_lucro !== undefined)
+                .sort((a, b) => (b.financeiro?.margem_lucro || 0) - (a.financeiro?.margem_lucro || 0))
                 .slice(0, 10)
                 .map(item => ({
-                  grua: item.grua.nome.substring(0, 15),
-                  margem: Number(item.financeiro.margem_lucro.toFixed(1))
+                  grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
+                  margem: Number((item.financeiro?.margem_lucro || 0).toFixed(1))
                 }))}
             >
               <CartesianGrid strokeDasharray="3 3" />

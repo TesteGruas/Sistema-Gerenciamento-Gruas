@@ -18,6 +18,7 @@ import {
   FileText,
   Clock,
   AlertTriangle,
+  AlertCircle,
   CheckCircle,
   Wrench,
   Building2,
@@ -768,7 +769,7 @@ export default function RelatoriosPage() {
 
               {/* Tab: Resumo */}
               <TabsContent value="resumo" className="space-y-6">
-                <PerformanceGruasResumo resumo={dadosPerformance.resumo_geral} />
+                <PerformanceGruasResumo resumo={dadosPerformance?.resumo_geral || null} />
                 
                 <Card>
                   <CardHeader>
@@ -779,22 +780,26 @@ export default function RelatoriosPage() {
                       <div>
                         <p className="text-sm text-gray-600">Data Início</p>
                         <p className="font-medium">
-                          {new Date(dadosPerformance.periodo.data_inicio).toLocaleDateString('pt-BR')}
+                          {dadosPerformance?.periodo?.data_inicio 
+                            ? new Date(dadosPerformance.periodo.data_inicio).toLocaleDateString('pt-BR')
+                            : 'N/A'}
                         </p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Data Fim</p>
                         <p className="font-medium">
-                          {new Date(dadosPerformance.periodo.data_fim).toLocaleDateString('pt-BR')}
+                          {dadosPerformance?.periodo?.data_fim 
+                            ? new Date(dadosPerformance.periodo.data_fim).toLocaleDateString('pt-BR')
+                            : 'N/A'}
                         </p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Dias Totais</p>
-                        <p className="font-medium">{dadosPerformance.periodo.dias_totais} dias</p>
+                        <p className="font-medium">{dadosPerformance?.periodo?.dias_totais || 0} dias</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Dias Úteis</p>
-                        <p className="font-medium">{dadosPerformance.periodo.dias_uteis} dias</p>
+                        <p className="font-medium">{dadosPerformance?.periodo?.dias_uteis || 0} dias</p>
                       </div>
                     </div>
                   </CardContent>
@@ -804,9 +809,9 @@ export default function RelatoriosPage() {
               {/* Tab: Detalhado */}
               <TabsContent value="detalhado" className="space-y-6">
                 <PerformanceGruasTabela
-                  dados={dadosPerformance.performance_por_grua}
+                  dados={dadosPerformance?.performance_por_grua || []}
                   pagina={paginaPerformance}
-                  totalPaginas={dadosPerformance.paginacao?.total_paginas || 1}
+                  totalPaginas={dadosPerformance?.paginacao?.total_paginas || 1}
                   limite={10}
                   onPaginaChange={setPaginaPerformance}
                 />
@@ -814,7 +819,7 @@ export default function RelatoriosPage() {
 
               {/* Tab: Gráficos */}
               <TabsContent value="graficos" className="space-y-6">
-                <PerformanceGruasGraficos dados={dadosPerformance.performance_por_grua} />
+                <PerformanceGruasGraficos dados={dadosPerformance?.performance_por_grua || []} />
               </TabsContent>
 
               {/* Tab: Comparativo */}
@@ -828,42 +833,48 @@ export default function RelatoriosPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {dadosPerformance.performance_por_grua
-                        .filter(item => item.comparativo_periodo_anterior)
-                        .map((item, index) => (
-                          <Card key={index}>
-                            <CardHeader>
-                              <CardTitle className="text-base">{item.grua.nome}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              {item.comparativo_periodo_anterior && (
-                                <div className="space-y-2 text-sm">
-                                  <div>
-                                    <p className="text-gray-600">Variação Horas Trabalhadas</p>
-                                    <p className={`font-bold ${item.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {item.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? '+' : ''}
-                                      {item.comparativo_periodo_anterior.horas_trabalhadas_variacao.toFixed(1)}%
-                                    </p>
+                      {dadosPerformance?.performance_por_grua && Array.isArray(dadosPerformance.performance_por_grua) ? (
+                        dadosPerformance.performance_por_grua
+                          .filter(item => item.comparativo_periodo_anterior)
+                          .map((item, index) => (
+                            <Card key={index}>
+                              <CardHeader>
+                                <CardTitle className="text-base">{item.grua.nome}</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                {item.comparativo_periodo_anterior && (
+                                  <div className="space-y-2 text-sm">
+                                    <div>
+                                      <p className="text-gray-600">Variação Horas Trabalhadas</p>
+                                      <p className={`font-bold ${item.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {item.comparativo_periodo_anterior.horas_trabalhadas_variacao >= 0 ? '+' : ''}
+                                        {item.comparativo_periodo_anterior.horas_trabalhadas_variacao.toFixed(1)}%
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-gray-600">Variação Receita</p>
+                                      <p className={`font-bold ${item.comparativo_periodo_anterior.receita_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {item.comparativo_periodo_anterior.receita_variacao >= 0 ? '+' : ''}
+                                        {item.comparativo_periodo_anterior.receita_variacao.toFixed(1)}%
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-gray-600">Variação Utilização</p>
+                                      <p className={`font-bold ${item.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {item.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? '+' : ''}
+                                        {item.comparativo_periodo_anterior.utilizacao_variacao.toFixed(1)}%
+                                      </p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className="text-gray-600">Variação Receita</p>
-                                    <p className={`font-bold ${item.comparativo_periodo_anterior.receita_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {item.comparativo_periodo_anterior.receita_variacao >= 0 ? '+' : ''}
-                                      {item.comparativo_periodo_anterior.receita_variacao.toFixed(1)}%
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-gray-600">Variação Utilização</p>
-                                    <p className={`font-bold ${item.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {item.comparativo_periodo_anterior.utilizacao_variacao >= 0 ? '+' : ''}
-                                      {item.comparativo_periodo_anterior.utilizacao_variacao.toFixed(1)}%
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))}
+                                )}
+                              </CardContent>
+                            </Card>
+                          ))
+                      ) : (
+                        <div className="col-span-full text-center py-8 text-gray-500">
+                          <p>Nenhum dado comparativo disponível</p>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
