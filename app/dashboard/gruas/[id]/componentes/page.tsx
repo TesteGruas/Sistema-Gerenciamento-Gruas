@@ -462,7 +462,16 @@ export default function ComponentesGruaPage() {
             onClick={async () => {
               try {
                 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                const token = localStorage.getItem('token')
+                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                
+                if (!token) {
+                  toast({
+                    title: "Erro",
+                    description: "Token de autenticação não encontrado. Por favor, faça login novamente.",
+                    variant: "destructive"
+                  })
+                  return
+                }
                 
                 const response = await fetch(`${API_URL}/api/relatorios/componentes-estoque/pdf?grua_id=${gruaId}`, {
                   method: 'GET',
@@ -472,6 +481,15 @@ export default function ComponentesGruaPage() {
                 })
 
                 if (!response.ok) {
+                  // Verificar se é erro de autenticação
+                  if (response.status === 401) {
+                    const errorData = await response.json().catch(() => ({}))
+                    throw new Error(errorData.message || 'Token inválido ou expirado. Por favor, faça login novamente.')
+                  }
+                  // Verificar se é erro de permissão
+                  if (response.status === 403) {
+                    throw new Error('Você não tem permissão para gerar este relatório.')
+                  }
                   throw new Error('Erro ao gerar PDF')
                 }
 
@@ -494,9 +512,10 @@ export default function ComponentesGruaPage() {
                 })
               } catch (error) {
                 console.error('Erro ao gerar PDF:', error)
+                const errorMessage = error instanceof Error ? error.message : "Erro ao gerar relatório PDF. Tente novamente."
                 toast({
                   title: "Erro",
-                  description: "Erro ao gerar relatório PDF. Tente novamente.",
+                  description: errorMessage,
                   variant: "destructive"
                 })
               }
@@ -858,6 +877,7 @@ export default function ComponentesGruaPage() {
                     <SelectItem value="unidade">Unidade</SelectItem>
                     <SelectItem value="metro">Metro</SelectItem>
                     <SelectItem value="quilograma">Quilograma</SelectItem>
+                    <SelectItem value="tonelada">Tonelada</SelectItem>
                     <SelectItem value="metro_quadrado">Metro Quadrado</SelectItem>
                     <SelectItem value="metro_cubico">Metro Cúbico</SelectItem>
                     <SelectItem value="litro">Litro</SelectItem>

@@ -34,6 +34,8 @@ import { ExportButton } from "@/components/export-button"
 import { CardLoader } from "@/components/ui/loader"
 import { OrcamentoPDFDocument } from "@/components/orcamento-pdf"
 import { pdf } from "@react-pdf/renderer"
+import { api, API_BASE_URL } from "@/lib/api"
+import { orcamentosLocacaoApi, OrcamentoLocacao } from "@/lib/api-orcamentos-locacao"
 
 type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado'
 
@@ -101,120 +103,132 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosIniciaisCarregados])
 
+  // Recarregar quando filtro de status mudar
+  useEffect(() => {
+    if (dadosIniciaisCarregados) {
+      loadOrcamentos()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroStatus])
+
+  // Debounce para busca (aguarda 500ms após parar de digitar)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timeoutId = setTimeout(() => {
+      loadOrcamentos()
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm])
+
   const loadOrcamentos = async () => {
     setLoading(true)
     try {
-      // TODO: Integrar com API
-      const mockData: Orcamento[] = [
-        {
-          id: '1',
-          numero: 'ORC-2025-001',
-          cliente_nome: 'Construtora ABC',
-          obra_nome: 'Residencial Jardim das Flores',
-          obra_endereco: 'Rua das Flores, 123',
-          obra_cidade: 'São Paulo',
-          obra_estado: 'SP',
-          tipo_obra: 'Residencial',
-          equipamento: 'Grua Torre / XCMG QTZ40B',
-          altura_inicial: 21,
-          altura_final: 95,
-          comprimento_lanca: 30,
-          carga_maxima: 2000,
-          carga_ponta: 1300,
-          potencia_eletrica: '42 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 31600,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 3750,
-          total_mensal: 55750,
-          prazo_locacao_meses: 13,
-          data_inicio_estimada: '2025-02-01',
-          tolerancia_dias: 15,
-          status: 'aprovado',
-          created_at: '2025-01-15T10:00:00Z',
-          aprovado_por: 'João Silva',
-          aprovado_em: '2025-01-20T14:30:00Z'
-        },
-        {
-          id: '2',
-          numero: 'ORC-2025-002',
-          cliente_nome: 'Empresa XYZ',
-          obra_nome: 'Shopping Center Norte',
-          obra_endereco: 'Av. Principal, 456',
-          obra_cidade: 'São Paulo',
-          obra_estado: 'SP',
-          tipo_obra: 'Comercial',
-          equipamento: 'Grua Torre / Potain MDT 178',
-          altura_inicial: 25,
-          altura_final: 120,
-          comprimento_lanca: 35,
-          carga_maxima: 2500,
-          carga_ponta: 1500,
-          potencia_eletrica: '50 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 38000,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 4500,
-          total_mensal: 62900,
-          prazo_locacao_meses: 18,
-          data_inicio_estimada: '2025-03-01',
-          tolerancia_dias: 15,
-          status: 'enviado',
-          created_at: '2025-01-20T09:00:00Z'
-        },
-        {
-          id: '3',
-          numero: 'ORC-2025-003',
-          cliente_nome: 'Construtora DEF',
-          obra_nome: 'Condomínio Vista Mar',
-          obra_endereco: 'Rua do Mar, 789',
-          obra_cidade: 'Rio de Janeiro',
-          obra_estado: 'RJ',
-          tipo_obra: 'Residencial',
-          equipamento: 'Grua Torre / Liebherr 132 EC-H',
-          altura_inicial: 20,
-          altura_final: 80,
-          comprimento_lanca: 28,
-          carga_maxima: 1800,
-          carga_ponta: 1100,
-          potencia_eletrica: '38 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 29000,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 3500,
-          total_mensal: 52900,
-          prazo_locacao_meses: 10,
-          data_inicio_estimada: '2025-02-15',
-          tolerancia_dias: 15,
-          status: 'rascunho',
-          created_at: '2025-01-22T11:00:00Z'
+      const filters: any = {
+        page: 1,
+        limit: 100
+      }
+      
+      if (filtroStatus !== "todos") {
+        filters.status = filtroStatus
+      }
+      
+      if (searchTerm) {
+        filters.search = searchTerm
+      }
+
+      const response = await orcamentosLocacaoApi.list(filters)
+      
+      if (response.success && response.data) {
+        // Transformar dados da API para o formato esperado pela interface
+        const orcamentosTransformados: Orcamento[] = response.data.map((orc: OrcamentoLocacao) => {
+          // Calcular valores mensais a partir dos itens
+          const itens = orc.orcamento_itens_locacao || []
+          const itemLocacao = itens.find(item => item.tipo === 'equipamento' || item.produto_servico?.toLowerCase().includes('locação'))
+          const itemOperador = itens.find(item => item.produto_servico?.toLowerCase().includes('operador'))
+          const itemSinaleiro = itens.find(item => item.produto_servico?.toLowerCase().includes('sinaleiro'))
+          const itemManutencao = itens.find(item => item.produto_servico?.toLowerCase().includes('manutenção'))
+
+          // Extrair prazo de locação do prazo_entrega (formato: "20 meses")
+          const prazoMeses = orc.prazo_entrega ? parseInt(orc.prazo_entrega.match(/\d+/)?.[0] || '0') : 0
+
+          // Mapear status da API para o formato esperado
+          const statusMap: Record<string, StatusOrcamento> = {
+            'rascunho': 'rascunho',
+            'enviado': 'enviado',
+            'aprovado': 'aprovado',
+            'rejeitado': 'rejeitado',
+            'vencido': 'rejeitado', // Tratar vencido como rejeitado
+            'convertido': 'aprovado' // Tratar convertido como aprovado
+          }
+          const status = statusMap[orc.status] || 'rascunho'
+
+          return {
+            id: orc.id.toString(),
+            numero: orc.numero,
+            cliente_id: orc.cliente_id,
+            cliente_nome: orc.clientes?.nome || '',
+            obra_nome: 'Obra não especificada', // Pode ser adicionado se houver relacionamento com obra
+            obra_endereco: '',
+            obra_cidade: '',
+            obra_estado: '',
+            tipo_obra: '',
+            equipamento: itemLocacao?.produto_servico || itemLocacao?.descricao || 'Equipamento não especificado',
+            altura_inicial: 0,
+            altura_final: 0,
+            comprimento_lanca: 0,
+            carga_maxima: 0,
+            carga_ponta: 0,
+            potencia_eletrica: '',
+            energia_necessaria: '',
+            valor_locacao_mensal: itemLocacao?.valor_unitario || 0,
+            valor_operador: itemOperador?.valor_unitario || 0,
+            valor_sinaleiro: itemSinaleiro?.valor_unitario || 0,
+            valor_manutencao: itemManutencao?.valor_unitario || 0,
+            total_mensal: orc.valor_total / (prazoMeses || 1), // Valor total dividido pelo prazo
+            prazo_locacao_meses: prazoMeses,
+            data_inicio_estimada: orc.data_orcamento,
+            tolerancia_dias: 15,
+            status: status,
+            validade_proposta: orc.data_validade,
+            condicoes_comerciais: orc.condicoes_pagamento,
+            created_at: orc.created_at,
+            updated_at: orc.updated_at,
+            observacoes: orc.observacoes
+          }
+        })
+        
+        setOrcamentos(orcamentosTransformados)
+      } else {
+        setOrcamentos([])
+        if (response.message) {
+          toast({
+            title: "Aviso",
+            description: response.message,
+            variant: "default"
+          })
         }
-      ]
-      setOrcamentos(mockData)
-    } catch (error) {
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar orçamentos:', error)
       toast({
         title: "Erro",
-        description: "Erro ao carregar orçamentos",
+        description: error?.response?.data?.message || error?.message || "Erro ao carregar orçamentos",
         variant: "destructive"
       })
+      setOrcamentos([])
     } finally {
       setLoading(false)
     }
   }
 
+  // A filtragem já é feita pela API, mas mantemos filtro local apenas para status
+  // caso o usuário mude o filtro sem recarregar os dados
   const filteredOrcamentos = orcamentos.filter(item => {
-    const matchesSearch = !searchTerm || 
-      item.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.obra_nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.cliente_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.equipamento.toLowerCase().includes(searchTerm.toLowerCase())
-    
     const matchesStatus = filtroStatus === "todos" || item.status === filtroStatus
-    
-    return matchesSearch && matchesStatus
+    return matchesStatus
   })
 
   const getStatusBadge = (status: StatusOrcamento) => {
@@ -372,23 +386,17 @@ export default function OrcamentosPage() {
     if (!orcamento) return
     
     try {
-      // Usar API do backend para gerar PDF
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const token = localStorage.getItem('token')
-      
-      const response = await fetch(`${API_URL}/api/relatorios/orcamentos/${orcamento.id}/pdf`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
+      // Usar axios com responseType blob para receber o PDF
+      // O interceptor do axios já adiciona o token automaticamente
+      const response = await api.get(
+        `/relatorios/orcamentos/${orcamento.id}/pdf`,
+        {
+          responseType: 'blob',
+        }
+      )
 
-      if (!response.ok) {
-        throw new Error('Erro ao gerar PDF')
-      }
-
-      // Obter o blob do PDF
-      const blob = await response.blob()
+      // Criar blob do PDF
+      const blob = new Blob([response.data], { type: 'application/pdf' })
       
       // Criar link de download
       const url = URL.createObjectURL(blob)
@@ -404,13 +412,40 @@ export default function OrcamentosPage() {
         title: "Sucesso",
         description: "Orçamento exportado em PDF com sucesso!",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao exportar PDF:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao exportar orçamento. Tente novamente.",
-        variant: "destructive"
-      })
+      
+      // Tentar ler mensagem de erro do blob se for erro do servidor
+      let errorMessage = "Erro ao exportar orçamento. Tente novamente."
+      
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text()
+          const errorData = JSON.parse(text)
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch {
+          // Se não conseguir parsear, usar mensagem padrão
+        }
+      } else if (error.response?.data?.message || error.response?.data?.error) {
+        errorMessage = error.response.data.message || error.response.data.error
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      // Se for erro de token, mostrar mensagem mais específica
+      if (errorMessage.includes('Token') || errorMessage.includes('token') || errorMessage.includes('inválido') || errorMessage.includes('expirado')) {
+        toast({
+          title: "Erro de Autenticação",
+          description: "Sua sessão expirou. Por favor, faça login novamente.",
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Erro",
+          description: errorMessage,
+          variant: "destructive"
+        })
+      }
     }
   }
 

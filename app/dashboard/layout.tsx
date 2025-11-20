@@ -101,7 +101,7 @@ const baseNavigation: NavigationItemWithPermission[] = [
   { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional", permission: "clientes:visualizar" },
   { name: "Orçamentos", href: "/dashboard/orcamentos", icon: FileText, category: "operacional", permission: "orcamentos:visualizar" },
   { name: "Obras", href: "/dashboard/obras", icon: Building2, category: "operacional", permission: "obras:visualizar" },
-  { name: "Controle de Gruas", href: "/dashboard/gruas", icon: Crane, category: "operacional", permission: "gruas:visualizar" },
+  { name: "Gruas", href: "/dashboard/gruas", icon: Crane, category: "operacional", permission: "gruas:visualizar" },
   { name: "Livros de Gruas", href: "/dashboard/livros-gruas", icon: BookOpen, category: "operacional", permission: "livros_gruas:visualizar" },
   { name: "Estoque", href: "/dashboard/estoque", icon: Package, category: "operacional", permission: "estoque:visualizar" },
   { name: "Complementos", href: "/dashboard/complementos", icon: Layers, category: "operacional", permission: "complementos:visualizar" },
