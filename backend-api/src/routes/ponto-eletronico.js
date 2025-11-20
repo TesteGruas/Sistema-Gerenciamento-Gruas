@@ -21,6 +21,7 @@ import {
 import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -5746,16 +5747,25 @@ router.get('/relatorios/exportar', async (req, res) => {
 
       // Função para desenhar cabeçalho
       const desenharCabecalho = () => {
-        doc.fontSize(18).font('Helvetica-Bold').text('Relatório de Ponto Eletrônico', 40, 40, { align: 'center', width: doc.page.width - 80 });
+        let yPos = 40;
+        
+        // Adicionar logos
+        yPos = adicionarLogosNoCabecalho(doc, yPos);
+        
+        doc.fontSize(18).font('Helvetica-Bold').text('Relatório de Ponto Eletrônico', 40, yPos, { align: 'center', width: doc.page.width - 80 });
+        yPos += 20;
         
         const periodoTexto = formato === 'mensal' ? 'Mensal' : formato === 'semanal' ? 'Semanal' : 'Diário';
-        doc.fontSize(11).font('Helvetica').text(`Período: ${periodoTexto} - ${formatarData(dataInicio)} a ${formatarData(dataFim)}`, { align: 'center', width: doc.page.width - 80 });
-        doc.fontSize(9).text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, { align: 'center', width: doc.page.width - 80 });
-        doc.moveDown(1.5);
+        doc.fontSize(11).font('Helvetica').text(`Período: ${periodoTexto} - ${formatarData(dataInicio)} a ${formatarData(dataFim)}`, 40, yPos, { align: 'center', width: doc.page.width - 80 });
+        yPos += 15;
+        doc.fontSize(9).text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 40, yPos, { align: 'center', width: doc.page.width - 80 });
+        yPos += 20;
+        
+        return yPos;
       };
 
       // Desenhar cabeçalho inicial
-      desenharCabecalho();
+      let currentY = desenharCabecalho();
 
       // Estatísticas gerais
       const totalRegistros = registros.length;
@@ -5766,8 +5776,8 @@ router.get('/relatorios/exportar', async (req, res) => {
 
       doc.fontSize(9).font('Helvetica-Bold');
       doc.text(`Resumo: ${totalRegistros} registros | ${totalHoras.toFixed(2)}h trabalhadas | ${totalHorasExtras.toFixed(2)}h extras | ${totalAtrasos} atrasos | ${totalFaltas} faltas`, 
-        40, doc.y, { align: 'center', width: doc.page.width - 80 });
-      doc.moveDown(1);
+        40, currentY, { align: 'center', width: doc.page.width - 80 });
+      currentY += 15;
 
       // Configurações da tabela
       const margemEsq = 40;
@@ -5805,7 +5815,7 @@ router.get('/relatorios/exportar', async (req, res) => {
       };
 
       // Desenhar header da tabela
-      let currentY = desenharHeaderTabela(doc.y);
+      currentY = desenharHeaderTabela(currentY);
 
       // Desenhar linhas
       registros.forEach((registro, index) => {
@@ -5854,17 +5864,33 @@ router.get('/relatorios/exportar', async (req, res) => {
         currentY += rowHeight;
       });
 
-      // Rodapé em todas as páginas
+      // ===== LOGOS EM TODAS AS PÁGINAS =====
+      // Adicionar logos no cabeçalho de todas as páginas
+      adicionarLogosEmTodasAsPaginas(doc);
+      
+      // ===== RODAPÉ =====
+      // Adicionar informações da empresa em todas as páginas
+      adicionarRodapeEmpresa(doc);
+      
+      // Adicionar numeração de páginas
       const range = doc.bufferedPageRange();
-      for (let i = 0; i < range.count; i++) {
-        doc.switchToPage(i);
-        doc.fontSize(8).font('Helvetica').fillColor('#666666');
-        doc.text(
-          `Página ${i + 1} de ${range.count}`,
-          0,
-          doc.page.height - 50,
-          { align: 'center', width: doc.page.width }
-        );
+      const startPage = range.start || 0;
+      const pageCount = range.count || 0;
+      
+      for (let i = startPage; i < startPage + pageCount; i++) {
+        try {
+          doc.switchToPage(i);
+          doc.fontSize(7).font('Helvetica').fillColor('#666666');
+          const pageNumber = i - startPage + 1;
+          doc.text(
+            `Página ${pageNumber} de ${pageCount}`,
+            0,
+            doc.page.height - 15,
+            { align: 'center', width: doc.page.width }
+          );
+        } catch (error) {
+          console.warn(`[PDF] Erro ao adicionar numeração na página ${i}:`, error.message);
+        }
       }
 
       // Finalizar PDF

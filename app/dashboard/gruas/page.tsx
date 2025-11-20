@@ -610,12 +610,19 @@ export default function GruasPage() {
 
       const doc = new jsPDF()
       
+      // Adicionar logos no cabeçalho
+      const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+      let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+      
       // Título
       doc.setFontSize(16)
-      doc.text('Relatório de Gruas', 14, 22)
+      doc.text('Relatório de Gruas', 14, yPos)
+      yPos += 8
       doc.setFontSize(10)
-      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 30)
-      doc.text(`Total de gruas: ${dados.length}`, 14, 36)
+      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, yPos)
+      yPos += 6
+      doc.text(`Total de gruas: ${dados.length}`, 14, yPos)
+      yPos += 6
 
       // Dados da tabela
       const headers = ['Nome', 'Modelo', 'Fabricante', 'Capacidade', 'Status', 'Tipo', 'Obra Atual', 'Data Criação']
@@ -633,11 +640,15 @@ export default function GruasPage() {
       autoTable(doc, {
         head: [headers],
         body: tableData,
-        startY: 45,
+        startY: yPos,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [66, 139, 202] },
         alternateRowStyles: { fillColor: [245, 245, 245] }
       })
+
+      // Adicionar rodapé com informações da empresa
+      const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+      adicionarRodapeEmpresaFrontend(doc)
 
       doc.save(`relatorio-gruas-${new Date().toISOString().split('T')[0]}.pdf`)
 

@@ -2,6 +2,7 @@ import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina, adicionarRodapeNaPagina } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -135,6 +136,9 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
 
     let yPos = 40;
 
+    // ===== LOGOS NO CABEÇALHO =====
+    yPos = adicionarLogosNoCabecalho(doc, yPos);
+
     // ===== CABEÇALHO =====
     doc.fontSize(16).font('Helvetica-Bold').text('RELATÓRIO DE COMPONENTES E ESTOQUE', 40, yPos, { align: 'center' });
     yPos += 25;
@@ -188,6 +192,8 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
     if (componentesAlocados.length > 0) {
       if (yPos > 700) {
         doc.addPage();
+        // Adicionar logos na nova página
+        adicionarLogosNaPagina(doc, 40);
         yPos = 40;
       }
       
@@ -211,6 +217,8 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
       componentesAlocados.forEach(comp => {
         if (yPos > 750) {
           doc.addPage();
+          // Adicionar logos na nova página
+          adicionarLogosNaPagina(doc, 40);
           yPos = 40;
           // Redesenhar cabeçalho
           doc.fontSize(9).font('Helvetica-Bold');
@@ -253,6 +261,8 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
     if (componentesRetornados.length > 0) {
       if (yPos > 700) {
         doc.addPage();
+        // Adicionar logos na nova página
+        adicionarLogosNaPagina(doc, 40);
         yPos = 40;
       }
       
@@ -276,6 +286,8 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
       componentesRetornados.forEach(comp => {
         if (yPos > 750) {
           doc.addPage();
+          // Adicionar logos na nova página
+          adicionarLogosNaPagina(doc, 40);
           yPos = 40;
           doc.fontSize(9).font('Helvetica-Bold');
           doc.text('Nome', 40, yPos);
@@ -308,6 +320,8 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
     if (movimentacoes && movimentacoes.length > 0) {
       if (yPos > 700) {
         doc.addPage();
+        // Adicionar logos na nova página
+        adicionarLogosNaPagina(doc, 40);
         yPos = 40;
       }
       
@@ -330,6 +344,8 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
       movimentacoes.slice(0, 30).forEach(mov => {
         if (yPos > 750) {
           doc.addPage();
+          // Adicionar logos na nova página
+          adicionarLogosNaPagina(doc, 40);
           yPos = 40;
           doc.fontSize(9).font('Helvetica-Bold');
           doc.text('Data', 40, yPos);
@@ -357,17 +373,33 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
       yPos += 10;
     }
 
+    // ===== LOGOS EM TODAS AS PÁGINAS =====
+    // Adicionar logos no cabeçalho de todas as páginas
+    adicionarLogosEmTodasAsPaginas(doc);
+    
     // ===== RODAPÉ =====
-    const pageCount = doc.bufferedPageRange().count;
-    for (let i = 0; i < pageCount; i++) {
-      doc.switchToPage(i);
-      doc.fontSize(8).font('Helvetica');
-      doc.text(
-        `Página ${i + 1} de ${pageCount} | Gerado em ${formatarData(new Date())}`,
-        40,
-        doc.page.height - 30,
-        { align: 'center', width: 515 }
-      );
+    // Adicionar informações da empresa em todas as páginas
+    adicionarRodapeEmpresa(doc);
+    
+    // Adicionar numeração de páginas (acima do rodapé)
+    const pageRange = doc.bufferedPageRange();
+    const startPage = pageRange.start || 0;
+    const pageCount = pageRange.count || 0;
+    
+    for (let i = startPage; i < startPage + pageCount; i++) {
+      try {
+        doc.switchToPage(i);
+        doc.fontSize(7).font('Helvetica');
+        const pageNumber = i - startPage + 1;
+        doc.text(
+          `Página ${pageNumber} de ${pageCount} | Gerado em ${formatarData(new Date())}`,
+          40,
+          doc.page.height - 35,
+          { align: 'center', width: 515 }
+        );
+      } catch (error) {
+        console.warn(`[PDF] Erro ao adicionar numeração na página ${i}:`, error.message);
+      }
     }
 
     // Finalizar documento

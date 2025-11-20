@@ -2,6 +2,7 @@ import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -113,6 +114,9 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
 
     let yPos = 40;
     let totalAcumulado = 0;
+
+    // ===== LOGOS NO CABEÇALHO =====
+    yPos = adicionarLogosNoCabecalho(doc, yPos);
 
     // ===== CABEÇALHO =====
     doc.fontSize(16).font('Helvetica-Bold').text('RELATÓRIO DE MEDIÇÕES MENSAIS', 40, yPos, { align: 'center' });
@@ -293,17 +297,33 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
       }
     });
 
+    // ===== LOGOS EM TODAS AS PÁGINAS =====
+    // Adicionar logos no cabeçalho de todas as páginas
+    adicionarLogosEmTodasAsPaginas(doc);
+    
     // ===== RODAPÉ =====
-    const pageCount = doc.bufferedPageRange().count;
-    for (let i = 0; i < pageCount; i++) {
-      doc.switchToPage(i);
-      doc.fontSize(8).font('Helvetica');
-      doc.text(
-        `Página ${i + 1} de ${pageCount} | Gerado em ${formatarData(new Date())}`,
-        40,
-        doc.page.height - 30,
-        { align: 'center', width: 515 }
+    // Adicionar informações da empresa em todas as páginas
+    adicionarRodapeEmpresa(doc);
+    
+    // Adicionar numeração de páginas
+    const pageRange = doc.bufferedPageRange();
+    const startPage = pageRange.start || 0;
+    const pageCount = pageRange.count || 0;
+    
+    for (let i = startPage; i < startPage + pageCount; i++) {
+      try {
+        doc.switchToPage(i);
+        doc.fontSize(7).font('Helvetica');
+        const pageNumber = i - startPage + 1;
+        doc.text(
+          `Página ${pageNumber} de ${pageCount} | Gerado em ${formatarData(new Date())}`,
+          40,
+          doc.page.height - 15,
+          { align: 'center', width: 515 }
       );
+      } catch (error) {
+        console.warn(`[PDF] Erro ao adicionar numeração na página ${i}:`, error.message);
+      }
     }
 
     // Finalizar documento

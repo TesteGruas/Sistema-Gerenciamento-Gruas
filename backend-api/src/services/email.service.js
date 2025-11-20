@@ -285,83 +285,161 @@ async function sendWelcomeEmail(userData) {
 }
 
 /**
- * Envia email de reset de senha com senha temporária
+ * Envia email de reset de senha com nova senha temporária
  * @param {Object} userData - Dados do usuário
  * @param {string} userData.nome - Nome do usuário
  * @param {string} userData.email - Email do usuário
- * @param {string} userData.senha_temporaria - Senha temporária gerada
+ * @param {string} userData.senha_temporaria - Nova senha temporária gerada
  * @returns {Promise<Object>} Resultado do envio
  */
 async function sendPasswordResetEmail(userData) {
   try {
-    // Usar template de reset_password ou criar um customizado
-    let template;
-    try {
-      template = await getTemplate('reset_password');
-    } catch (error) {
-      // Se não encontrar template, usar template welcome como fallback
-      template = await getTemplate('welcome');
-    }
+    const nome = userData.nome || 'Usuário';
+    const email = userData.email;
+    const senhaTemporaria = userData.senha_temporaria;
+    const linkLogin = `${FRONTEND_URL}/login`;
+    const ano = new Date().getFullYear();
     
-    const data = {
-      nome: userData.nome,
-      email: userData.email,
-      senha_temporaria: userData.senha_temporaria,
-      link_login: `${FRONTEND_URL}/login`,
-      empresa: 'Sistema de Gerenciamento de Gruas',
-      ano: new Date().getFullYear()
-    };
-    
-    // Criar HTML customizado para reset de senha
-    const htmlTemplate = `<!DOCTYPE html>
+    // Template HTML específico para reset de senha
+    const html = `
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redefinição de Senha</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinição de Senha - Sistema de Gerenciamento de Gruas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #2c3e50;
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .greeting {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        .credentials {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .credentials h2 {
+            color: #2c3e50;
+            font-size: 16px;
+            margin-top: 0;
+        }
+        .credential-item {
+            margin: 10px 0;
+        }
+        .credential-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .password {
+            font-family: monospace;
+            font-size: 18px;
+            color: #e74c3c;
+            font-weight: bold;
+            background-color: #fff;
+            padding: 5px 10px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #3498db;
+            color: #ffffff;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .button:hover {
+            background-color: #2980b9;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #777;
+            font-size: 14px;
+        }
+    </style>
 </head>
-<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0;">
-  <div style="max-width: 600px; margin: 20px auto; background: white; padding: 30px; border-radius: 8px;">
-    <div style="text-align: center; padding-bottom: 20px; border-bottom: 2px solid #007bff;">
-      <div style="font-size: 24px; font-weight: bold; color: #007bff;">🏗️ Sistema de Gerenciamento de Gruas</div>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Redefinição de Senha</h1>
+        </div>
+        <div class="content">
+            <div class="greeting">
+                Olá, <strong>${nome}</strong>! 👋
+            </div>
+            <p>Sua senha foi redefinida com sucesso!</p>
+            
+            <div class="credentials">
+                <h2>📧 Suas Credenciais de Acesso</h2>
+                <div class="credential-item">
+                    <span class="credential-label">Email:</span> ${email}
+                </div>
+                <div class="credential-item">
+                    <span class="credential-label">Nova Senha Temporária:</span>
+                    <div class="password">${senhaTemporaria}</div>
+                </div>
+            </div>
+            
+            <div class="warning">
+                ⚠️ <strong>Importante:</strong> Altere sua senha no próximo acesso ao sistema.
+            </div>
+            
+            <div style="text-align: center;">
+                <a href="${linkLogin}" class="button">Acessar o Sistema</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p><strong>Redefinição de Senha - Sistema de Gerenciamento de Gruas</strong></p>
+            <p>© ${ano} - Todos os direitos reservados</p>
+        </div>
     </div>
-    <div style="padding: 20px 0; line-height: 1.6; color: #333;">
-      <h2>Redefinição de Senha 🔒</h2>
-      <p>Olá, <strong>{{nome}}</strong>!</p>
-      <p>Sua senha foi redefinida com sucesso. Uma nova senha temporária foi gerada para você.</p>
-      <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0;">
-        <h3>📧 Suas Credenciais de Acesso</h3>
-        <p><strong>Email:</strong> {{email}}</p>
-        <p><strong>Nova Senha Temporária:</strong> <code style="background: #fff; padding: 2px 6px; border: 1px solid #ddd;">{{senha_temporaria}}</code></p>
-      </div>
-      <div style="text-align: center;">
-        <a href="{{link_login}}" style="display: inline-block; padding: 12px 30px; background: #007bff; color: white !important; text-decoration: none; border-radius: 5px; margin: 20px 0;">Acessar o Sistema</a>
-      </div>
-      <div style="background: #fff3cd; padding: 10px; border-left: 4px solid #ffc107; margin: 20px 0;">
-        <strong>⚠️ Importante:</strong>
-        <ul style="margin: 10px 0; padding-left: 20px;">
-          <li>Esta é uma senha <strong>temporária</strong></li>
-          <li>Altere sua senha no primeiro acesso</li>
-          <li>Não compartilhe suas credenciais com ninguém</li>
-        </ul>
-      </div>
-    </div>
-    <div style="text-align: center; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-      <p><strong>Sistema de Gerenciamento de Gruas</strong></p>
-      <p style="margin-top: 10px; color: #999;">
-        Este é um email automático, por favor não responda.<br>
-        © {{ano}} Sistema de Gerenciamento de Gruas. Todos os direitos reservados.
-      </p>
-    </div>
-  </div>
 </body>
 </html>`;
     
-    const html = replaceVariables(htmlTemplate, data);
-    const assunto = `Redefinição de Senha - Sistema de Gerenciamento de Gruas`;
+    const assunto = `🔐 Redefinição de Senha - Sistema de Gerenciamento de Gruas`;
     
     return await sendEmail({
-      to: userData.email,
+      to: email,
       subject: assunto,
       html: html,
       tipo: 'reset_password'
@@ -373,7 +451,7 @@ async function sendPasswordResetEmail(userData) {
 }
 
 /**
- * Envia email de redefinição de senha
+ * Envia email de redefinição de senha com token (para forgot-password)
  * @param {Object} userData - Dados do usuário
  * @param {string} userData.nome - Nome do usuário
  * @param {string} userData.email - Email do usuário
@@ -382,59 +460,7 @@ async function sendPasswordResetEmail(userData) {
  */
 async function sendResetPasswordEmail(userData) {
   try {
-    let template;
-    try {
-      template = await getTemplate('reset_password');
-    } catch (templateError) {
-      console.warn('⚠️ Template reset_password não encontrado, usando template HTML padrão:', templateError.message);
-      // Usar template HTML padrão se não encontrar no banco
-      template = {
-        html_template: `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redefinir Senha</title>
-</head>
-<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0;">
-  <div style="max-width: 600px; margin: 20px auto; background: white; padding: 30px; border-radius: 8px;">
-    <div style="text-align: center; padding-bottom: 20px; border-bottom: 2px solid #007bff;">
-      <div style="font-size: 24px; font-weight: bold; color: #007bff;">🏗️ Sistema de Gerenciamento de Gruas</div>
-    </div>
-    <div style="padding: 20px 0; line-height: 1.6; color: #333;">
-      <h2>Redefinição de Senha 🔒</h2>
-      <p>Olá, <strong>{{nome}}</strong>!</p>
-      <p>Você solicitou a redefinição de senha no Sistema de Gerenciamento de Gruas.</p>
-      <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0;">
-        <p>Clique no botão abaixo para redefinir sua senha:</p>
-        <div style="text-align: center; margin: 20px 0;">
-          <a href="{{reset_link}}" style="display: inline-block; padding: 12px 30px; background: #007bff; color: white !important; text-decoration: none; border-radius: 5px;">Redefinir Senha</a>
-        </div>
-        <p style="font-size: 12px; color: #666; margin-top: 10px;">Ou copie e cole este link no seu navegador:</p>
-        <p style="font-size: 12px; color: #007bff; word-break: break-all;">{{reset_link}}</p>
-      </div>
-      <div style="background: #fff3cd; padding: 10px; border-left: 4px solid #ffc107; margin: 20px 0;">
-        <strong>⚠️ Importante:</strong>
-        <ul style="margin: 10px 0; padding-left: 20px;">
-          <li>Este link expira em {{expiry_time}}</li>
-          <li>Se você não solicitou esta redefinição, ignore este email</li>
-          <li>Não compartilhe este link com ninguém</li>
-        </ul>
-      </div>
-    </div>
-    <div style="text-align: center; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-      <p><strong>{{empresa}}</strong></p>
-      <p style="margin-top: 10px; color: #999;">
-        Este é um email automático, por favor não responda.<br>
-        © {{ano}} {{empresa}}. Todos os direitos reservados.
-      </p>
-    </div>
-  </div>
-</body>
-</html>`,
-        assunto: 'Redefinição de Senha - {{empresa}}'
-      };
-    }
+    const template = await getTemplate('reset_password');
     
     const data = {
       nome: userData.nome,
@@ -448,18 +474,14 @@ async function sendResetPasswordEmail(userData) {
     const html = replaceVariables(template.html_template, data);
     const assunto = replaceVariables(template.assunto, data);
     
-    console.log(`📧 Enviando email de reset de senha para ${userData.email}`);
-    const resultado = await sendEmail({
+    return await sendEmail({
       to: userData.email,
       subject: assunto,
       html: html,
       tipo: 'reset_password'
     });
-    console.log(`✅ Email de reset de senha enviado com sucesso:`, resultado);
-    return resultado;
   } catch (error) {
-    console.error('❌ Erro ao enviar email de redefinição:', error);
-    console.error('❌ Stack trace:', error.stack);
+    console.error('Erro ao enviar email de redefinição:', error);
     throw error;
   }
 }
@@ -503,8 +525,8 @@ export {
   decrypt,
   sendEmail,
   sendWelcomeEmail,
-  sendPasswordResetEmail,
   sendResetPasswordEmail,
+  sendPasswordResetEmail,
   sendPasswordChangedEmail,
   getEmailConfig,
   getTemplate,

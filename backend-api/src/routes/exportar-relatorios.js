@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
 import XLSX from 'xlsx';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -34,17 +35,23 @@ router.post('/pdf/financeiro', authenticateToken, requirePermission('financeiro:
     // Pipe do documento para a resposta
     doc.pipe(res);
 
+    // ===== LOGOS NO CABEÇALHO =====
+    let yPos = 50;
+    yPos = adicionarLogosNoCabecalho(doc, yPos);
+
     // Cabeçalho do documento
-    doc.fontSize(20).font('Helvetica-Bold').text('Relatório Financeiro', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(12).font('Helvetica').text(`Tipo: ${tipo}`, { align: 'center' });
-    doc.text(`Período: ${formatarData(data_inicio)} a ${formatarData(data_fim)}`, { align: 'center' });
-    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, { align: 'center' });
-    doc.moveDown(2);
+    doc.fontSize(20).font('Helvetica-Bold').text('Relatório Financeiro', 50, yPos, { align: 'center' });
+    yPos += 20;
+    doc.fontSize(12).font('Helvetica').text(`Tipo: ${tipo}`, 50, yPos, { align: 'center' });
+    yPos += 15;
+    doc.text(`Período: ${formatarData(data_inicio)} a ${formatarData(data_fim)}`, 50, yPos, { align: 'center' });
+    yPos += 15;
+    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 50, yPos, { align: 'center' });
+    yPos += 20;
 
     // Linha separadora
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    doc.moveDown(1);
+    doc.moveTo(50, yPos).lineTo(550, yPos).stroke();
+    yPos += 15;
 
     // Buscar dados conforme o tipo
     let dadosRelatorio;
@@ -85,13 +92,34 @@ router.post('/pdf/financeiro', authenticateToken, requirePermission('financeiro:
         renderizarRelatorioGenericoPDF(doc, dadosRelatorio);
     }
 
-    // Rodapé
-    doc.fontSize(8).text(
-      `Sistema de Gerenciamento de Gruas - Página 1`,
-      50,
-      doc.page.height - 50,
-      { align: 'center' }
-    );
+    // ===== LOGOS EM TODAS AS PÁGINAS =====
+    // Adicionar logos no cabeçalho de todas as páginas
+    adicionarLogosEmTodasAsPaginas(doc);
+    
+    // ===== RODAPÉ =====
+    // Adicionar informações da empresa em todas as páginas
+    adicionarRodapeEmpresa(doc);
+    
+    // Adicionar numeração de páginas
+    const pageRange = doc.bufferedPageRange();
+    const startPage = pageRange.start || 0;
+    const pageCount = pageRange.count || 0;
+    
+    for (let i = startPage; i < startPage + pageCount; i++) {
+      try {
+        doc.switchToPage(i);
+        doc.fontSize(7).font('Helvetica');
+        const pageNumber = i - startPage + 1;
+        doc.text(
+          `Página ${pageNumber} de ${pageCount}`,
+          50,
+          doc.page.height - 15,
+          { align: 'center' }
+        );
+      } catch (error) {
+        console.warn(`[PDF] Erro ao adicionar numeração na página ${i}:`, error.message);
+      }
+    }
 
     // Finalizar documento
     doc.end();

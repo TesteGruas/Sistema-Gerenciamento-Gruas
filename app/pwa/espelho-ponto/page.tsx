@@ -218,12 +218,19 @@ export default function PWAEspelhoPontoPage() {
 
       const doc = new jsPDF()
       
+      // Adicionar logos no cabeçalho
+      const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+      let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+      
       // Título
       doc.setFontSize(16)
-      doc.text('ESPELHO DE PONTO', 14, 22)
+      doc.text('ESPELHO DE PONTO', 14, yPos)
+      yPos += 8
       doc.setFontSize(10)
-      doc.text(`Funcionário: ${user?.nome}`, 14, 30)
-      doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, 35)
+      doc.text(`Funcionário: ${user?.nome}`, 14, yPos)
+      yPos += 6
+      doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, yPos)
+      yPos += 6
 
       // Dados da tabela
       const tableData = registros.map(registro => [
@@ -240,7 +247,7 @@ export default function PWAEspelhoPontoPage() {
       autoTable(doc, {
         head: [['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras', 'Status']],
         body: tableData,
-        startY: 45,
+        startY: yPos,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [66, 139, 202] }
       })
@@ -262,6 +269,10 @@ export default function PWAEspelhoPontoPage() {
       if (assinaturaGestor) {
         doc.text(`Assinatura do Gestor: ${assinaturaGestor}`, 14, finalY + 25)
       }
+
+      // Adicionar rodapé com informações da empresa
+      const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+      adicionarRodapeEmpresaFrontend(doc)
 
       doc.save(`espelho-ponto-${user?.nome}-${dataInicio}-${dataFim}.pdf`)
 
