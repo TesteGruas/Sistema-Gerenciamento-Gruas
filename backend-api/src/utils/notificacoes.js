@@ -50,6 +50,26 @@ _Sistema de Gestão de Gruas_`;
 
 export async function criarNotificacaoAprovacao(registro, gestor) {
   try {
+    // VALIDAÇÃO: Verificar se o gestor tem usuario_id válido
+    const usuarioId = gestor.usuario_id || gestor.id;
+
+    if (!usuarioId) {
+      console.warn(`[criarNotificacaoAprovacao] Gestor ${gestor.nome} (ID: ${gestor.id}) não possui usuario_id válido`);
+      return; // Não criar notificação se não houver usuario_id
+    }
+
+    // Verificar se o usuário existe na tabela usuarios
+    const { data: usuario, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id')
+      .eq('id', usuarioId)
+      .single();
+
+    if (usuarioError || !usuario) {
+      console.warn(`[criarNotificacaoAprovacao] Usuário ${usuarioId} não encontrado na tabela usuarios`);
+      return; // Não criar notificação se o usuário não existir
+    }
+
     const titulo = 'Aprovação de Horas Extras';
     const mensagem = `${registro.funcionario.nome} tem ${registro.horas_extras}h extras para aprovar`;
     const link = `/pwa/aprovacoes/${registro.id}`;
@@ -57,7 +77,7 @@ export async function criarNotificacaoAprovacao(registro, gestor) {
     const { error } = await supabaseAdmin
       .from('notificacoes')
       .insert({
-        usuario_id: gestor.id,
+        usuario_id: usuarioId,
         tipo: 'warning',
         titulo,
         mensagem,
@@ -71,10 +91,10 @@ export async function criarNotificacaoAprovacao(registro, gestor) {
       throw error;
     }
 
-    console.log(`Notificação de aprovação criada para gestor ${gestor.nome}`);
+    console.log(`Notificação de aprovação criada para gestor ${gestor.nome} (usuario_id: ${usuarioId})`);
     
     // Enviar via WhatsApp
-    await enviarNotificacaoWhatsApp(gestor.id, titulo, mensagem, link);
+    await enviarNotificacaoWhatsApp(usuarioId, titulo, mensagem, link);
   } catch (error) {
     console.error('Erro na função criarNotificacaoAprovacao:', error);
     throw error;
@@ -130,6 +150,26 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
  */
 export async function criarNotificacaoLembrete(registro, gestor) {
   try {
+    // VALIDAÇÃO: Verificar se o gestor tem usuario_id válido
+    const usuarioId = gestor.usuario_id || gestor.id;
+
+    if (!usuarioId) {
+      console.warn(`[criarNotificacaoLembrete] Gestor ${gestor.nome} (ID: ${gestor.id}) não possui usuario_id válido`);
+      return; // Não criar notificação se não houver usuario_id
+    }
+
+    // Verificar se o usuário existe na tabela usuarios
+    const { data: usuario, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id')
+      .eq('id', usuarioId)
+      .single();
+
+    if (usuarioError || !usuario) {
+      console.warn(`[criarNotificacaoLembrete] Usuário ${usuarioId} não encontrado na tabela usuarios`);
+      return; // Não criar notificação se o usuário não existir
+    }
+
     const titulo = 'Lembrete: Aprovação Pendente';
     const mensagem = `Lembrete: ${registro.funcionario.nome} ainda tem ${registro.horas_extras}h extras aguardando aprovação há mais de 1 dia`;
     const link = `/pwa/aprovacoes/${registro.id}`;
@@ -137,7 +177,7 @@ export async function criarNotificacaoLembrete(registro, gestor) {
     const { error } = await supabaseAdmin
       .from('notificacoes')
       .insert({
-        usuario_id: gestor.id,
+        usuario_id: usuarioId,
         tipo: 'info',
         titulo,
         mensagem,
@@ -151,10 +191,10 @@ export async function criarNotificacaoLembrete(registro, gestor) {
       throw error;
     }
 
-    console.log(`Notificação de lembrete criada para gestor ${gestor.nome}`);
+    console.log(`Notificação de lembrete criada para gestor ${gestor.nome} (usuario_id: ${usuarioId})`);
     
     // Enviar via WhatsApp
-    await enviarNotificacaoWhatsApp(gestor.id, titulo, mensagem, link);
+    await enviarNotificacaoWhatsApp(usuarioId, titulo, mensagem, link);
   } catch (error) {
     console.error('Erro na função criarNotificacaoLembrete:', error);
     throw error;
@@ -184,7 +224,13 @@ export async function buscarRegistrosPendentesAntigos() {
       throw error;
     }
 
-    return data || [];
+    // Filtrar apenas registros com funcionário que tem obra_atual_id não nulo
+    const registrosComObra = (data || []).filter(registro => {
+      const obraId = registro.funcionario?.obra_atual_id;
+      return obraId !== null && obraId !== undefined && obraId !== 'null';
+    });
+
+    return registrosComObra;
   } catch (error) {
     console.error('Erro na função buscarRegistrosPendentesAntigos:', error);
     throw error;
@@ -198,10 +244,30 @@ export async function buscarRegistrosPendentesAntigos() {
  */
 export async function buscarGestoresPorObra(obraId) {
   try {
+    // VALIDAÇÃO: Verificar se obraId é válido
+    if (!obraId || obraId === null || obraId === 'null' || obraId === undefined) {
+      console.warn(`[buscarGestoresPorObra] obraId inválido: ${obraId}`);
+      return [];
+    }
+
+    // Converter para número se necessário
+    const obraIdNumero = typeof obraId === 'string' ? parseInt(obraId, 10) : obraId;
+
+    if (isNaN(obraIdNumero) || obraIdNumero <= 0) {
+      console.warn(`[buscarGestoresPorObra] Não foi possível converter obraId para número válido: ${obraId}`);
+      return [];
+    }
+
     const { data, error } = await supabaseAdmin
       .from('funcionarios')
-      .select('id, nome, cargo, email')
-      .eq('obra_atual_id', obraId)
+      .select(`
+        id, 
+        nome, 
+        cargo, 
+        email,
+        usuarios:usuarios!funcionario_id(id)
+      `)
+      .eq('obra_atual_id', obraIdNumero)
       .eq('status', 'Ativo')
       .in('cargo', ['Supervisor', 'Técnico Manutenção', 'Gerente', 'Coordenador']);
 
@@ -210,7 +276,16 @@ export async function buscarGestoresPorObra(obraId) {
       throw error;
     }
 
-    return data || [];
+    // Mapear resultado para incluir usuario_id
+    const gestoresComUsuario = (data || []).map(gestor => ({
+      id: gestor.id,
+      nome: gestor.nome,
+      cargo: gestor.cargo,
+      email: gestor.email,
+      usuario_id: gestor.usuarios?.[0]?.id || null
+    }));
+
+    return gestoresComUsuario;
   } catch (error) {
     console.error('Erro na função buscarGestoresPorObra:', error);
     throw error;
@@ -235,8 +310,16 @@ export async function enviarLembretesAprovacao() {
 
     for (const registro of registrosPendentes) {
       try {
+        // VALIDAÇÃO: Verificar se o funcionário tem obra_atual_id válido
+        const obraId = registro.funcionario?.obra_atual_id;
+        
+        if (!obraId || obraId === null || obraId === 'null' || obraId === undefined) {
+          console.warn(`[enviarLembretesAprovacao] Registro ${registro.id}: Funcionário ${registro.funcionario?.nome || 'N/A'} sem obra atribuída, pulando...`);
+          continue; // Pular este registro
+        }
+        
         // Buscar gestores da obra do funcionário
-        const gestores = await buscarGestoresPorObra(registro.funcionario.obra_atual_id);
+        const gestores = await buscarGestoresPorObra(obraId);
         
         // Enviar lembrete para cada gestor
         for (const gestor of gestores) {

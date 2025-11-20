@@ -25,21 +25,8 @@ import { estoqueAPI, type Produto, type Categoria, type Movimentacao } from "@/l
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
 import { ProtectedRoute } from "@/components/protected-route"
-
-// Dados simulados de obras e gruas (mantidos por enquanto)
-const obrasData = [
-  { id: "OBR001", nome: "Residencial Jardim das Flores", cliente: "Construtora ABC", endereco: "Rua das Flores, 123" },
-  { id: "OBR002", nome: "Shopping Center Norte", cliente: "Empresa XYZ", endereco: "Av. Principal, 456" },
-  { id: "OBR003", nome: "Condomínio Vista Mar", cliente: "Construtora DEF", endereco: "Rua do Mar, 789" },
-  { id: "OBR004", nome: "Torre Comercial", cliente: "Empresa GHI", endereco: "Av. Comercial, 321" },
-]
-
-const gruasData = [
-  { id: "GRU001", modelo: "Potain MDT 178", status: "Operacional", localizacao: "Obra Jardim das Flores" },
-  { id: "GRU002", modelo: "Liebherr 132 EC-H", status: "Operacional", localizacao: "Shopping Center Norte" },
-  { id: "GRU003", modelo: "Terex CTT 181-8", status: "Manutenção", localizacao: "Condomínio Vista Mar" },
-  { id: "GRU004", modelo: "Favelle Favco M440D", status: "Disponível", localizacao: "Depósito Central" },
-]
+import { obrasApi } from "@/lib/api-obras"
+import { gruasApi } from "@/lib/api-gruas"
 
 export default function EstoquePage() {
   const { toast } = useToast()

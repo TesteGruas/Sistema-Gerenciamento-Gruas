@@ -45,9 +45,374 @@ const relatorioManutencaoSchema = Joi.object({
   tipo_manutencao: Joi.string().valid('Todas', 'Preventiva', 'Corretiva', 'Preditiva').default('Todas')
 })
 
+const relatorioPerformanceGruasSchema = Joi.object({
+  data_inicio: Joi.date().required(),
+  data_fim: Joi.date().required(),
+  grua_id: Joi.string().optional(),
+  obra_id: Joi.number().integer().optional(),
+  agrupar_por: Joi.string().valid('grua', 'obra', 'mes').default('grua'),
+  incluir_projecao: Joi.boolean().default(false),
+  limite: Joi.number().integer().min(1).max(100).default(20),
+  pagina: Joi.number().integer().min(1).default(1),
+  ordenar_por: Joi.string().valid('taxa_utilizacao', 'receita_total', 'lucro_bruto', 'roi_percentual', 'horas_trabalhadas').default('taxa_utilizacao'),
+  ordem: Joi.string().valid('asc', 'desc').default('desc'),
+  comparar_periodo_anterior: Joi.boolean().default(false)
+})
+
 // =====================================================
 // FUNÇÕES AUXILIARES
 // =====================================================
+
+// Cache simples em memória para performance-gruas (5 minutos)
+const performanceCache = new Map()
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutos em milissegundos
+
+/**
+ * Limpar cache expirado
+ */
+function limparCacheExpirado() {
+  const agora = Date.now()
+  for (const [key, value] of performanceCache.entries()) {
+    if (value.expiresAt < agora) {
+      performanceCache.delete(key)
+    }
+  }
+}
+
+/**
+ * Gerar chave de cache baseada nos parâmetros
+ */
+function gerarChaveCache(params) {
+  return JSON.stringify({
+    data_inicio: params.data_inicio,
+    data_fim: params.data_fim,
+    grua_id: params.grua_id || null,
+    obra_id: params.obra_id || null,
+    agrupar_por: params.agrupar_por || 'grua'
+  })
+}
+
+/**
+ * Calcular horas trabalhadas por grua baseado em grua_obra
+ */
+async function calcularHorasTrabalhadas(gruaId, dataInicio, dataFim) {
+  try {
+    const dataInicioISO = new Date(dataInicio).toISOString().split('T')[0]
+    const dataFimISO = new Date(dataFim).toISOString().split('T')[0]
+
+    // Buscar locações da grua no período
+    const { data: locacoes, error } = await supabaseAdmin
+      .from('grua_obra')
+      .select('data_inicio_locacao, data_fim_locacao, status')
+      .eq('grua_id', gruaId)
+      .in('status', ['Ativa', 'Concluída'])
+      .or(`data_inicio_locacao.lte.${dataFimISO},data_fim_locacao.gte.${dataInicioISO}`)
+
+    if (error) {
+      console.error('Erro ao buscar locações para cálculo de horas:', error)
+      return 0
+    }
+
+    let horasTrabalhadas = 0
+
+    for (const locacao of locacoes || []) {
+      const inicio = new Date(Math.max(
+        new Date(locacao.data_inicio_locacao).getTime(),
+        new Date(dataInicioISO).getTime()
+      ))
+      const fim = new Date(Math.min(
+        locacao.data_fim_locacao ? new Date(locacao.data_fim_locacao).getTime() : Date.now(),
+        new Date(dataFimISO).getTime()
+      ))
+
+      if (fim > inicio) {
+        const dias = Math.ceil((fim - inicio) / (1000 * 60 * 60 * 24))
+        horasTrabalhadas += dias * 24 // Assumindo 24h por dia de operação
+      }
+    }
+
+    return horasTrabalhadas
+  } catch (error) {
+    console.error('Erro ao calcular horas trabalhadas:', error)
+    return 0
+  }
+}
+
+/**
+ * Calcular receitas por grua baseado em medicoes_mensais e grua_obra
+ */
+async function calcularReceitas(gruaId, dataInicio, dataFim) {
+  try {
+    const dataInicioISO = new Date(dataInicio).toISOString().split('T')[0]
+    const dataFimISO = new Date(dataFim).toISOString().split('T')[0]
+
+    let receitaTotal = 0
+
+    // Buscar receitas de medições mensais (via orcamentos que têm grua_id)
+    // Primeiro buscar orcamentos com grua_id
+    const { data: orcamentos, error: orcamentosError } = await supabaseAdmin
+      .from('orcamentos')
+      .select('id')
+      .eq('grua_id', gruaId)
+
+    if (!orcamentosError && orcamentos && orcamentos.length > 0) {
+      const orcamentoIds = orcamentos.map(o => o.id)
+      
+      // Buscar medições desses orçamentos
+      const { data: medicoes, error: medicoesError } = await supabaseAdmin
+        .from('medicoes_mensais')
+        .select('valor_total')
+        .in('orcamento_id', orcamentoIds)
+        .gte('data_medicao', dataInicioISO)
+        .lte('data_medicao', dataFimISO)
+        .eq('status', 'finalizada')
+
+      if (!medicoesError && medicoes) {
+        receitaTotal += medicoes.reduce((sum, m) => sum + (parseFloat(m.valor_total) || 0), 0)
+      }
+    }
+
+    // Buscar receitas de locações diretas (grua_obra)
+    const { data: locacoes, error: locacoesError } = await supabaseAdmin
+      .from('grua_obra')
+      .select('valor_locacao_mensal, data_inicio_locacao, data_fim_locacao')
+      .eq('grua_id', gruaId)
+      .in('status', ['Ativa', 'Concluída'])
+
+    if (!locacoesError && locacoes) {
+      for (const locacao of locacoes) {
+        const inicio = new Date(Math.max(
+          new Date(locacao.data_inicio_locacao).getTime(),
+          new Date(dataInicioISO).getTime()
+        ))
+        const fim = new Date(Math.min(
+          locacao.data_fim_locacao ? new Date(locacao.data_fim_locacao).getTime() : Date.now(),
+          new Date(dataFimISO).getTime()
+        ))
+
+        if (fim > inicio) {
+          const dias = Math.ceil((fim - inicio) / (1000 * 60 * 60 * 24))
+          const meses = dias / 30
+          receitaTotal += (parseFloat(locacao.valor_locacao_mensal) || 0) * meses
+        }
+      }
+    }
+
+    return receitaTotal
+  } catch (error) {
+    console.error('Erro ao calcular receitas:', error)
+    return 0
+  }
+}
+
+/**
+ * Calcular custos por grua baseado em custos operacionais
+ */
+async function calcularCustos(gruaId, dataInicio, dataFim) {
+  try {
+    const dataInicioISO = new Date(dataInicio).toISOString().split('T')[0]
+    const dataFimISO = new Date(dataFim).toISOString().split('T')[0]
+
+    let custoTotal = 0
+
+    // Nota: Tabela manutencoes não existe no banco atual
+    // Custos de manutenção serão calculados via valor_manutencao mensal da grua
+
+    // Buscar custos operacionais (via orcamento_custos_mensais de orcamentos com grua_id)
+    // Primeiro buscar orcamentos com grua_id
+    const { data: orcamentosCustos, error: orcamentosCustosError } = await supabaseAdmin
+      .from('orcamentos')
+      .select('id')
+      .eq('grua_id', gruaId)
+
+    if (!orcamentosCustosError && orcamentosCustos && orcamentosCustos.length > 0) {
+      const orcamentoIds = orcamentosCustos.map(o => o.id)
+      
+      // Buscar custos mensais desses orçamentos
+      const { data: custosMensais, error: custosError } = await supabaseAdmin
+        .from('orcamento_custos_mensais')
+        .select('valor_mensal')
+        .in('orcamento_id', orcamentoIds)
+
+      if (!custosError && custosMensais) {
+        // Calcular meses no período
+        const diasPeriodo = Math.ceil((new Date(dataFimISO) - new Date(dataInicioISO)) / (1000 * 60 * 60 * 24))
+        const meses = diasPeriodo / 30
+        custoTotal += custosMensais.reduce((sum, c) => sum + (parseFloat(c.valor_mensal) || 0), 0) * meses
+      }
+    }
+
+    // Adicionar custos fixos da grua (valor_manutencao como custo mensal estimado)
+    const { data: grua, error: gruaError } = await supabaseAdmin
+      .from('gruas')
+      .select('valor_manutencao, valor_operacao, valor_sinaleiro')
+      .eq('id', gruaId)
+      .single()
+
+    if (!gruaError && grua) {
+      const diasPeriodo = Math.ceil((new Date(dataFimISO) - new Date(dataInicioISO)) / (1000 * 60 * 60 * 24))
+      const meses = diasPeriodo / 30
+      
+      // Custo de manutenção mensal estimado
+      if (grua.valor_manutencao) {
+        custoTotal += (parseFloat(grua.valor_manutencao) || 0) * meses
+      }
+      
+      // Custo de operação mensal (se houver)
+      if (grua.valor_operacao) {
+        custoTotal += (parseFloat(grua.valor_operacao) || 0) * meses
+      }
+      
+      // Custo de sinaleiro mensal (se houver)
+      if (grua.valor_sinaleiro) {
+        custoTotal += (parseFloat(grua.valor_sinaleiro) || 0) * meses
+      }
+    }
+
+    return custoTotal
+  } catch (error) {
+    console.error('Erro ao calcular custos:', error)
+    return 0
+  }
+}
+
+/**
+ * Calcular métricas de performance (taxa utilização, margem lucro, etc.)
+ */
+function calcularMetricas(horasTrabalhadas, horasDisponiveis, receitaTotal, custoTotal) {
+  const taxaUtilizacao = horasDisponiveis > 0 
+    ? Math.round((horasTrabalhadas / horasDisponiveis) * 100 * 100) / 100 
+    : 0
+
+  const lucroBruto = receitaTotal - custoTotal
+  const margemLucro = receitaTotal > 0 
+    ? Math.round((lucroBruto / receitaTotal) * 100 * 100) / 100 
+    : 0
+
+  const receitaPorHora = horasTrabalhadas > 0 
+    ? Math.round((receitaTotal / horasTrabalhadas) * 100) / 100 
+    : 0
+
+  const custoPorHora = horasTrabalhadas > 0 
+    ? Math.round((custoTotal / horasTrabalhadas) * 100) / 100 
+    : 0
+
+  const lucroPorHora = horasTrabalhadas > 0 
+    ? Math.round((lucroBruto / horasTrabalhadas) * 100) / 100 
+    : 0
+
+  return {
+    taxa_utilizacao: taxaUtilizacao,
+    margem_lucro: margemLucro,
+    receita_por_hora: receitaPorHora,
+    custo_por_hora: custoPorHora,
+    lucro_por_hora: lucroPorHora
+  }
+}
+
+/**
+ * Calcular ROI e tempo de retorno
+ */
+async function calcularROI(gruaId, receitaAcumulada, custoAcumulado) {
+  try {
+    // Buscar investimento inicial (valor_real da grua)
+    const { data: grua, error } = await supabaseAdmin
+      .from('gruas')
+      .select('valor_real')
+      .eq('id', gruaId)
+      .single()
+
+    if (error || !grua || !grua.valor_real) {
+      return {
+        investimento_inicial: 0,
+        roi_percentual: 0,
+        tempo_retorno_meses: null
+      }
+    }
+
+    const investimentoInicial = parseFloat(grua.valor_real) || 0
+
+    if (investimentoInicial === 0) {
+      return {
+        investimento_inicial: 0,
+        roi_percentual: 0,
+        tempo_retorno_meses: null
+      }
+    }
+
+    const roiPercentual = Math.round(((receitaAcumulada - custoAcumulado) / investimentoInicial) * 100 * 100) / 100
+
+    // Calcular tempo de retorno (meses)
+    const lucroMensalMedio = receitaAcumulada > 0 
+      ? (receitaAcumulada - custoAcumulado) / 12 // Assumindo 12 meses de histórico
+      : 0
+
+    const tempoRetornoMeses = lucroMensalMedio > 0 
+      ? Math.round((investimentoInicial / lucroMensalMedio) * 100) / 100 
+      : null
+
+    return {
+      investimento_inicial: investimentoInicial,
+      receita_acumulada: receitaAcumulada,
+      custo_acumulado: custoAcumulado,
+      roi_percentual: roiPercentual,
+      tempo_retorno_meses: tempoRetornoMeses
+    }
+  } catch (error) {
+    console.error('Erro ao calcular ROI:', error)
+    return {
+      investimento_inicial: 0,
+      roi_percentual: 0,
+      tempo_retorno_meses: null
+    }
+  }
+}
+
+/**
+ * Buscar obras visitadas por grua
+ */
+async function buscarObrasVisitadas(gruaId, dataInicio, dataFim) {
+  try {
+    const dataInicioISO = new Date(dataInicio).toISOString().split('T')[0]
+    const dataFimISO = new Date(dataFim).toISOString().split('T')[0]
+
+    const { data: locacoes, error } = await supabaseAdmin
+      .from('grua_obra')
+      .select(`
+        obra_id,
+        data_inicio_locacao,
+        data_fim_locacao,
+        valor_locacao_mensal,
+        obras(id, nome)
+      `)
+      .eq('grua_id', gruaId)
+      .in('status', ['Ativa', 'Concluída'])
+      .or(`data_inicio_locacao.lte.${dataFimISO},data_fim_locacao.gte.${dataInicioISO}`)
+
+    if (error) {
+      console.error('Erro ao buscar obras visitadas:', error)
+      return []
+    }
+
+    const obrasVisitadas = (locacoes || []).map(locacao => {
+      const inicio = new Date(locacao.data_inicio_locacao)
+      const fim = locacao.data_fim_locacao ? new Date(locacao.data_fim_locacao) : new Date()
+      const diasPermanencia = Math.ceil((fim - inicio) / (1000 * 60 * 60 * 24))
+
+      return {
+        obra_id: locacao.obra_id,
+        obra_nome: locacao.obras?.nome || `Obra ${locacao.obra_id}`,
+        dias_permanencia: diasPermanencia,
+        receita_gerada: parseFloat(locacao.valor_locacao_mensal) || 0
+      }
+    })
+
+    return obrasVisitadas
+  } catch (error) {
+    console.error('Erro ao buscar obras visitadas:', error)
+    return []
+  }
+}
 
 /**
  * Calcular estatísticas de utilização de uma grua
@@ -1290,6 +1655,331 @@ router.get('/dashboard', async (req, res) => {
   } catch (error) {
     console.error('Erro ao gerar dashboard:', error)
     res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+// =====================================================
+// RELATÓRIO DE PERFORMANCE DE GRUAS
+// =====================================================
+
+/**
+ * @swagger
+ * /api/relatorios/performance-gruas:
+ *   get:
+ *     summary: Relatório de performance de gruas
+ *     tags: [Relatórios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: data_inicio
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de início do período
+ *       - in: query
+ *         name: data_fim
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de fim do período
+ *       - in: query
+ *         name: grua_id
+ *         schema:
+ *           type: string
+ *         description: Filtrar por ID da grua
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por ID da obra
+ *       - in: query
+ *         name: agrupar_por
+ *         schema:
+ *           type: string
+ *           enum: [grua, obra, mes]
+ *           default: grua
+ *         description: Critério de agrupamento
+ *       - in: query
+ *         name: incluir_projecao
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Incluir projeções futuras
+ *       - in: query
+ *         name: limite
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Limite de resultados por página
+ *       - in: query
+ *         name: pagina
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: ordenar_por
+ *         schema:
+ *           type: string
+ *           enum: [taxa_utilizacao, receita_total, lucro_bruto, roi_percentual, horas_trabalhadas]
+ *           default: taxa_utilizacao
+ *         description: Campo para ordenação
+ *       - in: query
+ *         name: ordem
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Ordem de classificação
+ *       - in: query
+ *         name: comparar_periodo_anterior
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Comparar com período anterior
+ *     responses:
+ *       200:
+ *         description: Relatório de performance de gruas
+ *       400:
+ *         description: Parâmetros inválidos
+ */
+router.get('/performance-gruas', async (req, res) => {
+  try {
+    // Limpar cache expirado
+    limparCacheExpirado()
+
+    // Validar parâmetros
+    const { error, value } = relatorioPerformanceGruasSchema.validate(req.query)
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    const {
+      data_inicio,
+      data_fim,
+      grua_id,
+      obra_id,
+      agrupar_por,
+      incluir_projecao,
+      limite,
+      pagina,
+      ordenar_por,
+      ordem,
+      comparar_periodo_anterior
+    } = value
+
+    // Verificar cache
+    const cacheKey = gerarChaveCache(value)
+    const cached = performanceCache.get(cacheKey)
+    
+    if (cached && cached.expiresAt > Date.now()) {
+      return res.json({
+        success: true,
+        data: cached.data,
+        cache: {
+          cached: true,
+          expires_at: new Date(cached.expiresAt).toISOString()
+        }
+      })
+    }
+
+    // Calcular período em dias
+    const diasPeriodo = Math.ceil((new Date(data_fim) - new Date(data_inicio)) / (1000 * 60 * 60 * 24))
+    const horasDisponiveis = diasPeriodo * 24
+
+    // Buscar gruas
+    let queryGruas = supabaseAdmin
+      .from('gruas')
+      .select('id, name, modelo, fabricante, tipo, status, valor_real')
+
+    if (grua_id) {
+      queryGruas = queryGruas.eq('id', grua_id)
+    }
+
+    const { data: gruas, error: gruasError } = await queryGruas
+
+    if (gruasError) {
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar gruas',
+        message: gruasError.message
+      })
+    }
+
+    // Calcular performance para cada grua
+    const relatorio = await Promise.all(
+      (gruas || []).map(async (grua) => {
+        // Filtrar por obra se especificado
+        if (obra_id) {
+          const { data: locacoesObra } = await supabaseAdmin
+            .from('grua_obra')
+            .select('id')
+            .eq('grua_id', grua.id)
+            .eq('obra_id', obra_id)
+            .limit(1)
+
+          if (!locacoesObra || locacoesObra.length === 0) {
+            return null
+          }
+        }
+
+        const horasTrabalhadas = await calcularHorasTrabalhadas(grua.id, data_inicio, data_fim)
+        const receitaTotal = await calcularReceitas(grua.id, data_inicio, data_fim)
+        const custoTotal = await calcularCustos(grua.id, data_inicio, data_fim)
+        const metricas = calcularMetricas(horasTrabalhadas, horasDisponiveis, receitaTotal, custoTotal)
+        const roi = await calcularROI(grua.id, receitaTotal, custoTotal)
+        const obrasVisitadas = await buscarObrasVisitadas(grua.id, data_inicio, data_fim)
+
+        return {
+          grua: {
+            id: grua.id,
+            nome: grua.name || `Grua ${grua.id}`,
+            modelo: grua.modelo,
+            fabricante: grua.fabricante,
+            tipo: grua.tipo,
+            status: grua.status
+          },
+          metricas: {
+            horas_trabalhadas: horasTrabalhadas,
+            horas_disponiveis: horasDisponiveis,
+            horas_ociosas: horasDisponiveis - horasTrabalhadas,
+            taxa_utilizacao: metricas.taxa_utilizacao,
+            dias_em_operacao: Math.ceil(horasTrabalhadas / 24),
+            dias_total_periodo: diasPeriodo
+          },
+          financeiro: {
+            receita_total: Math.round(receitaTotal * 100) / 100,
+            custo_operacao: Math.round(custoTotal * 100) / 100,
+            custo_manutencao: 0, // Será calculado separadamente se necessário
+            custo_total: Math.round(custoTotal * 100) / 100,
+            lucro_bruto: Math.round((receitaTotal - custoTotal) * 100) / 100,
+            margem_lucro: metricas.margem_lucro,
+            receita_por_hora: metricas.receita_por_hora,
+            custo_por_hora: metricas.custo_por_hora,
+            lucro_por_hora: metricas.lucro_por_hora
+          },
+          roi: {
+            investimento_inicial: roi.investimento_inicial,
+            receita_acumulada: receitaTotal,
+            custo_acumulado: custoTotal,
+            roi_percentual: roi.roi_percentual,
+            tempo_retorno_meses: roi.tempo_retorno_meses
+          },
+          obras: {
+            total_obras: obrasVisitadas.length,
+            obras_visitadas: obrasVisitadas
+          }
+        }
+      })
+    )
+
+    // Filtrar nulls (gruas que não atendem filtro de obra)
+    const relatorioFiltrado = relatorio.filter(item => item !== null)
+
+    // Ordenar resultados
+    relatorioFiltrado.sort((a, b) => {
+      let valorA, valorB
+
+      switch (ordenar_por) {
+        case 'receita_total':
+          valorA = a.financeiro.receita_total
+          valorB = b.financeiro.receita_total
+          break
+        case 'lucro_bruto':
+          valorA = a.financeiro.lucro_bruto
+          valorB = b.financeiro.lucro_bruto
+          break
+        case 'roi_percentual':
+          valorA = a.roi.roi_percentual
+          valorB = b.roi.roi_percentual
+          break
+        case 'horas_trabalhadas':
+          valorA = a.metricas.horas_trabalhadas
+          valorB = b.metricas.horas_trabalhadas
+          break
+        case 'taxa_utilizacao':
+        default:
+          valorA = a.metricas.taxa_utilizacao
+          valorB = b.metricas.taxa_utilizacao
+          break
+      }
+
+      return ordem === 'asc' ? valorA - valorB : valorB - valorA
+    })
+
+    // Calcular totais
+    const totais = {
+      total_gruas: relatorioFiltrado.length,
+      receita_total: relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.receita_total, 0),
+      custo_total: relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.custo_total, 0),
+      lucro_total: relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.lucro_bruto, 0),
+      taxa_utilizacao_media: relatorioFiltrado.length > 0
+        ? Math.round((relatorioFiltrado.reduce((sum, item) => sum + item.metricas.taxa_utilizacao, 0) / relatorioFiltrado.length) * 100) / 100
+        : 0
+    }
+
+    // Aplicar paginação
+    const total = relatorioFiltrado.length
+    const totalPages = Math.ceil(total / limite)
+    const offset = (pagina - 1) * limite
+    const relatorioPaginado = relatorioFiltrado.slice(offset, offset + limite)
+
+    // Preparar resposta
+    const responseData = {
+      periodo: {
+        data_inicio,
+        data_fim
+      },
+      filtros: {
+        grua_id: grua_id || null,
+        obra_id: obra_id || null,
+        agrupar_por,
+        incluir_projecao,
+        ordenar_por,
+        ordem
+      },
+      totais,
+      relatorio: relatorioPaginado,
+      paginacao: {
+        page: pagina,
+        limit: limite,
+        total: total,
+        pages: totalPages
+      }
+    }
+
+    // Salvar no cache
+    performanceCache.set(cacheKey, {
+      data: responseData,
+      expiresAt: Date.now() + CACHE_TTL
+    })
+
+    res.json({
+      success: true,
+      data: responseData,
+      cache: {
+        cached: false,
+        expires_at: new Date(Date.now() + CACHE_TTL).toISOString()
+      }
+    })
+
+  } catch (error) {
+    console.error('Erro ao gerar relatório de performance de gruas:', error)
+    res.status(500).json({
+      success: false,
       error: 'Erro interno do servidor',
       message: error.message
     })

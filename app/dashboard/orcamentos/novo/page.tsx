@@ -223,130 +223,40 @@ export default function NovoOrcamentoPage() {
   const loadOrcamentoForEdit = async (id: string) => {
     setIsLoadingOrcamento(true)
     try {
-      // TODO: Integrar com API real
-      // Por enquanto, usando dados mock baseados na estrutura da lista
-      const mockOrcamentos = [
-        {
-          id: '1',
-          numero: 'ORC-2025-001',
-          cliente_id: 1,
-          cliente_nome: 'Construtora ABC',
-          obra_nome: 'Residencial Jardim das Flores',
-          obra_endereco: 'Rua das Flores, 123',
-          obra_cidade: 'São Paulo',
-          obra_estado: 'SP',
-          tipo_obra: 'Residencial',
-          equipamento: 'Grua Torre / XCMG QTZ40B',
-          altura_inicial: 21,
-          altura_final: 95,
-          comprimento_lanca: 30,
-          carga_maxima: 2000,
-          carga_ponta: 1300,
-          potencia_eletrica: '42 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 31600,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 3750,
-          total_mensal: 55750,
-          prazo_locacao_meses: 13,
-          data_inicio_estimada: '2025-02-01',
-          tolerancia_dias: 15,
-          escopo_incluso: '',
-          responsabilidades_cliente: '',
-          condicoes_comerciais: '',
-          observacoes: ''
-        },
-        {
-          id: '2',
-          numero: 'ORC-2025-002',
-          cliente_id: 2,
-          cliente_nome: 'Empresa XYZ',
-          obra_nome: 'Shopping Center Norte',
-          obra_endereco: 'Av. Principal, 456',
-          obra_cidade: 'São Paulo',
-          obra_estado: 'SP',
-          tipo_obra: 'Comercial',
-          equipamento: 'Grua Torre / Potain MDT 178',
-          altura_inicial: 25,
-          altura_final: 120,
-          comprimento_lanca: 35,
-          carga_maxima: 2500,
-          carga_ponta: 1500,
-          potencia_eletrica: '50 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 38000,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 4500,
-          total_mensal: 62900,
-          prazo_locacao_meses: 18,
-          data_inicio_estimada: '2025-03-01',
-          tolerancia_dias: 15,
-          escopo_incluso: '',
-          responsabilidades_cliente: '',
-          condicoes_comerciais: '',
-          observacoes: ''
-        },
-        {
-          id: '3',
-          numero: 'ORC-2025-003',
-          cliente_id: 3,
-          cliente_nome: 'Construtora DEF',
-          obra_nome: 'Condomínio Vista Mar',
-          obra_endereco: 'Rua do Mar, 789',
-          obra_cidade: 'Rio de Janeiro',
-          obra_estado: 'RJ',
-          tipo_obra: 'Residencial',
-          equipamento: 'Grua Torre / Liebherr 132 EC-H',
-          altura_inicial: 20,
-          altura_final: 80,
-          comprimento_lanca: 28,
-          carga_maxima: 1800,
-          carga_ponta: 1100,
-          potencia_eletrica: '38 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 29000,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 3500,
-          total_mensal: 52900,
-          prazo_locacao_meses: 10,
-          data_inicio_estimada: '2025-02-15',
-          tolerancia_dias: 15,
-          escopo_incluso: '',
-          responsabilidades_cliente: '',
-          condicoes_comerciais: '',
-          observacoes: ''
-        }
-      ]
-
-      const orcamento = mockOrcamentos.find(o => o.id === id)
+      const { getOrcamento } = await import('@/lib/api-orcamentos')
+      const response = await getOrcamento(parseInt(id))
+      const orcamento = response.data
       
       if (orcamento) {
         setIsEditMode(true)
         
+        // Mapear dados da API para o formato do formulário
+        const clienteNome = orcamento.clientes?.nome || ''
+        const obraNome = orcamento.obras?.nome || orcamento.obra_nome || ''
+        const obraEndereco = orcamento.obras?.endereco || orcamento.obra_endereco || ''
+        const equipamento = orcamento.gruas ? `${orcamento.gruas.name || ''} / ${orcamento.gruas.modelo || ''}` : orcamento.grua_modelo || ''
+        
         // Preencher formData
         setFormData({
           cliente_id: orcamento.cliente_id?.toString() || '',
-          cliente_nome: orcamento.cliente_nome || '',
-          obra_nome: orcamento.obra_nome || '',
-          obra_endereco: orcamento.obra_endereco || '',
+          cliente_nome: clienteNome,
+          obra_nome: obraNome,
+          obra_endereco: obraEndereco,
           obra_cidade: orcamento.obra_cidade || '',
           obra_estado: orcamento.obra_estado || '',
-          tipo_obra: orcamento.tipo_obra || '',
-          equipamento: orcamento.equipamento || '',
-          altura_inicial: orcamento.altura_inicial?.toString() || '',
-          altura_final: orcamento.altura_final?.toString() || '',
-          comprimento_lanca: orcamento.comprimento_lanca?.toString() || '',
-          carga_maxima: orcamento.carga_maxima?.toString() || '',
-          carga_ponta: orcamento.carga_ponta?.toString() || '',
-          potencia_eletrica: orcamento.potencia_eletrica || '',
-          energia_necessaria: orcamento.energia_necessaria || '',
-          valor_locacao_mensal: orcamento.valor_locacao_mensal?.toString() || '',
-          valor_operador: orcamento.valor_operador?.toString() || '',
-          valor_sinaleiro: orcamento.valor_sinaleiro?.toString() || '',
-          valor_manutencao: orcamento.valor_manutencao?.toString() || '',
+          tipo_obra: orcamento.obra_tipo || orcamento.tipo_obra || '',
+          equipamento: equipamento,
+          altura_inicial: '',
+          altura_final: orcamento.grua_altura_final?.toString() || '',
+          comprimento_lanca: orcamento.grua_lanca?.toString() || '',
+          carga_maxima: orcamento.grua_capacidade_1_cabo?.toString() || '',
+          carga_ponta: orcamento.grua_capacidade_2_cabos?.toString() || '',
+          potencia_eletrica: orcamento.grua_potencia?.toString() || '',
+          energia_necessaria: orcamento.grua_voltagem || '',
+          valor_locacao_mensal: '',
+          valor_operador: '',
+          valor_sinaleiro: '',
+          valor_manutencao: '',
           prazo_locacao_meses: orcamento.prazo_locacao_meses?.toString() || '',
           data_inicio_estimada: orcamento.data_inicio_estimada || '',
           tolerancia_dias: orcamento.tolerancia_dias?.toString() || '15',
@@ -357,44 +267,33 @@ export default function NovoOrcamentoPage() {
         })
 
         // Preencher cliente selecionado
-        if (orcamento.cliente_id) {
+        if (orcamento.cliente_id && orcamento.clientes) {
           setClienteSelecionado({
             id: orcamento.cliente_id,
-            nome: orcamento.cliente_nome
+            nome: clienteNome
           })
         }
 
-        // Preencher custos mensais
-        setCustosMensais([
-          {
-            id: 'cm_1',
-            tipo: 'Locação',
-            descricao: 'Locação da grua',
-            valor_mensal: orcamento.valor_locacao_mensal || 0,
-            obrigatorio: true
-          },
-          {
-            id: 'cm_2',
-            tipo: 'Operador',
-            descricao: 'Operador',
-            valor_mensal: orcamento.valor_operador || 0,
-            obrigatorio: true
-          },
-          {
-            id: 'cm_3',
-            tipo: 'Sinaleiro',
-            descricao: 'Sinaleiro',
-            valor_mensal: orcamento.valor_sinaleiro || 0,
-            obrigatorio: true
-          },
-          {
-            id: 'cm_4',
-            tipo: 'Manutenção',
-            descricao: 'Manutenção preventiva',
-            valor_mensal: orcamento.valor_manutencao || 0,
-            obrigatorio: true
-          }
-        ])
+        // Preencher custos mensais a partir dos dados da API
+        const custosMensaisData = orcamento.custos_mensais || []
+        if (custosMensaisData.length > 0) {
+          setCustosMensais(custosMensaisData.map((cm: any, index: number) => ({
+            id: `cm_${index + 1}`,
+            tipo: cm.tipo || '',
+            descricao: cm.descricao || '',
+            valor_mensal: cm.valor_mensal || 0,
+            obrigatorio: cm.obrigatorio || false,
+            observacoes: cm.observacoes || ''
+          })))
+        } else {
+          // Se não houver custos mensais, usar valores padrão vazios
+          setCustosMensais([
+            { id: 'cm_1', tipo: 'Locação', descricao: 'Locação da grua', valor_mensal: 0, obrigatorio: true },
+            { id: 'cm_2', tipo: 'Operador', descricao: 'Operador', valor_mensal: 0, obrigatorio: true },
+            { id: 'cm_3', tipo: 'Sinaleiro', descricao: 'Sinaleiro', valor_mensal: 0, obrigatorio: true },
+            { id: 'cm_4', tipo: 'Manutenção', descricao: 'Manutenção preventiva', valor_mensal: 0, obrigatorio: true }
+          ])
+        }
       } else {
         toast({
           title: "Erro",

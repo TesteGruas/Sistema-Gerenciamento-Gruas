@@ -34,6 +34,7 @@ import { ExportButton } from "@/components/export-button"
 import { CardLoader } from "@/components/ui/loader"
 import { OrcamentoPDFDocument } from "@/components/orcamento-pdf"
 import { pdf } from "@react-pdf/renderer"
+import { getOrcamentos, type Orcamento as OrcamentoAPI } from "@/lib/api-orcamentos"
 
 type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado'
 
@@ -104,100 +105,57 @@ export default function OrcamentosPage() {
   const loadOrcamentos = async () => {
     setLoading(true)
     try {
-      // TODO: Integrar com API
-      const mockData: Orcamento[] = [
-        {
-          id: '1',
-          numero: 'ORC-2025-001',
-          cliente_nome: 'Construtora ABC',
-          obra_nome: 'Residencial Jardim das Flores',
-          obra_endereco: 'Rua das Flores, 123',
-          obra_cidade: 'São Paulo',
-          obra_estado: 'SP',
-          tipo_obra: 'Residencial',
-          equipamento: 'Grua Torre / XCMG QTZ40B',
-          altura_inicial: 21,
-          altura_final: 95,
-          comprimento_lanca: 30,
-          carga_maxima: 2000,
-          carga_ponta: 1300,
-          potencia_eletrica: '42 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 31600,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 3750,
-          total_mensal: 55750,
-          prazo_locacao_meses: 13,
-          data_inicio_estimada: '2025-02-01',
-          tolerancia_dias: 15,
-          status: 'aprovado',
-          created_at: '2025-01-15T10:00:00Z',
-          aprovado_por: 'João Silva',
-          aprovado_em: '2025-01-20T14:30:00Z'
-        },
-        {
-          id: '2',
-          numero: 'ORC-2025-002',
-          cliente_nome: 'Empresa XYZ',
-          obra_nome: 'Shopping Center Norte',
-          obra_endereco: 'Av. Principal, 456',
-          obra_cidade: 'São Paulo',
-          obra_estado: 'SP',
-          tipo_obra: 'Comercial',
-          equipamento: 'Grua Torre / Potain MDT 178',
-          altura_inicial: 25,
-          altura_final: 120,
-          comprimento_lanca: 35,
-          carga_maxima: 2500,
-          carga_ponta: 1500,
-          potencia_eletrica: '50 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 38000,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 4500,
-          total_mensal: 62900,
-          prazo_locacao_meses: 18,
-          data_inicio_estimada: '2025-03-01',
-          tolerancia_dias: 15,
-          status: 'enviado',
-          created_at: '2025-01-20T09:00:00Z'
-        },
-        {
-          id: '3',
-          numero: 'ORC-2025-003',
-          cliente_nome: 'Construtora DEF',
-          obra_nome: 'Condomínio Vista Mar',
-          obra_endereco: 'Rua do Mar, 789',
-          obra_cidade: 'Rio de Janeiro',
-          obra_estado: 'RJ',
-          tipo_obra: 'Residencial',
-          equipamento: 'Grua Torre / Liebherr 132 EC-H',
-          altura_inicial: 20,
-          altura_final: 80,
-          comprimento_lanca: 28,
-          carga_maxima: 1800,
-          carga_ponta: 1100,
-          potencia_eletrica: '38 KVA',
-          energia_necessaria: '380V',
-          valor_locacao_mensal: 29000,
-          valor_operador: 10200,
-          valor_sinaleiro: 10200,
-          valor_manutencao: 3500,
-          total_mensal: 52900,
-          prazo_locacao_meses: 10,
-          data_inicio_estimada: '2025-02-15',
-          tolerancia_dias: 15,
-          status: 'rascunho',
-          created_at: '2025-01-22T11:00:00Z'
-        }
-      ]
-      setOrcamentos(mockData)
-    } catch (error) {
+      const response = await getOrcamentos({
+        page: 1,
+        limit: 100,
+        status: filtroStatus !== "todos" ? filtroStatus : undefined
+      })
+
+      // Mapear dados da API para o formato esperado pelo componente
+      const mappedData: Orcamento[] = response.data.map((orc: any) => ({
+        id: String(orc.id),
+        numero: orc.numero || `ORC-${orc.id}`,
+        cliente_id: orc.cliente_id,
+        cliente_nome: orc.clientes?.nome || orc.cliente_nome || '',
+        obra_nome: orc.obras?.nome || orc.obra_nome || '',
+        obra_endereco: orc.obras?.endereco || orc.obra_endereco || '',
+        obra_cidade: orc.obra_cidade || '',
+        obra_estado: orc.obra_estado || '',
+        tipo_obra: orc.obra_tipo || orc.tipo_obra || '',
+        equipamento: orc.gruas ? `${orc.gruas.name || ''} / ${orc.gruas.modelo || ''}` : orc.grua_modelo || orc.equipamento || '',
+        altura_inicial: orc.grua_altura_final ? undefined : undefined,
+        altura_final: orc.grua_altura_final || orc.altura_final,
+        comprimento_lanca: orc.grua_lanca || orc.comprimento_lanca,
+        carga_maxima: orc.grua_capacidade_1_cabo || orc.carga_maxima,
+        carga_ponta: orc.grua_capacidade_2_cabos || orc.carga_ponta,
+        potencia_eletrica: orc.grua_potencia ? `${orc.grua_potencia} KVA` : orc.potencia_eletrica,
+        energia_necessaria: orc.grua_voltagem || orc.energia_necessaria,
+        valor_locacao_mensal: orc.valor_total || 0,
+        valor_operador: 0,
+        valor_sinaleiro: 0,
+        valor_manutencao: 0,
+        total_mensal: orc.valor_total || 0,
+        prazo_locacao_meses: orc.prazo_locacao_meses || 0,
+        data_inicio_estimada: orc.data_inicio_estimada || '',
+        tolerancia_dias: orc.tolerancia_dias || 15,
+        status: orc.status as StatusOrcamento,
+        validade_proposta: orc.data_validade || '',
+        condicoes_comerciais: orc.condicoes_comerciais || '',
+        responsabilidades_cliente: orc.responsabilidades_cliente || '',
+        escopo_incluso: orc.escopo_incluso || '',
+        created_at: orc.created_at || '',
+        updated_at: orc.updated_at,
+        aprovado_por: orc.funcionarios?.nome,
+        aprovado_em: orc.data_aprovacao,
+        observacoes: orc.observacoes
+      }))
+
+      setOrcamentos(mappedData)
+    } catch (error: any) {
+      console.error('Erro ao carregar orçamentos:', error)
       toast({
         title: "Erro",
-        description: "Erro ao carregar orçamentos",
+        description: error?.message || "Erro ao carregar orçamentos",
         variant: "destructive"
       })
     } finally {

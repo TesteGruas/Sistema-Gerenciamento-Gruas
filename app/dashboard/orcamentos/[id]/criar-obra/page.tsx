@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Building2, CheckCircle2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { obrasApi } from "@/lib/api-obras"
+import { getOrcamento } from "@/lib/api-orcamentos"
 
 export default function CriarObraFromOrcamentoPage() {
   const router = useRouter()
@@ -26,38 +27,42 @@ export default function CriarObraFromOrcamentoPage() {
   const loadOrcamento = async () => {
     setLoading(true)
     try {
-      // TODO: Buscar orçamento da API
-      const mockOrcamento = {
+      const response = await getOrcamento(parseInt(orcamentoId))
+      const orcamentoData = response.data
+      
+      // Mapear dados da API para o formato esperado
+      const mappedOrcamento = {
         id: orcamentoId,
-        numero: 'ORC-2025-001',
-        cliente_id: 1,
-        cliente_nome: 'Construtora ABC',
-        obra_nome: 'Residencial Jardim das Flores',
-        obra_endereco: 'Rua das Flores, 123',
-        obra_cidade: 'São Paulo',
-        obra_estado: 'SP',
-        tipo_obra: 'Residencial',
-        equipamento: 'Grua Torre / XCMG QTZ40B',
-        valor_locacao_mensal: 31600,
-        valor_operador: 10200,
-        valor_sinaleiro: 10200,
-        valor_manutencao: 3750,
-        total_mensal: 55750,
-        prazo_locacao_meses: 13,
-        data_inicio_estimada: '2025-02-01',
-        altura_inicial: 21,
-        altura_final: 95,
-        comprimento_lanca: 30,
-        carga_maxima: 2000,
-        carga_ponta: 1300,
-        potencia_eletrica: '42 KVA',
-        energia_necessaria: '380V'
+        numero: orcamentoData.numero || `ORC-${orcamentoData.id}`,
+        cliente_id: orcamentoData.cliente_id,
+        cliente_nome: orcamentoData.clientes?.nome || '',
+        obra_nome: orcamentoData.obras?.nome || orcamentoData.obra_nome || '',
+        obra_endereco: orcamentoData.obras?.endereco || orcamentoData.obra_endereco || '',
+        obra_cidade: orcamentoData.obra_cidade || '',
+        obra_estado: orcamentoData.obra_estado || '',
+        tipo_obra: orcamentoData.obra_tipo || '',
+        equipamento: orcamentoData.gruas ? `${orcamentoData.gruas.name || ''} / ${orcamentoData.gruas.modelo || ''}` : orcamentoData.grua_modelo || '',
+        valor_locacao_mensal: 0,
+        valor_operador: 0,
+        valor_sinaleiro: 0,
+        valor_manutencao: 0,
+        total_mensal: orcamentoData.valor_total || 0,
+        prazo_locacao_meses: orcamentoData.prazo_locacao_meses || 0,
+        data_inicio_estimada: orcamentoData.data_inicio_estimada || '',
+        altura_inicial: undefined,
+        altura_final: orcamentoData.grua_altura_final,
+        comprimento_lanca: orcamentoData.grua_lanca,
+        carga_maxima: orcamentoData.grua_capacidade_1_cabo,
+        carga_ponta: orcamentoData.grua_capacidade_2_cabos,
+        potencia_eletrica: orcamentoData.grua_potencia ? `${orcamentoData.grua_potencia} KVA` : '',
+        energia_necessaria: orcamentoData.grua_voltagem || ''
       }
-      setOrcamento(mockOrcamento)
-    } catch (error) {
+      setOrcamento(mappedOrcamento)
+    } catch (error: any) {
+      console.error('Erro ao carregar orçamento:', error)
       toast({
         title: "Erro",
-        description: "Erro ao carregar orçamento",
+        description: error?.message || "Erro ao carregar orçamento",
         variant: "destructive"
       })
     } finally {
@@ -85,8 +90,7 @@ export default function CriarObraFromOrcamentoPage() {
         observacoes: `Orçamento de origem: ${orcamento.numero}\nEquipamento: ${orcamento.equipamento}\nPrazo: ${orcamento.prazo_locacao_meses} meses`
       }
 
-      // TODO: Criar obra na API
-      // const response = await obrasApi.criarObra(obraData)
+      const response = await obrasApi.criarObra(obraData)
       
       toast({
         title: "Sucesso",
@@ -94,8 +98,7 @@ export default function CriarObraFromOrcamentoPage() {
       })
 
       // Redirecionar para a obra criada
-      // router.push(`/dashboard/obras/${response.id}`)
-      router.push('/dashboard/obras')
+      router.push(`/dashboard/obras/${response.data.id}`)
     } catch (error) {
       toast({
         title: "Erro",

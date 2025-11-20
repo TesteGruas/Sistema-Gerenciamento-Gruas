@@ -2,8 +2,6 @@
  * API Client para Relatório de Performance de Gruas
  */
 
-import { gerarMockPerformanceGruas, filtrarMockPerformanceGruas, type PerformanceGruasResponse } from './mocks/performance-gruas-mocks'
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 function getAuthToken(): string | null {
@@ -50,49 +48,27 @@ export const performanceGruasApi = {
   /**
    * Obter relatório de performance de gruas
    */
-  async obterRelatorio(filtros: PerformanceGruasFiltros = {}): Promise<{ success: boolean; data: PerformanceGruasResponse }> {
-    try {
-      // Tentar buscar da API real
-      const params = new URLSearchParams()
-      if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio)
-      if (filtros.data_fim) params.append('data_fim', filtros.data_fim)
-      if (filtros.grua_id) params.append('grua_id', filtros.grua_id.toString())
-      if (filtros.obra_id) params.append('obra_id', filtros.obra_id.toString())
-      if (filtros.agrupar_por) params.append('agrupar_por', filtros.agrupar_por)
-      if (filtros.incluir_projecao) params.append('incluir_projecao', 'true')
-      if (filtros.limite) params.append('limite', filtros.limite.toString())
-      if (filtros.pagina) params.append('pagina', filtros.pagina.toString())
-      if (filtros.ordenar_por) params.append('ordenar_por', filtros.ordenar_por)
-      if (filtros.ordem) params.append('ordem', filtros.ordem)
+  async obterRelatorio(filtros: PerformanceGruasFiltros = {}): Promise<{ success: boolean; data: any }> {
+    const params = new URLSearchParams()
+    if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio)
+    if (filtros.data_fim) params.append('data_fim', filtros.data_fim)
+    if (filtros.grua_id) params.append('grua_id', filtros.grua_id.toString())
+    if (filtros.obra_id) params.append('obra_id', filtros.obra_id.toString())
+    if (filtros.agrupar_por) params.append('agrupar_por', filtros.agrupar_por)
+    if (filtros.incluir_projecao) params.append('incluir_projecao', 'true')
+    if (filtros.limite) params.append('limite', filtros.limite.toString())
+    if (filtros.pagina) params.append('pagina', filtros.pagina.toString())
+    if (filtros.ordenar_por) params.append('ordenar_por', filtros.ordenar_por)
+    if (filtros.ordem) params.append('ordem', filtros.ordem)
 
-      const query = params.toString()
-      const response = await apiRequest(`/api/relatorios/performance-gruas${query ? `?${query}` : ''}`)
-      
-      if (response.success) {
-        return response
-      }
-      
-      throw new Error('Resposta inválida da API')
-    } catch (error) {
-      // Se a API falhar, usar dados mockados
-      console.warn('API não disponível, usando dados mockados:', error)
-      
-      const dataInicio = filtros.data_inicio || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
-      const dataFim = filtros.data_fim || new Date().toISOString().split('T')[0]
-      
-      const dadosMock = gerarMockPerformanceGruas(dataInicio, dataFim)
-      const dadosFiltrados = filtrarMockPerformanceGruas(dadosMock, {
-        grua_id: filtros.grua_id,
-        obra_id: filtros.obra_id,
-        ordenar_por: filtros.ordenar_por,
-        ordem: filtros.ordem
-      })
-      
-      return {
-        success: true,
-        data: dadosFiltrados
-      }
+    const query = params.toString()
+    const response = await apiRequest(`/api/relatorios/performance-gruas${query ? `?${query}` : ''}`)
+    
+    if (!response.success) {
+      throw new Error(response.error || response.message || 'Erro ao obter relatório de performance')
     }
+    
+    return response
   },
 
   /**

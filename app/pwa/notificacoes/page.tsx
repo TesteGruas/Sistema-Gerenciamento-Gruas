@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { PWANotificationsManager } from "@/components/pwa-notifications-manager"
 import { useToast } from "@/hooks/use-toast"
+import { NotificacoesAPI, Notificacao as NotificacaoAPI } from "@/lib/api-notificacoes"
 
 interface Notificacao {
   id: string
@@ -37,69 +38,114 @@ export default function PWANotificacoesPage() {
 
   useEffect(() => {
     carregarNotificacoes()
-  }, [])
+  }, [filtro])
 
   const carregarNotificacoes = async () => {
     setLoading(true)
     try {
-      // Mock de notificações locais
-      const notificacoesLocais: Notificacao[] = [
-        {
-          id: '1',
-          tipo: 'alerta',
-          titulo: 'Lembrete de Ponto',
-          mensagem: 'Não esqueça de registrar seu ponto de saída',
-          lida: false,
-          data: new Date().toISOString(),
-          acao: '/pwa/ponto'
-        },
-        {
-          id: '2',
-          tipo: 'info',
-          titulo: 'Documentos Pendentes',
-          mensagem: 'Você tem 2 documentos aguardando assinatura',
-          lida: false,
-          data: new Date(Date.now() - 3600000).toISOString(),
-          acao: '/pwa/documentos'
-        },
-        {
-          id: '3',
-          tipo: 'sucesso',
-          titulo: 'Ponto Registrado',
-          mensagem: 'Entrada registrada às 08:00',
-          lida: true,
-          data: new Date(Date.now() - 7200000).toISOString()
-        }
-      ]
-      setNotificacoes(notificacoesLocais)
+      // Buscar notificações reais da API
+      const response = await NotificacoesAPI.listar({
+        page: 1,
+        limit: 50,
+        lida: filtro === 'todas' ? undefined : false
+      })
+
+      if (response.success && response.data) {
+        // Mapear notificações da API para o formato esperado
+        const notificacoesMapeadas: Notificacao[] = response.data.map((notif: NotificacaoAPI) => {
+          // Mapear tipos da API para tipos do componente
+          let tipo: 'info' | 'alerta' | 'sucesso' | 'erro' = 'info'
+          if (notif.tipo === 'warning' || notif.tipo === 'alerta') {
+            tipo = 'alerta'
+          } else if (notif.tipo === 'success' || notif.tipo === 'sucesso') {
+            tipo = 'sucesso'
+          } else if (notif.tipo === 'error' || notif.tipo === 'erro') {
+            tipo = 'erro'
+          }
+
+          return {
+            id: String(notif.id),
+            tipo,
+            titulo: notif.titulo,
+            mensagem: notif.mensagem,
+            lida: notif.lida,
+            data: notif.data || notif.created_at || new Date().toISOString(),
+            acao: notif.link
+          }
+        })
+
+        setNotificacoes(notificacoesMapeadas)
+      } else {
+        console.warn('Resposta da API sem dados:', response)
+        setNotificacoes([])
+      }
     } catch (error) {
       console.error('Erro ao carregar notificações:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as notificações",
+        variant: "destructive"
+      })
+      setNotificacoes([])
     } finally {
       setLoading(false)
     }
-
   }
 
-  const marcarComoLida = (id: string) => {
-    setNotificacoes(prev => 
-      prev.map(n => n.id === id ? { ...n, lida: true } : n)
-    )
+  const marcarComoLida = async (id: string) => {
+    try {
+      await NotificacoesAPI.marcarComoLida(id)
+      setNotificacoes(prev => 
+        prev.map(n => n.id === id ? { ...n, lida: true } : n)
+      )
+      toast({
+        title: "Sucesso",
+        description: "Notificação marcada como lida",
+      })
+    } catch (error) {
+      console.error('Erro ao marcar notificação como lida:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível marcar a notificação como lida",
+        variant: "destructive"
+      })
+    }
   }
 
-  const excluirNotificacao = (id: string) => {
-    setNotificacoes(prev => prev.filter(n => n.id !== id))
-    toast({
-      title: "Notificação excluída",
-      description: "A notificação foi removida",
-    })
+  const excluirNotificacao = async (id: string) => {
+    try {
+      await NotificacoesAPI.deletar(id)
+      setNotificacoes(prev => prev.filter(n => n.id !== id))
+      toast({
+        title: "Notificação excluída",
+        description: "A notificação foi removida",
+      })
+    } catch (error) {
+      console.error('Erro ao excluir notificação:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir a notificação",
+        variant: "destructive"
+      })
+    }
   }
 
-  const marcarTodasComoLidas = () => {
-    setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })))
-    toast({
-      title: "Todas marcadas como lidas",
-      description: "Todas as notificações foram marcadas como lidas",
-    })
+  const marcarTodasComoLidas = async () => {
+    try {
+      await NotificacoesAPI.marcarTodasComoLidas()
+      setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })))
+      toast({
+        title: "Todas marcadas como lidas",
+        description: "Todas as notificações foram marcadas como lidas",
+      })
+    } catch (error) {
+      console.error('Erro ao marcar todas como lidas:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível marcar todas as notificações como lidas",
+        variant: "destructive"
+      })
+    }
   }
 
   const getIconeNotificacao = (tipo: string) => {
