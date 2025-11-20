@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { adicionarLogosNoCabecalhoFrontend } from './pdf-logos-frontend'
+import { adicionarRodapeEmpresaFrontend } from './pdf-rodape-frontend'
 
 export interface ExportPDFOptions {
   titulo: string
@@ -26,25 +28,32 @@ export async function exportTabToPDF(
     format: 'a4'
   })
 
+  // Adicionar logos no cabeçalho
+  let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+
   // Cabeçalho
   doc.setFontSize(18)
   doc.setFont('helvetica', 'bold')
-  doc.text(options.titulo, 105, 20, { align: 'center' })
+  doc.text(options.titulo, 105, yPos, { align: 'center' })
+  yPos += 8
 
   if (options.subtitulo) {
     doc.setFontSize(12)
     doc.setFont('helvetica', 'normal')
-    doc.text(options.subtitulo, 105, 28, { align: 'center' })
+    doc.text(options.subtitulo, 105, yPos, { align: 'center' })
+    yPos += 8
   }
 
   if (options.obraNome) {
     doc.setFontSize(10)
-    doc.text(`Obra: ${options.obraNome}`, 14, 36)
+    doc.text(`Obra: ${options.obraNome}`, 14, yPos)
+    yPos += 6
   }
 
   if (options.tabName) {
     doc.setFontSize(10)
-    doc.text(`Aba: ${options.tabName}`, 14, 42)
+    doc.text(`Aba: ${options.tabName}`, 14, yPos)
+    yPos += 6
   }
 
   // Data de geração
@@ -52,14 +61,16 @@ export async function exportTabToPDF(
   doc.text(
     `Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
     14,
-    48
+    yPos
   )
+  yPos += 6
 
   // Linha separadora
   doc.setLineWidth(0.5)
-  doc.line(14, 52, 196, 52)
+  doc.line(14, yPos, 196, yPos)
+  yPos += 6
 
-  let startY = 58
+  let startY = yPos
 
   // Extrair dados de tabelas
   const tables = tabContent.querySelectorAll('table')
@@ -195,16 +206,19 @@ export async function exportTabToPDF(
     })
   }
 
-  // Rodapé
+  // Rodapé com informações da empresa
+  adicionarRodapeEmpresaFrontend(doc)
+  
+  // Adicionar numeração de páginas
   const pageCount = doc.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
-    doc.setFontSize(8)
+    doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.text(
-      `Página ${i} de ${pageCount} - Sistema de Gerenciamento de Gruas`,
+      `Página ${i} de ${pageCount}`,
       105,
-      285,
+      290,
       { align: 'center' }
     )
   }
@@ -227,28 +241,35 @@ export async function exportAllTabsToPDF(
     format: 'a4'
   })
 
+  // Adicionar logos no cabeçalho
+  let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+
   // Cabeçalho geral
   doc.setFontSize(18)
   doc.setFont('helvetica', 'bold')
-  doc.text(options.titulo || 'Relatório Completo da Obra', 105, 20, { align: 'center' })
+  doc.text(options.titulo || 'Relatório Completo da Obra', 105, yPos, { align: 'center' })
+  yPos += 8
 
   if (options.obraNome) {
     doc.setFontSize(12)
     doc.setFont('helvetica', 'normal')
-    doc.text(`Obra: ${options.obraNome}`, 105, 28, { align: 'center' })
+    doc.text(`Obra: ${options.obraNome}`, 105, yPos, { align: 'center' })
+    yPos += 8
   }
 
   doc.setFontSize(9)
   doc.text(
     `Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
     14,
-    36
+    yPos
   )
+  yPos += 6
 
   doc.setLineWidth(0.5)
-  doc.line(14, 40, 196, 40)
+  doc.line(14, yPos, 196, yPos)
+  yPos += 6
 
-  let startY = 46
+  let startY = yPos
 
   // Processar cada tab
   tabsData.forEach((tab, tabIndex) => {
@@ -335,16 +356,19 @@ export async function exportAllTabsToPDF(
     }
   })
 
-  // Rodapé
+  // Rodapé com informações da empresa
+  adicionarRodapeEmpresaFrontend(doc)
+  
+  // Adicionar numeração de páginas
   const pageCount = doc.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
-    doc.setFontSize(8)
+    doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.text(
-      `Página ${i} de ${pageCount} - Sistema de Gerenciamento de Gruas`,
+      `Página ${i} de ${pageCount}`,
       105,
-      285,
+      290,
       { align: 'center' }
     )
   }

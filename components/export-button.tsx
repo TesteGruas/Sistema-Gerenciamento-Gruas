@@ -203,12 +203,18 @@ export function ExportButton({
 
       const doc = new jsPDF()
       
+      // Adicionar logos no cabeçalho
+      const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+      let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+      
       // Título
       if (titulo) {
         doc.setFontSize(16)
-        doc.text(titulo, 14, 22)
+        doc.text(titulo, 14, yPos)
+        yPos += 8
         doc.setFontSize(10)
-        doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 30)
+        doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, yPos)
+        yPos += 8
       }
 
       // Dados da tabela
@@ -220,11 +226,15 @@ export function ExportButton({
       autoTable(doc, {
         head: [headers],
         body: tableData,
-        startY: titulo ? 40 : 20,
+        startY: yPos,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [66, 139, 202] },
         alternateRowStyles: { fillColor: [245, 245, 245] }
       })
+
+      // Adicionar rodapé com informações da empresa
+      const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+      adicionarRodapeEmpresaFrontend(doc)
 
       doc.save(`${nomeArquivo || tipo}-${new Date().toISOString().split('T')[0]}.pdf`)
 

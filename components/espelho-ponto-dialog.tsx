@@ -305,12 +305,19 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
 
       const doc = new jsPDF()
       
+      // Adicionar logos no cabeçalho
+      const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+      let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+      
       // Título
       doc.setFontSize(16)
-      doc.text('ESPELHO DE PONTO', 14, 22)
+      doc.text('ESPELHO DE PONTO', 14, yPos)
+      yPos += 8
       doc.setFontSize(10)
-      doc.text(`Funcionário: ${espelhoData?.funcionario_nome}`, 14, 30)
-      doc.text(`Período: ${mes}/${ano}`, 14, 35)
+      doc.text(`Funcionário: ${espelhoData?.funcionario_nome}`, 14, yPos)
+      yPos += 6
+      doc.text(`Período: ${mes}/${ano}`, 14, yPos)
+      yPos += 6
 
       // Dados da tabela
       const tableData = espelhoData?.registros.map(registro => [
@@ -326,7 +333,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       autoTable(doc, {
         head: [['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras']],
         body: tableData,
-        startY: 45,
+        startY: yPos,
         styles: { fontSize: 8 },
         headStyles: { fillColor: [66, 139, 202] }
       })
@@ -341,6 +348,10 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       // Assinaturas
       doc.text(`Assinatura do Funcionário: ${assinaturaFuncionario}`, 14, finalY + 25)
       doc.text(`Assinatura do Gestor: ${assinaturaGestor}`, 14, finalY + 30)
+
+      // Adicionar rodapé com informações da empresa
+      const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+      adicionarRodapeEmpresaFrontend(doc)
 
       doc.save(`espelho-ponto-${espelhoData?.funcionario_nome}-${mes}-${ano}.pdf`)
 

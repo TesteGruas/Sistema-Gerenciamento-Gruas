@@ -465,20 +465,25 @@ export default function GruaComplementosManager({
 
       const doc = new jsPDF()
       
+      // Adicionar logos no cabeçalho
+      const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+      let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+      
       // Cabeçalho
       doc.setFontSize(18)
       doc.setFont('helvetica', 'bold')
       doc.text(
         gruaId ? 'Complementos da Grua' : 'Complementos de Obra',
         14,
-        20
+        yPos
       )
+      yPos += 8
       
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
       
       // Informações da obra/grua
-      let yPos = 30
+      yPos += 2
       if (obraId) {
         doc.text(`Obra ID: ${obraId}`, 14, yPos)
         yPos += 5
@@ -641,15 +646,19 @@ export default function GruaComplementosManager({
         doc.text('Nenhum complemento incluído', 14, yPos + 10)
       }
 
-      // Rodapé
+      // Adicionar rodapé com informações da empresa
+      const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+      adicionarRodapeEmpresaFrontend(doc)
+
+      // Adicionar numeração de páginas
       const pageCount = doc.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
-        doc.setFontSize(8)
+        doc.setFontSize(7)
         doc.text(
-          `Sistema de Gerenciamento de Gruas - Página ${i} de ${pageCount}`,
+          `Página ${i} de ${pageCount}`,
           doc.internal.pageSize.width / 2,
-          doc.internal.pageSize.height - 10,
+          doc.internal.pageSize.height - 5,
           { align: 'center' }
         )
       }
