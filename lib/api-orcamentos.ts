@@ -77,6 +77,7 @@ export interface OrcamentoFilters {
   obra_id?: number
   data_inicio?: string
   data_fim?: string
+  search?: string
 }
 
 export interface OrcamentoResponse {
@@ -109,6 +110,7 @@ export const getOrcamentos = async (filters?: OrcamentoFilters): Promise<Orcamen
   if (filters?.obra_id) params.append('obra_id', filters.obra_id.toString())
   if (filters?.data_inicio) params.append('data_inicio', filters.data_inicio)
   if (filters?.data_fim) params.append('data_fim', filters.data_fim)
+  if (filters?.search) params.append('search', filters.search)
 
   const response = await api.get(`/orcamentos?${params.toString()}`)
   

@@ -147,12 +147,32 @@ router.get('/', async (req, res) => {
       search 
     } = req.query;
 
+    // Primeiro, buscar o total para paginação (sem filtros de busca)
+    let countQuery = supabase
+      .from('orcamentos_locacao')
+      .select('*', { count: 'exact', head: true });
+
+    if (status && status !== 'all') {
+      countQuery = countQuery.eq('status', status);
+    }
+
+    if (tipo_orcamento && tipo_orcamento !== 'all') {
+      countQuery = countQuery.eq('tipo_orcamento', tipo_orcamento);
+    }
+
+    if (cliente_id) {
+      countQuery = countQuery.eq('cliente_id', cliente_id);
+    }
+
+    const { count: totalCount } = await countQuery;
+
+    // Query principal com relacionamentos
     let query = supabase
       .from('orcamentos_locacao')
       .select(`
         *,
-        clientes!inner(nome, cnpj),
-        funcionarios!vendedor_id(nome),
+        clientes:cliente_id(nome, cnpj, contato, telefone, email),
+        funcionarios:vendedor_id(nome, telefone, email),
         orcamento_itens_locacao (*),
         orcamento_valores_fixos_locacao (*),
         orcamento_custos_mensais_locacao (*)
@@ -171,36 +191,51 @@ router.get('/', async (req, res) => {
       query = query.eq('cliente_id', cliente_id);
     }
 
+    // Busca - precisa ser feita manualmente após buscar os dados
+    let orcamentosFiltrados = [];
+    let finalCount = totalCount || 0;
+
     if (search) {
-      query = query.or(`numero.ilike.%${search}%,clientes.nome.ilike.%${search}%`);
-    }
+      // Buscar todos os orçamentos (sem paginação) para filtrar
+      query = query.order('data_orcamento', { ascending: false });
+      const { data: allOrcamentos, error: allError } = await query;
 
-    // Paginação
-    const offset = (page - 1) * limit;
-    query = query.range(offset, offset + limit - 1);
+      if (allError) throw allError;
 
-    // Ordenação
-    query = query.order('data_orcamento', { ascending: false });
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      console.error('Erro ao buscar orçamentos de locação:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erro interno do servidor',
-        error: error.message 
+      // Filtrar pelo termo de busca
+      const searchLower = search.toLowerCase();
+      orcamentosFiltrados = (allOrcamentos || []).filter((orc) => {
+        const numeroMatch = orc.numero?.toLowerCase().includes(searchLower);
+        const clienteMatch = orc.clientes?.nome?.toLowerCase().includes(searchLower);
+        return numeroMatch || clienteMatch;
       });
+
+      finalCount = orcamentosFiltrados.length;
+
+      // Aplicar paginação manualmente após filtrar
+      const offset = (page - 1) * limit;
+      orcamentosFiltrados = orcamentosFiltrados.slice(offset, offset + parseInt(limit));
+    } else {
+      // Sem busca, aplicar paginação normalmente
+      const offset = (page - 1) * limit;
+      query = query.range(offset, offset + parseInt(limit) - 1);
+      query = query.order('data_orcamento', { ascending: false });
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      orcamentosFiltrados = data || [];
     }
 
     res.json({
       success: true,
-      data: data || [],
+      data: orcamentosFiltrados,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit)
+        total: finalCount || 0,
+        pages: Math.ceil((finalCount || 0) / limit)
       }
     });
 

@@ -230,6 +230,11 @@ const itemOrcamentoSchema = Joi.object({
  *           type: string
  *           format: date
  *         description: Data de fim para filtro
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Busca por número do orçamento, nome do cliente ou nome da obra
  *     responses:
  *       200:
  *         description: Lista de orçamentos
@@ -347,7 +352,7 @@ const itemOrcamentoSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, cliente_id, obra_id, data_inicio, data_fim } = req.query;
+    const { page = 1, limit = 10, status, cliente_id, obra_id, data_inicio, data_fim, search } = req.query;
     const offset = (page - 1) * limit;
 
     let query = supabase
@@ -384,7 +389,7 @@ router.get('/', async (req, res) => {
         orcamento_custos_mensais (*),
         orcamento_horas_extras (*),
         orcamento_servicos_adicionais (*)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false });
 
     // Filtros
@@ -404,28 +409,50 @@ router.get('/', async (req, res) => {
       query = query.lte('data_orcamento', data_fim);
     }
 
-    // Paginação
-    query = query.range(offset, offset + limit - 1);
+    // Se houver busca, não aplicar paginação ainda (buscar todos para filtrar)
+    // Caso contrário, aplicar paginação normalmente
+    let orcamentosFiltrados = [];
+    let totalCount = 0;
 
-    const { data: orcamentos, error } = await query;
+    if (search) {
+      // Buscar todos os orçamentos (sem paginação) para poder filtrar
+      const { data: allOrcamentos, error: allError, count: allCount } = await query;
 
-    if (error) throw error;
+      if (allError) throw allError;
 
-    // Buscar total de registros para paginação
-    const { count, error: countError } = await supabase
-      .from('orcamentos')
-      .select('*', { count: 'exact', head: true });
+      // Filtrar pelo termo de busca
+      const searchLower = search.toLowerCase();
+      orcamentosFiltrados = (allOrcamentos || []).filter((orc) => {
+        const numeroMatch = orc.numero?.toLowerCase().includes(searchLower);
+        const clienteMatch = orc.clientes?.nome?.toLowerCase().includes(searchLower);
+        const obraMatch = orc.obras?.nome?.toLowerCase().includes(searchLower);
+        return numeroMatch || clienteMatch || obraMatch;
+      });
 
-    if (countError) throw countError;
+      totalCount = orcamentosFiltrados.length;
+
+      // Aplicar paginação manualmente após filtrar
+      orcamentosFiltrados = orcamentosFiltrados.slice(offset, offset + parseInt(limit));
+    } else {
+      // Sem busca, aplicar paginação normalmente
+      query = query.range(offset, offset + limit - 1);
+
+      const { data: orcamentos, error, count } = await query;
+
+      if (error) throw error;
+
+      orcamentosFiltrados = orcamentos || [];
+      totalCount = count || 0;
+    }
 
     res.json({
       success: true,
-      data: orcamentos,
+      data: orcamentosFiltrados,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: count,
-        pages: Math.ceil(count / limit)
+        total: totalCount || 0,
+        pages: Math.ceil((totalCount || 0) / limit)
       }
     });
   } catch (error) {

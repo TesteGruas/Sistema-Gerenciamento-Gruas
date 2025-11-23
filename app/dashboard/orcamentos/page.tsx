@@ -38,6 +38,12 @@ import { getOrcamentos, getOrcamento, type Orcamento as OrcamentoAPI } from "@/l
 import { api, API_BASE_URL } from "@/lib/api"
 import { orcamentosLocacaoApi, OrcamentoLocacao } from "@/lib/api-orcamentos-locacao"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado' | 'vencido' | 'convertido'
 
@@ -158,7 +164,8 @@ export default function OrcamentosPage() {
       const response = await getOrcamentos({
         page: 1,
         limit: 100,
-        status: filtroStatus !== "todos" ? filtroStatus : undefined
+        status: filtroStatus !== "todos" ? filtroStatus : undefined,
+        search: searchTerm || undefined
       })
 
       // Mapear dados da API para o formato esperado pelo componente
@@ -224,12 +231,19 @@ export default function OrcamentosPage() {
         search: searchTerm || undefined
       })
 
-      setOrcamentosLocacao(response.data || [])
+      console.log('Resposta da API de orçamentos de locação:', response)
+      
+      // Garantir que estamos usando os dados corretos da resposta
+      const dados = response?.data || response?.success ? (response.data || []) : []
+      
+      console.log('Dados processados:', dados)
+      setOrcamentosLocacao(dados)
     } catch (error: any) {
       console.error('Erro ao carregar orçamentos de locação:', error)
+      console.error('Detalhes do erro:', error?.response?.data || error?.message)
       toast({
         title: "Erro",
-        description: error?.message || "Erro ao carregar orçamentos de locação",
+        description: error?.response?.data?.message || error?.message || "Erro ao carregar orçamentos de locação",
         variant: "destructive"
       })
       setOrcamentosLocacao([])
@@ -238,21 +252,47 @@ export default function OrcamentosPage() {
     }
   }
 
-  // A filtragem já é feita pela API, mas mantemos filtro local apenas para status
-  // caso o usuário mude o filtro sem recarregar os dados
-  const filteredOrcamentos = orcamentos.filter(item => {
-    const matchesStatus = filtroStatus === "todos" || item.status === filtroStatus
-    return matchesStatus
-  })
+  // A filtragem já é feita pela API
+  const filteredOrcamentos = orcamentos
 
   const getStatusBadge = (status: StatusOrcamento) => {
     const configs: Record<StatusOrcamento, { label: string; variant: 'default' | 'secondary' | 'destructive'; icon: any; className?: string }> = {
-      rascunho: { label: 'Rascunho', variant: 'secondary', icon: FileText },
-      enviado: { label: 'Enviado', variant: 'default', icon: Clock },
-      aprovado: { label: 'Aprovado', variant: 'default', icon: CheckCircle2, className: 'bg-green-500 text-white' },
-      rejeitado: { label: 'Rejeitado', variant: 'destructive', icon: XCircle },
-      vencido: { label: 'Vencido', variant: 'destructive', icon: AlertCircle, className: 'bg-orange-500 text-white' },
-      convertido: { label: 'Convertido', variant: 'default', icon: CheckCircle, className: 'bg-blue-500 text-white' }
+      rascunho: { 
+        label: 'Rascunho', 
+        variant: 'secondary', 
+        icon: FileText, 
+        className: 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' 
+      },
+      enviado: { 
+        label: 'Enviado', 
+        variant: 'default', 
+        icon: Clock, 
+        className: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' 
+      },
+      aprovado: { 
+        label: 'Aprovado', 
+        variant: 'default', 
+        icon: CheckCircle2, 
+        className: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+      },
+      rejeitado: { 
+        label: 'Rejeitado', 
+        variant: 'destructive', 
+        icon: XCircle, 
+        className: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' 
+      },
+      vencido: { 
+        label: 'Vencido', 
+        variant: 'destructive', 
+        icon: AlertCircle, 
+        className: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' 
+      },
+      convertido: { 
+        label: 'Convertido', 
+        variant: 'default', 
+        icon: CheckCircle, 
+        className: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' 
+      }
     }
     
     const config = configs[status]
@@ -260,7 +300,7 @@ export default function OrcamentosPage() {
     // Fallback para status desconhecido
     if (!config) {
       return (
-        <Badge variant="secondary" className="flex items-center gap-1">
+        <Badge variant="secondary" className="inline-flex items-center gap-1 w-auto bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200">
           <FileText className="w-3 h-3" />
           {status}
         </Badge>
@@ -270,7 +310,7 @@ export default function OrcamentosPage() {
     const Icon = config.icon
     
     return (
-      <Badge variant={config.variant} className={`flex items-center gap-1 ${config.className || ''}`}>
+      <Badge variant={config.variant} className={`inline-flex items-center gap-1 border transition-colors w-auto ${config.className || ''}`}>
         <Icon className="w-3 h-3" />
         {config.label}
       </Badge>
@@ -380,8 +420,15 @@ export default function OrcamentosPage() {
     }
   }
 
-  const handleCreate = () => {
-    router.push('/dashboard/orcamentos/novo')
+  const handleCreateNovoOrcamentoObra = () => {
+    // Redirecionar para criar orçamento de obra
+    // Por enquanto, a página /novo cria apenas de locação
+    // Se houver uma página específica para obra, usar aqui
+    router.push('/dashboard/orcamentos/novo?tipo=obra')
+  }
+
+  const handleCreateNovoOrcamentoLocacao = () => {
+    router.push('/dashboard/orcamentos/novo?tipo=locacao')
   }
 
   // Função para formatar texto em Title Case (primeira letra maiúscula)
@@ -595,11 +642,11 @@ export default function OrcamentosPage() {
   const getTipoColor = (tipo: string) => {
     switch (tipo) {
       case 'locacao_grua':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
       case 'locacao_plataforma':
-        return 'bg-green-100 text-green-800'
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
     }
   }
 
@@ -612,10 +659,24 @@ export default function OrcamentosPage() {
             Gerencie orçamentos de obra e locação
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Orçamento
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Novo Orçamento
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleCreateNovoOrcamentoObra}>
+              <Building2 className="w-4 h-4 mr-2" />
+              Orçamento de Obra
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleCreateNovoOrcamentoLocacao}>
+              <FileText className="w-4 h-4 mr-2" />
+              Orçamento de Locação
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'obra' | 'locacao')} className="w-full">
@@ -629,6 +690,36 @@ export default function OrcamentosPage() {
             Orçamentos de Locação
           </TabsTrigger>
         </TabsList>
+
+        {/* Descrição explicativa das tabs */}
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          {activeTab === 'obra' ? (
+            <div className="flex items-start gap-3">
+              <Building2 className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-blue-900 mb-1">Orçamentos de Obra</p>
+                <p className="text-sm text-blue-700">
+                  Orçamentos vinculados a uma <strong>obra específica</strong> com informações completas da construção, 
+                  especificações técnicas detalhadas da grua (altura, lança, carga), prazo de locação, valores mensais 
+                  (equipamento, operador, sinaleiro, manutenção) e condições comerciais. Quando aprovados, podem ser 
+                  convertidos automaticamente em obras.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3">
+              <FileText className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-blue-900 mb-1">Orçamentos de Locação</p>
+                <p className="text-sm text-blue-700">
+                  Orçamentos para <strong>locação de equipamentos</strong> (grua ou plataforma) <strong>sem vínculo a uma obra específica</strong>. 
+                  Focados nas condições de locação, valores, logística (transporte e instalação), garantias e condições gerais do contrato. 
+                  Ideal para locações pontuais ou quando a obra ainda não foi definida.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
 
         <TabsContent value="obra" className="space-y-6">
       <Card>
@@ -935,396 +1026,237 @@ export default function OrcamentosPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Orçamento {selectedOrcamento.numero}</CardTitle>
-                    <CardDescription>{selectedOrcamento.obra_nome}</CardDescription>
+                    <CardTitle>Orçamento de Obra - {selectedOrcamento.numero}</CardTitle>
+                    <CardDescription>{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || 'Cliente não informado'}</CardDescription>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => {
-                      setIsViewDialogOpen(false)
-                      setSelectedOrcamento(null)
-                      setEditedOrcamento(null)
-                    }}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExportPDF(selectedOrcamento)}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Exportar PDF
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => {
+                        setIsViewDialogOpen(false)
+                        setSelectedOrcamento(null)
+                        setEditedOrcamento(null)
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Identificação Básica */}
-                <div className="space-y-5">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Identificação</h3>
+                {/* Informações Básicas */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                    <div>
                       <label className="text-sm font-medium text-gray-700">Cliente</label>
-                      <Input
-                        value={(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || ''}
-                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, cliente_nome: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, cliente_nome: e.target.value } : null)}
-                        className="text-gray-900 font-medium"
-                        readOnly
-                      />
+                      <p className="text-sm font-medium">{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || '-'}</p>
                     </div>
-                    <div className="space-y-2">
+                    <div>
                       <label className="text-sm font-medium text-gray-700">Status</label>
-                      <div className="h-9 flex items-center">
+                      <div className="mt-1 inline-block">
                         {orcamentoAtual && getStatusBadge(orcamentoAtual.status)}
                       </div>
                     </div>
-                    <div className="col-span-2 space-y-2">
+                    <div>
                       <label className="text-sm font-medium text-gray-700">Obra</label>
-                      <Input
-                        value={orcamentoAtual?.obra_nome || ''}
-                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_nome: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, obra_nome: e.target.value } : null)}
-                        className="text-gray-900 font-medium"
-                      />
-                      <div className="grid grid-cols-3 gap-2 mt-2">
-                        <Input
-                          placeholder="Endereço"
-                          value={orcamentoAtual?.obra_endereco || ''}
-                          onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_endereco: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, obra_endereco: e.target.value } : null)}
-                          className="text-gray-600 text-sm"
-                        />
-                        <Input
-                          placeholder="Cidade"
-                          value={orcamentoAtual?.obra_cidade || ''}
-                          onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_cidade: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, obra_cidade: e.target.value } : null)}
-                          className="text-gray-600 text-sm"
-                        />
-                        <Input
-                          placeholder="Estado"
-                          value={orcamentoAtual?.obra_estado || ''}
-                          onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, obra_estado: e.target.value.toUpperCase() } : selectedOrcamento ? { ...selectedOrcamento, obra_estado: e.target.value.toUpperCase() } : null)}
-                          className="text-gray-600 text-sm"
-                          maxLength={2}
-                        />
-                      </div>
+                      <p className="text-sm font-medium">{orcamentoAtual?.obra_nome || '-'}</p>
+                      {orcamentoAtual?.obra_endereco && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {orcamentoAtual.obra_endereco}
+                          {orcamentoAtual.obra_cidade && `, ${orcamentoAtual.obra_cidade}`}
+                          {orcamentoAtual.obra_estado && ` - ${orcamentoAtual.obra_estado}`}
+                        </p>
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Equipamento</label>
-                      <Input
-                        value={orcamentoAtual?.equipamento || ''}
-                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, equipamento: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, equipamento: e.target.value } : null)}
-                        className="text-gray-900 font-medium"
-                      />
-                    </div>
-                    <div className="space-y-2">
+                    <div>
                       <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
-                      <Input
-                        value={orcamentoAtual?.tipo_obra || ''}
-                        onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, tipo_obra: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, tipo_obra: e.target.value } : null)}
-                        className="text-gray-900 font-medium"
-                      />
+                      <p className="text-sm">{orcamentoAtual?.tipo_obra || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Equipamento</label>
+                      <p className="text-sm">{orcamentoAtual?.equipamento || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Data do Orçamento</label>
+                      <p className="text-sm">{orcamentoAtual?.created_at ? new Date(orcamentoAtual.created_at).toLocaleDateString('pt-BR') : '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Data de Validade</label>
+                      <p className="text-sm">{orcamentoAtual?.validade_proposta ? new Date(orcamentoAtual.validade_proposta).toLocaleDateString('pt-BR') : '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Valor Total Mensal</label>
+                      <p className="text-lg font-bold text-green-600">
+                        R$ {orcamentoAtual?.total_mensal?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Prazo de Locação</label>
+                      <p className="text-sm">{orcamentoAtual?.prazo_locacao_meses ? `${orcamentoAtual.prazo_locacao_meses} meses` : '-'}</p>
+                    </div>
+                    {orcamentoAtual?.data_inicio_estimada && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Data de Início Estimada</label>
+                        <p className="text-sm">
+                          {new Date(orcamentoAtual.data_inicio_estimada).toLocaleDateString('pt-BR')}
+                          {orcamentoAtual.tolerancia_dias && ` (±${orcamentoAtual.tolerancia_dias} dias)`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Especificações Técnicas */}
+                {(orcamentoAtual?.altura_final || orcamentoAtual?.comprimento_lanca || orcamentoAtual?.carga_maxima || orcamentoAtual?.potencia_eletrica) && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Especificações Técnicas</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {orcamentoAtual?.altura_inicial && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Altura Inicial (m)</label>
+                          <p className="text-sm">{orcamentoAtual.altura_inicial}</p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.altura_final && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Altura Final (m)</label>
+                          <p className="text-sm">{orcamentoAtual.altura_final}</p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.comprimento_lanca && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Comprimento da Lança (m)</label>
+                          <p className="text-sm">{orcamentoAtual.comprimento_lanca}</p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.carga_maxima && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Carga Máxima (kg)</label>
+                          <p className="text-sm">{orcamentoAtual.carga_maxima}</p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.carga_ponta && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Carga na Ponta (kg)</label>
+                          <p className="text-sm">{orcamentoAtual.carga_ponta}</p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.potencia_eletrica && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Potência Elétrica</label>
+                          <p className="text-sm">{orcamentoAtual.potencia_eletrica}</p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.energia_necessaria && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Energia Necessária</label>
+                          <p className="text-sm">{orcamentoAtual.energia_necessaria}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                )}
 
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Especificações Técnicas</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Altura Inicial (m)</label>
-                    <Input
-                      type="number"
-                      value={orcamentoAtual?.altura_inicial || ''}
-                      onChange={(e) => {
-                        const valor = parseFloat(e.target.value) || undefined
-                        setEditedOrcamento(prev => prev ? { ...prev, altura_inicial: valor } : selectedOrcamento ? { ...selectedOrcamento, altura_inicial: valor } : null)
-                      }}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 21"
-                    />
+                {/* Custos Mensais */}
+                {(orcamentoAtual?.valor_locacao_mensal || orcamentoAtual?.valor_operador || orcamentoAtual?.valor_sinaleiro || orcamentoAtual?.valor_manutencao) && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {orcamentoAtual?.valor_locacao_mensal !== undefined && orcamentoAtual.valor_locacao_mensal > 0 && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Locação da Grua</label>
+                          <p className="text-sm font-semibold">
+                            R$ {orcamentoAtual.valor_locacao_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.valor_operador !== undefined && orcamentoAtual.valor_operador > 0 && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Operador</label>
+                          <p className="text-sm font-semibold">
+                            R$ {orcamentoAtual.valor_operador.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.valor_sinaleiro !== undefined && orcamentoAtual.valor_sinaleiro > 0 && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Sinaleiro</label>
+                          <p className="text-sm font-semibold">
+                            R$ {orcamentoAtual.valor_sinaleiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.valor_manutencao !== undefined && orcamentoAtual.valor_manutencao > 0 && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Manutenção Preventiva</label>
+                          <p className="text-sm font-semibold">
+                            R$ {orcamentoAtual.valor_manutencao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                      {orcamentoAtual?.total_mensal !== undefined && orcamentoAtual.total_mensal > 0 && (
+                        <div className="col-span-2 pt-2 border-t-2 border-gray-300">
+                          <label className="text-base font-bold text-gray-900">Total Mensal</label>
+                          <p className="text-lg font-bold text-green-600">
+                            R$ {orcamentoAtual.total_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Altura Final (m)</label>
-                    <Input
-                      type="number"
-                      value={orcamentoAtual?.altura_final || ''}
-                      onChange={(e) => {
-                        const valor = parseFloat(e.target.value) || undefined
-                        setEditedOrcamento(prev => prev ? { ...prev, altura_final: valor } : selectedOrcamento ? { ...selectedOrcamento, altura_final: valor } : null)
-                      }}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 95"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Comprimento da Lança (m)</label>
-                    <Input
-                      type="number"
-                      value={orcamentoAtual?.comprimento_lanca || ''}
-                      onChange={(e) => {
-                        const valor = parseFloat(e.target.value) || undefined
-                        setEditedOrcamento(prev => prev ? { ...prev, comprimento_lanca: valor } : selectedOrcamento ? { ...selectedOrcamento, comprimento_lanca: valor } : null)
-                      }}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 30"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Carga Máxima (kg)</label>
-                    <Input
-                      type="number"
-                      value={orcamentoAtual?.carga_maxima || ''}
-                      onChange={(e) => {
-                        const valor = parseFloat(e.target.value) || undefined
-                        setEditedOrcamento(prev => prev ? { ...prev, carga_maxima: valor } : selectedOrcamento ? { ...selectedOrcamento, carga_maxima: valor } : null)
-                      }}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 2000"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Carga na Ponta (kg)</label>
-                    <Input
-                      type="number"
-                      value={orcamentoAtual?.carga_ponta || ''}
-                      onChange={(e) => {
-                        const valor = parseFloat(e.target.value) || undefined
-                        setEditedOrcamento(prev => prev ? { ...prev, carga_ponta: valor } : selectedOrcamento ? { ...selectedOrcamento, carga_ponta: valor } : null)
-                      }}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 1300"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Potência Elétrica</label>
-                    <Input
-                      value={orcamentoAtual?.potencia_eletrica || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, potencia_eletrica: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, potencia_eletrica: e.target.value } : null)}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 42 KVA"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Energia Necessária</label>
-                    <Input
-                      value={orcamentoAtual?.energia_necessaria || ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, energia_necessaria: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, energia_necessaria: e.target.value } : null)}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 380V"
-                    />
-                  </div>
-                </div>
-              </div>
+                )}
 
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Custos Mensais</h3>
-                <div className="grid grid-cols-2 gap-4">
+                {/* Escopo Básico Incluso */}
+                {orcamentoAtual?.escopo_incluso && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Locação da Grua (R$)</label>
-                    <Input
-                      type="text"
-                      value={orcamentoAtual?.valor_locacao_mensal 
-                        ? formatCurrency(orcamentoAtual.valor_locacao_mensal)
-                        : ''}
-                      onChange={(e) => {
-                        const formatted = formatCurrency(e.target.value)
-                        const valor = parseCurrency(formatted)
-                        setEditedOrcamento(prev => {
-                          const base = prev || selectedOrcamento
-                          if (!base) return null
-                          const total = valor + (base.valor_operador || 0) + (base.valor_sinaleiro || 0) + (base.valor_manutencao || 0)
-                          return { ...base, valor_locacao_mensal: valor, total_mensal: total }
-                        })
-                      }}
-                      className="text-gray-900 font-semibold"
-                      placeholder="0,00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Operador (R$)</label>
-                    <Input
-                      type="text"
-                      value={orcamentoAtual?.valor_operador 
-                        ? formatCurrency(orcamentoAtual.valor_operador)
-                        : ''}
-                      onChange={(e) => {
-                        const formatted = formatCurrency(e.target.value)
-                        const valor = parseCurrency(formatted)
-                        setEditedOrcamento(prev => {
-                          const base = prev || selectedOrcamento
-                          if (!base) return null
-                          const total = (base.valor_locacao_mensal || 0) + valor + (base.valor_sinaleiro || 0) + (base.valor_manutencao || 0)
-                          return { ...base, valor_operador: valor, total_mensal: total }
-                        })
-                      }}
-                      className="text-gray-900 font-semibold"
-                      placeholder="0,00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Sinaleiro (R$)</label>
-                    <Input
-                      type="text"
-                      value={orcamentoAtual?.valor_sinaleiro 
-                        ? formatCurrency(orcamentoAtual.valor_sinaleiro)
-                        : ''}
-                      onChange={(e) => {
-                        const formatted = formatCurrency(e.target.value)
-                        const valor = parseCurrency(formatted)
-                        setEditedOrcamento(prev => {
-                          const base = prev || selectedOrcamento
-                          if (!base) return null
-                          const total = (base.valor_locacao_mensal || 0) + (base.valor_operador || 0) + valor + (base.valor_manutencao || 0)
-                          return { ...base, valor_sinaleiro: valor, total_mensal: total }
-                        })
-                      }}
-                      className="text-gray-900 font-semibold"
-                      placeholder="0,00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Manutenção Preventiva (R$)</label>
-                    <Input
-                      type="text"
-                      value={orcamentoAtual?.valor_manutencao 
-                        ? formatCurrency(orcamentoAtual.valor_manutencao)
-                        : ''}
-                      onChange={(e) => {
-                        const formatted = formatCurrency(e.target.value)
-                        const valor = parseCurrency(formatted)
-                        setEditedOrcamento(prev => {
-                          const base = prev || selectedOrcamento
-                          if (!base) return null
-                          const total = (base.valor_locacao_mensal || 0) + (base.valor_operador || 0) + (base.valor_sinaleiro || 0) + valor
-                          return { ...base, valor_manutencao: valor, total_mensal: total }
-                        })
-                      }}
-                      className="text-gray-900 font-semibold"
-                      placeholder="0,00"
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-2 pt-2 border-t-2 border-gray-300">
-                    <label className="text-base font-bold text-gray-900">Total Mensal</label>
-                    <Input
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Escopo Básico Incluso</h3>
+                    <Textarea
                       readOnly
-                      value={formatCurrencyDisplay(orcamentoAtual?.total_mensal || 0)}
-                      className="bg-blue-50 border-blue-200 text-blue-700 text-lg font-bold cursor-default"
+                      value={orcamentoAtual.escopo_incluso}
+                      className="min-h-[100px] bg-gray-50"
                     />
                   </div>
-                </div>
-              </div>
+                )}
 
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Prazos e Datas</h3>
-                <div className="grid grid-cols-2 gap-4">
+                {/* Responsabilidades do Cliente */}
+                {orcamentoAtual?.responsabilidades_cliente && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Prazo de Locação (meses)</label>
-                    <Input
-                      type="number"
-                      value={orcamentoAtual?.prazo_locacao_meses || ''}
-                      onChange={(e) => {
-                        const valor = parseInt(e.target.value) || 0
-                        setEditedOrcamento(prev => prev ? { ...prev, prazo_locacao_meses: valor } : selectedOrcamento ? { ...selectedOrcamento, prazo_locacao_meses: valor } : null)
-                      }}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 13"
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Responsabilidades do Cliente</h3>
+                    <Textarea
+                      readOnly
+                      value={orcamentoAtual.responsabilidades_cliente}
+                      className="min-h-[100px] bg-gray-50"
                     />
                   </div>
+                )}
+
+                {/* Condições Comerciais */}
+                {orcamentoAtual?.condicoes_comerciais && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Data de Início Estimada</label>
-                    <Input
-                      type="date"
-                      value={orcamentoAtual?.data_inicio_estimada ? orcamentoAtual.data_inicio_estimada.split('T')[0] : ''}
-                      onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, data_inicio_estimada: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, data_inicio_estimada: e.target.value } : null)}
-                      className="text-gray-900 font-medium"
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições Comerciais</h3>
+                    <Textarea
+                      readOnly
+                      value={orcamentoAtual.condicoes_comerciais}
+                      className="min-h-[100px] bg-gray-50"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Tolerância (± dias)</label>
-                    <Input
-                      type="number"
-                      value={orcamentoAtual?.tolerancia_dias || ''}
-                      onChange={(e) => {
-                        const valor = parseInt(e.target.value) || undefined
-                        setEditedOrcamento(prev => prev ? { ...prev, tolerancia_dias: valor } : selectedOrcamento ? { ...selectedOrcamento, tolerancia_dias: valor } : null)
-                      }}
-                      className="text-gray-900 font-medium"
-                      placeholder="Ex: 15"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Escopo Básico Incluso</h3>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Descrição</label>
-                  <Textarea
-                    value={orcamentoAtual?.escopo_incluso || ''}
-                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, escopo_incluso: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, escopo_incluso: e.target.value } : null)}
-                    className="bg-blue-50 border-blue-200 text-gray-700 min-h-[100px] resize-none"
-                    rows={4}
-                    placeholder="Descreva o escopo básico incluso no orçamento..."
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Responsabilidades do Cliente</h3>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Descrição</label>
-                  <Textarea
-                    value={orcamentoAtual?.responsabilidades_cliente || ''}
-                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, responsabilidades_cliente: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, responsabilidades_cliente: e.target.value } : null)}
-                    className="bg-amber-50 border-amber-200 text-gray-700 min-h-[100px] resize-none"
-                    rows={4}
-                    placeholder="Descreva as responsabilidades do cliente..."
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">Condições Comerciais</h3>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Descrição</label>
-                  <Textarea
-                    value={orcamentoAtual?.condicoes_comerciais || ''}
-                    onChange={(e) => setEditedOrcamento(prev => prev ? { ...prev, condicoes_comerciais: e.target.value } : selectedOrcamento ? { ...selectedOrcamento, condicoes_comerciais: e.target.value } : null)}
-                    className="bg-green-50 border-green-200 text-gray-700 min-h-[100px] resize-none"
-                    rows={4}
-                    placeholder="Descreva as condições comerciais..."
-                  />
-                </div>
-              </div>
-
-              {/* Itens do Orçamento */}
-              {orcamentoAtual && ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens) && 
-               ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens).length > 0 && (
-                <div className="space-y-2 border-t border-gray-200 pt-6">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto/Serviço</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens || []).map((item: any) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.produto_servico}</TableCell>
-                          <TableCell>{item.descricao || '-'}</TableCell>
-                          <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
-                          <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                )}
 
               {/* Valores Fixos */}
               {orcamentoAtual && ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos) && 
                ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos).length > 0 && (
-                <div className="space-y-2 border-t border-gray-200 pt-6">
+                <div className="space-y-2">
                   <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Valores Fixos</h3>
                   <Table>
                     <TableHeader>
@@ -1356,7 +1288,7 @@ export default function OrcamentosPage() {
               {/* Custos Mensais */}
               {orcamentoAtual && ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais) && 
                ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais).length > 0 && (
-                <div className="space-y-2 border-t border-gray-200 pt-6">
+                <div className="space-y-2">
                   <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
                   <Table>
                     <TableHeader>
@@ -1387,10 +1319,43 @@ export default function OrcamentosPage() {
                 </div>
               )}
 
+              {/* Itens do Orçamento */}
+              {orcamentoAtual && ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens) && 
+               ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens).length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto/Serviço</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens || []).map((item: any) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.produto_servico}</TableCell>
+                          <TableCell>{item.descricao || '-'}</TableCell>
+                          <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
+                          <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                          <TableCell className="font-semibold">
+                            R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+
               {/* Horas Extras */}
               {orcamentoAtual && ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras) && 
                ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras).length > 0 && (
-                <div className="space-y-2 border-t border-gray-200 pt-6">
+                <div className="space-y-2">
                   <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Horas Extras</h3>
                   <Table>
                     <TableHeader>
@@ -1426,7 +1391,7 @@ export default function OrcamentosPage() {
               {/* Serviços Adicionais */}
               {orcamentoAtual && ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais) && 
                ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais).length > 0 && (
-                <div className="space-y-2 border-t border-gray-200 pt-6">
+                <div className="space-y-2">
                   <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Serviços Adicionais</h3>
                   <Table>
                     <TableHeader>
@@ -1455,43 +1420,47 @@ export default function OrcamentosPage() {
                 </div>
               )}
 
-              <div className="border-t border-gray-200 pt-6 flex justify-between items-center">
-                <div className="flex gap-2">
+              {/* Observações */}
+              {orcamentoAtual?.observacoes && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Observações</h3>
+                  <Textarea
+                    readOnly
+                    value={orcamentoAtual.observacoes}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => {
+                  setIsViewDialogOpen(false)
+                  setSelectedOrcamento(null)
+                  setEditedOrcamento(null)
+                }}>
+                  Fechar
+                </Button>
+                {orcamentoAtual && orcamentoAtual.status === 'rascunho' && (
+                  <Button onClick={() => {
+                    setIsViewDialogOpen(false)
+                    handleEdit(orcamentoAtual.id)
+                  }}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Editar
+                  </Button>
+                )}
+                {orcamentoAtual && orcamentoAtual.status === 'aprovado' && (
                   <Button 
                     variant="outline"
-                    onClick={() => orcamentoAtual && handleExportPDF(orcamentoAtual)}
+                    onClick={() => {
+                      setIsViewDialogOpen(false)
+                      handleCreateObra(orcamentoAtual)
+                    }}
                   >
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar PDF
+                    <Building2 className="w-4 h-4 mr-2" />
+                    Criar Obra
                   </Button>
-                  {orcamentoAtual && orcamentoAtual.status === 'aprovado' && (
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        handleCancelEdit()
-                        handleCreateObra(orcamentoAtual)
-                      }}
-                    >
-                      <Building2 className="w-4 h-4 mr-2" />
-                      Criar Obra
-                    </Button>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline"
-                    onClick={handleCancelEdit}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button 
-                    onClick={handleSaveEdit}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    Salvar Alterações
-                  </Button>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1551,7 +1520,7 @@ export default function OrcamentosPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700">Status</label>
-                    <div className="mt-1">{getStatusBadge(selectedOrcamentoLocacao.status as StatusOrcamento)}</div>
+                    <div className="mt-1 inline-block">{getStatusBadge(selectedOrcamentoLocacao.status as StatusOrcamento)}</div>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700">Data do Orçamento</label>
@@ -1569,9 +1538,11 @@ export default function OrcamentosPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700">Tipo</label>
-                    <Badge className={getTipoColor(selectedOrcamentoLocacao.tipo_orcamento)}>
-                      {selectedOrcamentoLocacao.tipo_orcamento === 'locacao_grua' ? 'Locação de Grua' : 'Locação de Plataforma'}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge className={getTipoColor(selectedOrcamentoLocacao.tipo_orcamento)}>
+                        {selectedOrcamentoLocacao.tipo_orcamento === 'locacao_grua' ? 'Locação de Grua' : 'Locação de Plataforma'}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               </div>

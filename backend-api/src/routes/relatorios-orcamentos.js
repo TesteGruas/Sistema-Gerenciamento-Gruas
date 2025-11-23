@@ -922,22 +922,45 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     // Pipe do documento para a resposta
     doc.pipe(res);
 
+    // Cor principal: #d93020 (RGB: 217, 48, 32)
+    const corPrincipal = '#d93020';
+    const corPrincipalRGB = { r: 217, g: 48, b: 32 };
+
     let yPos = 40;
 
-    // ===== CABEÇALHO =====
-    doc.fontSize(16).font('Helvetica-Bold').text('ORÇAMENTO DE LOCAÇÃO DE GRUA', 40, yPos, { align: 'center' });
+    // ===== CABEÇALHO COM LOGOS =====
+    yPos = adicionarLogosNoCabecalho(doc, yPos);
+    yPos += 10;
+
+    // Título com cor
+    doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+       .fontSize(18)
+       .font('Helvetica-Bold')
+       .text('ORÇAMENTO DE LOCAÇÃO DE GRUA', 40, yPos, { align: 'center' });
     yPos += 25;
     
     const numeroOrcamento = orcamento.numero || `LOC-${id}`;
-    doc.fontSize(12).font('Helvetica').text(`Nº ${numeroOrcamento}`, 40, yPos, { align: 'center' });
+    doc.fillColor('black')
+       .fontSize(12)
+       .font('Helvetica')
+       .text(`Nº ${numeroOrcamento}`, 40, yPos, { align: 'center' });
     yPos += 20;
 
-    // Linha separadora
-    doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+    // Linha separadora com cor
+    doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+       .lineWidth(2)
+       .moveTo(40, yPos)
+       .lineTo(555, yPos)
+       .stroke();
+    doc.strokeColor('black').lineWidth(1); // Resetar para preto
     yPos += 15;
 
     // ===== DADOS DO CLIENTE =====
-    doc.fontSize(11).font('Helvetica-Bold').text('DADOS DO CLIENTE', 40, yPos);
+    doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+       .fontSize(11)
+       .font('Helvetica-Bold')
+       .text('DADOS DO CLIENTE', 40, yPos);
+    doc.fillColor('black'); // Resetar para preto
     yPos += 15;
     doc.fontSize(10).font('Helvetica');
     
@@ -992,7 +1015,11 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     const temDadosObra = orcamento.obra_nome && orcamento.obra_nome !== '-';
     
     if (temDadosObra) {
-      doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA OBRA', 40, yPos);
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('DADOS DA OBRA', 40, yPos);
+      doc.fillColor('black'); // Resetar para preto
       yPos += 15;
       doc.fontSize(10).font('Helvetica');
       
@@ -1019,7 +1046,11 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     const temDadosGrua = orcamento.equipamento && orcamento.equipamento !== '-';
     
     if (temDadosGrua) {
-      doc.fontSize(11).font('Helvetica-Bold').text('DADOS DA GRUA', 40, yPos);
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('DADOS DA GRUA', 40, yPos);
+      doc.fillColor('black'); // Resetar para preto
       yPos += 15;
       doc.fontSize(10).font('Helvetica');
       
@@ -1093,19 +1124,32 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     }
     
     if (todosItens && todosItens.length > 0) {
-      doc.fontSize(11).font('Helvetica-Bold').text('ITENS DO ORÇAMENTO', 40, yPos);
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('ITENS DO ORÇAMENTO', 40, yPos);
+      doc.fillColor('black'); // Resetar para preto
       yPos += 15;
       
-      // Cabeçalho da tabela
-      doc.fontSize(9).font('Helvetica-Bold');
+      // Cabeçalho da tabela com cor
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(9)
+         .font('Helvetica-Bold');
       doc.text('Produto/Serviço', 40, yPos);
       doc.text('Descrição', 150, yPos);
       doc.text('Qtd', 300, yPos);
       doc.text('Valor Unit.', 350, yPos);
       doc.text('Valor Total', 450, yPos);
+      doc.fillColor('black'); // Resetar para preto
       yPos += 12;
       
-      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      // Linha separadora com cor
+      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .lineWidth(1.5)
+         .moveTo(40, yPos)
+         .lineTo(555, yPos)
+         .stroke();
+      doc.strokeColor('black').lineWidth(1); // Resetar para preto
       yPos += 8;
       
       doc.fontSize(9).font('Helvetica');
@@ -1140,21 +1184,278 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
         const valorTotal = parseFloat(item.valor_total) || 0;
         return sum + valorTotal;
       }, 0);
-      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      // Linha separadora com cor
+      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .lineWidth(1.5)
+         .moveTo(40, yPos)
+         .lineTo(555, yPos)
+         .stroke();
+      doc.strokeColor('black').lineWidth(1); // Resetar para preto
       yPos += 8;
-      doc.fontSize(10).font('Helvetica-Bold');
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(10)
+         .font('Helvetica-Bold');
       doc.text(`TOTAL ITENS: ${formatarMoeda(totalItens)}`, 350, yPos, { align: 'right' });
+      doc.fillColor('black'); // Resetar para preto
       yPos += 20;
     }
 
-    // Verificar se precisa de nova página
-    if (yPos > 700) {
-      doc.addPage();
-      yPos = 40;
+    // ===== VALORES FIXOS =====
+    if (valoresFixos && valoresFixos.length > 0) {
+      // Verificar se há espaço suficiente para a tabela (precisa de ~100px mínimo)
+      if (yPos > 680) {
+        doc.addPage();
+        yPos = 40;
+      }
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('VALORES FIXOS', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      // Cabeçalho da tabela
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(9)
+         .font('Helvetica-Bold');
+      doc.text('Tipo', 40, yPos);
+      doc.text('Descrição', 120, yPos);
+      doc.text('Qtd', 300, yPos);
+      doc.text('Valor Unit.', 350, yPos);
+      doc.text('Valor Total', 450, yPos);
+      doc.fillColor('black');
+      yPos += 12;
+      
+      // Linha separadora
+      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .lineWidth(1.5)
+         .moveTo(40, yPos)
+         .lineTo(555, yPos)
+         .stroke();
+      doc.strokeColor('black').lineWidth(1);
+      yPos += 8;
+      
+      doc.fontSize(9).font('Helvetica');
+      valoresFixos.forEach(vf => {
+        if (yPos > 750) {
+          doc.addPage();
+          yPos = 40;
+        }
+        
+        const quantidade = parseFloat(vf.quantidade) || 0;
+        const valorUnitario = parseFloat(vf.valor_unitario) || 0;
+        const valorTotal = parseFloat(vf.valor_total) || 0;
+        
+        doc.text(vf.tipo || '-', 40, yPos, { width: 70 });
+        doc.text(vf.descricao || '-', 120, yPos, { width: 170 });
+        doc.text(quantidade.toString(), 300, yPos);
+        doc.text(formatarMoeda(valorUnitario), 350, yPos);
+        doc.text(formatarMoeda(valorTotal), 450, yPos);
+        yPos += 15;
+      });
+      
+      yPos += 10;
+    }
+
+    // ===== CUSTOS MENSAIS =====
+    if (custosMensais && custosMensais.length > 0) {
+      // Verificar se há espaço suficiente para a tabela (precisa de ~100px mínimo)
+      if (yPos > 680) {
+        doc.addPage();
+        yPos = 40;
+      }
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('CUSTOS MENSAIS', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      // Cabeçalho da tabela
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(9)
+         .font('Helvetica-Bold');
+      doc.text('Tipo', 40, yPos);
+      doc.text('Descrição', 120, yPos);
+      doc.text('Valor Mensal', 350, yPos);
+      doc.text('Obrigatório', 450, yPos);
+      doc.fillColor('black');
+      yPos += 12;
+      
+      // Linha separadora
+      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .lineWidth(1.5)
+         .moveTo(40, yPos)
+         .lineTo(555, yPos)
+         .stroke();
+      doc.strokeColor('black').lineWidth(1);
+      yPos += 8;
+      
+      doc.fontSize(9).font('Helvetica');
+      custosMensais.forEach(cm => {
+        if (yPos > 750) {
+          doc.addPage();
+          yPos = 40;
+        }
+        
+        const valorMensal = parseFloat(cm.valor_mensal) || 0;
+        const obrigatorio = cm.obrigatorio ? 'Sim' : 'Não';
+        
+        doc.text(cm.tipo || '-', 40, yPos, { width: 70 });
+        doc.text(cm.descricao || '-', 120, yPos, { width: 220 });
+        doc.text(formatarMoeda(valorMensal), 350, yPos);
+        doc.text(obrigatorio, 450, yPos);
+        yPos += 15;
+      });
+      
+      yPos += 10;
+    }
+
+    // ===== CONDIÇÕES GERAIS =====
+    if (orcamento.condicoes_gerais) {
+      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
+      if (yPos > 720) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('CONDIÇÕES GERAIS', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      doc.fontSize(10).font('Helvetica');
+      const textoCondicoes = orcamento.condicoes_gerais || '';
+      const linhas = textoCondicoes.split('\n');
+      const alturaPorLinha = 12;
+      const alturaEstimada = linhas.length * alturaPorLinha;
+      
+      if (yPos + alturaEstimada > 750) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.text(textoCondicoes, 40, yPos, {
+        width: 515,
+        align: 'left'
+      });
+      yPos += alturaEstimada + 15;
+    }
+
+    // ===== LOGÍSTICA =====
+    if (orcamento.logistica) {
+      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
+      if (yPos > 720) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('LOGÍSTICA', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      doc.fontSize(10).font('Helvetica');
+      const textoLogistica = orcamento.logistica || '';
+      const linhas = textoLogistica.split('\n');
+      const alturaPorLinha = 12;
+      const alturaEstimada = linhas.length * alturaPorLinha;
+      
+      if (yPos + alturaEstimada > 750) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.text(textoLogistica, 40, yPos, {
+        width: 515,
+        align: 'left'
+      });
+      yPos += alturaEstimada + 15;
+    }
+
+    // ===== GARANTIAS =====
+    if (orcamento.garantias) {
+      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
+      if (yPos > 720) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('GARANTIAS', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      doc.fontSize(10).font('Helvetica');
+      const textoGarantias = orcamento.garantias || '';
+      const linhas = textoGarantias.split('\n');
+      const alturaPorLinha = 12;
+      const alturaEstimada = linhas.length * alturaPorLinha;
+      
+      if (yPos + alturaEstimada > 750) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.text(textoGarantias, 40, yPos, {
+        width: 515,
+        align: 'left'
+      });
+      yPos += alturaEstimada + 15;
+    }
+
+    // ===== OBSERVAÇÕES =====
+    if (orcamento.observacoes) {
+      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
+      if (yPos > 720) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('OBSERVAÇÕES', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      doc.fontSize(10).font('Helvetica');
+      const textoObservacoes = orcamento.observacoes || '';
+      const linhas = textoObservacoes.split('\n');
+      const alturaPorLinha = 12;
+      const alturaEstimada = linhas.length * alturaPorLinha;
+      
+      if (yPos + alturaEstimada > 750) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.text(textoObservacoes, 40, yPos, {
+        width: 515,
+        align: 'left'
+      });
+      yPos += alturaEstimada + 15;
     }
 
     // ===== ASSINATURAS =====
-    doc.fontSize(11).font('Helvetica-Bold').text('ASSINATURAS', 40, yPos);
+    // Verificar se há espaço suficiente para as assinaturas (precisa de ~70px)
+    // Altura da página A4 é ~792px, margem inferior ~60px, então máximo é ~732px
+    if (yPos > 660) {
+      doc.addPage();
+      yPos = 40;
+    }
+    
+    doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+       .fontSize(11)
+       .font('Helvetica-Bold')
+       .text('ASSINATURAS', 40, yPos);
+    doc.fillColor('black'); // Resetar para preto
     yPos += 20;
     doc.fontSize(10).font('Helvetica');
     
@@ -1164,18 +1465,13 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     doc.text(`Empresa: ${dataAtual}`, 40, yPos);
     yPos += 20;
 
-    // Rodapé
-    const totalPages = doc.bufferedPageRange().count;
-    for (let i = 0; i < totalPages; i++) {
-      doc.switchToPage(i);
-      doc.fontSize(8).font('Helvetica');
-      doc.text(
-        `Página ${i + 1} de ${totalPages} | Gerado em ${formatarDataHora(new Date())}`,
-        40,
-        doc.page.height - 30,
-        { align: 'center', width: 515 }
-      );
-    }
+    // ===== LOGOS EM TODAS AS PÁGINAS =====
+    // Adicionar logos no cabeçalho de todas as páginas
+    adicionarLogosEmTodasAsPaginas(doc);
+    
+    // ===== RODAPÉ =====
+    // Adicionar informações da empresa em todas as páginas
+    adicionarRodapeEmpresa(doc);
 
     // Finalizar documento
     doc.end();
