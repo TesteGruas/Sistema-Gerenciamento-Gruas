@@ -3,6 +3,7 @@ import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { sendWelcomeEmail } from '../services/email.service.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -425,15 +426,46 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
       usuario_id: usuarioId
     }
 
-    // Adicionar senha temporária se criou usuário
-    if (criar_usuario && usuarioId && senhaTemporaria) {
-      responseData.senha_temporaria = senhaTemporaria
+    // Enviar email e WhatsApp se criou usuário (não bloquear criação se falhar)
+    if (criar_usuario && usuarioId && senhaTemporaria && value.contato_email) {
+      // Enviar email de boas-vindas
+      console.log('📧 Tentando enviar email de boas-vindas para cliente...')
+      console.log('📧 Dados:', { nome: value.contato, email: value.contato_email, senha: '***' })
+      
+      try {
+        const emailResult = await sendWelcomeEmail({
+          nome: value.contato,
+          email: value.contato_email,
+          senha_temporaria: senhaTemporaria
+        })
+        console.log(`✅ Email de boas-vindas enviado com sucesso para ${value.contato_email}`, emailResult)
+      } catch (emailError) {
+        console.error('❌ Erro ao enviar email de boas-vindas:', emailError)
+        console.error('❌ Stack trace:', emailError.stack)
+        // Não falha a criação do cliente se o email falhar
+      }
+
+      // Enviar mensagem WhatsApp com instruções de acesso (não bloquear criação se falhar)
+      try {
+        const { enviarMensagemNovoUsuarioCliente } = await import('../services/whatsapp-service.js');
+        await enviarMensagemNovoUsuarioCliente(
+          data,
+          value.contato_email,
+          senhaTemporaria
+        ).catch(whatsappError => {
+          console.error('❌ Erro ao enviar mensagem WhatsApp (não bloqueia criação):', whatsappError);
+        });
+      } catch (importError) {
+        console.error('❌ Erro ao importar serviço WhatsApp (não bloqueia criação):', importError);
+      }
     }
 
     res.status(201).json({
       success: true,
       data: responseData,
-      message: usuarioId ? 'Cliente e usuário criados com sucesso. Senha temporária gerada.' : 'Cliente criado com sucesso'
+      message: usuarioId 
+        ? 'Cliente e usuário criados com sucesso. Email e WhatsApp com senha temporária enviados.' 
+        : 'Cliente criado com sucesso'
     })
   } catch (error) {
     console.error('Erro ao criar cliente:', error)

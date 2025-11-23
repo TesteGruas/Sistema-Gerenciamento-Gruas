@@ -736,6 +736,37 @@ _Sistema de Gestão de Gruas_`;
 }
 
 /**
+ * Formata mensagem de novo usuário cliente para WhatsApp
+ * @param {Object} cliente - Dados do cliente
+ * @param {string} email - Email do usuário
+ * @param {string} senhaTemporaria - Senha temporária
+ * @returns {string} - Mensagem formatada
+ */
+function formatarMensagemNovoUsuarioCliente(cliente, email, senhaTemporaria) {
+  const nomeCliente = cliente?.contato || cliente?.nome || 'Cliente';
+  const nomeEmpresa = cliente?.nome || 'Empresa';
+  
+  const mensagem = `👋 *Bem-vindo ao Sistema de Gestão de Gruas!*
+
+Olá ${nomeCliente},
+
+Seu acesso ao sistema foi criado com sucesso para a empresa *${nomeEmpresa}*!
+
+📧 *Email:* ${email}
+🔑 *Senha Temporária:* ${senhaTemporaria}
+
+⚠️ *Importante:* Altere sua senha no primeiro acesso.
+
+🔗 *Link de Acesso:*
+${FRONTEND_URL}/login
+
+---
+_Sistema de Gestão de Gruas_`;
+
+  return mensagem;
+}
+
+/**
  * Formata mensagem de reset de senha para WhatsApp
  * @param {Object} funcionario - Dados do funcionário
  * @param {string} email - Email do usuário
@@ -1029,6 +1060,79 @@ export async function enviarMensagemNovoUsuarioFuncionario(funcionario, email, s
     return resultado;
   } catch (error) {
     console.error('[whatsapp-service] Erro ao enviar mensagem de novo usuário funcionário:', error);
+    return {
+      sucesso: false,
+      erro: error.message || 'Erro desconhecido'
+    };
+  }
+}
+
+/**
+ * Envia mensagem de novo usuário cliente com instruções de acesso
+ * @param {Object} cliente - Dados do cliente
+ * @param {string} email - Email do usuário criado
+ * @param {string} senhaTemporaria - Senha temporária gerada
+ * @returns {Promise<Object>} - { sucesso: boolean, erro: string|null }
+ */
+export async function enviarMensagemNovoUsuarioCliente(cliente, email, senhaTemporaria) {
+  try {
+    console.log(`[whatsapp-service] Iniciando envio de mensagem para novo usuário cliente ${cliente.id}`);
+    
+    // Buscar telefone do cliente
+    let telefone = null;
+    
+    // Tentar buscar telefone do cliente ou contato_telefone
+    if (cliente.contato_telefone) {
+      telefone = formatarTelefone(cliente.contato_telefone);
+    } else if (cliente.telefone) {
+      telefone = formatarTelefone(cliente.telefone);
+    }
+    
+    // Se não encontrou no cliente, tentar buscar no usuário vinculado
+    if (!telefone && cliente.contato_usuario_id) {
+      const { data: usuario, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('telefone')
+        .eq('id', cliente.contato_usuario_id)
+        .single();
+      
+      if (!userError && usuario && usuario.telefone) {
+        telefone = formatarTelefone(usuario.telefone);
+      }
+    }
+    
+    if (!telefone) {
+      console.warn(`[whatsapp-service] Telefone WhatsApp não disponível para cliente ${cliente.id}`);
+      return {
+        sucesso: false,
+        erro: 'Telefone WhatsApp do cliente não cadastrado'
+      };
+    }
+    
+    // Formatar mensagem
+    const mensagem = formatarMensagemNovoUsuarioCliente(cliente, email, senhaTemporaria);
+    const linkLogin = `${FRONTEND_URL}/login`;
+    
+    // Enviar mensagem
+    const resultado = await enviarMensagemWebhook(
+      telefone, 
+      mensagem, 
+      linkLogin,
+      {
+        tipo: 'novo_usuario_cliente',
+        destinatario_nome: cliente.contato || cliente.nome
+      }
+    );
+    
+    if (resultado.sucesso) {
+      console.log(`[whatsapp-service] Mensagem de novo usuário cliente enviada com sucesso para ${telefone}`);
+    } else {
+      console.error(`[whatsapp-service] Erro ao enviar mensagem de novo usuário cliente: ${resultado.erro}`);
+    }
+    
+    return resultado;
+  } catch (error) {
+    console.error('[whatsapp-service] Erro ao enviar mensagem de novo usuário cliente:', error);
     return {
       sucesso: false,
       erro: error.message || 'Erro desconhecido'

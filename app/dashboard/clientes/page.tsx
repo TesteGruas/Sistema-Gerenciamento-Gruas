@@ -65,7 +65,7 @@ export default function ClientesPage() {
     contato_telefone: '',
     status: 'ativo',
     criar_usuario: true,
-    usuario_senha: ''
+    usuario_senha: '' // Não será usado pelo usuário, apenas mockado no envio
   })
   
   // Estados para gerenciar dados da API
@@ -127,6 +127,24 @@ export default function ClientesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, dadosIniciaisCarregados])
 
+  // Resetar página quando busca ou filtro mudarem
+  const prevSearchTermRef = useRef(searchTerm)
+  const prevStatusFilterRef = useRef(statusFilter)
+  
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    // Verificar se busca ou filtro mudaram (não apenas paginação)
+    const searchChanged = prevSearchTermRef.current !== searchTerm
+    const filterChanged = prevStatusFilterRef.current !== statusFilter
+    
+    if (searchChanged || filterChanged) {
+      setPagination(prev => ({ ...prev, page: 1 }))
+      prevSearchTermRef.current = searchTerm
+      prevStatusFilterRef.current = statusFilter
+    }
+  }, [searchTerm, statusFilter, dadosIniciaisCarregados])
+
   // Carregar clientes quando paginação, busca ou filtro mudarem (com debounce)
   // NOTA: Este useEffect só roda APÓS dadosIniciaisCarregados ser true
   // O carregamento inicial é feito no useEffect anterior
@@ -134,17 +152,11 @@ export default function ClientesPage() {
     if (!dadosIniciaisCarregados) return
     
     const timer = setTimeout(() => {
-      if (!isLoadingRef.current) {
-        isLoadingRef.current = true
-        if (searchTerm.trim()) {
-          buscarClientes().finally(() => {
-            isLoadingRef.current = false
-          })
-        } else {
-          carregarClientes().finally(() => {
-            isLoadingRef.current = false
-          })
-        }
+      // Executar busca ou carregamento
+      if (searchTerm.trim()) {
+        buscarClientes()
+      } else {
+        carregarClientes()
       }
     }, 300)
     
@@ -210,27 +222,28 @@ export default function ClientesPage() {
 
   const buscarClientes = async () => {
     try {
-      if (isLoadingRef.current) return
       isLoadingRef.current = true
       setLoading(true)
       setError(null)
+      console.log('🔍 Buscando clientes com termo:', searchTerm, 'página:', pagination.page)
       const response = await clientesApi.buscarClientes(
         searchTerm, 
         pagination.page, 
         pagination.limit,
         statusFilter || undefined
       )
+      console.log('✅ Busca concluída:', response.data.length, 'clientes encontrados')
       setClientes(response.data)
       setPagination(response.pagination || {
-        page: 1,
-        limit: 9,
+        page: pagination.page,
+        limit: pagination.limit,
         total: 0,
         pages: 0
       })
       setHasLoadedOnce(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao buscar clientes')
-      console.error('Erro ao buscar clientes:', err)
+      console.error('❌ Erro ao buscar clientes:', err)
       setHasLoadedOnce(true)
     } finally {
       setLoading(false)
@@ -306,7 +319,8 @@ export default function ClientesPage() {
         contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
         // Incluir campos de usuário se estiver criando
         criar_usuario: clienteFormData.criar_usuario || false,
-        usuario_senha: clienteFormData.criar_usuario ? clienteFormData.usuario_senha : undefined
+        // Enviar senha mockada temporariamente (backend ainda exige, mas será gerada automaticamente)
+        usuario_senha: clienteFormData.criar_usuario ? 'TempPass123!' : undefined
       }
       
       const response = await clientesApi.criarCliente(dadosFormatados)
@@ -330,12 +344,12 @@ export default function ClientesPage() {
         contato_telefone: '',
         status: 'ativo',
         criar_usuario: true,
-        usuario_senha: ''
+        usuario_senha: '' // Não será usado pelo usuário
       })
       setIsCreateDialogOpen(false)
       
       const message = response.data?.usuario_criado 
-        ? "Cliente e usuário criados com sucesso! O representante receberá um email com as instruções de acesso."
+        ? "Cliente e usuário criados com sucesso! O representante receberá um email e uma mensagem no WhatsApp com as instruções de acesso e senha temporária."
         : "Cliente criado com sucesso!"
       
       toast({
@@ -1285,20 +1299,9 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
                 </p>
                 {!isEdit && (
                   <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="usuario_senha">Senha Inicial *</Label>
-                      <Input
-                        id="usuario_senha"
-                        type="password"
-                        value={formData.usuario_senha || ''}
-                        onChange={(e) => setFormData({ ...formData, usuario_senha: e.target.value })}
-                        placeholder="Mínimo 6 caracteres"
-                        required={formData.criar_usuario}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        O representante poderá alterar esta senha no primeiro acesso.
-                      </p>
-                    </div>
+                    <p className="text-xs text-gray-500">
+                      Uma senha temporária será gerada automaticamente e enviada por email e WhatsApp ao representante.
+                    </p>
                   </div>
                 )}
               </div>
