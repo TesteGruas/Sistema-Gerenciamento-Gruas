@@ -45,7 +45,7 @@ const funcionarioSchema = Joi.object({
   observacoes: Joi.string().allow(null, '').optional(),
   // Campos para criação do usuário
   criar_usuario: Joi.boolean().default(true).optional(),
-  usuario_senha: Joi.string().min(6).when('criar_usuario', { is: true, then: Joi.required(), otherwise: Joi.optional() })
+  usuario_senha: Joi.string().min(6).optional().allow('', null)
 })
 
 // Schema para atualização (campos opcionais e sem validação de senha)
@@ -1131,11 +1131,34 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params
 
     // Validar dados
-    const { error, value } = funcionarioUpdateSchema.validate(req.body)
+    const { error, value } = funcionarioUpdateSchema.validate(req.body, {
+      abortEarly: false,
+      messages: {
+        'string.min': 'O campo {#label} deve ter no mínimo {#limit} caracteres',
+        'string.max': 'O campo {#label} deve ter no máximo {#limit} caracteres',
+        'string.email': 'O email fornecido é inválido',
+        'any.required': 'O campo {#label} é obrigatório',
+        'string.pattern.base': 'O formato do campo {#label} é inválido'
+      }
+    })
     if (error) {
+      // Mapear mensagens de erro para português mais amigável
+      const mensagensErro = {
+        'nome': 'O nome deve ter no mínimo 2 caracteres',
+        'cargo': 'O cargo é obrigatório',
+        'email': 'O email fornecido é inválido',
+        'cpf': 'O CPF fornecido é inválido',
+        'telefone': 'O telefone fornecido é inválido'
+      }
+      
+      const primeiroErro = error.details[0]
+      const campo = primeiroErro.path[0]
+      const mensagemAmigavel = mensagensErro[campo] || primeiroErro.message
+      
       return res.status(400).json({
         error: 'Dados inválidos',
-        details: error.details[0].message
+        message: mensagemAmigavel,
+        details: primeiroErro.message
       })
     }
 

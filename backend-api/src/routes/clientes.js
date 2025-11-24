@@ -37,7 +37,7 @@ const clienteSchema = Joi.object({
   status: Joi.string().valid('ativo', 'inativo', 'bloqueado', 'pendente').default('ativo').optional(),
   // Campos para criação do usuário
   criar_usuario: Joi.boolean().default(true).optional(),
-  usuario_senha: Joi.string().min(6).when('criar_usuario', { is: true, then: Joi.required(), otherwise: Joi.optional() })
+  usuario_senha: Joi.string().min(6).optional().allow('', null)
 })
 
 // Schema para atualização (campos opcionais e sem validação de senha)
@@ -269,11 +269,38 @@ router.get('/:id', authenticateToken, requirePermission('clientes:visualizar'), 
  */
 router.post('/', authenticateToken, requirePermission('clientes:criar'), async (req, res) => {
   try {
-    const { error, value } = clienteSchema.validate(req.body)
+    const { error, value } = clienteSchema.validate(req.body, {
+      abortEarly: false,
+      messages: {
+        'string.min': 'O campo {#label} deve ter no mínimo {#limit} caracteres',
+        'string.max': 'O campo {#label} deve ter no máximo {#limit} caracteres',
+        'string.email': 'O email fornecido é inválido',
+        'any.required': 'O campo {#label} é obrigatório',
+        'string.pattern.base': 'O formato do campo {#label} é inválido',
+        'string.length': 'O campo {#label} deve ter exatamente {#limit} caracteres'
+      }
+    })
     if (error) {
+      // Mapear mensagens de erro para português mais amigável
+      const mensagensErro = {
+        'nome': 'O nome é obrigatório e deve ter no mínimo 2 caracteres',
+        'cnpj': 'O CNPJ fornecido é inválido',
+        'email': 'O email fornecido é inválido',
+        'contato_email': 'O email do representante fornecido é inválido',
+        'contato_cpf': 'O CPF do representante fornecido é inválido',
+        'cep': 'O CEP fornecido é inválido',
+        'estado': 'O estado deve ter exatamente 2 caracteres',
+        'usuario_senha': 'A senha do usuário deve ter no mínimo 6 caracteres'
+      }
+      
+      const primeiroErro = error.details[0]
+      const campo = primeiroErro.path[0]
+      const mensagemAmigavel = mensagensErro[campo] || primeiroErro.message
+      
       return res.status(400).json({
         error: 'Dados inválidos',
-        details: error.details[0].message
+        message: mensagemAmigavel,
+        details: primeiroErro.message
       })
     }
 
@@ -518,11 +545,37 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
   try {
     const { id } = req.params
 
-    const { error, value } = clienteUpdateSchema.validate(req.body)
+    const { error, value } = clienteUpdateSchema.validate(req.body, {
+      abortEarly: false,
+      messages: {
+        'string.min': 'O campo {#label} deve ter no mínimo {#limit} caracteres',
+        'string.max': 'O campo {#label} deve ter no máximo {#limit} caracteres',
+        'string.email': 'O email fornecido é inválido',
+        'any.required': 'O campo {#label} é obrigatório',
+        'string.pattern.base': 'O formato do campo {#label} é inválido',
+        'string.length': 'O campo {#label} deve ter exatamente {#limit} caracteres'
+      }
+    })
     if (error) {
+      // Mapear mensagens de erro para português mais amigável
+      const mensagensErro = {
+        'nome': 'O nome deve ter no mínimo 2 caracteres',
+        'cnpj': 'O CNPJ fornecido é inválido',
+        'email': 'O email fornecido é inválido',
+        'contato_email': 'O email do representante fornecido é inválido',
+        'contato_cpf': 'O CPF do representante fornecido é inválido',
+        'cep': 'O CEP fornecido é inválido',
+        'estado': 'O estado deve ter exatamente 2 caracteres'
+      }
+      
+      const primeiroErro = error.details[0]
+      const campo = primeiroErro.path[0]
+      const mensagemAmigavel = mensagensErro[campo] || primeiroErro.message
+      
       return res.status(400).json({
         error: 'Dados inválidos',
-        details: error.details[0].message
+        message: mensagemAmigavel,
+        details: primeiroErro.message
       })
     }
 

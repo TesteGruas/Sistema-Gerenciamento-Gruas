@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast"
 interface CreateFuncionarioDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: FuncionarioCreateData & { usuario_senha?: string, criar_usuario: boolean }) => Promise<void>
+  onSubmit: (data: FuncionarioCreateData & { criar_usuario: boolean }) => Promise<void>
   submitting: boolean
 }
 
@@ -37,14 +37,13 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     email: "",
     phone: "",
     cpf: "",
-    role: "" as string,
+    role: "",
     status: "Ativo" as const,
     turno: "Diurno" as const,
     salary: "",
     hireDate: "",
     observations: "",
-    criar_usuario: true,
-    usuario_senha: ""
+    criar_usuario: true
   })
 
   const handleChange = useCallback((field: string, value: any) => {
@@ -105,15 +104,6 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     }
     
     if (form.criar_usuario) {
-      if (!form.usuario_senha || form.usuario_senha.length < 6) {
-        toast({
-          title: "Erro de validação",
-          description: "A senha do usuário deve ter no mínimo 6 caracteres",
-          variant: "destructive"
-        })
-        return
-      }
-      
       if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
         toast({
           title: "Erro de validação",
@@ -132,7 +122,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     
     await onSubmit({
       nome: form.name,
-      cargo: cargoFormatado,
+      cargo: cargoFormatado as 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras',
       telefone: form.phone,
       email: form.email,
       cpf: form.cpf,
@@ -141,8 +131,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       data_admissao: form.hireDate,
       salario: salarioNumerico,
       observacoes: form.observations,
-      criar_usuario: form.criar_usuario,
-      usuario_senha: form.criar_usuario ? form.usuario_senha : undefined
+      criar_usuario: form.criar_usuario
     })
   }, [form, onSubmit])
 
@@ -158,8 +147,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       salary: "",
       hireDate: "",
       observations: "",
-      criar_usuario: true,
-      usuario_senha: ""
+      criar_usuario: true
     })
     setMostrarInputNovoCargo(false)
     setNovoCargo("")
@@ -400,21 +388,20 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
           </div>
 
           {form.criar_usuario && (
-            <div className="space-y-2">
-              <Label htmlFor="usuario_senha">Senha do Usuário *</Label>
-              <Input
-                id="usuario_senha"
-                type="password"
-                value={form.usuario_senha}
-                onChange={(e) => handleChange('usuario_senha', e.target.value)}
-                required={form.criar_usuario}
-                placeholder="Mínimo de 6 caracteres"
-                minLength={6}
-                className={form.usuario_senha && form.usuario_senha.length > 0 && form.usuario_senha.length < 6 ? "border-red-500" : ""}
-              />
-              {form.usuario_senha && form.usuario_senha.length > 0 && form.usuario_senha.length < 6 && (
-                <p className="text-sm text-red-500">A senha deve ter no mínimo 6 caracteres</p>
-              )}
+            <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <User className="w-5 h-5 mt-0.5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium mb-1 text-blue-900">
+                    Criação de Usuário
+                  </h4>
+                  <p className="text-sm text-blue-700">
+                    Será criado um usuário para o funcionário com acesso ao sistema. Uma senha temporária será gerada automaticamente e enviada por email e WhatsApp.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
