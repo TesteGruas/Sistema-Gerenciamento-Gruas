@@ -538,7 +538,18 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       doc.fontSize(10).font('Helvetica-Bold');
       doc.text('TOTAL ITENS:', 300, yPos);
       doc.text(formatarMoeda(totalItens), 450, yPos);
-      yPos += 20;
+      yPos += 15;
+      
+      // Valor Total Mensal (se houver prazo de locação)
+      if (orcamento.prazo_locacao_meses && orcamento.prazo_locacao_meses > 0) {
+        const valorTotal = parseFloat(orcamento.valor_total) || totalItens;
+        const valorMensal = valorTotal / orcamento.prazo_locacao_meses;
+        doc.text('VALOR TOTAL MENSAL:', 300, yPos);
+        doc.text(formatarMoeda(valorMensal), 450, yPos);
+        yPos += 15;
+      }
+      
+      yPos += 5;
     }
 
     // ===== VALORES FIXOS =====
@@ -738,8 +749,34 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       yPos = 40;
     }
 
+    // ===== CONDIÇÕES COMERCIAIS =====
+    if (orcamento.condicoes_comerciais) {
+      doc.fontSize(11).font('Helvetica-Bold').text('CONDIÇÕES COMERCIAIS', 40, yPos);
+      yPos += 15;
+      doc.fontSize(9).font('Helvetica');
+      doc.text(orcamento.condicoes_comerciais, 40, yPos, { width: 515, align: 'justify' });
+      yPos += doc.heightOfString(orcamento.condicoes_comerciais, { width: 515 }) + 15;
+    }
+
+    // ===== CONDIÇÕES DE PAGAMENTO =====
+    if (orcamento.condicoes_pagamento) {
+      if (yPos > 700) {
+        doc.addPage();
+        yPos = 40;
+      }
+      doc.fontSize(11).font('Helvetica-Bold').text('CONDIÇÕES DE PAGAMENTO', 40, yPos);
+      yPos += 15;
+      doc.fontSize(9).font('Helvetica');
+      doc.text(orcamento.condicoes_pagamento, 40, yPos, { width: 515, align: 'justify' });
+      yPos += doc.heightOfString(orcamento.condicoes_pagamento, { width: 515 }) + 15;
+    }
+
     // ===== CONDIÇÕES GERAIS =====
     if (orcamento.condicoes_gerais) {
+      if (yPos > 700) {
+        doc.addPage();
+        yPos = 40;
+      }
       doc.fontSize(11).font('Helvetica-Bold').text('CONDIÇÕES GERAIS', 40, yPos);
       yPos += 15;
       doc.fontSize(9).font('Helvetica');
@@ -1096,8 +1133,12 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     // Para orçamentos de locação, usar apenas os itens de orcamento_itens_locacao
     let todosItens = itens || [];
     
+    // Flag para indicar se valores fixos foram convertidos em itens
+    let valoresFixosConvertidosEmItens = false;
+    
     // Se não houver itens, mas houver valores fixos ou custos mensais, converter
     if (todosItens.length === 0 && (valoresFixos.length > 0 || custosMensais.length > 0)) {
+      valoresFixosConvertidosEmItens = true;
       todosItens = [
         ...valoresFixos.map(vf => ({
           produto_servico: vf.tipo || 'Valor Fixo',
@@ -1179,11 +1220,12 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
         }
       });
       
-      // Total dos itens
+      // Total dos itens (será usado depois para calcular o total geral)
       const totalItens = todosItens.reduce((sum, item) => {
         const valorTotal = parseFloat(item.valor_total) || 0;
         return sum + valorTotal;
       }, 0);
+      
       // Linha separadora com cor
       doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
          .lineWidth(1.5)
@@ -1201,7 +1243,8 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     }
 
     // ===== VALORES FIXOS =====
-    if (valoresFixos && valoresFixos.length > 0) {
+    // Só exibir valores fixos se não foram convertidos em itens
+    if (valoresFixos && valoresFixos.length > 0 && !valoresFixosConvertidosEmItens) {
       // Verificar se há espaço suficiente para a tabela (precisa de ~100px mínimo)
       if (yPos > 680) {
         doc.addPage();
@@ -1254,7 +1297,66 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
         yPos += 15;
       });
       
+      // Total dos valores fixos
+      const totalValoresFixos = valoresFixos.reduce((sum, vf) => {
+        const valorTotal = parseFloat(vf.valor_total) || 0;
+        return sum + valorTotal;
+      }, 0);
+      
+      // Linha separadora com cor
+      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .lineWidth(1.5)
+         .moveTo(40, yPos)
+         .lineTo(555, yPos)
+         .stroke();
+      doc.strokeColor('black').lineWidth(1);
+      yPos += 8;
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(10)
+         .font('Helvetica-Bold');
+      doc.text(`TOTAL VALORES FIXOS: ${formatarMoeda(totalValoresFixos)}`, 350, yPos, { align: 'right' });
+      doc.fillColor('black');
+      yPos += 20;
+    }
+    
+    // ===== TOTAL GERAL =====
+    // Calcular total geral (itens + valores fixos, mas só somar valores fixos se não foram convertidos em itens)
+    const totalItens = (todosItens || []).reduce((sum, item) => {
+      const valorTotal = parseFloat(item.valor_total) || 0;
+      return sum + valorTotal;
+    }, 0);
+    
+    // Só somar valores fixos se não foram convertidos em itens
+    const totalValoresFixos = valoresFixosConvertidosEmItens ? 0 : (valoresFixos || []).reduce((sum, vf) => {
+      const valorTotal = parseFloat(vf.valor_total) || 0;
+      return sum + valorTotal;
+    }, 0);
+    
+    const totalGeral = totalItens + totalValoresFixos;
+    
+    // Exibir total geral apenas se houver valores
+    if (totalGeral > 0) {
+      // Verificar se há espaço suficiente
+      if (yPos > 700) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      // Linha separadora com cor
+      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .lineWidth(2)
+         .moveTo(40, yPos)
+         .lineTo(555, yPos)
+         .stroke();
+      doc.strokeColor('black').lineWidth(1);
       yPos += 10;
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(12)
+         .font('Helvetica-Bold');
+      doc.text(`TOTAL GERAL: ${formatarMoeda(totalGeral)}`, 350, yPos, { align: 'right' });
+      doc.fillColor('black');
+      yPos += 25;
     }
 
     // ===== CUSTOS MENSAIS =====
@@ -1309,6 +1411,39 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       });
       
       yPos += 10;
+    }
+
+    // ===== CONDIÇÕES DE PAGAMENTO =====
+    if (orcamento.condicoes_pagamento) {
+      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
+      if (yPos > 720) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('CONDIÇÕES DE PAGAMENTO', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      doc.fontSize(10).font('Helvetica');
+      const textoCondicoesPagamento = orcamento.condicoes_pagamento || '';
+      const linhas = textoCondicoesPagamento.split('\n');
+      const alturaPorLinha = 12;
+      const alturaEstimada = linhas.length * alturaPorLinha;
+      
+      if (yPos + alturaEstimada > 750) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.text(textoCondicoesPagamento, 40, yPos, {
+        width: 515,
+        align: 'left'
+      });
+      yPos += alturaEstimada + 15;
     }
 
     // ===== CONDIÇÕES GERAIS =====
@@ -1371,6 +1506,39 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       }
       
       doc.text(textoLogistica, 40, yPos, {
+        width: 515,
+        align: 'left'
+      });
+      yPos += alturaEstimada + 15;
+    }
+
+    // ===== PRAZO DE ENTREGA =====
+    if (orcamento.prazo_entrega) {
+      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
+      if (yPos > 720) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('PRAZO DE ENTREGA', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      doc.fontSize(10).font('Helvetica');
+      const textoPrazoEntrega = orcamento.prazo_entrega || '';
+      const linhas = textoPrazoEntrega.split('\n');
+      const alturaPorLinha = 12;
+      const alturaEstimada = linhas.length * alturaPorLinha;
+      
+      if (yPos + alturaEstimada > 750) {
+        doc.addPage();
+        yPos = 40;
+      }
+      
+      doc.text(textoPrazoEntrega, 40, yPos, {
         width: 515,
         align: 'left'
       });

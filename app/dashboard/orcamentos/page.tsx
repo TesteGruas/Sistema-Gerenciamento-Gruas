@@ -44,6 +44,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 
 type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado' | 'vencido' | 'convertido'
 
@@ -101,11 +110,55 @@ export default function OrcamentosPage() {
   const [isViewLocacaoDialogOpen, setIsViewLocacaoDialogOpen] = useState(false)
   const [editedOrcamento, setEditedOrcamento] = useState<Orcamento | null>(null)
   
+  // Estados de paginação para orçamentos de obra
+  const [currentPageObra, setCurrentPageObra] = useState(1)
+  const [totalPagesObra, setTotalPagesObra] = useState(1)
+  const [totalItemsObra, setTotalItemsObra] = useState(0)
+  const [itemsPerPageObra] = useState(10)
+  
+  // Estados de paginação para orçamentos de locação
+  const [currentPageLocacao, setCurrentPageLocacao] = useState(1)
+  const [totalPagesLocacao, setTotalPagesLocacao] = useState(1)
+  const [totalItemsLocacao, setTotalItemsLocacao] = useState(0)
+  const [itemsPerPageLocacao] = useState(10)
+  
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const [dadosLocacaoCarregados, setDadosLocacaoCarregados] = useState(false)
   const loadingRef = useRef(false)
   const loadingLocacaoRef = useRef(false)
+
+  // Função helper para formatar datas sem problemas de timezone
+  // Usa apenas a parte da data (YYYY-MM-DD) sem considerar hora/timezone
+  const formatarData = (dataString: string | null | undefined): string => {
+    if (!dataString) return '-'
+    
+    try {
+      // Se já está no formato YYYY-MM-DD (com ou sem hora), extrair apenas a data
+      if (typeof dataString === 'string') {
+        // Remover parte de hora se existir (ex: "2025-11-24T00:00:00" -> "2025-11-24")
+        const dataParte = dataString.split('T')[0].split(' ')[0]
+        
+        // Verificar se está no formato YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dataParte)) {
+          const [ano, mes, dia] = dataParte.split('-')
+          return `${dia}/${mes}/${ano}`
+        }
+      }
+      
+      // Caso contrário, tentar parsear como Date e usar UTC
+      const data = new Date(dataString)
+      if (isNaN(data.getTime())) return '-'
+      
+      // Usar UTC para evitar problemas de timezone
+      const dia = String(data.getUTCDate()).padStart(2, '0')
+      const mes = String(data.getUTCMonth() + 1).padStart(2, '0')
+      const ano = data.getUTCFullYear()
+      return `${dia}/${mes}/${ano}`
+    } catch {
+      return '-'
+    }
+  }
 
   useEffect(() => {
     if (!dadosIniciaisCarregados && !loadingRef.current) {
@@ -118,13 +171,22 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosIniciaisCarregados])
 
-  // Recarregar quando filtro de status mudar
+  // Recarregar quando filtro de status mudar ou página mudar
   useEffect(() => {
     if (dadosIniciaisCarregados) {
+      setCurrentPageObra(1) // Resetar para primeira página ao mudar filtro
       loadOrcamentos()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroStatus])
+
+  // Recarregar quando página mudar (orçamentos de obra)
+  useEffect(() => {
+    if (dadosIniciaisCarregados && activeTab === 'obra') {
+      loadOrcamentos()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPageObra])
 
   // Carregar orçamentos de locação
   useEffect(() => {
@@ -138,19 +200,29 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosLocacaoCarregados, activeTab])
 
-  // Recarregar orçamentos de locação quando tab mudar
+  // Recarregar orçamentos de locação quando tab mudar ou filtro mudar
   useEffect(() => {
     if (activeTab === 'locacao' && dadosLocacaoCarregados) {
+      setCurrentPageLocacao(1) // Resetar para primeira página ao mudar filtro
       loadOrcamentosLocacao()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, filtroStatus])
+
+  // Recarregar quando página mudar (orçamentos de locação)
+  useEffect(() => {
+    if (dadosLocacaoCarregados && activeTab === 'locacao') {
+      loadOrcamentosLocacao()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPageLocacao])
 
   // Debounce para busca (aguarda 500ms após parar de digitar)
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
     
     const timeoutId = setTimeout(() => {
+      setCurrentPageObra(1) // Resetar para primeira página ao pesquisar
       loadOrcamentos()
     }, 500)
 
@@ -158,18 +230,37 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm])
 
+  // Debounce para busca de locação
+  useEffect(() => {
+    if (!dadosLocacaoCarregados || activeTab !== 'locacao') return
+    
+    const timeoutId = setTimeout(() => {
+      setCurrentPageLocacao(1) // Resetar para primeira página ao pesquisar
+      loadOrcamentosLocacao()
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, activeTab])
+
   const loadOrcamentos = async () => {
     setLoading(true)
     try {
       const response = await getOrcamentos({
-        page: 1,
-        limit: 100,
+        page: currentPageObra,
+        limit: itemsPerPageObra,
         status: filtroStatus !== "todos" ? filtroStatus : undefined,
         search: searchTerm || undefined
       })
 
+      // Atualizar informações de paginação
+      if (response.pagination) {
+        setTotalPagesObra(response.pagination.pages || 1)
+        setTotalItemsObra(response.pagination.total || 0)
+      }
+
       // Mapear dados da API para o formato esperado pelo componente
-      const mappedData: Orcamento[] = response.data.map((orc: any) => ({
+      const mappedData: Orcamento[] = (response.data || []).map((orc: any) => ({
         id: String(orc.id),
         numero: orc.numero || `ORC-${orc.id}`,
         cliente_id: orc.cliente_id,
@@ -225,13 +316,19 @@ export default function OrcamentosPage() {
     setLoadingLocacao(true)
     try {
       const response = await orcamentosLocacaoApi.list({
-        page: 1,
-        limit: 100,
+        page: currentPageLocacao,
+        limit: itemsPerPageLocacao,
         status: filtroStatus !== "todos" ? filtroStatus : undefined,
         search: searchTerm || undefined
       })
 
       console.log('Resposta da API de orçamentos de locação:', response)
+      
+      // Atualizar informações de paginação
+      if (response.pagination) {
+        setTotalPagesLocacao(response.pagination.pages || 1)
+        setTotalItemsLocacao(response.pagination.total || 0)
+      }
       
       // Garantir que estamos usando os dados corretos da resposta
       const dados = response?.data || response?.success ? (response.data || []) : []
@@ -782,7 +879,7 @@ export default function OrcamentosPage() {
                 ) : (
                   filteredOrcamentos.map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-mono font-medium">{item.numero}</TableCell>
+                      <TableCell>{item.numero}</TableCell>
                       <TableCell>{item.cliente_nome || '-'}</TableCell>
                       <TableCell>
                         <div>
@@ -876,6 +973,79 @@ export default function OrcamentosPage() {
               </TableBody>
             </Table>
           )}
+          
+          {/* Paginação para Orçamentos de Obra */}
+          {!loading && totalPagesObra > 1 && (
+            <div className="mt-6 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Mostrando {((currentPageObra - 1) * itemsPerPageObra) + 1} a {Math.min(currentPageObra * itemsPerPageObra, totalItemsObra)} de {totalItemsObra} orçamentos
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (currentPageObra > 1) {
+                          setCurrentPageObra(currentPageObra - 1)
+                        }
+                      }}
+                      className={currentPageObra === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                  
+                  {Array.from({ length: Math.min(5, totalPagesObra) }, (_, i) => {
+                    let pageNum
+                    if (totalPagesObra <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPageObra <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPageObra >= totalPagesObra - 2) {
+                      pageNum = totalPagesObra - 4 + i
+                    } else {
+                      pageNum = currentPageObra - 2 + i
+                    }
+                    
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setCurrentPageObra(pageNum)
+                          }}
+                          isActive={currentPageObra === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  })}
+                  
+                  {totalPagesObra > 5 && currentPageObra < totalPagesObra - 2 && (
+                    <PaginationItem>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  )}
+                  
+                  <PaginationItem>
+                    <PaginationNext 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (currentPageObra < totalPagesObra) {
+                          setCurrentPageObra(currentPageObra + 1)
+                        }
+                      }}
+                      className={currentPageObra === totalPagesObra ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </CardContent>
       </Card>
         </TabsContent>
@@ -941,17 +1111,9 @@ export default function OrcamentosPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  orcamentosLocacao
-                    .filter((item) => {
-                      const matchesSearch = !searchTerm || 
-                        item.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        item.clientes?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
-                      const matchesStatus = filtroStatus === "todos" || item.status === filtroStatus
-                      return matchesSearch && matchesStatus
-                    })
-                    .map((item) => (
+                  orcamentosLocacao.map((item) => (
                       <TableRow key={item.id}>
-                        <TableCell className="font-mono font-medium">{item.numero}</TableCell>
+                        <TableCell>{item.numero}</TableCell>
                         <TableCell>{item.clientes?.nome || '-'}</TableCell>
                         <TableCell>{new Date(item.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
                         <TableCell className="font-semibold">
@@ -1000,6 +1162,79 @@ export default function OrcamentosPage() {
                 )}
               </TableBody>
             </Table>
+          )}
+          
+          {/* Paginação para Orçamentos de Locação */}
+          {!loadingLocacao && totalPagesLocacao > 1 && (
+            <div className="mt-6 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Mostrando {((currentPageLocacao - 1) * itemsPerPageLocacao) + 1} a {Math.min(currentPageLocacao * itemsPerPageLocacao, totalItemsLocacao)} de {totalItemsLocacao} orçamentos
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (currentPageLocacao > 1) {
+                          setCurrentPageLocacao(currentPageLocacao - 1)
+                        }
+                      }}
+                      className={currentPageLocacao === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                  
+                  {Array.from({ length: Math.min(5, totalPagesLocacao) }, (_, i) => {
+                    let pageNum
+                    if (totalPagesLocacao <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPageLocacao <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPageLocacao >= totalPagesLocacao - 2) {
+                      pageNum = totalPagesLocacao - 4 + i
+                    } else {
+                      pageNum = currentPageLocacao - 2 + i
+                    }
+                    
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setCurrentPageLocacao(pageNum)
+                          }}
+                          isActive={currentPageLocacao === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  })}
+                  
+                  {totalPagesLocacao > 5 && currentPageLocacao < totalPagesLocacao - 2 && (
+                    <PaginationItem>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  )}
+                  
+                  <PaginationItem>
+                    <PaginationNext 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (currentPageLocacao < totalPagesLocacao) {
+                          setCurrentPageLocacao(currentPageLocacao + 1)
+                        }
+                      }}
+                      className={currentPageLocacao === totalPagesLocacao ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -1081,35 +1316,84 @@ export default function OrcamentosPage() {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
-                      <p className="text-sm">{orcamentoAtual?.tipo_obra || '-'}</p>
+                      <p className="text-sm">{(orcamentoAtual as any)?.obra_tipo || orcamentoAtual?.tipo_obra || '-'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Equipamento</label>
-                      <p className="text-sm">{orcamentoAtual?.equipamento || '-'}</p>
+                      {(orcamentoAtual as any)?.grua_modelo ? (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">{(orcamentoAtual as any).grua_modelo}</p>
+                          {((orcamentoAtual as any).grua_lanca || (orcamentoAtual as any).grua_altura_final || (orcamentoAtual as any).grua_potencia || (orcamentoAtual as any).grua_capacidade_1_cabo || (orcamentoAtual as any).grua_capacidade_2_cabos || (orcamentoAtual as any).grua_voltagem) && (
+                            <div className="text-xs text-gray-500 space-y-0.5">
+                              {(orcamentoAtual as any).grua_lanca && <p>Lança: {(orcamentoAtual as any).grua_lanca}m</p>}
+                              {(orcamentoAtual as any).grua_altura_final && <p>Altura Final: {(orcamentoAtual as any).grua_altura_final}m</p>}
+                              {(orcamentoAtual as any).grua_potencia && <p>Potência: {(orcamentoAtual as any).grua_potencia}kW</p>}
+                              {(orcamentoAtual as any).grua_capacidade_1_cabo && <p>Capacidade 1 cabo: {(orcamentoAtual as any).grua_capacidade_1_cabo}kg</p>}
+                              {(orcamentoAtual as any).grua_capacidade_2_cabos && <p>Capacidade 2 cabos: {(orcamentoAtual as any).grua_capacidade_2_cabos}kg</p>}
+                              {(orcamentoAtual as any).grua_voltagem && <p>Voltagem: {(orcamentoAtual as any).grua_voltagem}V</p>}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm">{orcamentoAtual?.equipamento || '-'}</p>
+                      )}
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Data do Orçamento</label>
-                      <p className="text-sm">{orcamentoAtual?.created_at ? new Date(orcamentoAtual.created_at).toLocaleDateString('pt-BR') : '-'}</p>
+                      <p className="text-sm">
+                        {formatarData((orcamentoAtual as any)?.data_orcamento || orcamentoAtual?.created_at)}
+                      </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Data de Validade</label>
-                      <p className="text-sm">{orcamentoAtual?.validade_proposta ? new Date(orcamentoAtual.validade_proposta).toLocaleDateString('pt-BR') : '-'}</p>
+                      <p className="text-sm">
+                        {formatarData((orcamentoAtual as any)?.data_validade || orcamentoAtual?.validade_proposta)}
+                      </p>
                     </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Valor Total do Contrato</label>
+                      <p className="text-lg font-bold text-blue-600">
+                        {(() => {
+                          const valorTotal = (orcamentoAtual as any)?.valor_total || 0
+                          return `R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                        })()}
+                      </p>
+                    </div>
+                    {(orcamentoAtual as any)?.desconto !== undefined && (orcamentoAtual as any).desconto !== null && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Desconto</label>
+                        <p className={`text-sm font-semibold ${(orcamentoAtual as any).desconto > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                          R$ {(orcamentoAtual as any).desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="text-sm font-medium text-gray-700">Valor Total Mensal</label>
                       <p className="text-lg font-bold text-green-600">
-                        R$ {orcamentoAtual?.total_mensal?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                        {(() => {
+                          // Calcular valor mensal: valor_total / prazo_locacao_meses
+                          const valorTotal = (orcamentoAtual as any)?.valor_total || 0
+                          const prazoMeses = orcamentoAtual?.prazo_locacao_meses || 1
+                          const valorMensal = prazoMeses > 0 ? valorTotal / prazoMeses : 0
+                          return `R$ ${valorMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                        })()}
                       </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Prazo de Locação</label>
                       <p className="text-sm">{orcamentoAtual?.prazo_locacao_meses ? `${orcamentoAtual.prazo_locacao_meses} meses` : '-'}</p>
                     </div>
+                    {(orcamentoAtual as any)?.prazo_entrega && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Prazo de Entrega</label>
+                        <p className="text-sm">{(orcamentoAtual as any).prazo_entrega}</p>
+                      </div>
+                    )}
                     {orcamentoAtual?.data_inicio_estimada && (
                       <div>
                         <label className="text-sm font-medium text-gray-700">Data de Início Estimada</label>
                         <p className="text-sm">
-                          {new Date(orcamentoAtual.data_inicio_estimada).toLocaleDateString('pt-BR')}
+                          {formatarData(orcamentoAtual.data_inicio_estimada)}
                           {orcamentoAtual.tolerancia_dias && ` (±${orcamentoAtual.tolerancia_dias} dias)`}
                         </p>
                       </div>
@@ -1248,6 +1532,54 @@ export default function OrcamentosPage() {
                     <Textarea
                       readOnly
                       value={orcamentoAtual.condicoes_comerciais}
+                      className="min-h-[100px] bg-gray-50"
+                    />
+                  </div>
+                )}
+
+                {/* Condições de Pagamento */}
+                {(orcamentoAtual as any)?.condicoes_pagamento && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições de Pagamento</h3>
+                    <Textarea
+                      readOnly
+                      value={(orcamentoAtual as any).condicoes_pagamento}
+                      className="min-h-[100px] bg-gray-50"
+                    />
+                  </div>
+                )}
+
+                {/* Condições Gerais */}
+                {(orcamentoAtual as any)?.condicoes_gerais && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições Gerais</h3>
+                    <Textarea
+                      readOnly
+                      value={(orcamentoAtual as any).condicoes_gerais}
+                      className="min-h-[100px] bg-gray-50"
+                    />
+                  </div>
+                )}
+
+                {/* Logística */}
+                {(orcamentoAtual as any)?.logistica && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Logística</h3>
+                    <Textarea
+                      readOnly
+                      value={(orcamentoAtual as any).logistica}
+                      className="min-h-[100px] bg-gray-50"
+                    />
+                  </div>
+                )}
+
+                {/* Garantias */}
+                {(orcamentoAtual as any)?.garantias && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Garantias</h3>
+                    <Textarea
+                      readOnly
+                      value={(orcamentoAtual as any).garantias}
                       className="min-h-[100px] bg-gray-50"
                     />
                   </div>
@@ -1547,6 +1879,18 @@ export default function OrcamentosPage() {
                 </div>
               </div>
 
+              {/* Condições de Pagamento */}
+              {selectedOrcamentoLocacao.condicoes_pagamento && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições de Pagamento</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamentoLocacao.condicoes_pagamento}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
               {/* Condições Gerais */}
               {selectedOrcamentoLocacao.condicoes_gerais && (
                 <div className="space-y-2">
@@ -1566,6 +1910,18 @@ export default function OrcamentosPage() {
                   <Textarea
                     readOnly
                     value={selectedOrcamentoLocacao.logistica}
+                    className="min-h-[100px] bg-gray-50"
+                  />
+                </div>
+              )}
+
+              {/* Prazo de Entrega */}
+              {selectedOrcamentoLocacao.prazo_entrega && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Prazo de Entrega</h3>
+                  <Textarea
+                    readOnly
+                    value={selectedOrcamentoLocacao.prazo_entrega}
                     className="min-h-[100px] bg-gray-50"
                   />
                 </div>

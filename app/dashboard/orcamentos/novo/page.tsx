@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,7 @@ import {
   Calendar,
   FileText,
   Plus,
+  Minus,
   Loader2,
   Save,
   FileText as FileTextIcon,
@@ -32,6 +33,7 @@ import GruaSearch from "@/components/grua-search"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
 import { orcamentosLocacaoApi } from "@/lib/api-orcamentos-locacao"
+import { createOrcamento, updateOrcamento, getOrcamento } from "@/lib/api-orcamentos"
 
 // Funções de máscara de moeda
 const formatCurrency = (value: string) => {
@@ -90,6 +92,8 @@ export default function NovoOrcamentoPage() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const orcamentoId = searchParams.get('id')
+  const tipo = searchParams.get('tipo') || 'locacao' // 'obra' ou 'locacao'
+  const isObra = tipo === 'obra'
   const [isLoadingOrcamento, setIsLoadingOrcamento] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   
@@ -149,7 +153,8 @@ export default function NovoOrcamentoPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [complementosSelecionados, setComplementosSelecionados] = useState<any[]>([])
   const [searchComplemento, setSearchComplemento] = useState("")
-  const [selectComplementoValue, setSelectComplementoValue] = useState("")
+  const [showComplementosResults, setShowComplementosResults] = useState(false)
+  const complementosSearchRef = useRef<HTMLDivElement>(null)
   const [valoresFixos, setValoresFixos] = useState<Array<{
     id?: string
     tipo: 'Locação' | 'Serviço'
@@ -224,6 +229,18 @@ export default function NovoOrcamentoPage() {
       loadOrcamentoForEdit(orcamentoId)
     }
   }, [orcamentoId])
+
+  // Fechar resultados de complementos quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (complementosSearchRef.current && !complementosSearchRef.current.contains(event.target as Node)) {
+        setShowComplementosResults(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const loadOrcamentoForEdit = async (id: string) => {
     setIsLoadingOrcamento(true)
@@ -373,14 +390,39 @@ export default function NovoOrcamentoPage() {
 
       // Validações básicas
       if (!isDraft) {
-        if (!formData.obra_nome || !formData.equipamento || !clienteSelecionado) {
-          toast({
-            title: "Erro",
-            description: "Preencha os campos obrigatórios (Obra, Equipamento e Cliente)",
-            variant: "destructive"
-          })
-          setIsSaving(false)
-          return
+        if (isObra) {
+          // Validações para orçamento de obra
+          const camposFaltando = []
+          if (!formData.obra_nome) camposFaltando.push('Nome da Obra')
+          if (!formData.tipo_obra) camposFaltando.push('Tipo de Obra')
+          if (!formData.equipamento && !gruaSelecionada) camposFaltando.push('Equipamento Ofertado')
+          if (!clienteSelecionado && !formData.cliente_id) camposFaltando.push('Cliente')
+          
+          if (camposFaltando.length > 0) {
+            toast({
+              title: "Erro",
+              description: `Preencha os campos obrigatórios: ${camposFaltando.join(', ')}`,
+              variant: "destructive"
+            })
+            setIsSaving(false)
+            return
+          }
+        } else {
+          // Validações para orçamento de locação
+          const camposFaltando = []
+          if (!formData.obra_nome) camposFaltando.push('Nome da Obra')
+          if (!formData.equipamento && !gruaSelecionada) camposFaltando.push('Equipamento Ofertado')
+          if (!clienteSelecionado && !formData.cliente_id) camposFaltando.push('Cliente')
+          
+          if (camposFaltando.length > 0) {
+            toast({
+              title: "Erro",
+              description: `Preencha os campos obrigatórios: ${camposFaltando.join(', ')}`,
+              variant: "destructive"
+            })
+            setIsSaving(false)
+            return
+          }
         }
       } else {
         // Para rascunho, apenas cliente é obrigatório
@@ -417,99 +459,249 @@ export default function NovoOrcamentoPage() {
         return
       }
 
-      const prazoMeses = parseInt(formData.prazo_locacao_meses || '1')
-      
-      // Calcular valor total dos complementos
-      let valorTotalComplementos = 0
-      const itensComplementos = complementosSelecionados.map(complemento => {
-        let valorItem = 0
-        let quantidade = complemento.quantidade || 1
-        
-        // Calcular valor baseado no tipo de precificação
-        if (complemento.tipo_precificacao === 'mensal') {
-          valorItem = (complemento.preco_unitario_centavos / 100) * quantidade * prazoMeses
-        } else if (complemento.tipo_precificacao === 'unico') {
-          valorItem = (complemento.preco_unitario_centavos / 100) * quantidade
-        } else {
-          // Para por_metro, por_hora, por_dia - usar o valor_total já calculado
-          valorItem = complemento.valor_total || (complemento.preco_unitario_centavos / 100) * quantidade
-        }
-        
-        valorTotalComplementos += valorItem
-        
-        return {
-          produto_servico: complemento.nome,
-          descricao: complemento.descricao || `${complemento.nome} - ${complemento.sku || ''}`,
-          quantidade: complemento.tipo_precificacao === 'mensal' ? quantidade * prazoMeses : quantidade,
-          valor_unitario: complemento.preco_unitario_centavos / 100,
-          valor_total: valorItem,
-            tipo: (complemento.sku?.startsWith('ACESS') ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
-          unidade: complemento.unidade || 'unidade',
-          observacoes: complemento.descricao || ''
-        }
-      })
-      
-      // Calcular valor total dos valores fixos
-      const valorTotalValoresFixos = valoresFixos.reduce((sum, vf) => sum + (vf.quantidade * vf.valor_unitario), 0)
-      
-      const valorTotalOrcamento = (totalMensal * prazoMeses) + valorTotalComplementos + valorTotalValoresFixos
-      
-      const hoje = new Date()
-      const orcamentoData = {
-        numero,
-        cliente_id: parseInt(clienteId.toString()),
-        data_orcamento: hoje.toISOString().split('T')[0],
-        data_validade: formData.data_inicio_estimada 
-          ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
-          : new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        valor_total: valorTotalOrcamento,
-        desconto: 0,
-        status: (isDraft ? 'rascunho' : 'enviado') as 'rascunho' | 'enviado',
-        tipo_orcamento: 'locacao_grua' as 'locacao_grua' | 'locacao_plataforma',
-        condicoes_pagamento: formData.condicoes_comerciais || '',
-        condicoes_gerais: formData.condicoes_gerais || '',
-        logistica: formData.logistica || '',
-        garantias: formData.garantias || '',
-        prazo_entrega: formData.prazo_locacao_meses ? `${formData.prazo_locacao_meses} meses` : '',
-        observacoes: formData.observacoes || '',
-        valores_fixos: valoresFixos.map(vf => ({
-          tipo: vf.tipo,
-          descricao: vf.descricao,
-          quantidade: vf.quantidade,
-          valor_unitario: vf.valor_unitario,
-          valor_total: vf.quantidade * vf.valor_unitario,
-          observacoes: vf.observacoes || ''
-        })),
-        custos_mensais: custosMensais.map(cm => ({
-          tipo: cm.tipo,
-          descricao: cm.descricao,
-          valor_mensal: cm.valor_mensal,
-          obrigatorio: cm.obrigatorio,
-          observacoes: cm.observacoes || ''
-        })),
-        itens: [
-          // Incluir custos mensais como itens para compatibilidade
-          ...custosMensais.map(cm => ({
-            produto_servico: cm.tipo,
-            descricao: cm.descricao,
-            quantidade: prazoMeses,
-            valor_unitario: cm.valor_mensal,
-            valor_total: cm.valor_mensal * prazoMeses,
-            tipo: (cm.tipo === 'Locação' ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
-            unidade: 'mês',
-            observacoes: cm.observacoes || ''
-          })),
-          ...itensComplementos
-        ]
+      // Garantir que equipamento esteja preenchido se uma grua foi selecionada
+      let equipamentoFinal = formData.equipamento
+      if (!equipamentoFinal && gruaSelecionada) {
+        equipamentoFinal = `${gruaSelecionada.tipo || 'Grua Torre'} / ${gruaSelecionada.fabricante} ${gruaSelecionada.modelo}`
+        setFormData({ ...formData, equipamento: equipamentoFinal })
       }
 
+      const prazoMeses = parseInt(formData.prazo_locacao_meses || '1')
+      const hoje = new Date()
+      
       let response
-      if (isEditMode && orcamentoId) {
-        // Atualizar orçamento existente
-        response = await orcamentosLocacaoApi.update(parseInt(orcamentoId), orcamentoData)
+      
+      if (isObra) {
+        // ===== ORÇAMENTO DE OBRA =====
+        // Calcular valor total dos complementos
+        let valorTotalComplementos = 0
+        const itensComplementos = complementosSelecionados.map(complemento => {
+          let valorItem = 0
+          let quantidade = complemento.quantidade || 1
+          
+          // Calcular valor baseado no tipo de precificação
+          if (complemento.tipo_precificacao === 'mensal') {
+            valorItem = (complemento.preco_unitario_centavos / 100) * quantidade * prazoMeses
+          } else if (complemento.tipo_precificacao === 'unico') {
+            valorItem = (complemento.preco_unitario_centavos / 100) * quantidade
+          } else {
+            // Para por_metro, por_hora, por_dia - usar o valor_total já calculado
+            valorItem = complemento.valor_total || (complemento.preco_unitario_centavos / 100) * quantidade
+          }
+          
+          valorTotalComplementos += valorItem
+          
+          return {
+            produto_servico: complemento.nome,
+            descricao: complemento.descricao || `${complemento.nome} - ${complemento.sku || ''}`,
+            quantidade: complemento.tipo_precificacao === 'mensal' ? quantidade * prazoMeses : quantidade,
+            valor_unitario: complemento.preco_unitario_centavos / 100,
+            valor_total: valorItem,
+            tipo: (complemento.sku?.startsWith('ACESS') ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
+            unidade: complemento.unidade || 'unidade',
+            observacoes: complemento.descricao || ''
+          }
+        })
+        
+        // Calcular valor total dos custos mensais
+        const valorTotalCustosMensais = custosMensais.reduce((sum, cm) => sum + (cm.valor_mensal * prazoMeses), 0)
+        
+        const valorTotalOrcamento = valorTotalCustosMensais + valorTotalComplementos
+        
+        // Extrair informações da grua selecionada
+        // Converter grua_id para número se possível, caso contrário usar null
+        // IMPORTANTE: Se o ID for uma string com prefixo (ex: "G0062"), usar null
+        // pois o número extraído pode não corresponder ao ID real na tabela
+        // A API aceita null para grua_id, então é seguro não enviar se não tivermos certeza
+        let gruaId: number | null = null
+        if (gruaSelecionada?.id) {
+          if (typeof gruaSelecionada.id === 'number') {
+            // Se já é um número, usar diretamente
+            gruaId = gruaSelecionada.id > 0 ? gruaSelecionada.id : null
+          } else if (typeof gruaSelecionada.id === 'string') {
+            // Se for string, verificar se é um número puro (sem prefixo)
+            const isNumericString = /^\d+$/.test(gruaSelecionada.id)
+            if (isNumericString) {
+              const idNum = parseInt(gruaSelecionada.id)
+              gruaId = !isNaN(idNum) && idNum > 0 ? idNum : null
+            } else {
+              // Se tiver prefixo (ex: "G0062"), usar null para evitar erro de foreign key
+              // O ID real na tabela pode ser diferente do número extraído
+              gruaId = null
+            }
+          }
+        }
+        
+        // Log para debug (pode remover depois)
+        if (gruaSelecionada && !gruaId) {
+          console.log('[Orçamento] Grua selecionada mas grua_id será null:', {
+            gruaIdOriginal: gruaSelecionada.id,
+            tipo: typeof gruaSelecionada.id,
+            motivo: typeof gruaSelecionada.id === 'string' && !/^\d+$/.test(gruaSelecionada.id) 
+              ? 'ID tem prefixo (ex: G0062)' 
+              : 'ID inválido ou zero'
+          })
+        }
+        const gruaModelo = equipamentoFinal || gruaSelecionada?.modelo || ''
+        const gruaLanca = formData.comprimento_lanca ? parseFloat(formData.comprimento_lanca) : (gruaSelecionada?.lanca || null)
+        const gruaAlturaFinal = formData.altura_final ? parseFloat(formData.altura_final) : (gruaSelecionada?.altura_final || null)
+        const gruaTipoBase = gruaSelecionada?.tipo_base || ''
+        const gruaAno = gruaSelecionada?.ano || null
+        const gruaPotencia = formData.potencia_eletrica ? parseFloat(formData.potencia_eletrica) : (gruaSelecionada?.potencia_instalada || null)
+        const gruaCapacidade1 = formData.carga_maxima ? parseFloat(formData.carga_maxima) : (gruaSelecionada?.capacidade_1_cabo || null)
+        const gruaCapacidade2 = formData.carga_ponta ? parseFloat(formData.carga_ponta) : (gruaSelecionada?.capacidade_2_cabos || null)
+        const gruaVoltagem = formData.energia_necessaria || gruaSelecionada?.voltagem || ''
+        
+        const orcamentoData = {
+          cliente_id: parseInt(clienteId.toString()),
+          data_orcamento: hoje.toISOString().split('T')[0],
+          data_validade: formData.data_inicio_estimada 
+            ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
+            : new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          valor_total: valorTotalOrcamento,
+          desconto: 0,
+          status: (isDraft ? 'rascunho' : 'enviado') as 'rascunho' | 'enviado',
+          tipo_orcamento: 'locacao' as 'equipamento' | 'servico' | 'locacao' | 'venda',
+          condicoes_pagamento: formData.condicoes_comerciais || '',
+          prazo_entrega: formData.prazo_locacao_meses ? `${formData.prazo_locacao_meses} meses` : '',
+          observacoes: formData.observacoes || '',
+          // Campos de obra
+          obra_nome: formData.obra_nome || '',
+          obra_tipo: formData.tipo_obra || '',
+          obra_endereco: formData.obra_endereco || '',
+          obra_cidade: formData.obra_cidade || '',
+          // Campos de grua
+          grua_id: gruaId,
+          grua_modelo: gruaModelo,
+          grua_lanca: gruaLanca,
+          grua_altura_final: gruaAlturaFinal,
+          grua_tipo_base: gruaTipoBase,
+          grua_ano: gruaAno,
+          grua_potencia: gruaPotencia,
+          grua_capacidade_1_cabo: gruaCapacidade1,
+          grua_capacidade_2_cabos: gruaCapacidade2,
+          grua_voltagem: gruaVoltagem,
+          // Campos gerais
+          prazo_locacao_meses: prazoMeses,
+          data_inicio_estimada: formData.data_inicio_estimada || null,
+          tolerancia_dias: parseInt(formData.tolerancia_dias || '15'),
+          escopo_incluso: formData.escopo_incluso || '',
+          responsabilidades_cliente: formData.responsabilidades_cliente || '',
+          condicoes_comerciais: formData.condicoes_comerciais || '',
+          condicoes_gerais: formData.condicoes_gerais || '',
+          logistica: formData.logistica || '',
+          garantias: formData.garantias || '',
+          itens: [
+            // Incluir custos mensais como itens
+            ...custosMensais.map(cm => ({
+              produto_servico: cm.tipo,
+              descricao: cm.descricao,
+              quantidade: prazoMeses,
+              valor_unitario: cm.valor_mensal,
+              valor_total: cm.valor_mensal * prazoMeses,
+              tipo: (cm.tipo === 'Locação' ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
+              unidade: 'mês',
+              observacoes: cm.observacoes || ''
+            })),
+            ...itensComplementos
+          ]
+        }
+        
+        if (isEditMode && orcamentoId) {
+          response = await updateOrcamento({ id: parseInt(orcamentoId), ...orcamentoData })
+        } else {
+          response = await createOrcamento(orcamentoData)
+        }
       } else {
-        // Criar novo orçamento
-        response = await orcamentosLocacaoApi.create(orcamentoData)
+        // ===== ORÇAMENTO DE LOCAÇÃO =====
+        // Calcular valor total dos complementos
+        let valorTotalComplementos = 0
+        const itensComplementos = complementosSelecionados.map(complemento => {
+          let valorItem = 0
+          let quantidade = complemento.quantidade || 1
+          
+          // Calcular valor baseado no tipo de precificação
+          if (complemento.tipo_precificacao === 'mensal') {
+            valorItem = (complemento.preco_unitario_centavos / 100) * quantidade * prazoMeses
+          } else if (complemento.tipo_precificacao === 'unico') {
+            valorItem = (complemento.preco_unitario_centavos / 100) * quantidade
+          } else {
+            // Para por_metro, por_hora, por_dia - usar o valor_total já calculado
+            valorItem = complemento.valor_total || (complemento.preco_unitario_centavos / 100) * quantidade
+          }
+          
+          valorTotalComplementos += valorItem
+          
+          return {
+            produto_servico: complemento.nome,
+            descricao: complemento.descricao || `${complemento.nome} - ${complemento.sku || ''}`,
+            quantidade: complemento.tipo_precificacao === 'mensal' ? quantidade * prazoMeses : quantidade,
+            valor_unitario: complemento.preco_unitario_centavos / 100,
+            valor_total: valorItem,
+            tipo: (complemento.sku?.startsWith('ACESS') ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
+            unidade: complemento.unidade || 'unidade',
+            observacoes: complemento.descricao || ''
+          }
+        })
+        
+        // Calcular valor total dos valores fixos
+        const valorTotalValoresFixos = valoresFixos.reduce((sum, vf) => sum + (vf.quantidade * vf.valor_unitario), 0)
+        
+        const valorTotalOrcamento = (totalMensal * prazoMeses) + valorTotalComplementos + valorTotalValoresFixos
+        
+        const orcamentoData = {
+          numero,
+          cliente_id: parseInt(clienteId.toString()),
+          data_orcamento: hoje.toISOString().split('T')[0],
+          data_validade: formData.data_inicio_estimada 
+            ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
+            : new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          valor_total: valorTotalOrcamento,
+          desconto: 0,
+          status: (isDraft ? 'rascunho' : 'enviado') as 'rascunho' | 'enviado',
+          tipo_orcamento: 'locacao_grua' as 'locacao_grua' | 'locacao_plataforma',
+          condicoes_pagamento: formData.condicoes_comerciais || '',
+          condicoes_gerais: formData.condicoes_gerais || '',
+          logistica: formData.logistica || '',
+          garantias: formData.garantias || '',
+          prazo_entrega: formData.prazo_locacao_meses ? `${formData.prazo_locacao_meses} meses` : '',
+          observacoes: formData.observacoes || '',
+          valores_fixos: valoresFixos.map(vf => ({
+            tipo: vf.tipo,
+            descricao: vf.descricao,
+            quantidade: vf.quantidade,
+            valor_unitario: vf.valor_unitario,
+            valor_total: vf.quantidade * vf.valor_unitario,
+            observacoes: vf.observacoes || ''
+          })),
+          custos_mensais: custosMensais.map(cm => ({
+            tipo: cm.tipo,
+            descricao: cm.descricao,
+            valor_mensal: cm.valor_mensal,
+            obrigatorio: cm.obrigatorio,
+            observacoes: cm.observacoes || ''
+          })),
+          itens: [
+            // Incluir custos mensais como itens para compatibilidade
+            ...custosMensais.map(cm => ({
+              produto_servico: cm.tipo,
+              descricao: cm.descricao,
+              quantidade: prazoMeses,
+              valor_unitario: cm.valor_mensal,
+              valor_total: cm.valor_mensal * prazoMeses,
+              tipo: (cm.tipo === 'Locação' ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
+              unidade: 'mês',
+              observacoes: cm.observacoes || ''
+            })),
+            ...itensComplementos
+          ]
+        }
+
+        if (isEditMode && orcamentoId) {
+          response = await orcamentosLocacaoApi.update(parseInt(orcamentoId), orcamentoData)
+        } else {
+          response = await orcamentosLocacaoApi.create(orcamentoData)
+        }
       }
 
       if (response.success) {
@@ -637,12 +829,14 @@ export default function NovoOrcamentoPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold">
-              {isEditMode ? 'Editar Orçamento de Obra' : 'Novo Orçamento de Obra'}
+              {isEditMode 
+                ? (isObra ? 'Editar Orçamento de Obra' : 'Editar Orçamento de Locação')
+                : (isObra ? 'Novo Orçamento de Obra' : 'Novo Orçamento de Locação')}
             </h1>
             <p className="text-gray-600 mt-1">
               {isEditMode 
-                ? 'Edite os dados do orçamento de locação'
-                : 'Preencha os dados essenciais do orçamento de locação'}
+                ? (isObra ? 'Edite os dados do orçamento de obra' : 'Edite os dados do orçamento de locação')
+                : (isObra ? 'Preencha os dados essenciais do orçamento de obra' : 'Preencha os dados essenciais do orçamento de locação')}
             </p>
           </div>
         </div>
@@ -910,26 +1104,24 @@ export default function NovoOrcamentoPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             {custoMensal.tipo && ['Locação', 'Operador', 'Sinaleiro', 'Manutenção'].includes(custoMensal.tipo) ? (
-                              <Select
-                                value={custoMensal.tipo}
-                                onValueChange={(value) => {
-                                  const updated = custosMensais.map((cm, i) =>
-                                    i === index ? { ...cm, tipo: value === 'Outro' ? '' : value } : cm
-                                  )
-                                  setCustosMensais(updated)
-                                }}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Locação">Locação</SelectItem>
-                                  <SelectItem value="Operador">Operador</SelectItem>
-                                  <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
-                                  <SelectItem value="Manutenção">Manutenção</SelectItem>
-                                  <SelectItem value="Outro">Outro</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <>
+                                <Label>Tipo *</Label>
+                                <Select
+                                  value={custoMensal.tipo}
+                                  disabled={true}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Locação">Locação</SelectItem>
+                                    <SelectItem value="Operador">Operador</SelectItem>
+                                    <SelectItem value="Sinaleiro">Sinaleiro</SelectItem>
+                                    <SelectItem value="Manutenção">Manutenção</SelectItem>
+                                    <SelectItem value="Outro">Outro</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </>
                             ) : (
                               <>
                                 <Label>Tipo *</Label>
@@ -1240,54 +1432,102 @@ export default function NovoOrcamentoPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Busca de complementos */}
-              <div className="flex gap-2">
-                <div className="relative flex-1">
+              <div ref={complementosSearchRef} className="relative">
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Buscar complementos..."
+                    placeholder="Digite para buscar ou clique para ver todos os complementos..."
                     value={searchComplemento}
-                    onChange={(e) => setSearchComplemento(e.target.value)}
+                    onChange={(e) => {
+                      setSearchComplemento(e.target.value)
+                      setShowComplementosResults(true)
+                    }}
+                    onClick={() => {
+                      if (searchComplemento.length === 0) {
+                        setShowComplementosResults(true)
+                      }
+                    }}
                     className="pl-10"
                   />
                 </div>
-                <Select
-                  value={selectComplementoValue}
-                  onValueChange={(value) => {
-                    if (value && value !== '') {
-                      const complemento = CATALOGO_COMPLEMENTOS.find(c => c.sku === value)
-                      if (complemento && !complementosSelecionados.find(c => c.sku === complemento.sku)) {
-                        setComplementosSelecionados([
-                          ...complementosSelecionados,
-                          {
-                            ...complemento,
-                            quantidade: 1,
-                            valor_total: complemento.preco_unitario_centavos / 100
-                          }
-                        ])
-                        setSearchComplemento("")
-                        setSelectComplementoValue("")
-                      }
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-[250px]">
-                    <SelectValue placeholder="Selecione um complemento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATALOGO_COMPLEMENTOS
-                      .filter(c => 
-                        !complementosSelecionados.find(sel => sel.sku === c.sku) &&
-                        (searchComplemento === "" || 
-                         c.nome.toLowerCase().includes(searchComplemento.toLowerCase()) ||
-                         c.sku.toLowerCase().includes(searchComplemento.toLowerCase()))
-                      )
-                      .map((complemento) => (
-                        <SelectItem key={complemento.sku} value={complemento.sku}>
-                          {complemento.nome} - {complemento.sku}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+
+                {/* Resultados da busca */}
+                {showComplementosResults && (
+                  <Card className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto shadow-lg">
+                    <CardContent className="p-0">
+                      {(() => {
+                        const complementosFiltrados = CATALOGO_COMPLEMENTOS.filter(c => 
+                          !complementosSelecionados.find(sel => sel.sku === c.sku) &&
+                          (searchComplemento === "" || 
+                           c.nome.toLowerCase().includes(searchComplemento.toLowerCase()) ||
+                           c.sku.toLowerCase().includes(searchComplemento.toLowerCase()) ||
+                           c.descricao?.toLowerCase().includes(searchComplemento.toLowerCase()))
+                        )
+
+                        if (complementosFiltrados.length === 0) {
+                          return (
+                            <div className="p-4 text-center text-gray-500">
+                              <Package className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                              <p className="text-sm">Nenhum complemento encontrado</p>
+                              <p className="text-xs">Tente buscar por nome, SKU ou descrição</p>
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div className="divide-y">
+                            {complementosFiltrados.map((complemento) => (
+                              <button
+                                key={complemento.sku}
+                                onClick={() => {
+                                  if (!complementosSelecionados.find(c => c.sku === complemento.sku)) {
+                                    setComplementosSelecionados([
+                                      ...complementosSelecionados,
+                                      {
+                                        ...complemento,
+                                        quantidade: 1,
+                                        valor_total: complemento.preco_unitario_centavos / 100
+                                      }
+                                    ])
+                                    setSearchComplemento("")
+                                    setShowComplementosResults(false)
+                                  }
+                                }}
+                                className="w-full p-3 text-left hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <Package className="w-4 h-4 text-gray-500" />
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">{complemento.nome}</p>
+                                    <p className="text-sm text-gray-600">
+                                      {complemento.sku} - {complemento.descricao}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge variant="outline" className="text-xs">
+                                        {(() => {
+                                          const tipo = (complemento as any).tipo_precificacao
+                                          if (tipo === 'mensal') return 'Mensal'
+                                          if (tipo === 'unico') return 'Único'
+                                          if (tipo === 'por_metro') return 'Por Metro'
+                                          if (tipo === 'por_hora') return 'Por Hora'
+                                          if (tipo === 'por_dia') return 'Por Dia'
+                                          return tipo || 'N/A'
+                                        })()}
+                                      </Badge>
+                                      <span className="text-xs font-semibold text-gray-700">
+                                        R$ {((complemento as any).preco_unitario_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
 
               {/* Lista de complementos selecionados */}
@@ -1322,21 +1562,62 @@ export default function NovoOrcamentoPage() {
                           R$ {(complemento.preco_unitario_centavos / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </div>
                         <div className="col-span-2">
-                          <Input
-                            type="number"
-                            min="1"
-                            value={complemento.quantidade || 1}
-                            onChange={(e) => {
-                              const newQty = parseInt(e.target.value) || 1
-                              const updated = complementosSelecionados.map(c =>
-                                c.sku === complemento.sku
-                                  ? { ...c, quantidade: newQty, valor_total: (complemento.preco_unitario_centavos / 100) * newQty }
-                                  : c
-                              )
-                              setComplementosSelecionados(updated)
-                            }}
-                            className="w-full"
-                          />
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const currentQty = complemento.quantidade || 1
+                                if (currentQty > 1) {
+                                  const newQty = currentQty - 1
+                                  const updated = complementosSelecionados.map(c =>
+                                    c.sku === complemento.sku
+                                      ? { ...c, quantidade: newQty, valor_total: (complemento.preco_unitario_centavos / 100) * newQty }
+                                      : c
+                                  )
+                                  setComplementosSelecionados(updated)
+                                }
+                              }}
+                              className="h-9 w-9 p-0"
+                              disabled={(complemento.quantidade || 1) <= 1}
+                            >
+                              <Minus className="w-4 h-4" />
+                            </Button>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={complemento.quantidade || 1}
+                              onChange={(e) => {
+                                const newQty = parseInt(e.target.value) || 1
+                                const updated = complementosSelecionados.map(c =>
+                                  c.sku === complemento.sku
+                                    ? { ...c, quantidade: newQty, valor_total: (complemento.preco_unitario_centavos / 100) * newQty }
+                                    : c
+                                )
+                                setComplementosSelecionados(updated)
+                              }}
+                              className="w-16 text-center"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const currentQty = complemento.quantidade || 1
+                                const newQty = currentQty + 1
+                                const updated = complementosSelecionados.map(c =>
+                                  c.sku === complemento.sku
+                                    ? { ...c, quantidade: newQty, valor_total: (complemento.preco_unitario_centavos / 100) * newQty }
+                                    : c
+                                )
+                                setComplementosSelecionados(updated)
+                              }}
+                              className="h-9 w-9 p-0"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                         <div className="col-span-2">
                           <Button
@@ -1368,7 +1649,8 @@ export default function NovoOrcamentoPage() {
             </CardContent>
           </Card>
 
-          {/* Seção de Valores Fixos */}
+          {/* Seção de Valores Fixos - Apenas para Locação */}
+          {!isObra && (
           <Card>
             <CardHeader>
               <CardTitle>Valores Fixos</CardTitle>
@@ -1527,6 +1809,7 @@ export default function NovoOrcamentoPage() {
               ) : null}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
       </Tabs>
 

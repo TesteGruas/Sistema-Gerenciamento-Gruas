@@ -35,8 +35,15 @@ export default function GruaSearch({
   // Buscar gruas quando o termo de busca mudar
   useEffect(() => {
     const buscarGruas = async () => {
-      // Mostrar todas as gruas disponíveis quando o campo estiver vazio
+      // Se o campo estiver vazio, não buscar automaticamente
       if (searchTerm.length === 0) {
+        // Só mostrar resultados se o usuário já clicou no campo (showResults está true)
+        if (!showResults) {
+          setGruas([])
+          return
+        }
+        
+        // Se showResults está true, buscar todas as gruas disponíveis
         try {
           setLoading(true)
           setError(null)
@@ -55,7 +62,6 @@ export default function GruaSearch({
             }
             
             setGruas(gruasConvertidas)
-            setShowResults(true)
           } else {
             setGruas([])
             setShowResults(false)
@@ -121,7 +127,7 @@ export default function GruaSearch({
 
     const timeoutId = setTimeout(buscarGruas, 300) // Debounce de 300ms
     return () => clearTimeout(timeoutId)
-  }, [searchTerm, onlyAvailable])
+  }, [searchTerm, onlyAvailable, showResults])
 
   // Fechar resultados quando clicar fora
   useEffect(() => {
@@ -194,10 +200,40 @@ export default function GruaSearch({
           placeholder={placeholder}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          onClick={() => {
-            if (searchTerm.length === 0 && gruas.length === 0) {
+          onClick={async () => {
+            if (searchTerm.length === 0 && gruas.length === 0 && !showResults) {
               // Carregar gruas quando clicar no campo vazio
               setShowResults(true)
+              try {
+                setLoading(true)
+                setError(null)
+                
+                // Buscar gruas disponíveis
+                const response = await gruasApi.listarGruas({ status: 'disponivel' })
+                
+                if (response.success) {
+                  let gruasConvertidas = response.data
+                  
+                  // Filtrar apenas disponíveis se solicitado
+                  if (onlyAvailable) {
+                    gruasConvertidas = gruasConvertidas.filter(grua => 
+                      grua.status === 'disponivel'
+                    )
+                  }
+                  
+                  setGruas(gruasConvertidas)
+                } else {
+                  setGruas([])
+                  setShowResults(false)
+                }
+              } catch (err) {
+                console.error('Erro ao buscar gruas:', err)
+                setError('Erro ao buscar gruas')
+                setGruas([])
+                setShowResults(false)
+              } finally {
+                setLoading(false)
+              }
             }
           }}
           className="pl-10 pr-10"
