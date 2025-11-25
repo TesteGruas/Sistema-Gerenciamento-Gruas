@@ -97,6 +97,7 @@ import contasPagarRoutes from './routes/contas-pagar.js'
 import rentabilidadeRoutes from './routes/rentabilidade.js'
 import projecoesRoutes from './routes/projecoes.js'
 import exportarRelatoriosRoutes from './routes/exportar-relatorios.js'
+import exportarRoutes from './routes/exportar.js'
 import relatoriosFaturamentoRoutes from './routes/relatorios-faturamento.js'
 import relatoriosImpostosRoutes from './routes/relatorios-impostos.js'
 import relatoriosOrcamentosRoutes from './routes/relatorios-orcamentos.js'
@@ -334,6 +335,7 @@ app.use('/api/contas-pagar', contasPagarRoutes)
 app.use('/api/rentabilidade', rentabilidadeRoutes)
 app.use('/api/projecoes', projecoesRoutes)
 app.use('/api/exportar-relatorios', exportarRelatoriosRoutes)
+app.use('/api/exportar', exportarRoutes)
 app.use('/api/relatorios-faturamento', relatoriosFaturamentoRoutes)
 app.use('/api/relatorios-impostos', relatoriosImpostosRoutes)
 app.use('/api/relatorios', relatoriosOrcamentosRoutes)
