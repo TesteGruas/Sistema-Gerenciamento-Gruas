@@ -818,8 +818,8 @@ export default function OrcamentosPage() {
           )}
         </div>
 
-        <TabsContent value="obra" className="space-y-6">
-      <Card>
+        <TabsContent value="obra" className="space-y-6 p-0 mt-0">
+      <Card >
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -1050,7 +1050,7 @@ export default function OrcamentosPage() {
       </Card>
         </TabsContent>
 
-        <TabsContent value="locacao" className="space-y-6">
+        <TabsContent value="locacao" className="space-y-6 p-0 mt-0">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -2070,4 +2070,3 @@ export default function OrcamentosPage() {
     </div>
   )
 }
-

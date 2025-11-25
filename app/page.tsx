@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Building2, Lock, User } from "lucide-react"
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import { loadUserPermissions } from "@/lib/auth-permissions"
@@ -26,10 +27,20 @@ export default function LoginPage() {
 function LoginPageContent() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [rememberEmail, setRememberEmail] = useState(false)
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
   const { showAuthError, showSuccess } = useEnhancedToast()
   const { empresa, getEnderecoCompleto, getContatoCompleto } = useEmpresa()
+
+  // Carregar email salvo ao montar o componente
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('remembered_email')
+    if (savedEmail) {
+      setEmail(savedEmail)
+      setRememberEmail(true)
+    }
+  }, [])
 
   // Verificar se já está logado
   useEffect(() => {
@@ -76,6 +87,13 @@ function LoginPageContent() {
       
       if (!token) {
         throw new Error('Token não recebido na resposta')
+      }
+      
+      // Salvar ou remover email conforme a opção "Lembrar email"
+      if (rememberEmail) {
+        localStorage.setItem('remembered_email', email)
+      } else {
+        localStorage.removeItem('remembered_email')
       }
       
       // Salvar dados no localStorage
@@ -175,6 +193,19 @@ function LoginPageContent() {
                   required
                 />
               </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="rememberEmail"
+                checked={rememberEmail}
+                onCheckedChange={(checked) => setRememberEmail(checked === true)}
+              />
+              <Label
+                htmlFor="rememberEmail"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Lembrar email
+              </Label>
             </div>
             <Button
               type="submit" 
