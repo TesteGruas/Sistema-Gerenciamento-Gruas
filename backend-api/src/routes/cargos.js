@@ -23,7 +23,8 @@ const cargoSchema = Joi.object({
   requisitos: Joi.array().items(Joi.string()).default([]),
   competencias: Joi.array().items(Joi.string()).default([]),
   ativo: Joi.boolean().default(true),
-  acesso_global_obras: Joi.boolean().default(false)
+  acesso_global_obras: Joi.boolean().default(false),
+  perfil_id: Joi.number().integer().positive().allow(null).optional()
 })
 
 // Schema para atualização (campos opcionais)
@@ -50,10 +51,20 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit)
     const offset = (pageNum - 1) * limitNum
 
-    // Construir query
+    // Construir query com JOIN em perfis
+    // O Supabase retorna como array, então precisamos transformar depois
     let query = supabaseAdmin
       .from('cargos')
-      .select('*', { count: 'exact' })
+      .select(`
+        *,
+        perfis!cargos_perfil_id_fkey(
+          id,
+          nome,
+          descricao,
+          nivel_acesso,
+          status
+        )
+      `, { count: 'exact' })
 
     // Filtros
     if (ativo === 'true') {
@@ -87,9 +98,36 @@ router.get('/', async (req, res) => {
       })
     }
 
+    // Transformar perfis de array para objeto único (ou null)
+    const dataTransformada = (data || []).map(cargo => {
+      // O Supabase retorna perfis como array mesmo em relação 1:1
+      let perfil = null
+      if (cargo.perfis) {
+        if (Array.isArray(cargo.perfis) && cargo.perfis.length > 0) {
+          perfil = cargo.perfis[0]
+        } else if (typeof cargo.perfis === 'object' && !Array.isArray(cargo.perfis)) {
+          // Caso raro onde pode retornar como objeto direto
+          perfil = cargo.perfis
+        }
+      }
+      
+      // Debug: log para verificar estrutura dos dados
+      if (cargo.id === 12) {
+        console.log('Cargo 12 - dados brutos:', JSON.stringify(cargo, null, 2))
+        console.log('Cargo 12 - perfil extraído:', JSON.stringify(perfil, null, 2))
+      }
+      
+      // Remover campo perfis e adicionar perfil como objeto único
+      const { perfis, ...cargoSemPerfis } = cargo
+      return {
+        ...cargoSemPerfis,
+        perfil
+      }
+    })
+
     res.json({
       success: true,
-      data,
+      data: dataTransformada,
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -117,7 +155,16 @@ router.get('/:id', async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from('cargos')
-      .select('*')
+      .select(`
+        *,
+        perfis!cargos_perfil_id_fkey(
+          id,
+          nome,
+          descricao,
+          nivel_acesso,
+          status
+        )
+      `)
       .eq('id', id)
       .single()
 
@@ -131,9 +178,25 @@ router.get('/:id', async (req, res) => {
       throw error
     }
 
+    // Transformar perfis de array para objeto único (ou null)
+    let perfil = null
+    if (data.perfis) {
+      if (Array.isArray(data.perfis) && data.perfis.length > 0) {
+        perfil = data.perfis[0]
+      } else if (typeof data.perfis === 'object' && !Array.isArray(data.perfis)) {
+        perfil = data.perfis
+      }
+    }
+    
+    const { perfis: perfisArray, ...dataSemPerfis } = data
+    const dataTransformada = {
+      ...dataSemPerfis,
+      perfil
+    }
+
     res.json({
       success: true,
-      data
+      data: dataTransformada
     })
   } catch (error) {
     console.error('Erro ao buscar cargo:', error)
@@ -191,10 +254,19 @@ router.post('/', async (req, res) => {
     }
 
     // Criar cargo
-    const { data, error } = await supabaseAdmin
+    const { data: createdData, error } = await supabaseAdmin
       .from('cargos')
       .insert(value)
-      .select()
+      .select(`
+        *,
+        perfis!cargos_perfil_id_fkey(
+          id,
+          nome,
+          descricao,
+          nivel_acesso,
+          status
+        )
+      `)
       .single()
 
     if (error) {
@@ -206,9 +278,25 @@ router.post('/', async (req, res) => {
       })
     }
 
+    // Transformar perfis de array para objeto único (ou null)
+    let perfil = null
+    if (createdData.perfis) {
+      if (Array.isArray(createdData.perfis) && createdData.perfis.length > 0) {
+        perfil = createdData.perfis[0]
+      } else if (typeof createdData.perfis === 'object' && !Array.isArray(createdData.perfis)) {
+        perfil = createdData.perfis
+      }
+    }
+    
+    const { perfis, ...createdDataSemPerfis } = createdData
+    const dataTransformada = {
+      ...createdDataSemPerfis,
+      perfil
+    }
+
     res.status(201).json({
       success: true,
-      data,
+      data: dataTransformada,
       message: 'Cargo criado com sucesso'
     })
   } catch (error) {
@@ -286,11 +374,20 @@ router.put('/:id', async (req, res) => {
     }
 
     // Atualizar cargo
-    const { data, error } = await supabaseAdmin
+    const { data: updatedData, error } = await supabaseAdmin
       .from('cargos')
       .update(value)
       .eq('id', id)
-      .select()
+      .select(`
+        *,
+        perfis!cargos_perfil_id_fkey(
+          id,
+          nome,
+          descricao,
+          nivel_acesso,
+          status
+        )
+      `)
       .single()
 
     if (error) {
@@ -302,9 +399,25 @@ router.put('/:id', async (req, res) => {
       })
     }
 
+    // Transformar perfis de array para objeto único (ou null)
+    let perfil = null
+    if (updatedData.perfis) {
+      if (Array.isArray(updatedData.perfis) && updatedData.perfis.length > 0) {
+        perfil = updatedData.perfis[0]
+      } else if (typeof updatedData.perfis === 'object' && !Array.isArray(updatedData.perfis)) {
+        perfil = updatedData.perfis
+      }
+    }
+    
+    const { perfis, ...updatedDataSemPerfis } = updatedData
+    const dataTransformada = {
+      ...updatedDataSemPerfis,
+      perfil
+    }
+
     res.json({
       success: true,
-      data,
+      data: dataTransformada,
       message: 'Cargo atualizado com sucesso'
     })
   } catch (error) {

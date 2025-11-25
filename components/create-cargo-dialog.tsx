@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, memo } from "react"
+import { useState, useCallback, memo, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,6 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+interface Perfil {
+  id: number
+  nome: string
+  descricao?: string
+  nivel_acesso: number
+  status: string
+}
+
 interface CargoCreateData {
   nome: string
   descricao?: string
@@ -24,6 +32,7 @@ interface CargoCreateData {
   salario_minimo?: number
   salario_maximo?: number
   acesso_global_obras?: boolean
+  perfil_id?: number
 }
 
 interface CreateCargoDialogProps {
@@ -40,6 +49,8 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
   submitting,
 }: CreateCargoDialogProps) {
   const { toast } = useToast()
+  const [perfis, setPerfis] = useState<Perfil[]>([])
+  const [loadingPerfis, setLoadingPerfis] = useState(false)
   
   const [form, setForm] = useState({
     nome: "",
@@ -47,8 +58,38 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
     nivel: "Operacional" as const,
     salario_minimo: "",
     salario_maximo: "",
-    acesso_global_obras: false
+    acesso_global_obras: false,
+    perfil_id: undefined as number | undefined
   })
+
+  // Carregar perfis quando dialog abrir
+  useEffect(() => {
+    if (open) {
+      loadPerfis()
+    }
+  }, [open])
+
+  const loadPerfis = async () => {
+    try {
+      setLoadingPerfis(true)
+      const response = await fetch('/api/permissoes/perfis', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token')}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        // Filtrar apenas perfis ativos
+        const perfisAtivos = (data.data || []).filter((p: Perfil) => p.status === 'Ativo')
+        setPerfis(perfisAtivos)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar perfis:', error)
+    } finally {
+      setLoadingPerfis(false)
+    }
+  }
 
   const handleChange = useCallback((field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -85,7 +126,8 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
       nivel: form.nivel,
       salario_minimo: salarioMin,
       salario_maximo: salarioMax,
-      acesso_global_obras: form.acesso_global_obras
+      acesso_global_obras: form.acesso_global_obras,
+      perfil_id: form.perfil_id || undefined
     })
   }, [form, onSubmit, toast])
 
@@ -96,7 +138,8 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
       nivel: "Operacional",
       salario_minimo: "",
       salario_maximo: "",
-      acesso_global_obras: false
+      acesso_global_obras: false,
+      perfil_id: undefined
     })
   }, [])
 
@@ -158,6 +201,42 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
                 <SelectItem value="Diretoria">Diretoria</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="perfil">Perfil de Acesso</Label>
+            <Select
+              value={form.perfil_id ? form.perfil_id.toString() : "none"}
+              onValueChange={(value) => {
+                if (value === "none" || value === "loading") {
+                  handleChange('perfil_id', undefined)
+                } else {
+                  handleChange('perfil_id', parseInt(value))
+                }
+              }}
+              disabled={loadingPerfis}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={loadingPerfis ? "Carregando perfis..." : "Selecione um perfil (opcional)"} />
+              </SelectTrigger>
+              <SelectContent>
+                {loadingPerfis ? (
+                  <SelectItem value="loading" disabled>Carregando perfis...</SelectItem>
+                ) : (
+                  <>
+                    <SelectItem value="none">Nenhum perfil</SelectItem>
+                    {perfis.map((perfil) => (
+                      <SelectItem key={perfil.id} value={perfil.id.toString()}>
+                        {perfil.nome} (Nível {perfil.nivel_acesso})
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-500">
+              O perfil definido aqui será automaticamente atribuído aos usuários criados para funcionários com este cargo
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

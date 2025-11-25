@@ -1,6 +1,17 @@
 import api, { API_ENDPOINTS } from '../api'
 
 /**
+ * Interface para representar um perfil
+ */
+export interface Perfil {
+  id: number
+  nome: string
+  descricao?: string
+  nivel_acesso: number
+  status: string
+}
+
+/**
  * Interface para representar um cargo
  */
 export interface Cargo {
@@ -13,6 +24,8 @@ export interface Cargo {
   requisitos?: string[]
   competencias?: string[]
   ativo: boolean
+  perfil_id?: number
+  perfil?: Perfil
   created_at: string
   updated_at: string
 }
@@ -28,6 +41,7 @@ export interface CargoCreateData {
   salario_maximo?: number
   requisitos?: string[]
   competencias?: string[]
+  perfil_id?: number
 }
 
 /**
@@ -42,6 +56,7 @@ export interface CargoUpdateData {
   requisitos?: string[]
   competencias?: string[]
   ativo?: boolean
+  perfil_id?: number
 }
 
 /**
@@ -116,6 +131,10 @@ export const cargosApi = {
    */
   atualizarCargo: async (id: number, data: CargoUpdateData): Promise<ApiResponse<Cargo>> => {
     const response = await api.put(`${API_ENDPOINTS.CARGOS}/${id}`, data)
+    // Debug: verificar resposta
+    if (id === 12) {
+      console.log('Resposta da API ao atualizar cargo 12:', JSON.stringify(response.data, null, 2))
+    }
     return response.data
   },
 

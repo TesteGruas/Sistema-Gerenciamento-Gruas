@@ -2,6 +2,14 @@
 import { buildApiUrl, API_ENDPOINTS } from './api'
 
 // Interfaces
+export interface Perfil {
+  id: number
+  nome: string
+  descricao?: string
+  nivel_acesso: number
+  status: string
+}
+
 export interface Cargo {
   id: number
   nome: string
@@ -13,6 +21,8 @@ export interface Cargo {
   competencias: string[]
   ativo: boolean
   acesso_global_obras: boolean
+  perfil_id?: number
+  perfil?: Perfil
   created_at: string
   updated_at: string
 }
@@ -27,6 +37,7 @@ export interface CargoCreateData {
   competencias?: string[]
   ativo?: boolean
   acesso_global_obras?: boolean
+  perfil_id?: number
 }
 
 export interface CargoUpdateData {
@@ -39,6 +50,7 @@ export interface CargoUpdateData {
   competencias?: string[]
   ativo?: boolean
   acesso_global_obras?: boolean
+  perfil_id?: number
 }
 
 export interface CargosResponse {

@@ -790,10 +790,11 @@ router.post('/', async (req, res) => {
     const { criar_usuario, usuario_senha, ...funcionarioData } = value
 
     // Validar se cargo existe e está ativo
+    let cargoInfo = null
     if (value.cargo) {
       const { data: cargoExiste, error: cargoError } = await supabaseAdmin
         .from('cargos')
-        .select('id, nome, ativo')
+        .select('id, nome, ativo, perfil_id')
         .eq('nome', value.cargo)
         .single()
 
@@ -810,6 +811,9 @@ router.post('/', async (req, res) => {
           message: 'O cargo especificado está inativo e não pode ser utilizado'
         })
       }
+
+      // Guardar informações do cargo (incluindo perfil_id)
+      cargoInfo = cargoExiste
 
       // Adicionar cargo_id ao funcionarioData e remover o campo cargo (string)
       // para evitar violação da constraint CHECK no banco de dados
@@ -944,16 +948,23 @@ router.post('/', async (req, res) => {
         usuarioId = novoUsuario.id
 
         // Atribuir perfil baseado no cargo do funcionário
-        let perfilId = 4 // Operador por padrão
-        switch (value.cargo) {
-          case 'Supervisor':
-            perfilId = 3
-            break
-          case 'Operador':
-            perfilId = 4
-            break
-          default:
-            perfilId = 4 // Operador para outros cargos
+        let perfilId = 4 // Operador por padrão (fallback)
+        
+        // Se cargo tem perfil_id definido, usar esse perfil
+        if (cargoInfo && cargoInfo.perfil_id) {
+          perfilId = cargoInfo.perfil_id
+        } else {
+          // Fallback: usar lógica antiga baseada no nome do cargo
+          switch (value.cargo) {
+            case 'Supervisor':
+              perfilId = 3
+              break
+            case 'Operador':
+              perfilId = 4
+              break
+            default:
+              perfilId = 4 // Operador para outros cargos
+          }
         }
 
         const { error: perfilError } = await supabaseAdmin
@@ -1166,10 +1177,19 @@ router.put('/:id', async (req, res) => {
     const { criar_usuario, usuario_senha, ...funcionarioData } = value
 
     // Validar se cargo existe e está ativo (se fornecido)
+    let cargoInfo = null
+    let cargoMudou = false
     if (value.cargo) {
+      // Buscar cargo atual do funcionário para comparar
+      const { data: funcionarioAtual } = await supabaseAdmin
+        .from('funcionarios')
+        .select('cargo_id')
+        .eq('id', id)
+        .single()
+
       const { data: cargoExiste, error: cargoError } = await supabaseAdmin
         .from('cargos')
-        .select('id, nome, ativo')
+        .select('id, nome, ativo, perfil_id')
         .eq('nome', value.cargo)
         .single()
 
@@ -1186,6 +1206,14 @@ router.put('/:id', async (req, res) => {
           message: 'O cargo especificado está inativo e não pode ser utilizado'
         })
       }
+
+      // Verificar se cargo mudou
+      if (funcionarioAtual && funcionarioAtual.cargo_id !== cargoExiste.id) {
+        cargoMudou = true
+      }
+
+      // Guardar informações do cargo (incluindo perfil_id)
+      cargoInfo = cargoExiste
 
       // Adicionar cargo_id ao funcionarioData e remover o campo cargo (string)
       // para evitar violação da constraint CHECK no banco de dados
@@ -1232,6 +1260,60 @@ router.put('/:id', async (req, res) => {
         error: 'Erro ao atualizar funcionário',
         message: updateError.message
       })
+    }
+
+    // Se cargo mudou e funcionário tem usuário, atualizar perfil do usuário
+    if (cargoMudou && cargoInfo && cargoInfo.perfil_id) {
+      // Buscar usuário vinculado ao funcionário
+      const { data: usuarioFuncionario } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('funcionario_id', id)
+        .single()
+
+      if (usuarioFuncionario) {
+        // Desativar perfil atual
+        await supabaseAdmin
+          .from('usuario_perfis')
+          .update({ 
+            status: 'Inativa',
+            updated_at: new Date().toISOString()
+          })
+          .eq('usuario_id', usuarioFuncionario.id)
+          .eq('status', 'Ativa')
+
+        // Verificar se já existe associação com este perfil
+        const { data: perfilExistente } = await supabaseAdmin
+          .from('usuario_perfis')
+          .select('id')
+          .eq('usuario_id', usuarioFuncionario.id)
+          .eq('perfil_id', cargoInfo.perfil_id)
+          .single()
+
+        if (perfilExistente) {
+          // Ativar perfil existente
+          await supabaseAdmin
+            .from('usuario_perfis')
+            .update({
+              status: 'Ativa',
+              data_atribuicao: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', perfilExistente.id)
+        } else {
+          // Criar nova associação
+          await supabaseAdmin
+            .from('usuario_perfis')
+            .insert({
+              usuario_id: usuarioFuncionario.id,
+              perfil_id: cargoInfo.perfil_id,
+              status: 'Ativa',
+              data_atribuicao: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+        }
+      }
     }
 
     // Buscar dados completos do funcionário com JOIN

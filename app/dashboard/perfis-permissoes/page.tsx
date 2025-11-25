@@ -517,6 +517,7 @@ export default function PerfisPermissoesPage() {
                           value={formData.descricao}
                           onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                           placeholder="Descreva as responsabilidades deste perfil"
+                          required
                         />
                       </div>
 
@@ -526,6 +527,7 @@ export default function PerfisPermissoesPage() {
                           <Select
                             value={formData.nivel_acesso.toString()}
                             onValueChange={(value) => setFormData({ ...formData, nivel_acesso: parseInt(value) })}
+                            required
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Selecione o nível" />
@@ -554,6 +556,7 @@ export default function PerfisPermissoesPage() {
                               }}
                               className="w-20"
                               placeholder="1-10"
+                              required
                             />
                           </div>
                         </div>
@@ -564,6 +567,7 @@ export default function PerfisPermissoesPage() {
                         <Select
                           value={formData.status}
                           onValueChange={(value: 'Ativo' | 'Inativo') => setFormData({ ...formData, status: value })}
+                          required
                         >
                           <SelectTrigger>
                             <SelectValue />
