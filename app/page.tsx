@@ -98,6 +98,9 @@ function LoginPageContent() {
       
       // Salvar dados no localStorage
       localStorage.setItem('access_token', token)
+      if (data.data.refresh_token) {
+        localStorage.setItem('refresh_token', data.data.refresh_token)
+      }
       localStorage.setItem('user_profile', JSON.stringify(data.data.profile))
       localStorage.setItem('user_perfil', JSON.stringify(data.data.perfil))
       localStorage.setItem('user_permissoes', JSON.stringify(data.data.permissoes))

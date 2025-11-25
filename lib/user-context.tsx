@@ -106,6 +106,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const data = await response.json()
       if (data.success && data.data.access_token) {
         localStorage.setItem('access_token', data.data.access_token)
+        if (data.data.refresh_token) {
+          localStorage.setItem('refresh_token', data.data.refresh_token)
+        }
         
         // Carregar dados do usuário apenas se não estiver em loading
         if (!loadingRef.current) {

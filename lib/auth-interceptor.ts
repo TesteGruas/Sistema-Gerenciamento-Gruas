@@ -1,6 +1,7 @@
 /**
  * Interceptor Global de Autenticação
  * Captura erros de autenticação e redireciona para login automaticamente
+ * Tenta fazer refresh token antes de redirecionar
  */
 
 import { sessionPersistence } from './session-persistence'
@@ -106,10 +107,37 @@ class AuthInterceptor {
 
   /**
    * Interceptar resposta de fetch
+   * Tenta fazer refresh token antes de redirecionar
    */
   async interceptFetchResponse(response: Response, url: string): Promise<Response> {
     // Verificar se é erro de autenticação
     if (this.isAuthenticationError(response.status)) {
+      // Verificar se é endpoint de login/refresh - não tentar refresh
+      const isLoginEndpoint = url.includes('/auth/login') || url.includes('/auth/refresh')
+      
+      if (!isLoginEndpoint) {
+        // Tentar fazer refresh token antes de redirecionar
+        const refreshToken = typeof window !== 'undefined' 
+          ? localStorage.getItem('refresh_token') 
+          : null
+        
+        if (refreshToken) {
+          console.warn(`[AuthInterceptor] Tentando fazer refresh token antes de redirecionar...`)
+          try {
+            const { refreshAuthToken } = await import('./api')
+            const newToken = await refreshAuthToken()
+            if (newToken) {
+              console.log('[AuthInterceptor] Refresh token bem-sucedido, não redirecionando')
+              // Não redirecionar, a requisição será refeita com o novo token
+              return response
+            }
+          } catch (refreshError) {
+            console.error('[AuthInterceptor] Falha ao fazer refresh token:', refreshError)
+            // Se o refresh falhar, continuar com o redirecionamento
+          }
+        }
+      }
+      
       console.warn(`[AuthInterceptor] Erro de autenticação detectado: ${response.status}`)
       
       // Aguardar um pouco para evitar múltiplos redirecionamentos
@@ -156,6 +184,7 @@ class AuthInterceptor {
 
   /**
    * Interceptar erro do axios
+   * Tenta fazer refresh token antes de redirecionar
    */
   async interceptAxiosError(error: any): Promise<never> {
     const status = error.response?.status
@@ -169,6 +198,34 @@ class AuthInterceptor {
 
     // Verificar se é erro de autenticação
     if (this.isAuthenticationError(status, response)) {
+      // Verificar se é endpoint de login/refresh - não tentar refresh
+      const isLoginEndpoint = error.config?.url?.includes('/auth/login') || 
+                             error.config?.url?.includes('/auth/refresh')
+      
+      if (!isLoginEndpoint) {
+        // Tentar fazer refresh token antes de redirecionar
+        const refreshToken = typeof window !== 'undefined' 
+          ? localStorage.getItem('refresh_token') 
+          : null
+        
+        if (refreshToken) {
+          console.warn(`[AuthInterceptor] Tentando fazer refresh token antes de redirecionar...`)
+          try {
+            // Usar import dinâmico para evitar import circular
+            const { refreshAuthToken } = await import('./api')
+            const newToken = await refreshAuthToken()
+            if (newToken) {
+              console.log('[AuthInterceptor] Refresh token bem-sucedido, não redirecionando')
+              // Não redirecionar, deixar o interceptor do axios tentar novamente
+              throw error // Re-throw para o interceptor do axios processar
+            }
+          } catch (refreshError) {
+            console.error('[AuthInterceptor] Falha ao fazer refresh token:', refreshError)
+            // Se o refresh falhar, redirecionar
+          }
+        }
+      }
+      
       console.warn(`[AuthInterceptor] Erro de autenticação do axios: ${status}`)
       
       // Aguardar um pouco para evitar múltiplos redirecionamentos

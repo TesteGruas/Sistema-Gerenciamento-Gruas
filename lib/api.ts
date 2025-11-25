@@ -118,8 +118,8 @@ export const fetchWithAuth = async (url: string, options: RequestInit = {}): Pro
     // Verificar se é endpoint de login - não aplicar refresh token
     const isLoginEndpoint = url.includes('/auth/login') || url.includes('/auth/refresh')
 
-    // Se for 403 e não for login, tentar refresh token
-    if (response.status === 403 && !isLoginEndpoint) {
+    // Se for 401 ou 403 e não for login, tentar refresh token
+    if ((response.status === 401 || response.status === 403) && !isLoginEndpoint) {
       try {
         const newToken = await refreshAuthToken()
         if (newToken) {
@@ -160,23 +160,16 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
-    // Usar o auth interceptor para verificar erros de autenticação
-    try {
-      await authInterceptor.interceptAxiosError(error)
-    } catch (authError) {
-      // Se o auth interceptor redirecionou, não continuar
-      return Promise.reject(authError)
-    }
-
     // Verificar se é endpoint de login - não aplicar refresh token
     const isLoginEndpoint = originalRequest.url?.includes('/auth/login') || 
                            originalRequest.url?.includes('/auth/refresh')
 
-    // Verificar se é erro de token inválido/expirado (403) e não é login
-    if (error.response?.status === 403 && 
-        !isLoginEndpoint &&
-        !originalRequest._retry) {
-      
+    // Verificar se é erro de token inválido/expirado (401 ou 403) e não é login
+    const isAuthError = (error.response?.status === 401 || error.response?.status === 403) && 
+                        !isLoginEndpoint &&
+                        !originalRequest._retry
+
+    if (isAuthError) {
       if (isRefreshing) {
         // Se já está fazendo refresh, adicionar à fila
         return new Promise((resolve, reject) => {
@@ -201,13 +194,30 @@ api.interceptors.response.use(
           return api(originalRequest)
         } else {
           processQueue(new Error('Falha ao renovar token'), null)
+          // Se o refresh falhou, chamar auth interceptor para redirecionar
+          await authInterceptor.interceptAxiosError(error)
           return Promise.reject(error)
         }
       } catch (refreshError) {
         processQueue(refreshError, null)
+        // Se o refresh falhou, chamar auth interceptor para redirecionar
+        await authInterceptor.interceptAxiosError(error)
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false
+      }
+    }
+
+    // Para outros erros de autenticação que não foram tratados acima
+    if ((error.response?.status === 401 || error.response?.status === 403) && 
+        !isLoginEndpoint && 
+        originalRequest._retry) {
+      // Já tentou refresh e falhou, chamar auth interceptor
+      try {
+        await authInterceptor.interceptAxiosError(error)
+      } catch (authError) {
+        // Se o auth interceptor redirecionou, não continuar
+        return Promise.reject(authError)
       }
     }
 

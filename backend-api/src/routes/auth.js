@@ -279,7 +279,8 @@ router.post('/login', async (req, res) => {
         role: role, // Nome do role (v2.0)
         level: level, // Nível de acesso (v2.0)
         permissoes: permissoes,
-        access_token: data.session.access_token
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token
       },
       message: 'Login realizado com sucesso'
     })
@@ -562,10 +563,29 @@ router.get('/me', authenticateToken, async (req, res) => {
  *       401:
  *         description: Token inválido
  */
-router.post('/refresh', authenticateToken, async (req, res) => {
+router.post('/refresh', async (req, res) => {
   try {
+    // Obter refresh_token do header Authorization ou do body
+    const authHeader = req.headers['authorization']
+    let refreshToken = null
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      // Se enviado no header Authorization como Bearer token
+      refreshToken = authHeader.split(' ')[1]
+    } else if (req.body && req.body.refresh_token) {
+      // Se enviado no body
+      refreshToken = req.body.refresh_token
+    }
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        error: 'Refresh token não fornecido',
+        message: 'O refresh token deve ser enviado no header Authorization ou no body'
+      })
+    }
+
     const { data, error } = await supabase.auth.refreshSession({
-      refresh_token: req.user.refresh_token
+      refresh_token: refreshToken
     })
 
     if (error) {
