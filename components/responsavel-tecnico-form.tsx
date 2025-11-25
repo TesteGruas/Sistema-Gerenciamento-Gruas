@@ -4,8 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Search, UserPlus, Save, X, Loader2 } from "lucide-react"
+import { X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { responsavelTecnicoApi, type ResponsavelTecnicoBackend } from "@/lib/api-responsavel-tecnico"
 
@@ -35,11 +34,6 @@ export function ResponsavelTecnicoForm({
   readOnly = false
 }: ResponsavelTecnicoFormProps) {
   const { toast } = useToast()
-  const [isSearching, setIsSearching] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [searchResults, setSearchResults] = useState<ResponsavelTecnicoData[]>([])
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<ResponsavelTecnicoData>({
     funcionario_id: responsavel?.funcionario_id,
     nome: responsavel?.nome || "",
@@ -59,8 +53,6 @@ export function ResponsavelTecnicoForm({
         email: responsavel.email || "",
         telefone: responsavel.telefone || ""
       })
-      setIsSearching(false)
-      setSearchResults([])
     } else {
       // Se responsavel for null/undefined, limpar apenas se não houver dados no formData
       // Isso evita limpar quando o componente é montado pela primeira vez
@@ -70,80 +62,6 @@ export function ResponsavelTecnicoForm({
       }
     }
   }, [responsavel])
-
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) {
-      toast({
-        title: "Atenção",
-        description: "Digite um CPF/CNPJ para buscar",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setIsSearching(true)
-    setLoading(true)
-    try {
-      const found = await responsavelTecnicoApi.buscarPorCpf(searchTerm)
-      
-      if (found) {
-        const responsavelData: ResponsavelTecnicoData = found.origem === 'funcionarios'
-          ? {
-              funcionario_id: found.funcionario_id,
-              nome: found.nome,
-              cpf_cnpj: found.cpf_cnpj,
-              email: found.email || "",
-              telefone: found.telefone || "",
-            }
-          : {
-              id: found.id,
-              nome: found.nome,
-              cpf_cnpj: found.cpf_cnpj,
-              crea: found.crea,
-              email: found.email || "",
-              telefone: found.telefone || ""
-            }
-        setFormData(responsavelData)
-        setSearchResults([responsavelData])
-        toast({
-          title: "Responsável encontrado",
-          description: "Dados preenchidos automaticamente"
-        })
-      } else {
-        setSearchResults([])
-        toast({
-          title: "Não encontrado",
-          description: "Nenhum responsável encontrado com este CPF/CNPJ. Você pode cadastrar um novo.",
-          variant: "default"
-        })
-      }
-    } catch (error: any) {
-      // Se o endpoint não existir, apenas mostrar que não foi encontrado
-      if (error.message?.includes('404') || error.message?.includes('não encontrado')) {
-        setSearchResults([])
-        toast({
-          title: "Não encontrado",
-          description: "Nenhum responsável encontrado com este CPF/CNPJ. Você pode cadastrar um novo.",
-          variant: "default"
-        })
-      } else {
-        toast({
-          title: "Erro",
-          description: "Erro ao buscar responsável técnico",
-          variant: "destructive"
-        })
-      }
-    } finally {
-      setIsSearching(false)
-      setLoading(false)
-    }
-  }
-
-  const handleSelectExisting = (responsavel: ResponsavelTecnicoData) => {
-    setFormData(responsavel)
-    setIsSearching(false)
-    setSearchResults([])
-  }
 
   const handleSave = async (e?: React.MouseEvent<HTMLButtonElement>) => {
     // Prevenir submit do formulário pai
@@ -186,7 +104,6 @@ export function ResponsavelTecnicoForm({
     }
 
     // Salvar via API (apenas quando já existe obraId - edição de obra existente)
-    setSaving(true)
     try {
       const payload = isFuncionarioVinculo
         ? { funcionario_id: formData.funcionario_id }
@@ -230,61 +147,11 @@ export function ResponsavelTecnicoForm({
         description: error.message || "Erro ao salvar responsável técnico",
         variant: "destructive"
       })
-    } finally {
-      setSaving(false)
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>Responsável Técnico da Obra</span>
-          {onCancel && (
-            <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-              <X className="w-4 h-4" />
-            </Button>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Busca de responsável existente */}
-        {!responsavel && (
-          <div className="space-y-2 p-4 bg-gray-50 rounded-lg">
-            <Label>Buscar Responsável Existente</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Digite CPF/CNPJ"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              />
-              <Button type="button" onClick={handleSearch} variant="outline" disabled={loading || isSearching}>
-                {loading ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Search className="w-4 h-4 mr-2" />
-                )}
-                Buscar
-              </Button>
-            </div>
-            {searchResults.length > 0 && (
-              <div className="mt-2 space-y-2">
-                {searchResults.map((r) => (
-                  <div
-                    key={r.id}
-                    className="p-3 border rounded-lg cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSelectExisting(r)}
-                  >
-                    <p className="font-medium">{r.nome}</p>
-                    <p className="text-sm text-gray-600">{r.cpf_cnpj} • {r.crea}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
+    <div className="space-y-4">
         {/* Formulário */}
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -359,30 +226,7 @@ export function ResponsavelTecnicoForm({
           </div>
         </div>
 
-        {!readOnly && (
-          <div className="flex justify-end gap-2 pt-4 border-t">
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Cancelar
-              </Button>
-            )}
-            <Button type="button" onClick={handleSave} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Salvar Responsável
-                </>
-              )}
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    </div>
   )
 }
 

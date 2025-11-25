@@ -4,9 +4,8 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Save, User, FileText, Shield, Loader2 } from "lucide-react"
+import { Plus, Trash2, User, FileText, Shield, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { sinaleirosApi, type SinaleiroBackend } from "@/lib/api-sinaleiros"
 import { DocumentosSinaleiroList } from "./documentos-sinaleiro-list"
@@ -208,12 +207,12 @@ export function SinaleirosForm({
       e.stopPropagation()
     }
     
-    // Validar sinaleiro principal obrigatório
+    // Validar sinaleiro interno obrigatório
     const principal = sinaleiros.find(s => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
-    if (!principal || !principal.nome || !principal.rg_cpf) {
+    if (!principal || !principal.nome) {
       toast({
         title: "Erro",
-        description: "Sinaleiro interno é obrigatório. Preencha nome e CPF.",
+        description: "Sinaleiro interno é obrigatório. Selecione um funcionário.",
         variant: "destructive"
       })
       return
@@ -318,129 +317,103 @@ export function SinaleirosForm({
     }
   }
 
-  const canEdit = !readOnly && (clientePodeEditar || true) // Admin sempre pode editar
+  const canEdit = !readOnly && (clientePodeEditar || true)
+
+  if (!sinaleiros || sinaleiros.length === 0) {
+    return <div className="space-y-6">Carregando sinaleiros...</div>
+  }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sinaleiros da Obra</CardTitle>
-        <CardDescription>
-          Dois sinaleiros obrigatórios: Interno (empresa) e Indicado pelo Cliente (editável pelo cliente).
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {sinaleiros.map((sinaleiro, index) => (
-          <Card key={sinaleiro.id} className="border-l-4 border-l-blue-500">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  <CardTitle className="text-base">
-                    {sinaleiro.tipo_vinculo === 'interno' ? 'Sinaleiro Interno' : 'Sinaleiro Indicado pelo Cliente'}
-                  </CardTitle>
-                  <Badge variant={sinaleiro.tipo_vinculo === 'interno' ? 'default' : 'outline'}>
-                    {sinaleiro.tipo_vinculo === 'interno' ? 'Interno' : 'Cliente'}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {sinaleiro.tipo_vinculo === 'cliente' && (
-                <div className="mb-3 p-2 bg-blue-50 rounded-md">
-                  <p className="text-xs text-blue-700">Este sinaleiro pode ser editado pelo cliente</p>
-                </div>
-              )}
+    <div className="space-y-6">
+      {sinaleiros.map((sinaleiro, index) => (
+        <div key={sinaleiro.id} className="space-y-4">
+          {/* Cabeçalho do sinaleiro */}
+          <div className="flex items-center justify-between pb-3 border-b">
+            <div className="flex items-center gap-2">
+              <User className="w-5 h-5" />
+              <h3 className="font-semibold text-base">
+                {sinaleiro.tipo_vinculo === 'interno' ? 'Sinaleiro Interno' : 'Sinaleiro Indicado pelo Cliente'}
+              </h3>
+              <Badge variant={sinaleiro.tipo_vinculo === 'interno' ? 'default' : 'outline'}>
+                {sinaleiro.tipo_vinculo === 'interno' ? 'Interno' : 'Cliente'}
+              </Badge>
+            </div>
+          </div>
 
-              {/* Busca de funcionário para sinaleiro interno */}
-              {sinaleiro.tipo_vinculo === 'interno' && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
-                  <Label className="text-sm font-medium mb-2 block">
-                    Buscar Funcionário (Sinaleiro)
-                  </Label>
-                  <FuncionarioSearch
-                    onFuncionarioSelect={(funcionario) => {
-                      console.log('🔍 Funcionário selecionado:', funcionario)
-                      console.log('🔍 Sinaleiro ID:', sinaleiro.id)
+          <div className="space-y-4">
+            {/* Busca de funcionário para sinaleiro interno */}
+            {sinaleiro.tipo_vinculo === 'interno' && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Buscar Funcionário (Sinaleiro) <span className="text-red-500">*</span>
+                </Label>
+                <FuncionarioSearch
+                  onFuncionarioSelect={(funcionario) => {
+                    if (funcionario) {
+                      // Preencher campos automaticamente com dados do funcionário
+                      handleUpdateSinaleiro(sinaleiro.id, 'nome', funcionario.name || '')
+                      handleUpdateSinaleiro(sinaleiro.id, 'telefone', funcionario.phone || '')
+                      handleUpdateSinaleiro(sinaleiro.id, 'email', funcionario.email || '')
                       
-                      if (funcionario) {
-                        console.log('✅ Preenchendo campos com dados do funcionário:', {
-                          name: funcionario.name,
-                          phone: funcionario.phone,
-                          email: funcionario.email,
-                          cpf: funcionario.cpf
-                        })
-                        
-                        // Preencher campos automaticamente com dados do funcionário
-                        handleUpdateSinaleiro(sinaleiro.id, 'nome', funcionario.name || '')
-                        handleUpdateSinaleiro(sinaleiro.id, 'telefone', funcionario.phone || '')
-                        handleUpdateSinaleiro(sinaleiro.id, 'email', funcionario.email || '')
-                        
-                        // Preencher CPF se disponível
-                        if (funcionario.cpf) {
-                          // Remover formatação existente e reaplicar
-                          const cpfLimpo = funcionario.cpf.replace(/\D/g, '')
-                          if (cpfLimpo.length === 11) {
-                            const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
-                            console.log('📝 CPF formatado:', cpfFormatado)
-                            handleUpdateSinaleiro(sinaleiro.id, 'cpf', cpfFormatado)
-                            handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', cpfFormatado)
-                          } else {
-                            // Se não tiver 11 dígitos, usar como está
-                            console.log('📝 CPF sem formatação:', funcionario.cpf)
-                            handleUpdateSinaleiro(sinaleiro.id, 'cpf', funcionario.cpf)
-                            handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', funcionario.cpf)
-                          }
+                      // Preencher CPF se disponível
+                      if (funcionario.cpf) {
+                        const cpfLimpo = funcionario.cpf.replace(/\D/g, '')
+                        if (cpfLimpo.length === 11) {
+                          const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+                          handleUpdateSinaleiro(sinaleiro.id, 'cpf', cpfFormatado)
+                          handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', cpfFormatado)
+                        } else {
+                          handleUpdateSinaleiro(sinaleiro.id, 'cpf', funcionario.cpf)
+                          handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', funcionario.cpf)
                         }
-                        
-                        // Tentar buscar RG dos documentos do funcionário
-                        if (funcionario.id) {
-                          console.log('🔍 Buscando documentos do funcionário ID:', funcionario.id)
-                          funcionariosApi.listarDocumentosFuncionario(parseInt(funcionario.id))
-                            .then((response) => {
-                              console.log('📄 Documentos recebidos:', response)
-                              if (response.success && response.data) {
-                                // Procurar documento do tipo 'rg'
-                                const docRG = response.data.find((doc: any) => doc.tipo === 'rg')
-                                if (docRG && docRG.numero) {
-                                  console.log('📝 RG encontrado:', docRG.numero)
-                                  const rgLimpo = docRG.numero.replace(/\D/g, '')
-                                  if (rgLimpo.length <= 9) {
-                                    const rgFormatado = rgLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4')
-                                    handleUpdateSinaleiro(sinaleiro.id, 'rg', rgFormatado)
-                                  } else {
-                                    handleUpdateSinaleiro(sinaleiro.id, 'rg', docRG.numero)
-                                  }
+                      }
+                      
+                      // Buscar RG dos documentos do funcionário
+                      if (funcionario.id) {
+                        funcionariosApi.listarDocumentosFuncionario(parseInt(funcionario.id))
+                          .then((response) => {
+                            if (response.success && response.data) {
+                              const docRG = response.data.find((doc: any) => doc.tipo === 'rg')
+                              if (docRG && docRG.numero) {
+                                const rgLimpo = docRG.numero.replace(/\D/g, '')
+                                if (rgLimpo.length <= 9) {
+                                  const rgFormatado = rgLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4')
+                                  handleUpdateSinaleiro(sinaleiro.id, 'rg', rgFormatado)
                                 } else {
-                                  console.log('⚠️ RG não encontrado nos documentos')
+                                  handleUpdateSinaleiro(sinaleiro.id, 'rg', docRG.numero)
                                 }
                               }
-                            })
-                            .catch((error) => {
-                              console.error('❌ Erro ao buscar documentos do funcionário:', error)
-                              // Não mostrar erro ao usuário, apenas logar
-                            })
-                        }
-                        
-                        toast({
-                          title: "Funcionário selecionado",
-                          description: `Dados de ${funcionario.name} preenchidos automaticamente`,
-                        })
-                      } else {
-                        console.log('⚠️ Funcionário é null ou undefined')
+                            }
+                          })
+                          .catch((error) => {
+                            console.error('Erro ao buscar documentos do funcionário:', error)
+                          })
                       }
-                    }}
-                    allowedRoles={['Sinaleiro']}
-                    onlyActive={true}
-                    placeholder="Buscar funcionário com cargo Sinaleiro..."
-                    className="w-full"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Selecione um funcionário com cargo "Sinaleiro" para preencher os campos automaticamente
-                  </p>
-                </div>
-              )}
+                      
+                      toast({
+                        title: "Funcionário selecionado",
+                        description: `Dados de ${funcionario.name} preenchidos automaticamente`,
+                      })
+                    }
+                  }}
+                  allowedRoles={['Sinaleiro']}
+                  onlyActive={true}
+                  placeholder="Buscar funcionário com cargo Sinaleiro..."
+                  className="w-full"
+                />
+              </div>
+            )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Mensagem para sinaleiro cliente */}
+            {sinaleiro.tipo_vinculo === 'cliente' && (
+              <div className="p-2 bg-blue-50 rounded-md">
+                <p className="text-xs text-blue-700">Este sinaleiro pode ser editado pelo cliente</p>
+              </div>
+            )}
+
+            {/* Campos do formulário - apenas para sinaleiro cliente */}
+            {sinaleiro.tipo_vinculo === 'cliente' && (
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>
                     Nome <span className="text-red-500">*</span>
@@ -449,13 +422,13 @@ export function SinaleirosForm({
                     value={sinaleiro.nome}
                     onChange={(e) => handleUpdateSinaleiro(sinaleiro.id, 'nome', e.target.value)}
                     placeholder="Nome completo"
-                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
+                    disabled={!canEdit}
                   />
                 </div>
 
                 <div>
                   <Label>
-                    CPF {sinaleiro.tipo_vinculo === 'interno' ? <span className="text-red-500">*</span> : sinaleiro.tipo_vinculo === 'cliente' ? <span className="text-xs text-gray-500">(ou RG)</span> : null}
+                    CPF <span className="text-xs text-gray-500">(ou RG)</span>
                   </Label>
                   <Input
                     value={sinaleiro.cpf || sinaleiro.rg_cpf || ''}
@@ -471,13 +444,13 @@ export function SinaleirosForm({
                       }
                     }}
                     placeholder="000.000.000-00"
-                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
+                    disabled={!canEdit}
                   />
                 </div>
 
                 <div>
                   <Label>
-                    RG {sinaleiro.tipo_vinculo === 'interno' ? <span className="text-red-500">*</span> : sinaleiro.tipo_vinculo === 'cliente' ? <span className="text-xs text-gray-500">(ou CPF)</span> : null}
+                    RG <span className="text-xs text-gray-500">(ou CPF)</span>
                   </Label>
                   <Input
                     value={sinaleiro.rg || sinaleiro.rg_cpf || ''}
@@ -493,14 +466,14 @@ export function SinaleirosForm({
                       }
                     }}
                     placeholder="00.000.000-0"
-                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
+                    disabled={!canEdit}
                   />
                 </div>
 
                 <div>
                   <Label>Telefone</Label>
                   <Input
-                    value={sinaleiro.telefone}
+                    value={sinaleiro.telefone || ''}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, '')
                       let formatted = value
@@ -512,7 +485,7 @@ export function SinaleirosForm({
                       handleUpdateSinaleiro(sinaleiro.id, 'telefone', formatted)
                     }}
                     placeholder="(11) 98765-4321"
-                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
+                    disabled={!canEdit}
                   />
                 </div>
 
@@ -523,106 +496,49 @@ export function SinaleirosForm({
                     value={sinaleiro.email || ''}
                     onChange={(e) => handleUpdateSinaleiro(sinaleiro.id, 'email', e.target.value)}
                     placeholder="email@example.com"
-                    disabled={!canEdit || (sinaleiro.tipo_vinculo === 'interno' && clientePodeEditar)}
+                    disabled={!canEdit}
                   />
                 </div>
               </div>
+            )}
 
-              {/* Documentos e Certificados */}
-              <div className="space-y-3 pt-3 border-t">
-                <div>
-                  <Label className="text-sm font-medium mb-2">Documentos</Label>
-                  <div className="space-y-2">
-                    {sinaleiro.documentos && sinaleiro.documentos.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {sinaleiro.documentos.map((doc: any, docIdx: number) => (
-                          <Badge key={docIdx} variant="outline" className="flex items-center gap-1">
-                            <FileText className="w-3 h-3" />
-                            {doc.nome || doc.tipo || 'Documento'}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-500">Nenhum documento cadastrado</p>
-                    )}
-                  </div>
-                </div>
-                
-                <div>
-                  <Label className="text-sm font-medium mb-2">Certificados</Label>
-                  <div className="space-y-2">
-                    {sinaleiro.certificados && sinaleiro.certificados.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {sinaleiro.certificados.map((cert: any, certIdx: number) => (
-                          <Badge key={certIdx} variant="outline" className="flex items-center gap-1">
-                            <Shield className="w-3 h-3" />
-                            {cert.nome || cert.tipo || 'Certificado'}
-                            {cert.numero && ` - ${cert.numero}`}
-                            {cert.validade && ` (${new Date(cert.validade).toLocaleDateString('pt-BR')})`}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-500">Nenhum certificado cadastrado</p>
-                    )}
-                  </div>
-                </div>
+            {/* Mensagem informativa para sinaleiro interno após seleção */}
+            {sinaleiro.tipo_vinculo === 'interno' && sinaleiro.nome && (
+              <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
+                <p className="text-sm text-blue-700">
+                  <strong>Funcionário selecionado:</strong> {sinaleiro.nome}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Os dados do sinaleiro interno são preenchidos automaticamente a partir do cadastro de funcionários.
+                </p>
               </div>
+            )}
 
-              {/* Documentos do Sinaleiro - Apenas para sinaleiros externos (cliente) com UUID válido */}
-              {(() => {
-                // Validar se o ID é um UUID válido (não pode ser temporário)
-                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-                const idValido = sinaleiro.id && typeof sinaleiro.id === 'string'
-                const naoTemporario = idValido && !sinaleiro.id.startsWith('cliente_') && !sinaleiro.id.startsWith('interno_') && !sinaleiro.id.startsWith('temp_') && !sinaleiro.id.startsWith('new_')
-                const temUuidValido = naoTemporario && uuidRegex.test(sinaleiro.id)
-                const ehExterno = sinaleiro.tipo_vinculo !== 'interno' && sinaleiro.tipo !== 'principal'
-                
-                // Só renderizar se tiver UUID válido E for externo
-                if (!temUuidValido || !ehExterno) {
-                  return null
-                }
-                
-                return (
+            {/* Documentos do Sinaleiro - Apenas para sinaleiros externos (cliente) com UUID válido */}
+            {(() => {
+              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+              const idValido = sinaleiro.id && typeof sinaleiro.id === 'string'
+              const naoTemporario = idValido && !sinaleiro.id.startsWith('cliente_') && !sinaleiro.id.startsWith('interno_') && !sinaleiro.id.startsWith('temp_') && !sinaleiro.id.startsWith('new_')
+              const temUuidValido = naoTemporario && uuidRegex.test(sinaleiro.id)
+              const ehExterno = sinaleiro.tipo_vinculo !== 'interno' && sinaleiro.tipo !== 'principal'
+              
+              if (!temUuidValido || !ehExterno) {
+                return null
+              }
+              
+              return (
+                <div className="pt-3 border-t">
                   <DocumentosSinaleiroList
                     sinaleiroId={sinaleiro.id}
                     readOnly={!canEdit || clientePodeEditar}
                   />
-                )
-              })()}
-              
-              {/* Mensagem para sinaleiro interno */}
-              {sinaleiro.tipo_vinculo === 'interno' && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200">
-                  <p className="text-sm text-blue-700">
-                    <strong>Nota:</strong> Os documentos do sinaleiro interno já estão cadastrados no sistema de funcionários. 
-                    Não é necessário anexar documentos aqui.
-                  </p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-
-        {canEdit && sinaleiros.length > 0 && (
-          <div className="flex justify-end pt-4 border-t">
-            <Button type="button" onClick={handleSave} disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Salvar Sinaleiros
-                </>
-              )}
-            </Button>
+              )
+            })()}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      ))}
+    </div>
   )
 }
 

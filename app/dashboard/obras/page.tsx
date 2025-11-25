@@ -1304,7 +1304,7 @@ export default function ObrasPage() {
 
       {/* Filtros */}
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="">
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-sm font-medium">Buscar obras</label>

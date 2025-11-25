@@ -65,15 +65,29 @@ export const responsavelTecnicoApi = {
     })
   },
 
-  // Buscar responsável técnico por CPF/CNPJ (endpoint pode não existir ainda, mas preparado)
+  // Buscar responsável técnico por CPF/CNPJ
   async buscarPorCpf(cpfCnpj: string): Promise<any | null> {
     try {
       // Remove caracteres não numéricos
       const cpfLimpo = cpfCnpj.replace(/\D/g, '')
+      
+      // Validar se tem pelo menos 5 dígitos
+      if (cpfLimpo.length < 5) {
+        throw new Error('CPF/CNPJ deve ter pelo menos 5 dígitos')
+      }
+      
       const url = buildApiUrl(`responsaveis-tecnicos/buscar?cpf=${cpfLimpo}`)
+      console.log('🔍 URL da busca:', url)
+      
       const response = await apiRequest(url)
+      console.log('📋 Resposta da API:', response)
+      
       const d = response.data
-      if (!d) return null
+      if (!d) {
+        console.log('⚠️ Nenhum dado retornado')
+        return null
+      }
+      
       // Se veio de funcionarios
       if (d.origem === 'funcionarios') {
         return {
@@ -81,15 +95,27 @@ export const responsavelTecnicoApi = {
           funcionario_id: d.funcionario_id,
           nome: d.nome,
           cpf_cnpj: d.cpf_cnpj,
-          email: d.email,
-          telefone: d.telefone,
+          email: d.email || '',
+          telefone: d.telefone || '',
         }
       }
+      
       // Fallback: tabela responsaveis_tecnicos
-      return d
-    } catch (error) {
-      // Se o endpoint não existir, retornar null
-      if (error.message.includes('404') || error.message.includes('não encontrado')) {
+      return {
+        id: d.id,
+        nome: d.nome,
+        cpf_cnpj: d.cpf_cnpj,
+        crea: d.crea || '',
+        email: d.email || '',
+        telefone: d.telefone || ''
+      }
+    } catch (error: any) {
+      console.error('❌ Erro na busca:', error)
+      // Se o endpoint não existir ou não encontrar, retornar null
+      if (error.message?.includes('404') || 
+          error.message?.includes('não encontrado') ||
+          error.message?.includes('404') ||
+          error.message?.includes('Not Found')) {
         return null
       }
       throw error

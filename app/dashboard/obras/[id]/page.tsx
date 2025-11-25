@@ -990,6 +990,47 @@ function ObraDetailsPageContent() {
     }
   }
 
+  const handleDuplicarParaProximoMes = async () => {
+    if (!obra) return
+    
+    try {
+      const mesesExistentes = await custosMensaisApi.obterMesesDisponiveis(parseInt(obra.id))
+      if (mesesExistentes.length === 0) {
+        toast({
+          title: "Informação",
+          description: "Não há custos anteriores para duplicar. Crie primeiro os custos iniciais da obra.",
+          variant: "default"
+        })
+        return
+      }
+      
+      const ultimoMes = mesesExistentes[mesesExistentes.length - 1] as string
+      const proximoMes = new Date(ultimoMes + '-01')
+      proximoMes.setMonth(proximoMes.getMonth() + 1)
+      const proximoMesStr = proximoMes.toISOString().slice(0, 7)
+      
+      await custosMensaisApi.replicar({
+        obra_id: parseInt(obra.id),
+        mes_origem: ultimoMes,
+        mes_destino: proximoMesStr
+      })
+      
+      await carregarCustosMensais(obraId)
+      setMesSelecionado(proximoMesStr)
+      toast({
+        title: "Sucesso",
+        description: `Custos duplicados para ${formatarMes(proximoMesStr)} com sucesso!`,
+        variant: "default"
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: "Erro ao duplicar custos para o próximo mês",
+        variant: "destructive"
+      })
+    }
+  }
+
   const handleAtualizarQuantidade = async (custoId: number, novaQuantidade: number) => {
     try {
       await custosMensaisApi.atualizarQuantidadeRealizada(custoId, novaQuantidade)
@@ -3847,6 +3888,20 @@ function ObraDetailsPageContent() {
                     </div>
                   </Card>
                 </div>
+
+                {/* Botão para duplicar custos para próximo mês */}
+                {custosFiltrados.length > 0 && (
+                  <div className="flex gap-2 pt-4 border-t">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={handleDuplicarParaProximoMes}
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Duplicar para Próximo Mês
+                    </Button>
+                  </div>
+                )}
               </div>
               ) : (
                 <div className="text-center py-8">

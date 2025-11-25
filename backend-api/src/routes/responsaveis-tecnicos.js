@@ -16,17 +16,17 @@ router.get('/buscar', async (req, res) => {
   try {
     const { cpf = '' } = req.query
 
-    const schema = Joi.object({
-      cpf: Joi.string().min(5).required(),
-    })
-
-    const { error: validationError } = schema.validate({ cpf })
-    if (validationError) {
-      return res.status(400).json({ error: validationError.details[0].message })
-    }
-
     // Somente dígitos
     const cpfSomenteDigitos = String(cpf).replace(/\D/g, '')
+
+    // Validar se tem pelo menos 5 dígitos
+    if (!cpfSomenteDigitos || cpfSomenteDigitos.length < 5) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'CPF/CNPJ deve ter pelo menos 5 dígitos',
+        message: 'Digite pelo menos 5 dígitos do CPF/CNPJ para buscar'
+      })
+    }
 
     // 1) Tentar encontrar em funcionarios (match exato por CPF)
     const { data: funcionarios, error: errFunc } = await supabaseAdmin
@@ -60,13 +60,32 @@ router.get('/buscar', async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(1)
 
-    if (error) throw error
+    if (error) {
+      console.error('Erro ao buscar na tabela responsaveis_tecnicos:', error)
+      throw error
+    }
 
     const found = Array.isArray(respTec) && respTec.length > 0 ? respTec[0] : null
-    return res.json({ success: true, data: found })
+    
+    if (found) {
+      return res.json({ 
+        success: true, 
+        data: found 
+      })
+    } else {
+      // Não encontrado em nenhum lugar
+      return res.json({ 
+        success: true, 
+        data: null 
+      })
+    }
   } catch (error) {
     console.error('Erro ao buscar responsável técnico por CPF/CNPJ:', error)
-    return res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+    return res.status(500).json({ 
+      success: false,
+      error: 'Erro interno do servidor', 
+      message: error.message 
+    })
   }
 })
 

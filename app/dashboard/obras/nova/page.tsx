@@ -24,12 +24,12 @@ import {
   Package,
   Settings,
   FileText,
-  AlertCircle,
   Zap,
   Gauge,
   Battery,
   Truck,
-  CreditCard
+  CreditCard,
+  Loader2
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
@@ -44,6 +44,9 @@ import { ResponsavelTecnicoForm, ResponsavelTecnicoData } from "@/components/res
 import { SinaleirosForm } from "@/components/sinaleiros-form"
 import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
 import { sinaleirosApi } from "@/lib/api-sinaleiros"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
+import { Checkbox } from "@/components/ui/checkbox"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -192,6 +195,27 @@ export default function NovaObraPage() {
   const [responsavelTecnico, setResponsavelTecnico] = useState<ResponsavelTecnicoData | null>(null)
   const [sinaleiros, setSinaleiros] = useState<any[]>([])
   
+  // Estados para modal de criação de cliente
+  const [isClienteModalOpen, setIsClienteModalOpen] = useState(false)
+  const [isCreatingCliente, setIsCreatingCliente] = useState(false)
+  const [clienteFormData, setClienteFormData] = useState({
+    nome: '',
+    email: '',
+    telefone: '',
+    cnpj: '',
+    endereco: '',
+    cidade: '',
+    estado: '',
+    cep: '',
+    contato: '',
+    contato_email: '',
+    contato_cpf: '',
+    contato_telefone: '',
+    status: 'ativo',
+    criar_usuario: false,
+    usuario_senha: ''
+  })
+  
   // Estados para custos mensais
   const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
   const [custoForm, setCustoForm] = useState({
@@ -265,6 +289,70 @@ export default function NovaObraPage() {
   }
 
   // Função para lidar com seleção de cliente
+  const handleCreateCliente = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      setIsCreatingCliente(true)
+      
+      // Remover máscaras antes de enviar
+      const dadosFormatados = {
+        ...clienteFormData,
+        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
+        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
+        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
+        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
+        criar_usuario: clienteFormData.criar_usuario || false,
+        usuario_senha: clienteFormData.criar_usuario ? clienteFormData.usuario_senha : undefined
+      }
+      
+      const response = await clientesApi.criarCliente(dadosFormatados)
+      
+      if (response.success && response.data) {
+        // Converter o cliente criado para o formato esperado
+        const novoCliente = converterClienteBackendParaFrontend(response.data)
+        
+        // Selecionar automaticamente o cliente criado
+        handleClienteSelect(novoCliente)
+        
+        // Resetar formulário e fechar modal
+        setClienteFormData({
+          nome: '',
+          email: '',
+          telefone: '',
+          cnpj: '',
+          endereco: '',
+          cidade: '',
+          estado: '',
+          cep: '',
+          contato: '',
+          contato_email: '',
+          contato_cpf: '',
+          contato_telefone: '',
+          status: 'ativo',
+          criar_usuario: false,
+          usuario_senha: ''
+        })
+        setIsClienteModalOpen(false)
+        
+        toast({
+          title: "Sucesso",
+          description: "Cliente criado e selecionado com sucesso!",
+        })
+      }
+    } catch (err: any) {
+      console.error('Erro ao criar cliente:', err)
+      toast({
+        title: "Erro",
+        description: err.response?.data?.message || "Erro ao criar cliente. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsCreatingCliente(false)
+    }
+  }
+
   const handleClienteSelect = (cliente: any) => {
     setClienteSelecionado(cliente)
     if (cliente) {
@@ -699,7 +787,7 @@ export default function NovaObraPage() {
       </div>
 
       {/* Formulário */}
-      <form onSubmit={handleCreateObra} className="space-y-6">
+      <form onSubmit={handleCreateObra} className="">
         <Tabs defaultValue="obra" className="w-full">
           <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
@@ -724,8 +812,8 @@ export default function NovaObraPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  <div className="md:col-span-5">
                     <Label htmlFor="name">Nome da Obra *</Label>
                     <Input
                       id="name"
@@ -735,7 +823,7 @@ export default function NovaObraPage() {
                       required
                     />
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <Label htmlFor="status">Status</Label>
                     <Select value={obraFormData.status} onValueChange={(value) => setObraFormData({ ...obraFormData, status: value })}>
                       <SelectTrigger>
@@ -749,7 +837,7 @@ export default function NovaObraPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <Label htmlFor="startDate">Data de Início</Label>
                     <Input
                       id="startDate"
@@ -758,7 +846,7 @@ export default function NovaObraPage() {
                       onChange={(e) => setObraFormData({ ...obraFormData, startDate: e.target.value })}
                     />
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <Label htmlFor="endDate">Data de Fim</Label>
                     <Input
                       id="endDate"
@@ -767,7 +855,19 @@ export default function NovaObraPage() {
                       onChange={(e) => setObraFormData({ ...obraFormData, endDate: e.target.value })}
                     />
                   </div>
-                  <div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  <div className="md:col-span-8">
+                    <Label htmlFor="location">Endereço *</Label>
+                    <Input
+                      id="location"
+                      value={obraFormData.location}
+                      onChange={(e) => setObraFormData({ ...obraFormData, location: e.target.value })}
+                      placeholder="Ex: Rua das Flores, 123 - Centro"
+                      required
+                    />
+                  </div>
+                  <div className="md:col-span-4">
                     <Label htmlFor="budget">Orçamento (R$)</Label>
                     <Input
                       id="budget"
@@ -778,16 +878,6 @@ export default function NovaObraPage() {
                         setObraFormData({ ...obraFormData, budget: formatted })
                       }}
                       placeholder="0,00"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="location">Endereço *</Label>
-                    <Input
-                      id="location"
-                      value={obraFormData.location}
-                      onChange={(e) => setObraFormData({ ...obraFormData, location: e.target.value })}
-                      placeholder="Ex: Rua das Flores, 123 - Centro"
-                      required
                     />
                   </div>
                 </div>
@@ -869,11 +959,23 @@ export default function NovaObraPage() {
 
                 <div>
                   <Label htmlFor="clienteSearch">Cliente *</Label>
-                  <ClienteSearch
-                    onClienteSelect={handleClienteSelect}
-                    placeholder="Buscar cliente por nome ou CNPJ..."
-                    className="mt-1"
-                  />
+                  <div className="flex gap-2 mt-1">
+                    <div className="flex-1">
+                      <ClienteSearch
+                        onClienteSelect={handleClienteSelect}
+                        placeholder="Buscar cliente por nome ou CNPJ..."
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setIsClienteModalOpen(true)}
+                      className="shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                   {clienteSelecionado && (
                     <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-center gap-2">
@@ -916,73 +1018,77 @@ export default function NovaObraPage() {
                   Preencha os documentos obrigatórios para a obra
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="w-5 h-5 text-yellow-600" />
-                    <h3 className="font-medium text-yellow-900">Campos Obrigatórios</h3>
-                  </div>
-                  <p className="text-sm text-yellow-700">
-                    Todos os campos abaixo são obrigatórios para o cadastro da obra
-                  </p>
-                </div>
-
+              <CardContent className="px-0" style={{ padding: '0px !important' }}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* CNO */}
-                  <div>
-                    <CnoInput
-                      value={cno}
-                      onChange={setCno}
-                      label="CNO da Obra (CNPJ/Documento)"
-                      required={true}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Documento identificador da obra
-                    </p>
+                  {/* Coluna Esquerda */}
+                  <div className="space-y-6">
+                    {/* CNO */}
+                    <div className="space-y-2">
+                      <CnoInput
+                        value={cno}
+                        onChange={setCno}
+                        label="CNO da Obra (CNPJ/Documento)"
+                        required={true}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Documento identificador da obra
+                      </p>
+                    </div>
+
+                    {/* Número da ART */}
+                    <div className="space-y-2">
+                      <Label>
+                        Número da ART <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={artNumero}
+                        onChange={(e) => setArtNumero(e.target.value)}
+                        placeholder="Número da Anotação de Responsabilidade Técnica"
+                        required
+                      />
+                    </div>
+
+                    {/* Número da Apólice */}
+                    <div className="space-y-2">
+                      <Label>
+                        Número da Apólice de Seguro <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        value={apoliceNumero}
+                        onChange={(e) => setApoliceNumero(e.target.value)}
+                        placeholder="Número da apólice de seguro"
+                        required
+                      />
+                    </div>
                   </div>
 
-                  {/* ART */}
-                  <div className="space-y-2">
-                    <Label>
-                      Número da ART <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      value={artNumero}
-                      onChange={(e) => setArtNumero(e.target.value)}
-                      placeholder="Número da Anotação de Responsabilidade Técnica"
-                      required
-                    />
-                    <DocumentoUpload
-                      label="Upload do Documento ART (PDF)"
-                      accept="application/pdf"
-                      maxSize={5 * 1024 * 1024}
-                      required={true}
-                      onUpload={(file) => setArtArquivo(file)}
-                      onRemove={() => setArtArquivo(null)}
-                      currentFile={artArquivo}
-                    />
-                  </div>
+                  {/* Coluna Direita - Uploads */}
+                  <div className="space-y-6">
+                    {/* Upload ART */}
+                    <div className="space-y-2">
+                      <DocumentoUpload
+                        label="Upload do Documento ART (PDF)"
+                        accept="application/pdf"
+                        maxSize={5 * 1024 * 1024}
+                        required={true}
+                        onUpload={(file) => setArtArquivo(file)}
+                        onRemove={() => setArtArquivo(null)}
+                        currentFile={artArquivo}
+                      />
+                    </div>
 
-                  {/* Apólice de Seguro */}
-                  <div className="space-y-2">
-                    <Label>
-                      Número da Apólice de Seguro <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      value={apoliceNumero}
-                      onChange={(e) => setApoliceNumero(e.target.value)}
-                      placeholder="Número da apólice de seguro"
-                      required
-                    />
-                    <DocumentoUpload
-                      label="Upload da Apólice de Seguro (PDF)"
-                      accept="application/pdf"
-                      maxSize={5 * 1024 * 1024}
-                      required={true}
-                      onUpload={(file) => setApoliceArquivo(file)}
-                      onRemove={() => setApoliceArquivo(null)}
-                      currentFile={apoliceArquivo}
-                    />
+                    {/* Upload Apólice */}
+                    <div className="space-y-2">
+                      <DocumentoUpload
+                        label="Upload da Apólice de Seguro (PDF)"
+                        accept="application/pdf"
+                        maxSize={5 * 1024 * 1024}
+                        required={true}
+                        onUpload={(file) => setApoliceArquivo(file)}
+                        onRemove={() => setApoliceArquivo(null)}
+                        currentFile={apoliceArquivo}
+                      />
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -1058,16 +1164,6 @@ export default function NovaObraPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Crane className="w-5 h-5 text-blue-600" />
-                    <h3 className="font-medium text-blue-900">Gruas da Obra</h3>
-                  </div>
-                  <p className="text-sm text-blue-700">
-                    Selecione uma ou mais gruas que serão utilizadas nesta obra
-                  </p>
-                </div>
-
                 <div>
                   <Label htmlFor="gruaSearch">Buscar Grua</Label>
                   <GruaSearch
@@ -1805,16 +1901,6 @@ export default function NovaObraPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-5 h-5 text-green-600" />
-                    <h3 className="font-medium text-green-900">Funcionários da Obra</h3>
-                  </div>
-                  <p className="text-sm text-green-700">
-                    Busque e adicione funcionários para esta obra
-                  </p>
-                </div>
-
                 <div>
                   <Label htmlFor="funcionarioSearch">Buscar Funcionário</Label>
                   <FuncionarioSearch
@@ -1898,19 +1984,9 @@ export default function NovaObraPage() {
                   Configure os custos mensais que serão aplicados a esta obra
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <DollarSign className="w-5 h-5 text-purple-600" />
-                    <h3 className="font-medium text-purple-900">Custos Mensais da Obra</h3>
-                  </div>
-                  <p className="text-sm text-purple-700">
-                    Configure os custos mensais que serão aplicados a esta obra
-                  </p>
-                </div>
-
+              <CardContent className="">
                 {/* Formulário para adicionar custo */}
-                <div className="border rounded-lg p-4 space-y-4">
+                <div className="rounded-lg">
                   <h4 className="font-medium text-sm">Adicionar Novo Custo</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -2029,24 +2105,6 @@ export default function NovaObraPage() {
                   </div>
                 )}
 
-                {/* Botões de ação para custos */}
-                {custosMensais.length > 0 && (
-                  <div className="flex gap-2 pt-4 border-t">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => {
-                        const proximoMes = new Date(custoForm.mes + '-01')
-                        proximoMes.setMonth(proximoMes.getMonth() + 1)
-                        const proximoMesStr = proximoMes.toISOString().slice(0, 7)
-                        duplicarCustosParaMes(proximoMesStr)
-                      }}
-                    >
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Duplicar para Próximo Mês
-                    </Button>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -2084,6 +2142,326 @@ export default function NovaObraPage() {
           </div>
         </div>
       </form>
+
+      {/* Modal de Criação de Cliente */}
+      <Dialog open={isClienteModalOpen} onOpenChange={setIsClienteModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Novo Cliente
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateCliente} className="space-y-6">
+            {/* Informações Básicas */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Informações Básicas</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="nome">Nome da Empresa *</Label>
+                  <Input
+                    id="nome"
+                    value={clienteFormData.nome}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, nome: e.target.value })}
+                    placeholder="Ex: Construtora ABC Ltda"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cnpj">CNPJ *</Label>
+                  <Input
+                    id="cnpj"
+                    value={clienteFormData.cnpj}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) {
+                        value = value.substring(0, 2) + '.' + value.substring(2)
+                      }
+                      if (value.length >= 6) {
+                        value = value.substring(0, 6) + '.' + value.substring(6)
+                      }
+                      if (value.length >= 10) {
+                        value = value.substring(0, 10) + '/' + value.substring(10)
+                      }
+                      if (value.length >= 15) {
+                        value = value.substring(0, 15) + '-' + value.substring(15, 17)
+                      }
+                      setClienteFormData({ ...clienteFormData, cnpj: value })
+                    }}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="status">Status *</Label>
+                  <Select
+                    value={clienteFormData.status}
+                    onValueChange={(value) => setClienteFormData({ ...clienteFormData, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ativo">Ativo</SelectItem>
+                      <SelectItem value="inativo">Inativo</SelectItem>
+                      <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={clienteFormData.email || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, email: e.target.value })}
+                    placeholder="contato@empresa.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="telefone">Telefone</Label>
+                  <Input
+                    id="telefone"
+                    value={clienteFormData.telefone || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) {
+                        value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
+                      }
+                      if (value.length >= 10) {
+                        value = value.substring(0, 10) + '-' + value.substring(10, 14)
+                      }
+                      setClienteFormData({ ...clienteFormData, telefone: value })
+                    }}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Endereço */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Endereço</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="endereco">Endereço</Label>
+                  <Input
+                    id="endereco"
+                    value={clienteFormData.endereco || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco: e.target.value })}
+                    placeholder="Rua, número, bairro"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cep">CEP</Label>
+                  <Input
+                    id="cep"
+                    value={clienteFormData.cep || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 5) {
+                        value = value.substring(0, 5) + '-' + value.substring(5, 8)
+                      }
+                      setClienteFormData({ ...clienteFormData, cep: value })
+                    }}
+                    placeholder="01234-567"
+                    maxLength={9}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cidade">Cidade</Label>
+                  <Input
+                    id="cidade"
+                    value={clienteFormData.cidade || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, cidade: e.target.value })}
+                    placeholder="São Paulo"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="estado">Estado</Label>
+                  <Select
+                    value={clienteFormData.estado || undefined}
+                    onValueChange={(value) => setClienteFormData({ ...clienteFormData, estado: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AC">Acre (AC)</SelectItem>
+                      <SelectItem value="AL">Alagoas (AL)</SelectItem>
+                      <SelectItem value="AP">Amapá (AP)</SelectItem>
+                      <SelectItem value="AM">Amazonas (AM)</SelectItem>
+                      <SelectItem value="BA">Bahia (BA)</SelectItem>
+                      <SelectItem value="CE">Ceará (CE)</SelectItem>
+                      <SelectItem value="DF">Distrito Federal (DF)</SelectItem>
+                      <SelectItem value="ES">Espírito Santo (ES)</SelectItem>
+                      <SelectItem value="GO">Goiás (GO)</SelectItem>
+                      <SelectItem value="MA">Maranhão (MA)</SelectItem>
+                      <SelectItem value="MT">Mato Grosso (MT)</SelectItem>
+                      <SelectItem value="MS">Mato Grosso do Sul (MS)</SelectItem>
+                      <SelectItem value="MG">Minas Gerais (MG)</SelectItem>
+                      <SelectItem value="PA">Pará (PA)</SelectItem>
+                      <SelectItem value="PB">Paraíba (PB)</SelectItem>
+                      <SelectItem value="PR">Paraná (PR)</SelectItem>
+                      <SelectItem value="PE">Pernambuco (PE)</SelectItem>
+                      <SelectItem value="PI">Piauí (PI)</SelectItem>
+                      <SelectItem value="RJ">Rio de Janeiro (RJ)</SelectItem>
+                      <SelectItem value="RN">Rio Grande do Norte (RN)</SelectItem>
+                      <SelectItem value="RS">Rio Grande do Sul (RS)</SelectItem>
+                      <SelectItem value="RO">Rondônia (RO)</SelectItem>
+                      <SelectItem value="RR">Roraima (RR)</SelectItem>
+                      <SelectItem value="SC">Santa Catarina (SC)</SelectItem>
+                      <SelectItem value="SP">São Paulo (SP)</SelectItem>
+                      <SelectItem value="SE">Sergipe (SE)</SelectItem>
+                      <SelectItem value="TO">Tocantins (TO)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Pessoa de Contato */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Pessoa de Contato (Representante)</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="contato">Nome do Representante *</Label>
+                  <Input
+                    id="contato"
+                    value={clienteFormData.contato || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato: e.target.value })}
+                    placeholder="João Silva"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="contato_cpf">CPF do Representante</Label>
+                  <Input
+                    id="contato_cpf"
+                    value={clienteFormData.contato_cpf || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 3) {
+                        value = value.substring(0, 3) + '.' + value.substring(3)
+                      }
+                      if (value.length >= 7) {
+                        value = value.substring(0, 7) + '.' + value.substring(7)
+                      }
+                      if (value.length >= 11) {
+                        value = value.substring(0, 11) + '-' + value.substring(11, 13)
+                      }
+                      setClienteFormData({ ...clienteFormData, contato_cpf: value })
+                    }}
+                    placeholder="000.000.000-00"
+                    maxLength={14}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="contato_email">Email do Representante</Label>
+                  <Input
+                    id="contato_email"
+                    type="email"
+                    value={clienteFormData.contato_email || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato_email: e.target.value })}
+                    placeholder="joao.silva@empresa.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="contato_telefone">Telefone do Representante</Label>
+                  <Input
+                    id="contato_telefone"
+                    value={clienteFormData.contato_telefone || ''}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '')
+                      if (value.length >= 2) {
+                        value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
+                      }
+                      if (value.length >= 10) {
+                        value = value.substring(0, 10) + '-' + value.substring(10, 14)
+                      }
+                      setClienteFormData({ ...clienteFormData, contato_telefone: value })
+                    }}
+                    placeholder="(11) 99999-9999"
+                    maxLength={15}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Configuração de Usuário */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Configuração de Usuário</h3>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="criar_usuario"
+                  checked={clienteFormData.criar_usuario}
+                  onCheckedChange={(checked) => setClienteFormData({ ...clienteFormData, criar_usuario: checked === true })}
+                />
+                <Label htmlFor="criar_usuario" className="cursor-pointer">
+                  Criar usuário para o representante
+                </Label>
+              </div>
+              {clienteFormData.criar_usuario && (
+                <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <User className="w-5 h-5 mt-0.5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium mb-1 text-blue-900">Criação de Usuário</h4>
+                      <p className="text-sm mb-3 text-blue-700">
+                        Será criado um usuário para o representante com acesso limitado ao sistema.
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Uma senha temporária será gerada automaticamente e enviada por email e WhatsApp ao representante.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsClienteModalOpen(false)} 
+                disabled={isCreatingCliente}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isCreatingCliente}>
+                {isCreatingCliente ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Cliente
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
