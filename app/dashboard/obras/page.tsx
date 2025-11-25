@@ -169,7 +169,7 @@ export default function ObrasPage() {
         response.data.map(async (obraBackend: any) => {
           // Debug: verificar se grua_obra está presente
           if (obraBackend.grua_obra && obraBackend.grua_obra.length > 0) {
-            console.log(`🔍 Obra ${obraBackend.id} - Gruas encontradas:`, obraBackend.grua_obra)
+            // Gruas encontradas na listagem
           }
           
           const obraConvertida = converterObraBackendParaFrontend(obraBackend)
@@ -178,16 +178,9 @@ export default function ObrasPage() {
           // Isso resolve casos onde o relacionamento não veio na query inicial
           if (!obraConvertida.gruasVinculadas || obraConvertida.gruasVinculadas.length === 0) {
             try {
-              console.log(`⚠️ Obra ${obraBackend.id} - Sem gruas na listagem, buscando separadamente via grua_obra...`)
               const gruasResponse = await obrasApi.buscarGruasVinculadas(obraBackend.id)
-              console.log(`🔍 Obra ${obraBackend.id} - Resposta buscarGruasVinculadas:`, {
-                success: gruasResponse.success,
-                hasData: !!gruasResponse.data,
-                dataLength: gruasResponse.data?.length || 0
-              })
               
               if (gruasResponse.success && gruasResponse.data && gruasResponse.data.length > 0) {
-                console.log(`✅ Obra ${obraBackend.id} - ${gruasResponse.data.length} grua(s) encontrada(s) via buscarGruasVinculadas`)
                 
                 // Converter formato para o esperado pela renderização
                 const gruasFormatadas = gruasResponse.data.map((grua: any) => ({
@@ -210,8 +203,6 @@ export default function ObrasPage() {
                 }))
                 
                 obraConvertida.gruasVinculadas = gruasFormatadas
-              } else {
-                console.log(`ℹ️ Obra ${obraBackend.id} - Nenhuma grua encontrada em grua_obra`)
               }
             } catch (error) {
               console.error(`❌ Erro ao buscar gruas para obra ${obraBackend.id}:`, error)
@@ -221,7 +212,7 @@ export default function ObrasPage() {
           
           // Debug: verificar se gruasVinculadas foi convertido corretamente
           if (obraConvertida.gruasVinculadas && obraConvertida.gruasVinculadas.length > 0) {
-            console.log(`✅ Obra ${obraConvertida.id} - Gruas convertidas:`, obraConvertida.gruasVinculadas)
+            // Gruas convertidas com sucesso
           }
           
           return obraConvertida
@@ -932,8 +923,6 @@ export default function ObrasPage() {
       // Excluir obra no backend
       await obrasApi.excluirObra(parseInt(obraToDelete.id))
       
-      console.log('Obra excluída do backend:', obraToDelete)
-      
       // Recarregar lista de obras
       await carregarObras()
       
@@ -1211,8 +1200,6 @@ export default function ObrasPage() {
       // Atualizar obra no backend
       const response = await obrasApi.atualizarObra(parseInt(editingObra.id), obraBackendData)
       
-      console.log('✅ Obra atualizada no backend:', response.data)
-      
       // Recarregar lista de obras
       await carregarObras()
       
@@ -1304,7 +1291,7 @@ export default function ObrasPage() {
 
       {/* Filtros */}
       <Card>
-        <CardContent className="">
+        <CardContent className="p-6">
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-sm font-medium">Buscar obras</label>
@@ -1369,7 +1356,7 @@ export default function ObrasPage() {
           
           // Debug: verificar se gruasVinculadas está presente
           if (obraComRelacionamentos.gruasVinculadas && obraComRelacionamentos.gruasVinculadas.length > 0) {
-            console.log(`🎯 Renderizando obra ${obra.id} com ${obraComRelacionamentos.gruasVinculadas.length} grua(s)`)
+            // Renderizando obra com gruas vinculadas
           }
           
           return (

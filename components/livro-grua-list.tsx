@@ -392,7 +392,32 @@ export default function LivroGruaList({
                       <TableCell className="text-sm font-medium">
                         <div className="flex items-center gap-2">
                           <Wrench className="w-4 h-4 text-blue-600" />
-                          <span>{entrada.grua_modelo || entrada.grua_id}</span>
+                          <span>
+                            {(() => {
+                              // Limpar e corrigir valores de fabricante e modelo
+                              let modelo = (entrada.grua_modelo || '').trim()
+                              let fabricante = (entrada.grua_fabricante || '').trim()
+                              
+                              // Remover prefixos/sufixos incorretos
+                              if (modelo) {
+                                modelo = modelo.replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
+                              }
+                              if (fabricante) {
+                                fabricante = fabricante.replace(/^Fabricante/i, '').trim()
+                              }
+                              
+                              // Exibir fabricante e modelo se disponíveis
+                              if (fabricante && modelo) {
+                                return `${fabricante} ${modelo}`
+                              } else if (modelo) {
+                                return modelo
+                              } else if (fabricante) {
+                                return fabricante
+                              } else {
+                                return entrada.grua_id || 'N/A'
+                              }
+                            })()}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm">

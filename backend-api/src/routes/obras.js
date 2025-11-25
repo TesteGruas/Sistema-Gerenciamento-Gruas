@@ -30,14 +30,55 @@ const obraSchema = Joi.object({
   updated_at: Joi.date().optional(),
   // Dados da grua (mantido para compatibilidade)
   grua_id: Joi.string().allow(null, '').optional(),
-  grua_valor: Joi.number().positive().allow(null).optional(),
-  grua_mensalidade: Joi.number().positive().allow(null).optional(),
+  grua_valor: Joi.number().min(0).allow(null).optional(),
+  grua_mensalidade: Joi.number().min(0).allow(null).optional(),
   // Múltiplas gruas - aceitar ambos os campos para compatibilidade
   gruas: Joi.array().items(
     Joi.object({
       grua_id: Joi.string().required(),
-      valor_locacao: Joi.number().positive().optional(),
-      taxa_mensal: Joi.number().positive().optional()
+      valor_locacao: Joi.number().min(0).optional(),
+      taxa_mensal: Joi.number().min(0).optional(),
+      // Campos adicionais de configuração da grua (opcionais)
+      tipo_base: Joi.string().allow(null, '').optional(),
+      altura_inicial: Joi.number().min(0).allow(null).optional(),
+      altura_final: Joi.number().min(0).allow(null).optional(),
+      velocidade_giro: Joi.number().min(0).allow(null).optional(),
+      velocidade_elevacao: Joi.number().min(0).allow(null).optional(),
+      velocidade_translacao: Joi.number().min(0).allow(null).optional(),
+      potencia_instalada: Joi.number().min(0).allow(null).optional(),
+      voltagem: Joi.string().allow(null, '').optional(),
+      tipo_ligacao: Joi.string().allow(null, '').optional(),
+      capacidade_ponta: Joi.number().min(0).allow(null).optional(),
+      capacidade_maxima_raio: Joi.number().min(0).allow(null).optional(),
+      ano_fabricacao: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
+      vida_util: Joi.number().min(0).allow(null).optional(),
+      valor_operador: Joi.number().min(0).allow(null).optional(),
+      valor_manutencao: Joi.number().min(0).allow(null).optional(),
+      valor_estaiamento: Joi.number().min(0).allow(null).optional(),
+      valor_chumbadores: Joi.number().min(0).allow(null).optional(),
+      valor_montagem: Joi.number().min(0).allow(null).optional(),
+      valor_desmontagem: Joi.number().min(0).allow(null).optional(),
+      valor_transporte: Joi.number().min(0).allow(null).optional(),
+      valor_hora_extra: Joi.number().min(0).allow(null).optional(),
+      valor_seguro: Joi.number().min(0).allow(null).optional(),
+      valor_caucao: Joi.number().min(0).allow(null).optional(),
+      guindaste_montagem: Joi.string().allow(null, '').optional(),
+      quantidade_viagens: Joi.number().integer().min(0).allow(null).optional(),
+      alojamento_alimentacao: Joi.string().allow(null, '').optional(),
+      responsabilidade_acessorios: Joi.string().allow(null, '').optional(),
+      // Condições comerciais
+      prazo_validade: Joi.alternatives().try(
+        Joi.string().allow(null, ''),
+        Joi.number().allow(null)
+      ).optional(),
+      forma_pagamento: Joi.string().allow(null, '').optional(),
+      multa_atraso: Joi.number().min(0).allow(null).optional(),
+      reajuste_indice: Joi.string().allow(null, '').optional(),
+      garantia_caucao: Joi.alternatives().try(
+        Joi.string().allow(null, ''),
+        Joi.number().min(0).allow(null)
+      ).optional(),
+      retencao_contratual: Joi.number().min(0).allow(null).optional()
     })
   ).allow(null).optional(),
   // Dados dos funcionários
@@ -1118,6 +1159,9 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     console.log('✅ Obra criada com sucesso:', data?.id)
     console.log('🔍 DEBUG - Responsável técnico recebido:', value.responsavel_tecnico)
     console.log('🔍 DEBUG - Sinaleiros recebidos:', value.sinaleiros)
+    console.log('🔍 DEBUG - Tipo de sinaleiros:', typeof value.sinaleiros)
+    console.log('🔍 DEBUG - Sinaleiros é array?', Array.isArray(value.sinaleiros))
+    console.log('🔍 DEBUG - Quantidade de sinaleiros:', value.sinaleiros?.length || 0)
 
     // Processar responsável técnico se fornecido
     if (value.responsavel_tecnico && (value.responsavel_tecnico.funcionario_id || (value.responsavel_tecnico.nome && value.responsavel_tecnico.cpf_cnpj))) {
@@ -1183,35 +1227,76 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     }
 
     // Processar sinaleiros se fornecidos
+    console.log('🔍 DEBUG - Verificando sinaleiros antes de processar:')
+    console.log('  - value.sinaleiros existe?', !!value.sinaleiros)
+    console.log('  - É array?', Array.isArray(value.sinaleiros))
+    console.log('  - Length:', value.sinaleiros?.length || 0)
+    console.log('  - Conteúdo:', JSON.stringify(value.sinaleiros, null, 2))
+    
     if (value.sinaleiros && Array.isArray(value.sinaleiros) && value.sinaleiros.length > 0) {
       console.log('🔧 Processando sinaleiros...')
       try {
-        const sinaleirosValidos = value.sinaleiros.filter(s => s.nome && s.rg_cpf)
+        const sinaleirosValidos = value.sinaleiros.filter(s => {
+          const temNome = !!s.nome
+          const temDocumento = !!(s.rg_cpf || s.cpf || s.rg)
+          console.log(`  - Sinaleiro: nome=${temNome}, documento=${temDocumento}`, s)
+          return temNome && temDocumento
+        })
+        
+        console.log(`🔍 DEBUG - Sinaleiros válidos encontrados: ${sinaleirosValidos.length} de ${value.sinaleiros.length}`)
         
         if (sinaleirosValidos.length > 0) {
           for (const sinaleiro of sinaleirosValidos) {
             const { id: sinaleiroId, ...sinaleiroData } = sinaleiro
             
+            // Garantir que rg_cpf está presente
+            if (!sinaleiroData.rg_cpf && (sinaleiro.cpf || sinaleiro.rg)) {
+              sinaleiroData.rg_cpf = sinaleiro.cpf || sinaleiro.rg
+            }
+            
+            // Garantir que tipo está presente
+            if (!sinaleiroData.tipo) {
+              sinaleiroData.tipo = sinaleiro.tipo_vinculo === 'interno' ? 'principal' : 'reserva'
+            }
+            
+            console.log('📝 Inserindo sinaleiro:', {
+              obra_id: data.id,
+              ...sinaleiroData
+            })
+            
             const { data: sinaleiroCriado, error: errSinaleiro } = await supabaseAdmin
               .from('sinaleiros_obra')
               .insert({
                 obra_id: data.id,
-                ...sinaleiroData
+                nome: sinaleiroData.nome,
+                rg_cpf: sinaleiroData.rg_cpf,
+                telefone: sinaleiroData.telefone || null,
+                email: sinaleiroData.email || null,
+                tipo: sinaleiroData.tipo
               })
               .select()
               .single()
 
             if (errSinaleiro) {
               console.error('❌ Erro ao criar sinaleiro:', errSinaleiro)
+              console.error('❌ Dados que causaram erro:', {
+                obra_id: data.id,
+                ...sinaleiroData
+              })
             } else {
               console.log('✅ Sinaleiro criado com sucesso:', sinaleiroCriado)
             }
           }
+        } else {
+          console.warn('⚠️ Nenhum sinaleiro válido encontrado após filtro')
         }
       } catch (sinaleirosError) {
         console.error('❌ Erro ao processar sinaleiros:', sinaleirosError)
+        console.error('❌ Stack trace:', sinaleirosError.stack)
         // Não falhar a criação da obra por causa dos sinaleiros
       }
+    } else {
+      console.log('⚠️ Sinaleiros não fornecidos ou array vazio')
     }
 
     // Processar dados das gruas se fornecidos

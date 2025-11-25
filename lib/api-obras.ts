@@ -623,10 +623,10 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     startDate: obraBackend.data_inicio || obraBackend.created_at.split('T')[0],
     endDate: obraBackend.data_fim,
     status: obraBackend.status,
-    responsavelId: obraBackend.responsavel_id?.toString() || '3',
-    responsavelName: obraBackend.responsavel_nome || 'Pedro Costa',
+    responsavelId: obraBackend.responsavel_id?.toString() || null,
+    responsavelName: obraBackend.responsavel_nome || null,
     clienteId: obraBackend.cliente_id.toString(),
-    clienteName: obraBackend.clientes?.nome || 'Cliente não encontrado',
+    clienteName: obraBackend.clientes?.nome || null,
     cliente: obraBackend.clientes ? {
       id: obraBackend.clientes.id.toString(),
       nome: obraBackend.clientes.nome,
@@ -638,7 +638,7 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     orcamento: obraBackend.orcamento || 0,
     valorTotalObra: obraBackend.total_custos || obraBackend.total_custos_mensais || 0,
     location: `${obraBackend.cidade}, ${obraBackend.estado}`,
-    client: obraBackend.clientes?.nome || 'Cliente não encontrado',
+    client: obraBackend.clientes?.nome || null,
     observations: obraBackend.observacoes || (obraBackend.contato_obra ? `Contato: ${obraBackend.contato_obra}` : undefined),
     createdAt: obraBackend.created_at,
     updatedAt: obraBackend.updated_at,
@@ -729,11 +729,11 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
       alojamento_alimentacao: grua.alojamento_alimentacao,
       responsabilidade_acessorios: grua.responsabilidade_acessorios,
       // Condições comerciais
-      prazo_validade: grua.prazo_validade,
+      prazo_validade: grua.prazo_validade ? String(grua.prazo_validade) : null,
       forma_pagamento: grua.forma_pagamento,
       multa_atraso: grua.multa_atraso,
       reajuste_indice: grua.reajuste_indice,
-      garantia_caucao: grua.garantia_caucao,
+      garantia_caucao: grua.garantia_caucao ? String(grua.garantia_caucao) : null,
       retencao_contratual: grua.retencao_contratual
     }))
   }

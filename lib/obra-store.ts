@@ -14,8 +14,14 @@ interface ObraStore {
   budget?: number // Alias para orcamento
   valorTotalObra?: number // Valor total acumulado dos custos (deve ser usado para exibição)
   status: string
+  responsavelId?: string
   responsavelName?: string // Propriedade adicional
   location?: string // Localização da obra
+  endereco?: string
+  cidade?: string
+  estado?: string
+  cep?: string
+  tipo?: string
   cliente?: {
     id: string
     nome: string

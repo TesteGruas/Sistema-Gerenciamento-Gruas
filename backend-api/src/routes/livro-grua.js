@@ -488,11 +488,32 @@ router.get('/', async (req, res) => {
       })
     }
 
+    // Processar e limpar dados da grua
+    const dadosProcessados = (data || []).map(entrada => {
+      // Limpar e corrigir valores de fabricante e modelo
+      let fabricante = entrada.grua_fabricante || ''
+      let modelo = entrada.grua_modelo || ''
+      
+      // Remover prefixos/sufixos incorretos
+      if (fabricante && typeof fabricante === 'string') {
+        fabricante = fabricante.replace(/^Fabricante/i, '').trim()
+      }
+      if (modelo && typeof modelo === 'string') {
+        modelo = modelo.replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
+      }
+      
+      return {
+        ...entrada,
+        grua_fabricante: fabricante || null,
+        grua_modelo: modelo || null
+      }
+    })
+
     const totalPages = Math.ceil(count / limit)
 
     res.json({
       success: true,
-      data: data || [],
+      data: dadosProcessados,
       pagination: {
         page,
         limit,
@@ -581,9 +602,27 @@ router.get('/:id', async (req, res) => {
       }
     }
 
+    // Processar e limpar dados da grua
+    let fabricante = data.grua_fabricante || ''
+    let modelo = data.grua_modelo || ''
+    
+    // Remover prefixos/sufixos incorretos
+    if (fabricante && typeof fabricante === 'string') {
+      fabricante = fabricante.replace(/^Fabricante/i, '').trim()
+    }
+    if (modelo && typeof modelo === 'string') {
+      modelo = modelo.replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
+    }
+    
+    const dadosProcessados = {
+      ...data,
+      grua_fabricante: fabricante || null,
+      grua_modelo: modelo || null
+    }
+
     res.json({
       success: true,
-      data
+      data: dadosProcessados
     })
 
   } catch (error) {

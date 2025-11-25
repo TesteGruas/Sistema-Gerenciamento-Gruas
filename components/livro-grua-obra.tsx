@@ -18,7 +18,6 @@ import {
   Users,
   Settings,
   Download,
-  Printer,
   Truck,
   CreditCard
 } from "lucide-react"
@@ -42,6 +41,42 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
   useEffect(() => {
     carregarDados()
   }, [obraId])
+
+  // Selecionar automaticamente a primeira grua quando os dados carregarem
+  useEffect(() => {
+    if (obra && !gruaSelecionada && !loading) {
+      const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
+      console.log('🔍 DEBUG LivroGruaObra - Selecionando grua:', {
+        obraId: obra.id,
+        gruasDisponiveis: gruasDisponiveis.length,
+        gruas: gruasDisponiveis
+      })
+      
+      if (gruasDisponiveis.length > 0) {
+        const primeiraGrua = gruasDisponiveis[0]
+        console.log('🔍 DEBUG - Primeira grua encontrada:', primeiraGrua)
+        
+        if (primeiraGrua.grua) {
+          const gruaParaSelecionar = {
+            ...primeiraGrua.grua,
+            relacao: primeiraGrua,
+            name: primeiraGrua.grua.modelo || primeiraGrua.grua.name || `Grua ${primeiraGrua.grua.id}`
+          }
+          console.log('✅ Selecionando grua (com grua.grua):', gruaParaSelecionar)
+          setGruaSelecionada(gruaParaSelecionar)
+        } else {
+          const gruaParaSelecionar = {
+            ...primeiraGrua,
+            relacao: primeiraGrua
+          }
+          console.log('✅ Selecionando grua (direto):', gruaParaSelecionar)
+          setGruaSelecionada(gruaParaSelecionar)
+        }
+      } else {
+        console.log('⚠️ Nenhuma grua disponível para selecionar')
+      }
+    }
+  }, [obra, gruaSelecionada, loading])
 
   const carregarDados = async () => {
     try {
@@ -73,13 +108,40 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
       if (gruasResponse.success && gruasResponse.data) {
         gruasDisponiveis = gruasResponse.data.map((config: any) => {
           const grua = config.grua || {}
+          
+          // Limpar e corrigir valores de fabricante e modelo
+          let fabricante = (grua.fabricante || '').trim()
+          let modelo = (grua.modelo || '').trim()
+          
+          // Remover prefixos/sufixos incorretos
+          if (fabricante) {
+            fabricante = fabricante.replace(/^Fabricante/i, '').trim()
+          }
+          if (modelo) {
+            modelo = modelo.replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
+          }
+          
+          // Construir nome da grua de forma segura
+          let nameFinal = (grua.name || '').trim()
+          if (!nameFinal || nameFinal.toLowerCase().includes('fabricante') || nameFinal.toLowerCase().includes('modelo')) {
+            if (fabricante && modelo) {
+              nameFinal = `${fabricante} ${modelo}`
+            } else if (fabricante) {
+              nameFinal = fabricante
+            } else if (modelo) {
+              nameFinal = modelo
+            } else {
+              nameFinal = `Grua ${grua.id || config.grua_id || 'N/A'}`
+            }
+          }
+          
           return {
             id: grua.id || config.grua_id,
-            name: grua.modelo || grua.name || `Grua ${grua.id || config.grua_id}`,
-            modelo: grua.modelo,
-            fabricante: grua.fabricante,
-            tipo: grua.tipo,
-            capacidade: grua.capacidade,
+            name: nameFinal,
+            modelo: modelo || 'Modelo não informado',
+            fabricante: fabricante || 'Fabricante não informado',
+            tipo: grua.tipo || 'Tipo não informado',
+            capacidade: grua.capacidade || 'Capacidade não informada',
             relacao: config
           }
         })
@@ -92,8 +154,10 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
           gruasVinculadas: gruasDisponiveis
         })
         
-        // Selecionar primeira grua
+        // Selecionar primeira grua se não houver nenhuma selecionada
+        if (!gruaSelecionada) {
         setGruaSelecionada(gruasDisponiveis[0])
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -205,13 +269,431 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
     return `${formatarData(inicio)} até ${formatarData(fim)} (${diffDays} dias)`
   }
 
-  const handleImprimir = () => {
-    window.print()
-  }
+  const handleExportar = async () => {
+    try {
+      if (!obra || !gruaSelecionada) {
+        toast({
+          title: "Erro",
+          description: "Não há dados suficientes para exportar",
+          variant: "destructive"
+        })
+        return
+      }
 
-  const handleExportar = () => {
-    // TODO: Implementar exportação PDF
-    alert('Exportação PDF em desenvolvimento')
+      const { jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      // Adicionar logos no cabeçalho
+      const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+      let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+
+      // Box de cabeçalho com fundo
+      const headerBoxY = yPos - 3
+      const headerBoxHeight = 25
+      doc.setFillColor(66, 139, 202) // Azul profissional
+      doc.roundedRect(14, headerBoxY, 182, headerBoxHeight, 2, 2, 'F')
+      
+      // Título principal (branco sobre fundo azul)
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text('LIVRO DA GRUA', 105, yPos + 8, { align: 'center' })
+      
+      // Subtítulo (branco)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Manual de Operação da Obra`, 105, yPos + 14, { align: 'center' })
+      
+      // Nome da obra (branco)
+      doc.setFontSize(10)
+      doc.text(obra.name || 'N/A', 105, yPos + 20, { align: 'center' })
+      
+      // Resetar cor do texto
+      doc.setTextColor(0, 0, 0)
+      yPos = headerBoxY + headerBoxHeight + 10
+
+      // Box de informações da Grua
+      const fabricante = (gruaSelecionada.fabricante || '').replace(/^Fabricante/i, '').trim()
+      const modelo = (gruaSelecionada.modelo || '').replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
+      const nomeGrua = fabricante && modelo ? `${fabricante} ${modelo}` : (gruaSelecionada.name || `Grua ${gruaSelecionada.id}`)
+      
+      const infoBoxY = yPos
+      const infoBoxHeight = 20
+      doc.setFillColor(245, 247, 250) // Cinza claro
+      doc.roundedRect(14, infoBoxY, 182, infoBoxHeight, 2, 2, 'F')
+      
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(51, 51, 51)
+      doc.text('INFORMAÇÕES DA GRUA', 105, infoBoxY + 6, { align: 'center' })
+      
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Grua: ${nomeGrua}`, 20, infoBoxY + 12)
+      doc.text(`ID: ${String(gruaSelecionada.id || 'N/A')}`, 110, infoBoxY + 12)
+      doc.text(`Tipo: ${String(gruaSelecionada.tipo || 'N/A')}`, 20, infoBoxY + 17)
+      doc.text(`Capacidade: ${String(gruaSelecionada.capacidade || 'N/A')}`, 110, infoBoxY + 17)
+      
+      yPos = infoBoxY + infoBoxHeight + 8
+
+      // Data de geração (pequeno, no canto)
+      doc.setFontSize(8)
+      doc.setTextColor(128, 128, 128)
+      doc.text(
+        `Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
+        14,
+        yPos
+      )
+      yPos += 6
+
+      // Linha separadora decorativa
+      doc.setDrawColor(66, 139, 202)
+      doc.setLineWidth(1)
+      doc.line(14, yPos, 196, yPos)
+      yPos += 10
+
+      // 1. DADOS DA OBRA
+      const secaoY = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secaoY, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('1. DADOS DA OBRA', 18, secaoY + 6)
+      yPos = secaoY + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      // Criar tabela com duas colunas
+      const dadosObra = [
+        [`Nome:`, obra.name || 'N/A'],
+        [`Endereço:`, obra.location || obra.endereco || 'N/A'],
+        [`Cidade:`, obra.cidade || 'N/A'],
+        [`Estado:`, obra.estado || 'N/A'],
+        [`Tipo:`, obra.tipo || 'N/A'],
+        [`Status:`, obra.status || 'N/A'],
+        [`Data de Início:`, obra.startDate ? formatarData(obra.startDate) : 'N/A'],
+        [`Data de Fim:`, obra.endDate ? formatarData(obra.endDate) : 'N/A'],
+        [`Orçamento:`, obra.budget ? formatarMoeda(parseFloat(obra.budget.toString().replace(',', '.'))) : 'N/A']
+      ]
+
+      // Dividir em duas colunas
+      const col1XObra = 18
+      const col2XObra = 110
+      const linhaAlturaObra = 6
+      
+      dadosObra.forEach(([label, value], index) => {
+        const linhaY = yPos + (index % 5) * linhaAlturaObra
+        const coluna = Math.floor(index / 5)
+        
+        if (coluna === 1 && index % 5 === 0) {
+          yPos += 5 * linhaAlturaObra + 2
+        }
+        
+        const xPos = coluna === 0 ? col1XObra : col2XObra
+        const currentY = coluna === 0 ? linhaY : yPos + (index % 5) * linhaAlturaObra
+        
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, xPos, currentY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(String(value || 'N/A'), xPos + 35, currentY)
+      })
+      
+      yPos += Math.ceil(dadosObra.length / 2) * linhaAlturaObra + 8
+
+      // 2. EQUIPAMENTO - GRUA
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao2Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao2Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('2. EQUIPAMENTO - GRUA', 18, secao2Y + 6)
+      yPos = secao2Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const dadosGrua = [
+        [`Identificação:`, gruaSelecionada.name || 'N/A'],
+        [`Modelo:`, modelo || 'N/A'],
+        [`Fabricante:`, fabricante || 'N/A'],
+        [`Tipo:`, gruaSelecionada.tipo || 'N/A'],
+        [`Capacidade:`, gruaSelecionada.capacidade || 'N/A']
+      ]
+
+      dadosGrua.forEach(([label, value], index) => {
+        const linhaY = yPos + index * 6
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, 18, linhaY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(String(value || 'N/A'), 18 + 40, linhaY)
+      })
+      
+      yPos += dadosGrua.length * 6 + 8
+
+      // 3. RESPONSÁVEL TÉCNICO
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao3Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao3Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('3. RESPONSÁVEL TÉCNICO', 18, secao3Y + 6)
+      yPos = secao3Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      if (obra.responsavelTecnico || obra.responsavel_nome) {
+        const responsavel = obra.responsavelTecnico || {}
+        const dadosResponsavel = [
+          [`Nome:`, responsavel.nome || obra.responsavel_nome || 'N/A'],
+          [`CPF/CNPJ:`, responsavel.cpf_cnpj || 'N/A'],
+          [`CREA:`, responsavel.crea || 'N/A'],
+          [`Email:`, responsavel.email || 'N/A'],
+          [`Telefone:`, responsavel.telefone || 'N/A']
+        ]
+
+        dadosResponsavel.forEach(([label, value], index) => {
+          const linhaY = yPos + index * 6
+          doc.setFont('helvetica', 'bold')
+          doc.text(label, 18, linhaY)
+          doc.setFont('helvetica', 'normal')
+          doc.text(String(value || 'N/A'), 18 + 40, linhaY)
+        })
+        yPos += dadosResponsavel.length * 6
+      } else {
+        doc.text('Não informado', 18, yPos)
+        yPos += 6
+      }
+
+      yPos += 8
+
+      // 4. SINALEIROS
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao4Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao4Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('4. SINALEIROS', 18, secao4Y + 6)
+      yPos = secao4Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      const sinaleiros = obra.sinaleiros || sinaleirosMockados
+      if (sinaleiros && sinaleiros.length > 0) {
+        const sinaleirosData = sinaleiros.map((s: any, index: number) => [
+          `${index + 1}`,
+          s.nome || 'N/A',
+          s.tipo === 'principal' ? 'Principal' : 'Reserva',
+          s.tipo_vinculo === 'interno' ? 'Interno' : 'Cliente'
+        ])
+
+        autoTable(doc, {
+          head: [['#', 'Nome', 'Tipo', 'Vínculo']],
+          body: sinaleirosData.map((row: any[]) => [row[0], row[1], row[2], row[3]]),
+          startY: yPos,
+          margin: { left: 14, right: 14 },
+          styles: { 
+            fontSize: 9,
+            cellPadding: 3,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.1
+          },
+          headStyles: { 
+            fillColor: [66, 139, 202],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center'
+          },
+          alternateRowStyles: { fillColor: [250, 250, 250] },
+          columnStyles: {
+            0: { cellWidth: 15, halign: 'center' },
+            1: { cellWidth: 80 },
+            2: { cellWidth: 40, halign: 'center' },
+            3: { cellWidth: 40, halign: 'center' }
+          }
+        })
+
+        yPos = (doc as any).lastAutoTable.finalY + 10
+      } else {
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.text('Não informado', 18, yPos)
+        yPos += 6
+      }
+
+      yPos += 4
+
+      // 5. PARÂMETROS TÉCNICOS
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao5Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao5Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('5. PARÂMETROS TÉCNICOS', 18, secao5Y + 6)
+      yPos = secao5Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const parametrosTecnicos = [
+        [`Tipo de Base:`, relacaoGrua.tipo_base || 'N/A'],
+        [`Altura Inicial:`, relacaoGrua.altura_inicial ? `${relacaoGrua.altura_inicial}m` : 'N/A'],
+        [`Altura Final:`, relacaoGrua.altura_final ? `${relacaoGrua.altura_final}m` : 'N/A'],
+        [`Velocidade de Giro:`, relacaoGrua.velocidade_giro ? `${relacaoGrua.velocidade_giro} rpm` : 'N/A'],
+        [`Velocidade de Elevação:`, relacaoGrua.velocidade_elevacao ? `${relacaoGrua.velocidade_elevacao} m/min` : 'N/A'],
+        [`Potência Instalada:`, relacaoGrua.potencia_instalada ? `${relacaoGrua.potencia_instalada} kVA` : 'N/A'],
+        [`Voltagem:`, relacaoGrua.voltagem || 'N/A'],
+        [`Tipo de Ligação:`, relacaoGrua.tipo_ligacao || 'N/A'],
+        [`Capacidade na Ponta:`, relacaoGrua.capacidade_ponta ? `${relacaoGrua.capacidade_ponta} kg` : 'N/A'],
+        [`Ano de Fabricação:`, relacaoGrua.ano_fabricacao ? String(relacaoGrua.ano_fabricacao) : 'N/A'],
+        [`Vida Útil:`, relacaoGrua.vida_util ? `${relacaoGrua.vida_util} anos` : 'N/A']
+      ]
+
+      // Dividir em duas colunas
+      const col1XTec = 18
+      const col2XTec = 110
+      const linhaAlturaTec = 6
+      
+      parametrosTecnicos.forEach(([label, value], index) => {
+        const coluna = Math.floor(index / 6)
+        const linha = index % 6
+        
+        if (coluna === 1 && linha === 0) {
+          yPos += 6 * linhaAlturaTec + 2
+        }
+        
+        const xPos = coluna === 0 ? col1XTec : col2XTec
+        const currentY = coluna === 0 ? yPos + linha * linhaAlturaTec : yPos + linha * linhaAlturaTec
+        
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, xPos, currentY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(String(value || 'N/A'), xPos + 45, currentY)
+      })
+      
+      yPos += Math.ceil(parametrosTecnicos.length / 2) * linhaAlturaTec + 8
+
+      // 6. VALORES E CONDIÇÕES COMERCIAIS
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao6Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao6Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('6. VALORES E CONDIÇÕES COMERCIAIS', 18, secao6Y + 6)
+      yPos = secao6Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const valores = [
+        [`Locação Mensal:`, formatarMoeda(relacaoGrua.valor_locacao || 0)],
+        [`Operador:`, formatarMoeda(relacaoGrua.valor_operador || 0)],
+        [`Manutenção:`, formatarMoeda(relacaoGrua.valor_manutencao || 0)],
+        [`Montagem:`, formatarMoeda(relacaoGrua.valor_montagem || 0)],
+        [`Desmontagem:`, formatarMoeda(relacaoGrua.valor_desmontagem || 0)],
+        [`Transporte:`, formatarMoeda(relacaoGrua.valor_transporte || 0)],
+        [`Caução:`, formatarMoeda(relacaoGrua.valor_caucao || 0)],
+        [`Forma de Pagamento:`, relacaoGrua.forma_pagamento || 'N/A'],
+        [`Prazo de Validade:`, relacaoGrua.prazo_validade ? `${relacaoGrua.prazo_validade} dias` : 'N/A']
+      ]
+
+      // Criar tabela para valores
+      const valoresData = valores.map(([label, value]) => [label, value])
+      
+      autoTable(doc, {
+        head: [['Item', 'Valor']],
+        body: valoresData,
+        startY: yPos,
+        margin: { left: 14, right: 14 },
+        styles: { 
+          fontSize: 9,
+          cellPadding: 3,
+          lineColor: [200, 200, 200],
+          lineWidth: 0.1
+        },
+        headStyles: { 
+          fillColor: [66, 139, 202],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'left'
+        },
+        alternateRowStyles: { fillColor: [250, 250, 250] },
+        columnStyles: {
+          0: { cellWidth: 100, fontStyle: 'bold' },
+          1: { cellWidth: 80, halign: 'right' }
+        }
+      })
+
+      yPos = (doc as any).lastAutoTable.finalY + 10
+
+      // Adicionar rodapé
+      const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+      adicionarRodapeEmpresaFrontend(doc)
+
+      // Salvar PDF
+      const nomeArquivo = `livro-grua-${gruaSelecionada.id}-${obra.name?.replace(/\s+/g, '-') || 'obra'}-${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(nomeArquivo)
+
+      toast({
+        title: "Exportação concluída!",
+        description: "Arquivo PDF baixado com sucesso.",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar PDF. Tente novamente.",
+        variant: "destructive"
+      })
+    }
   }
 
   if (loading) {
@@ -341,13 +823,14 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
             </div>
           </div>
           <div className="flex gap-2 print:hidden">
-            <Button variant="outline" onClick={handleExportar} className="h-9 px-4 py-2">
+            <Button 
+              variant="outline" 
+              onClick={handleExportar} 
+              className="h-9 px-4 py-2"
+              disabled={!obra || !gruaSelecionada}
+            >
               <Download className="w-4 h-4 mr-2" />
               Exportar PDF
-            </Button>
-            <Button variant="outline" onClick={handleImprimir} className="h-9 px-4 py-2">
-              <Printer className="w-4 h-4 mr-2" />
-              Imprimir
             </Button>
           </div>
         </div>
@@ -401,7 +884,9 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
 
       {(() => {
         const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
-        if (!gruaSelecionada && gruasDisponiveis.length === 0) {
+        
+        // Se não houver gruas disponíveis
+        if (gruasDisponiveis.length === 0) {
           return (
             <Card>
               <CardContent className="py-8">
@@ -410,6 +895,47 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
             </Card>
           )
         }
+        
+        // Se houver gruas mas nenhuma selecionada, selecionar a primeira automaticamente
+        if (!gruaSelecionada && gruasDisponiveis.length > 0) {
+          const primeiraGrua = gruasDisponiveis[0]
+          if (primeiraGrua.grua) {
+            setGruaSelecionada({
+              ...primeiraGrua.grua,
+              relacao: primeiraGrua,
+              name: primeiraGrua.grua.modelo || primeiraGrua.grua.name || `Grua ${primeiraGrua.grua.id}`
+            })
+          } else {
+            setGruaSelecionada({
+              ...primeiraGrua,
+              relacao: primeiraGrua
+            })
+          }
+          return null // Retornar null enquanto está selecionando
+        }
+        
+        return null
+      })()}
+
+      {(() => {
+        const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
+        
+        // Se não houver grua selecionada mas houver gruas disponíveis, mostrar mensagem
+        if (!gruaSelecionada && gruasDisponiveis.length > 0) {
+          return (
+            <Card>
+              <CardContent className="py-8">
+                <p className="text-center text-gray-500">Carregando informações da grua...</p>
+              </CardContent>
+            </Card>
+          )
+        }
+        
+        // Se não houver grua selecionada e não houver gruas, já foi tratado acima
+        if (!gruaSelecionada) {
+          return null
+        }
+        
         return null
       })()}
 

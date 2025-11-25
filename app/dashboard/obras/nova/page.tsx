@@ -168,6 +168,11 @@ export default function NovaObraPage() {
     tipo: 'Residencial',
     clienteId: '',
     observations: '',
+    // Campos adicionais
+    cep: '',
+    contato_obra: '',
+    telefone_obra: '',
+    email_obra: '',
     // Dados do responsável
     responsavelId: '',
     responsavelName: '',
@@ -505,6 +510,11 @@ export default function NovaObraPage() {
         tipo: obraFormData.tipo,
         clienteId: clienteIdFinal,
         observations: obraFormData.observations,
+        // Campos adicionais
+        cep: obraFormData.cep ? obraFormData.cep.replace(/\D/g, '') : '',
+        contato_obra: obraFormData.contato_obra || '',
+        telefone_obra: obraFormData.telefone_obra || '',
+        email_obra: obraFormData.email_obra || '',
         // Novos campos obrigatórios
         cno: cno,
         art_numero: artNumero,
@@ -539,12 +549,24 @@ export default function NovaObraPage() {
 
       // Debug: Log dos dados finais
       console.log('🚀 DEBUG - Dados finais que serão enviados:')
+      console.log('  - Obra básica:', {
+        name: obraData.name,
+        cidade: obraData.cidade,
+        estado: obraData.estado,
+        tipo: obraData.tipo,
+        cep: obraData.cep,
+        contato_obra: obraData.contato_obra,
+        telefone_obra: obraData.telefone_obra,
+        email_obra: obraData.email_obra
+      })
       console.log('  - gruaId:', obraData.gruaId)
       console.log('  - gruaValue:', obraData.gruaValue)
       console.log('  - monthlyFee:', obraData.monthlyFee)
       console.log('  - gruasSelecionadas:', obraData.gruasSelecionadas)
       console.log('  - custos_mensais:', obraData.custos_mensais)
       console.log('  - funcionarios:', obraData.funcionarios)
+      console.log('  - responsavel_tecnico:', obraData.responsavel_tecnico)
+      console.log('  - sinaleiros:', obraData.sinaleiros)
 
       // 1. Fazer upload dos arquivos ART e Apólice (precisamos criar a obra primeiro)
       // Por enquanto, vamos criar a obra sem os arquivos e depois atualizar
@@ -746,16 +768,15 @@ export default function NovaObraPage() {
       tipo: 'Residencial',
       clienteId: '',
       observations: '',
+      // Campos adicionais
+      cep: '',
+      contato_obra: '',
+      telefone_obra: '',
+      email_obra: '',
       responsavelId: '',
       responsavelName: '',
       funcionarios: []
     })
-    setClienteSelecionado(null)
-    setGruasSelecionadas([])
-    setFuncionariosSelecionados([])
-    setResponsavelSelecionado(null)
-    setCustosMensais([])
-    // Reset dos novos campos
     setCno('')
     setArtNumero('')
     setArtArquivo(null)
@@ -763,6 +784,190 @@ export default function NovaObraPage() {
     setApoliceArquivo(null)
     setResponsavelTecnico(null)
     setSinaleiros([])
+    setGruasSelecionadas([])
+    setFuncionariosSelecionados([])
+    setResponsavelSelecionado(null)
+    setClienteSelecionado(null)
+    setCustosMensais([])
+  }
+
+  // Função para preencher todos os campos com dados de teste
+  const preencherDadosTeste = () => {
+    // Dados básicos da obra
+    setObraFormData({
+      name: 'Obra Residencial Teste - Jardim das Flores',
+      description: 'Construção de edifício residencial com 20 andares, localizado no bairro Jardim das Flores. Projeto completo de arquitetura e engenharia.',
+      status: 'Em Andamento',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 ano a partir de hoje
+      budget: '1500000,00',
+      location: 'Rua das Flores, 123 - Centro',
+      cidade: 'São Paulo',
+      estado: 'SP',
+      tipo: 'Residencial',
+      clienteId: '',
+      observations: 'Obra de teste para validação do sistema. Todos os campos foram preenchidos automaticamente.',
+      // Campos adicionais
+      cep: '01310-100',
+      contato_obra: 'João Silva',
+      telefone_obra: '(11) 98765-4321',
+      email_obra: 'joao.silva@construtora.com.br',
+      responsavelId: '',
+      responsavelName: '',
+      funcionarios: []
+    })
+
+    // Documentos
+    setCno('12345678000190')
+    setArtNumero('12345678901234567890')
+    setApoliceNumero('AP-2025-001234')
+
+    // Responsável técnico
+    setResponsavelTecnico({
+      funcionario_id: undefined,
+      nome: 'Eng. Carlos Roberto Santos',
+      cpf_cnpj: '12345678901',
+      crea: 'SP-123456',
+      email: 'carlos.santos@engenharia.com.br',
+      telefone: '(11) 98765-4321'
+    })
+
+    // Sinaleiros
+    setSinaleiros([
+      {
+        id: undefined,
+        nome: 'Pedro Oliveira',
+        rg_cpf: '98765432100',
+        telefone: '(11) 91234-5678',
+        email: 'pedro.oliveira@empresa.com.br',
+        tipo: 'principal',
+        tipo_vinculo: 'interno'
+      },
+      {
+        id: undefined,
+        nome: 'Maria Santos',
+        rg_cpf: '11122233344',
+        telefone: '(11) 92345-6789',
+        email: 'maria.santos@cliente.com.br',
+        tipo: 'reserva',
+        tipo_vinculo: 'cliente'
+      }
+    ])
+
+    // Grua de teste (simulada)
+    const gruaTeste = {
+      id: 'grua-teste-001',
+      name: 'Grua Torre Teste 001',
+      modelo: 'GT-500',
+      fabricante: 'Liebherr',
+      tipo: 'Grua Torre',
+      capacidade: '5000 kg',
+      valor_locacao: 15000,
+      taxa_mensal: 2000,
+      tipo_base: 'Chumbador',
+      altura_inicial: 20,
+      altura_final: 60,
+      velocidade_giro: 0.8,
+      velocidade_elevacao: 60,
+      velocidade_translacao: 0,
+      potencia_instalada: 25,
+      voltagem: '380V',
+      tipo_ligacao: 'Trifásica',
+      capacidade_ponta: 2000,
+      capacidade_maxima_raio: 5000,
+      ano_fabricacao: 2020,
+      vida_util: 10,
+      valor_operador: 5000,
+      valor_manutencao: 1500,
+      valor_estaiamento: 3000,
+      valor_chumbadores: 2000,
+      valor_montagem: 8000,
+      valor_desmontagem: 6000,
+      valor_transporte: 4000,
+      valor_hora_extra: 200,
+      valor_seguro: 1000,
+      valor_caucao: 50000,
+      guindaste_montagem: 'Guindaste 50T',
+      quantidade_viagens: 2,
+      alojamento_alimentacao: 'Incluído',
+      responsabilidade_acessorios: 'Cliente',
+      prazo_validade: '12 meses',
+      forma_pagamento: 'Boleto mensal',
+      multa_atraso: 2,
+      reajuste_indice: 'IPCA',
+      garantia_caucao: 50000,
+      retencao_contratual: 5
+    }
+    setGruasSelecionadas([gruaTeste])
+
+    // Funcionário de teste (simulado)
+    const funcionarioTeste = {
+      id: 'func-teste-001',
+      userId: 'user-teste-001',
+      role: 'Operador de Grua',
+      name: 'José da Silva',
+      gruaId: 'grua-teste-001'
+    }
+    setFuncionariosSelecionados([funcionarioTeste])
+    setObraFormData(prev => ({
+      ...prev,
+      funcionarios: [funcionarioTeste]
+    }))
+
+    // Responsável pela obra
+    setObraFormData(prev => ({
+      ...prev,
+      responsavelId: 'resp-teste-001',
+      responsavelName: 'Eng. Maria Costa'
+    }))
+
+    // Custos mensais de teste
+    const custoTeste1 = {
+      id: `cm_${Date.now()}_teste1`,
+      obraId: '',
+      item: '01.01',
+      descricao: 'Locação de grua torre',
+      unidade: 'mês',
+      quantidadeOrcamento: 12,
+      valorUnitario: 15000,
+      totalOrcamento: 180000,
+      mes: new Date().toISOString().slice(0, 7), // YYYY-MM
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: 0,
+      valorAcumulado: 0,
+      quantidadeSaldo: 12,
+      valorSaldo: 180000,
+      tipo: 'contrato' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    const custoTeste2 = {
+      id: `cm_${Date.now() + 1}_teste2`,
+      obraId: '',
+      item: '01.02',
+      descricao: 'Operador de grua',
+      unidade: 'mês',
+      quantidadeOrcamento: 12,
+      valorUnitario: 5000,
+      totalOrcamento: 60000,
+      mes: new Date().toISOString().slice(0, 7),
+      quantidadeRealizada: 0,
+      valorRealizado: 0,
+      quantidadeAcumulada: 0,
+      valorAcumulado: 0,
+      quantidadeSaldo: 12,
+      valorSaldo: 60000,
+      tipo: 'contrato' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    setCustosMensais([custoTeste1, custoTeste2] as any)
+
+    toast({
+      title: "Dados de teste preenchidos",
+      description: "Todos os campos foram preenchidos com dados de teste para validação.",
+    })
   }
 
   return (
@@ -2121,6 +2326,16 @@ export default function NovaObraPage() {
             Cancelar
           </Button>
           <div className="flex gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={preencherDadosTeste}
+              disabled={creating}
+              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Preencher Dados de Teste
+            </Button>
             <Button 
               type="button" 
               variant="outline" 

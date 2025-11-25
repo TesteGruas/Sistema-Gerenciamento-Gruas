@@ -131,7 +131,10 @@ function ObraDetailsPageContent() {
       data_inicio: obra.startDate ? new Date(obra.startDate).toISOString().split('T')[0] : '',
       data_fim: obra.endDate ? new Date(obra.endDate).toISOString().split('T')[0] : '',
       orcamento: obra?.budget || 0,
-      endereco: obra?.location || '',
+      endereco: obra?.endereco || obra?.location || '',
+      cidade: obra?.cidade || '',
+      estado: obra?.estado || '',
+      cep: obra?.cep || '',
       cno: obra?.cno || '',
       art_numero: obra?.art_numero || '',
       apolice_numero: obra?.apolice_numero || '',
@@ -215,6 +218,9 @@ function ObraDetailsPageContent() {
         data_fim: editingData.data_fim || null,
         orcamento: editingData.orcamento ? parseFloat(editingData.orcamento.toString()) : null,
         endereco: editingData.endereco || null,
+        cidade: editingData.cidade || null,
+        estado: editingData.estado || null,
+        cep: editingData.cep || null,
         cno: editingData.cno || null,
         art_numero: editingData.art_numero || null,
         apolice_numero: editingData.apolice_numero || null,
@@ -1733,12 +1739,31 @@ function ObraDetailsPageContent() {
                                 relacao.status === 'concluida' ? 'Concluída' : 
                                 relacao.status === 'suspensa' ? 'Suspensa' : 'Ativa'
             
+            const fabricante = (gruaData.manufacturer || gruaData.fabricante || '').trim()
+            const modelo = (gruaData.model || gruaData.modelo || '').trim()
+            const nomeGrua = (gruaData.name || '').trim()
+            
+            // Construir nome da grua de forma segura
+            let nameFinal = nomeGrua
+            if (!nameFinal || nameFinal.toLowerCase().includes('fabricante') || nameFinal.toLowerCase().includes('modelo')) {
+              // Se o nome contém palavras-chave estranhas, construir um novo
+              if (fabricante && modelo) {
+                nameFinal = `${fabricante} ${modelo}`
+              } else if (fabricante) {
+                nameFinal = fabricante
+              } else if (modelo) {
+                nameFinal = modelo
+              } else {
+                nameFinal = `Grua ${relacao.gruaId || relacao.grua?.id || 'N/A'}`
+              }
+            }
+            
             const gruaConvertida = {
               id: relacao.gruaId || relacao.grua?.id || '',
               relacaoId: relacao.id, // ID da relação grua_obra
-              name: gruaData.name || `${gruaData.manufacturer || gruaData.fabricante || 'Grua'} ${gruaData.model || gruaData.modelo || relacao.gruaId || 'N/A'}`,
-              modelo: gruaData.model || gruaData.modelo || 'Modelo não informado',
-              fabricante: gruaData.manufacturer || gruaData.fabricante || 'Fabricante não informado',
+              name: nameFinal,
+              modelo: modelo || 'Modelo não informado',
+              fabricante: fabricante || 'Fabricante não informado',
               tipo: gruaData.type || gruaData.tipo || 'Tipo não informado',
               capacidade: gruaData.capacity || gruaData.capacidade || 'Capacidade não informada',
               status: statusLegacy,
@@ -2553,6 +2578,10 @@ function ObraDetailsPageContent() {
                     )}
                   </div>
                   <div>
+                    <Label className="text-sm text-gray-600">Tipo:</Label>
+                    <span className="text-sm block mt-1">{obra?.tipo || 'Não informado'}</span>
+                  </div>
+                  <div>
                     <Label className="text-sm text-gray-600">Endereço:</Label>
                     {isEditing ? (
                       <Input
@@ -2561,12 +2590,38 @@ function ObraDetailsPageContent() {
                         placeholder="Endereço da obra"
                       />
                     ) : (
-                      <span className="text-sm block mt-1">{obra?.location || 'Não informado'}</span>
+                      <span className="text-sm block mt-1">{obra?.endereco || obra?.location || 'Não informado'}</span>
                     )}
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Cidade:</Label>
+                    <span className="text-sm block mt-1">{obra?.cidade || 'Não informado'}</span>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Estado:</Label>
+                    <span className="text-sm block mt-1">{obra?.estado || 'Não informado'}</span>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">CEP:</Label>
+                    <span className="text-sm block mt-1">{obra?.cep || 'Não informado'}</span>
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Responsável:</Label>
                     <span className="text-sm block mt-1">{obra?.responsavelName || 'Não informado'}</span>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Descrição:</Label>
+                    {isEditing ? (
+                      <Textarea
+                        value={editingData.descricao || ''}
+                        onChange={(e) => setEditingData({ ...editingData, descricao: e.target.value })}
+                        placeholder="Descrição da obra"
+                        rows={3}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1">{obra?.description || 'Não informado'}</span>
+                    )}
                   </div>
                 </div>
                 {isEditing && (
@@ -4238,10 +4293,10 @@ function ObraDetailsPageContent() {
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Wrench className="w-5 h-5" />
-                      {grua.name}
+                      {grua.name || `Grua ${grua.id}`}
                     </CardTitle>
                     <CardDescription>
-                      {grua.fabricante} {grua.modelo} - {grua.capacidade}
+                      {[grua.fabricante, grua.modelo].filter(Boolean).join(' ') || 'N/A'} - {grua.capacidade || 'N/A'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -4280,10 +4335,10 @@ function ObraDetailsPageContent() {
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Wrench className="w-5 h-5" />
-                      {grua.name}
+                      {grua.name || `Grua ${grua.id}`}
                     </CardTitle>
                     <CardDescription>
-                      {grua.fabricante} {grua.modelo} - {grua.capacidade}
+                      {[grua.fabricante, grua.modelo].filter(Boolean).join(' ') || 'N/A'} - {grua.capacidade || 'N/A'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>

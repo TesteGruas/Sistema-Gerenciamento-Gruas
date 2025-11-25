@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Building2, Lock, User } from "lucide-react"
+import { Building2, Lock, User, Eye, EyeOff } from "lucide-react"
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import { loadUserPermissions } from "@/lib/auth-permissions"
 import { useEmpresa, EmpresaProvider } from "@/hooks/use-empresa"
@@ -28,6 +28,7 @@ function LoginPageContent() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberEmail, setRememberEmail] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
   const { showAuthError, showSuccess } = useEnhancedToast()
@@ -188,13 +189,25 @@ function LoginPageContent() {
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 h-4 w-4 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  aria-label={showPassword ? "Ocultar senha" : "Exibir senha"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
             </div>
             <div className="flex items-center space-x-2">
