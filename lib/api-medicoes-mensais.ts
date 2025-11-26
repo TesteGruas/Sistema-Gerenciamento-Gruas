@@ -88,7 +88,8 @@ export interface MedicaoAditivo {
 }
 
 export interface MedicaoMensalCreate {
-  orcamento_id: number;
+  orcamento_id?: number | null;
+  obra_id?: number | null;
   numero: string;
   periodo: string;
   data_medicao: string;

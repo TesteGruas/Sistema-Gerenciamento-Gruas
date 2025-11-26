@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -24,7 +24,6 @@ import {
   Clock,
   Plus,
   Eye,
-  BookOpen,
   FileSignature,
   ExternalLink,
   Upload,
@@ -79,6 +78,7 @@ import { clientesApi } from "@/lib/api-clientes"
 import { ValorMonetarioOculto, ValorFormatadoOculto } from "@/components/valor-oculto"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { getOrcamentos } from "@/lib/api-orcamentos"
+import FuncionarioSearch from "@/components/funcionario-search"
 
 function ObraDetailsPageContent() {
 
@@ -120,10 +120,32 @@ function ObraDetailsPageContent() {
   const [saving, setSaving] = useState(false)
   const [artArquivo, setArtArquivo] = useState<File | null>(null)
   const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
+  const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
+  
+  // Estado para diálogo de criação manual de medição
+  const [isCriarMedicaoOpen, setIsCriarMedicaoOpen] = useState(false)
+  const [medicaoFormData, setMedicaoFormData] = useState({
+    periodo: '',
+    data_medicao: '',
+    valor_mensal_bruto: 0,
+    observacoes: ''
+  })
+  const [criandoMedicao, setCriandoMedicao] = useState(false)
   
   // Função para iniciar edição
   const iniciarEdicao = () => {
     if (!obra) return
+    
+    // Inicializar responsável selecionado se existir
+    if (obra?.responsavelId && obra?.responsavelName) {
+      setResponsavelSelecionado({
+        id: parseInt(obra.responsavelId),
+        name: obra.responsavelName
+      })
+    } else {
+      setResponsavelSelecionado(null)
+    }
+    
     setEditingData({
       nome: obra.name || '',
       descricao: obra.description || '',
@@ -135,6 +157,9 @@ function ObraDetailsPageContent() {
       cidade: obra?.cidade || '',
       estado: obra?.estado || '',
       cep: obra?.cep || '',
+      tipo: obra?.tipo || '',
+      responsavel_id: obra?.responsavelId ? parseInt(obra.responsavelId) : null,
+      responsavel_nome: obra?.responsavelName || '',
       cno: obra?.cno || '',
       art_numero: obra?.art_numero || '',
       apolice_numero: obra?.apolice_numero || '',
@@ -143,11 +168,30 @@ function ObraDetailsPageContent() {
     setIsEditing(true)
   }
   
+  // Função para lidar com seleção de responsável
+  const handleResponsavelSelect = (responsavel: any) => {
+    setResponsavelSelecionado(responsavel)
+    if (responsavel) {
+      setEditingData({ 
+        ...editingData, 
+        responsavel_id: responsavel.id,
+        responsavel_nome: responsavel.name
+      })
+    } else {
+      setEditingData({ 
+        ...editingData, 
+        responsavel_id: null,
+        responsavel_nome: ''
+      })
+    }
+  }
+  
   // Função para cancelar edição
   const cancelarEdicao = () => {
     setEditingData({})
     setArtArquivo(null)
     setApoliceArquivo(null)
+    setResponsavelSelecionado(null)
     setIsEditing(false)
   }
   
@@ -210,17 +254,23 @@ function ObraDetailsPageContent() {
       }
       
       // 2. Converter dados para formato do backend
+      // Campos obrigatórios devem sempre ser enviados
       const updateData: any = {
-        nome: editingData.nome,
-        descricao: editingData.descricao,
-        status: editingData.status,
+        nome: editingData.nome || obra?.name || '',
+        cliente_id: obra?.cliente?.id ? parseInt(obra.cliente.id) : null,
+        endereco: editingData.endereco || obra?.endereco || obra?.location || '',
+        cidade: editingData.cidade || obra?.cidade || '',
+        estado: editingData.estado || obra?.estado || '',
+        tipo: editingData.tipo || obra?.tipo || '',
+        // Campos opcionais
+        descricao: editingData.descricao || null,
+        status: editingData.status || obra?.status || 'Em Andamento',
         data_inicio: editingData.data_inicio || null,
         data_fim: editingData.data_fim || null,
         orcamento: editingData.orcamento ? parseFloat(editingData.orcamento.toString()) : null,
-        endereco: editingData.endereco || null,
-        cidade: editingData.cidade || null,
-        estado: editingData.estado || null,
         cep: editingData.cep || null,
+        responsavel_id: editingData.responsavel_id || null,
+        responsavel_nome: editingData.responsavel_nome || null,
         cno: editingData.cno || null,
         art_numero: editingData.art_numero || null,
         apolice_numero: editingData.apolice_numero || null,
@@ -235,9 +285,10 @@ function ObraDetailsPageContent() {
         updateData.apolice_arquivo = apoliceArquivoUrl
       }
       
-      // Remover campos vazios
+      // Remover apenas campos opcionais vazios (manter obrigatórios mesmo se vazios)
+      const camposObrigatorios = ['nome', 'cliente_id', 'endereco', 'cidade', 'estado', 'tipo']
       Object.keys(updateData).forEach(key => {
-        if (updateData[key] === null || updateData[key] === '' || updateData[key] === undefined) {
+        if (!camposObrigatorios.includes(key) && (updateData[key] === null || updateData[key] === '' || updateData[key] === undefined)) {
           delete updateData[key]
         }
       })
@@ -280,7 +331,7 @@ function ObraDetailsPageContent() {
     setLoadingMedicoes(true)
     setErrorMedicoes(null)
     try {
-      // 1. Buscar orçamentos vinculados à obra
+      // 1. Buscar orçamentos vinculados à obra (opcional)
       const orcamentosResponse = await getOrcamentos({ 
         page: 1, 
         limit: 100,
@@ -290,7 +341,7 @@ function ObraDetailsPageContent() {
       const orcamentos = orcamentosResponse.data || []
       setOrcamentosObra(orcamentos)
       
-      // 2. Buscar medições mensais de cada orçamento
+      // 2. Buscar medições mensais de cada orçamento (se houver)
       const todasMedicoes: MedicaoMensal[] = []
       
       for (const orcamento of orcamentos) {
@@ -302,6 +353,33 @@ function ObraDetailsPageContent() {
         } catch (error) {
           console.error(`Erro ao carregar medições do orçamento ${orcamento.id}:`, error)
         }
+      }
+      
+      // 3. Buscar medições diretamente pela obra (sem orçamento)
+      // Usando o filtro geral com obra_id através dos orçamentos
+      // Se não houver orçamentos, ainda podemos ter medições criadas diretamente
+      try {
+        const medicoesGeralResponse = await medicoesMensaisApi.listar({})
+        if (medicoesGeralResponse.success && medicoesGeralResponse.data) {
+          // Filtrar medições que pertencem a orçamentos desta obra
+          const medicoesDaObra = medicoesGeralResponse.data.filter((medicao: MedicaoMensal) => {
+            // Se a medição tem orçamento, verificar se o orçamento pertence à obra
+            if (medicao.orcamento_id && medicao.orcamentos) {
+              return orcamentos.some(orc => orc.id === medicao.orcamento_id)
+            }
+            // Se não tem orçamento, pode ser uma medição direta da obra (precisa verificar no backend)
+            return false
+          })
+          
+          // Adicionar apenas medições que ainda não foram adicionadas
+          medicoesDaObra.forEach((medicao: MedicaoMensal) => {
+            if (!todasMedicoes.find(m => m.id === medicao.id)) {
+              todasMedicoes.push(medicao)
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Erro ao carregar medições gerais:', error)
       }
       
       // Ordenar por período (mais recente primeiro)
@@ -317,6 +395,89 @@ function ObraDetailsPageContent() {
       setErrorMedicoes(error.message || 'Erro ao carregar medições mensais')
     } finally {
       setLoadingMedicoes(false)
+    }
+  }
+
+  // Função para criar medição manual (sem orçamento)
+  const handleCriarMedicaoManual = async () => {
+    if (!obraId || !obra) return
+    
+    // Validar campos obrigatórios
+    if (!medicaoFormData.periodo || !medicaoFormData.data_medicao) {
+      toast({
+        title: "Erro",
+        description: "Preencha o período e a data da medição",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Validar formato do período (YYYY-MM)
+    if (!/^\d{4}-\d{2}$/.test(medicaoFormData.periodo)) {
+      toast({
+        title: "Erro",
+        description: "Período deve estar no formato YYYY-MM (ex: 2025-01)",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setCriandoMedicao(true)
+    try {
+      const [ano, mes] = medicaoFormData.periodo.split('-').map(Number)
+      
+      // Gerar número da medição (formato: MED-YYYY-MM-001)
+      const numero = `MED-${medicaoFormData.periodo}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`
+      
+      const medicaoData = {
+        obra_id: parseInt(obraId),
+        orcamento_id: null, // Sem orçamento
+        numero: numero,
+        periodo: medicaoFormData.periodo,
+        data_medicao: medicaoFormData.data_medicao,
+        mes_referencia: mes,
+        ano_referencia: ano,
+        valor_mensal_bruto: medicaoFormData.valor_mensal_bruto || 0,
+        valor_aditivos: 0,
+        valor_custos_extras: 0,
+        valor_descontos: 0,
+        valor_total: medicaoFormData.valor_mensal_bruto || 0,
+        status: 'pendente' as const,
+        observacoes: medicaoFormData.observacoes || undefined
+      }
+
+      const response = await medicoesMensaisApi.criar(medicaoData)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Medição criada com sucesso",
+          variant: "default"
+        })
+        
+        // Limpar formulário
+        setMedicaoFormData({
+          periodo: '',
+          data_medicao: '',
+          valor_mensal_bruto: 0,
+          observacoes: ''
+        })
+        
+        // Fechar diálogo
+        setIsCriarMedicaoOpen(false)
+        
+        // Recarregar medições
+        await carregarMedicoesMensais()
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar medição:', error)
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || error.message || "Erro ao criar medição",
+        variant: "destructive"
+      })
+    } finally {
+      setCriandoMedicao(false)
     }
   }
 
@@ -441,7 +602,6 @@ function ObraDetailsPageContent() {
   // Estados locais que não estão no store
   const [gruasReais, setGruasReais] = useState<any[]>([])
   const [loadingGruas, setLoadingGruas] = useState(false)
-  const [historicosGruas, setHistoricosGruas] = useState<Record<string, EntradaLivroGruaCompleta[]>>({})
   
   // Estados para funcionários
   const [funcionariosVinculados, setFuncionariosVinculados] = useState<any[]>([])
@@ -1809,26 +1969,6 @@ function ObraDetailsPageContent() {
             // Não é crítico, continuar sem dados técnicos
           }
           setGruasReais(gruasConvertidas)
-          
-          // Carregar históricos das gruas
-          const historicosCarregados: Record<string, EntradaLivroGruaCompleta[]> = {}
-          for (const grua of gruasConvertidas) {
-            try {
-              const historicoResponse = await livroGruaApi.listarEntradas({ 
-                grua_id: grua.id.toString(),
-                limit: 5 // Apenas as últimas 5 entradas para exibição rápida
-              })
-              if (historicoResponse.success && historicoResponse.data) {
-                historicosCarregados[grua.id.toString()] = Array.isArray(historicoResponse.data) 
-                  ? historicoResponse.data 
-                  : [historicoResponse.data]
-              }
-            } catch (error) {
-              console.error(`Erro ao carregar histórico da grua ${grua.id}:`, error)
-              historicosCarregados[grua.id.toString()] = []
-            }
-          }
-          setHistoricosGruas(historicosCarregados)
         } else {
           setGruasReais([])
         }
@@ -2265,28 +2405,8 @@ function ObraDetailsPageContent() {
             Voltar
           </Button>
           <div className="flex-1">
-            {isEditing ? (
-              <div className="space-y-2">
-                <Input
-                  value={editingData.nome || ''}
-                  onChange={(e) => setEditingData({ ...editingData, nome: e.target.value })}
-                  className="text-3xl font-bold"
-                  placeholder="Nome da obra"
-                />
-                <Textarea
-                  value={editingData.descricao || ''}
-                  onChange={(e) => setEditingData({ ...editingData, descricao: e.target.value })}
-                  className="text-gray-600"
-                  placeholder="Descrição da obra"
-                  rows={2}
-                />
-              </div>
-            ) : (
-              <>
-                <h1 className="text-3xl font-bold text-gray-900">{obra?.name || ''}</h1>
-                <p className="text-gray-600">{obra?.description || ''}</p>
-              </>
-            )}
+            <h1 className="text-3xl font-bold text-gray-900">{obra?.name || ''}</h1>
+            <p className="text-gray-600">{obra?.description || ''}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -2476,28 +2596,23 @@ function ObraDetailsPageContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-11">
+      <TabsList className="grid w-full grid-cols-9">
         <TabsTrigger value="geral">Geral</TabsTrigger>
         <TabsTrigger value="gruas">Gruas</TabsTrigger>
         <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
         <TabsTrigger value="custos">Custos</TabsTrigger>
-        <TabsTrigger value="complementos">Complementos</TabsTrigger>
-        <TabsTrigger value="documentos">Documentos</TabsTrigger>
-        <TabsTrigger value="arquivos">Arquivos</TabsTrigger>
-        <TabsTrigger value="checklists">
-          <CheckCircle2 className="w-4 h-4 mr-2" />
-          Checklists Diários
+        <TabsTrigger value="medicoes-mensais">
+          Medições Mensais
         </TabsTrigger>
-        <TabsTrigger value="manutencoes">
-          Manutenções
-        </TabsTrigger>
+        <TabsTrigger value="documentos">Arquivos</TabsTrigger>
         <TabsTrigger value="livro-grua">
           Livro da Grua
         </TabsTrigger>
-        <TabsTrigger value="medicoes-mensais">
-          <Calculator className="w-4 h-4 mr-2" />
-          Medições Mensais
+        <TabsTrigger value="checklists">
+          <CheckCircle2 className="w-4 h-4 mr-2" />
+          Checklists e Manutenções
         </TabsTrigger>
+        <TabsTrigger value="complementos">Complementos</TabsTrigger>
       </TabsList>
 
         <TabsContent value="geral" className="space-y-4">
@@ -2508,6 +2623,19 @@ function ObraDetailsPageContent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <Label className="text-sm text-gray-600">Título:</Label>
+                    {isEditing ? (
+                      <Input
+                        value={editingData.nome || ''}
+                        onChange={(e) => setEditingData({ ...editingData, nome: e.target.value })}
+                        placeholder="Título da obra"
+                        className="mt-1"
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1 font-medium">{obra?.name || 'Não informado'}</span>
+                    )}
+                  </div>
                   <div>
                     <Label className="text-sm text-gray-600">Status:</Label>
                     {isEditing ? (
@@ -2579,7 +2707,24 @@ function ObraDetailsPageContent() {
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Tipo:</Label>
-                    <span className="text-sm block mt-1">{obra?.tipo || 'Não informado'}</span>
+                    {isEditing ? (
+                      <Select
+                        value={editingData.tipo || obra?.tipo || ''}
+                        onValueChange={(value) => setEditingData({ ...editingData, tipo: value })}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Selecione o tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Residencial">Residencial</SelectItem>
+                          <SelectItem value="Comercial">Comercial</SelectItem>
+                          <SelectItem value="Industrial">Industrial</SelectItem>
+                          <SelectItem value="Infraestrutura">Infraestrutura</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-sm block mt-1">{obra?.tipo || 'Não informado'}</span>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Endereço:</Label>
@@ -2595,19 +2740,89 @@ function ObraDetailsPageContent() {
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Cidade:</Label>
-                    <span className="text-sm block mt-1">{obra?.cidade || 'Não informado'}</span>
+                    {isEditing ? (
+                      <Input
+                        value={editingData.cidade || ''}
+                        onChange={(e) => setEditingData({ ...editingData, cidade: e.target.value })}
+                        placeholder="Cidade"
+                        className="mt-1"
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1">{obra?.cidade || 'Não informado'}</span>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Estado:</Label>
-                    <span className="text-sm block mt-1">{obra?.estado || 'Não informado'}</span>
+                    {isEditing ? (
+                      <Select
+                        value={editingData.estado || obra?.estado || ''}
+                        onValueChange={(value) => setEditingData({ ...editingData, estado: value })}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Selecione o estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="AC">AC</SelectItem>
+                          <SelectItem value="AL">AL</SelectItem>
+                          <SelectItem value="AP">AP</SelectItem>
+                          <SelectItem value="AM">AM</SelectItem>
+                          <SelectItem value="BA">BA</SelectItem>
+                          <SelectItem value="CE">CE</SelectItem>
+                          <SelectItem value="DF">DF</SelectItem>
+                          <SelectItem value="ES">ES</SelectItem>
+                          <SelectItem value="GO">GO</SelectItem>
+                          <SelectItem value="MA">MA</SelectItem>
+                          <SelectItem value="MT">MT</SelectItem>
+                          <SelectItem value="MS">MS</SelectItem>
+                          <SelectItem value="MG">MG</SelectItem>
+                          <SelectItem value="PA">PA</SelectItem>
+                          <SelectItem value="PB">PB</SelectItem>
+                          <SelectItem value="PR">PR</SelectItem>
+                          <SelectItem value="PE">PE</SelectItem>
+                          <SelectItem value="PI">PI</SelectItem>
+                          <SelectItem value="RJ">RJ</SelectItem>
+                          <SelectItem value="RN">RN</SelectItem>
+                          <SelectItem value="RS">RS</SelectItem>
+                          <SelectItem value="RO">RO</SelectItem>
+                          <SelectItem value="RR">RR</SelectItem>
+                          <SelectItem value="SC">SC</SelectItem>
+                          <SelectItem value="SP">SP</SelectItem>
+                          <SelectItem value="SE">SE</SelectItem>
+                          <SelectItem value="TO">TO</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-sm block mt-1">{obra?.estado || 'Não informado'}</span>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">CEP:</Label>
-                    <span className="text-sm block mt-1">{obra?.cep || 'Não informado'}</span>
+                    {isEditing ? (
+                      <Input
+                        value={editingData.cep || ''}
+                        onChange={(e) => setEditingData({ ...editingData, cep: e.target.value })}
+                        placeholder="00000-000"
+                        className="mt-1"
+                      />
+                    ) : (
+                      <span className="text-sm block mt-1">{obra?.cep || 'Não informado'}</span>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Responsável:</Label>
-                    <span className="text-sm block mt-1">{obra?.responsavelName || 'Não informado'}</span>
+                    {isEditing ? (
+                      <div className="mt-1">
+                        <FuncionarioSearch
+                          onFuncionarioSelect={handleResponsavelSelect}
+                          selectedFuncionario={responsavelSelecionado}
+                          placeholder="Buscar responsável por nome ou cargo..."
+                          onlyActive={true}
+                          allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente', 'Operador']}
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-sm block mt-1">{obra?.responsavelName || 'Não informado'}</span>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm text-gray-600">Descrição:</Label>
@@ -3056,7 +3271,6 @@ function ObraDetailsPageContent() {
               ) : gruasVinculadas.length > 0 ? (
                 <div className="space-y-6">
                   {gruasVinculadas.map((grua) => {
-                    const historico = historicosGruas[grua.id?.toString() || ''] || []
                     const isGruaReal = gruasReais.some(gr => gr.id === grua.id)
                     
                     return (
@@ -3267,56 +3481,6 @@ function ObraDetailsPageContent() {
                               </div>
                             )
                           })()}
-                        </div>
-
-                        {/* Histórico da Grua */}
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-medium text-sm">Livro da Grua</h4>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/livro`}
-                            >
-                              <BookOpen className="w-4 h-4 mr-1" />
-                              Abrir Livro
-                            </Button>
-                          </div>
-                          {historico.length > 0 ? (
-                            <div className="space-y-2">
-                              {historico.slice(0, 5).map((entry) => {
-                                // Mapear propriedades da API para o formato esperado
-                                const status = (entry as any).status_entrada || (entry as any).status || 'ok'
-                                const observacoes = entry.observacoes || entry.descricao || 'Sem observações'
-                                const data = entry.data_entrada || (entry as any).data || entry.created_at || new Date().toISOString()
-                                
-                                return (
-                                  <div key={entry.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                    <div className="flex items-center gap-2">
-                                      <div className={`w-2 h-2 rounded-full ${
-                                        status === 'ok' ? 'bg-green-500' : 
-                                        status === 'falha' ? 'bg-red-500' : 'bg-yellow-500'
-                                      }`} />
-                                      <span className="text-sm">{observacoes}</span>
-                                      {status === 'falha' && (
-                                        <AlertTriangle className="w-4 h-4 text-red-500" />
-                                      )}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      {new Date(data).toLocaleDateString('pt-BR')}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                              {historico.length > 5 && (
-                                <div className="text-xs text-gray-500 text-center">
-                                  +{historico.length - 5} entradas anteriores
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-gray-500">Nenhum histórico registrado</p>
-                          )}
                         </div>
                       </div>
                     )
@@ -3542,7 +3706,7 @@ function ObraDetailsPageContent() {
               <div className="flex justify-between items-center">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="w-5 h-5" />
-                  Custos Mensais - {obra?.name || 'Obra'}
+                  Custos Mensais
                 </CardTitle>
                 <div className="flex gap-2">
                   <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
@@ -3670,13 +3834,13 @@ function ObraDetailsPageContent() {
                       <TableHeader>
                         <TableRow className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
                           <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Item</TableHead>
-                          <TableHead className="min-w-[180px] font-semibold text-blue-900">Descrição</TableHead>
-                          <TableHead className="w-[80px] font-semibold text-blue-900 text-center">UND</TableHead>
-                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Orçamento</TableHead>
-                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Acumulado Anterior</TableHead>
-                          <TableHead className="w-[140px] font-semibold text-blue-900 text-center">Saldo Contrato</TableHead>
-                          <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Mês</TableHead>
-                          <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Ações</TableHead>
+                          <TableHead className="w-[120px] font-semibold text-blue-900">Descrição</TableHead>
+                          <TableHead className="w-[90px] font-semibold text-blue-900 text-center">UND</TableHead>
+                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Orçamento</TableHead>
+                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Acumulado Anterior</TableHead>
+                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Saldo Contrato</TableHead>
+                          <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Mês</TableHead>
+                          <TableHead className="w-[130px] font-semibold text-blue-900 text-center">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                     <TableBody>
@@ -3986,6 +4150,7 @@ function ObraDetailsPageContent() {
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-4">
+          {/* Seção: Documentos */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -4144,10 +4309,8 @@ function ObraDetailsPageContent() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Aba: Arquivos */}
-        <TabsContent value="arquivos" className="space-y-4">
+          {/* Seção: Arquivos */}
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -4155,25 +4318,15 @@ function ObraDetailsPageContent() {
                   <Folder className="w-5 h-5" />
                   Arquivos Adicionais
                 </CardTitle>
-                <div className="flex gap-2">
-                  <Button 
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsNovoArquivoOpen(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Novo Arquivo
-                  </Button>
-                  <Button 
-                    type="button"
-                    size="sm"
-                    onClick={() => setIsNovoDocumentoOpen(true)}
-                  >
-                    <FileSignature className="w-4 h-4 mr-2" />
-                    Novo Documento
-                  </Button>
-                </div>
+                <Button 
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsNovoArquivoOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Arquivo
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -4287,70 +4440,53 @@ function ObraDetailsPageContent() {
         {/* Aba: Checklists Diários */}
         <TabsContent value="checklists" className="space-y-4">
           {gruasVinculadas.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {gruasVinculadas.map((grua) => (
-                <Card key={grua.id} className="border-l-4 border-l-blue-500">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Wrench className="w-5 h-5" />
-                      {grua.name || `Grua ${grua.id}`}
-                    </CardTitle>
-                    <CardDescription>
-                      {[grua.fabricante, grua.modelo].filter(Boolean).join(' ') || 'N/A'} - {grua.capacidade || 'N/A'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <LivroGruaChecklistList
-                      gruaId={grua.id.toString()}
-                      onNovoChecklist={() => handleNovoChecklist(grua.id.toString())}
-                      onEditarChecklist={(checklist) => handleEditarChecklist(checklist, grua.id.toString())}
-                      onVisualizarChecklist={handleVisualizarChecklist}
-                      onExcluirChecklist={handleExcluirChecklist}
-                    />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="py-8">
-                <div className="text-center">
-                  <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua vinculada</h3>
-                  <p className="text-gray-600 mb-4">
-                    Esta obra ainda não possui gruas vinculadas para exibir checklists diários.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+                <div key={grua.id} className="space-y-4">
+                  {/* Seção: Checklists Diários */}
+                  <Card className="border-l-4 border-l-blue-500">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5" />
+                        {grua.name || `Grua ${grua.id}`} - Checklists Diários
+                      </CardTitle>
+                      <CardDescription>
+                        {[grua.fabricante, grua.modelo].filter(Boolean).join(' ') || 'N/A'} - {grua.capacidade || 'N/A'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <LivroGruaChecklistList
+                        gruaId={grua.id.toString()}
+                        onNovoChecklist={() => handleNovoChecklist(grua.id.toString())}
+                        onEditarChecklist={(checklist) => handleEditarChecklist(checklist, grua.id.toString())}
+                        onVisualizarChecklist={handleVisualizarChecklist}
+                        onExcluirChecklist={handleExcluirChecklist}
+                      />
+                    </CardContent>
+                  </Card>
 
-        {/* Aba: Manutenções */}
-        <TabsContent value="manutencoes" className="space-y-4">
-          {gruasVinculadas.length > 0 ? (
-            <div className="space-y-4">
-              {gruasVinculadas.map((grua) => (
-                <Card key={grua.id} className="border-l-4 border-l-green-500">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Wrench className="w-5 h-5" />
-                      {grua.name || `Grua ${grua.id}`}
-                    </CardTitle>
-                    <CardDescription>
-                      {[grua.fabricante, grua.modelo].filter(Boolean).join(' ') || 'N/A'} - {grua.capacidade || 'N/A'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <LivroGruaManutencaoList
-                      gruaId={grua.id.toString()}
-                      onNovaManutencao={() => handleNovaManutencao(grua.id.toString())}
-                      onEditarManutencao={(manutencao) => handleEditarManutencao(manutencao, grua.id.toString())}
-                      onVisualizarManutencao={handleVisualizarManutencao}
-                      onExcluirManutencao={handleExcluirManutencao}
-                    />
-                  </CardContent>
-                </Card>
+                  {/* Seção: Manutenções */}
+                  <Card className="border-l-4 border-l-green-500">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Wrench className="w-5 h-5" />
+                        {grua.name || `Grua ${grua.id}`} - Manutenções
+                      </CardTitle>
+                      <CardDescription>
+                        {[grua.fabricante, grua.modelo].filter(Boolean).join(' ') || 'N/A'} - {grua.capacidade || 'N/A'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <LivroGruaManutencaoList
+                        gruaId={grua.id.toString()}
+                        onNovaManutencao={() => handleNovaManutencao(grua.id.toString())}
+                        onEditarManutencao={(manutencao) => handleEditarManutencao(manutencao, grua.id.toString())}
+                        onVisualizarManutencao={handleVisualizarManutencao}
+                        onExcluirManutencao={handleExcluirManutencao}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
               ))}
             </div>
           ) : (
@@ -4360,7 +4496,7 @@ function ObraDetailsPageContent() {
                   <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua vinculada</h3>
                   <p className="text-gray-600 mb-4">
-                    Esta obra ainda não possui gruas vinculadas para exibir manutenções.
+                    Esta obra ainda não possui gruas vinculadas para exibir checklists e manutenções.
                   </p>
                 </div>
               </CardContent>
@@ -4380,11 +4516,11 @@ function ObraDetailsPageContent() {
                 <div>
                   <CardTitle>Medições Mensais</CardTitle>
                   <CardDescription>
-                    Histórico de medições mensais dos orçamentos vinculados a esta obra
+                    Histórico de medições mensais da obra
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  {orcamentosObra.length > 0 && (
+                  {orcamentosObra.length > 0 ? (
                     <Button
                       variant="outline"
                       onClick={async () => {
@@ -4423,6 +4559,25 @@ function ObraDetailsPageContent() {
                       <Plus className="w-4 h-4 mr-2" />
                       Gerar Medição Automática
                     </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        // Inicializar período com o mês atual
+                        const hoje = new Date()
+                        const periodo = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+                        setMedicaoFormData({
+                          periodo: periodo,
+                          data_medicao: hoje.toISOString().split('T')[0],
+                          valor_mensal_bruto: 0,
+                          observacoes: ''
+                        })
+                        setIsCriarMedicaoOpen(true)
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Criar Medição Manual
+                    </Button>
                   )}
                   <Button
                     variant="outline"
@@ -4446,17 +4601,15 @@ function ObraDetailsPageContent() {
                   <AlertCircle className="w-8 h-8 mx-auto mb-2" />
                   <p>{errorMedicoes}</p>
                 </div>
-              ) : orcamentosObra.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhum orçamento vinculado a esta obra</p>
-                  <p className="text-sm">As medições mensais aparecerão aqui quando houver orçamentos vinculados</p>
-                </div>
               ) : medicoesMensais.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>Nenhuma medição mensal encontrada</p>
-                  <p className="text-sm">As medições dos orçamentos vinculados aparecerão aqui</p>
+                  <p className="text-sm">
+                    {orcamentosObra.length > 0 
+                      ? "As medições dos orçamentos vinculados aparecerão aqui"
+                      : "Você pode criar medições mensais mesmo sem orçamentos vinculados"}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -6845,6 +6998,113 @@ function ObraDetailsPageContent() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo para criar medição manual */}
+      <Dialog open={isCriarMedicaoOpen} onOpenChange={setIsCriarMedicaoOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Criar Medição Mensal Manual</DialogTitle>
+            <DialogDescription>
+              Crie uma medição mensal diretamente para esta obra, sem necessidade de orçamento vinculado.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="periodo">Período (YYYY-MM) *</Label>
+                <Input
+                  id="periodo"
+                  type="text"
+                  placeholder="2025-01"
+                  value={medicaoFormData.periodo}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9-]/g, '')
+                    if (value.length <= 7) {
+                      setMedicaoFormData({ ...medicaoFormData, periodo: value })
+                    }
+                  }}
+                  pattern="\d{4}-\d{2}"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Formato: YYYY-MM (ex: 2025-01)</p>
+              </div>
+              
+              <div>
+                <Label htmlFor="data_medicao">Data da Medição *</Label>
+                <Input
+                  id="data_medicao"
+                  type="date"
+                  value={medicaoFormData.data_medicao}
+                  onChange={(e) => setMedicaoFormData({ ...medicaoFormData, data_medicao: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="valor_mensal_bruto">Valor Mensal Bruto (R$)</Label>
+              <Input
+                id="valor_mensal_bruto"
+                type="number"
+                step="0.01"
+                min="0"
+                value={medicaoFormData.valor_mensal_bruto}
+                onChange={(e) => setMedicaoFormData({ 
+                  ...medicaoFormData, 
+                  valor_mensal_bruto: parseFloat(e.target.value) || 0 
+                })}
+                placeholder="0.00"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="observacoes">Observações</Label>
+              <Textarea
+                id="observacoes"
+                value={medicaoFormData.observacoes}
+                onChange={(e) => setMedicaoFormData({ ...medicaoFormData, observacoes: e.target.value })}
+                placeholder="Observações sobre a medição..."
+                rows={3}
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCriarMedicaoOpen(false)
+                setMedicaoFormData({
+                  periodo: '',
+                  data_medicao: '',
+                  valor_mensal_bruto: 0,
+                  observacoes: ''
+                })
+              }}
+              disabled={criandoMedicao}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCriarMedicaoManual}
+              disabled={criandoMedicao || !medicaoFormData.periodo || !medicaoFormData.data_medicao}
+            >
+              {criandoMedicao ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Criar Medição
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -1026,6 +1026,7 @@ export default function NovaObraPage() {
                       onChange={(e) => setObraFormData({ ...obraFormData, name: e.target.value })}
                       placeholder="Ex: Obra Residencial Jardim das Flores"
                       required
+                      disabled
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -1159,6 +1160,7 @@ export default function NovaObraPage() {
                     onChange={(e) => setObraFormData({ ...obraFormData, description: e.target.value })}
                     placeholder="Descrição detalhada da obra..."
                     rows={3}
+                    disabled
                   />
                 </div>
 

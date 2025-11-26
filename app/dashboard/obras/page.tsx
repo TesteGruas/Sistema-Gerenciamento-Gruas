@@ -1362,20 +1362,20 @@ export default function ObrasPage() {
           return (
             <Card key={obra.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-blue-600" />
-                    <CardTitle className="text-lg">{obra.name}</CardTitle>
-                  </div>
-                  <Badge className={getStatusColor(obra.status)}>
-                    {getStatusIcon(obra.status)}
-                    <span className="ml-1 capitalize">{obra.status}</span>
-                  </Badge>
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                  <CardTitle className="text-lg">{obra.name}</CardTitle>
                 </div>
                 <CardDescription>{obra.description}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Badge className={getStatusColor(obra.status)}>
+                      {getStatusIcon(obra.status)}
+                      <span className="ml-1 capitalize">{obra.status}</span>
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Calendar className="w-4 h-4" />
                     <span>
@@ -1477,22 +1477,6 @@ export default function ObrasPage() {
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    
-                    {/* Nova Funcionalidade - Múltiplas Gruas */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = `/dashboard/obras/${obra.id}?tab=gruas`}
-                        className="flex-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 font-medium bg-orange-50 shadow-sm"
-                      >
-                        <Crane className="w-4 h-4 mr-1" />
-                        {obraComRelacionamentos.gruasVinculadas && obraComRelacionamentos.gruasVinculadas.length > 0 
-                          ? `Gerenciar Gruas (${obraComRelacionamentos.gruasVinculadas.length})`
-                          : 'Gerenciar Gruas'
-                        }
                       </Button>
                     </div>
                   </div>
