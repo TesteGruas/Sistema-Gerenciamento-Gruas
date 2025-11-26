@@ -1166,7 +1166,52 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 50
     const offset = (page - 1) * limit
-    const { produto_id, componente_id, tipo, data_inicio, data_fim } = req.query
+    const { produto_id, componente_id, tipo, data_inicio, data_fim, categoria_id, status, tipo_item } = req.query
+
+    // Se houver filtros de categoria ou status, primeiro buscar os IDs dos produtos que atendem aos critérios
+    let produtoIds = null
+    if (categoria_id || status) {
+      let produtosQuery = supabaseAdmin
+        .from('produtos')
+        .select('id')
+      
+      if (categoria_id) {
+        produtosQuery = produtosQuery.eq('categoria_id', categoria_id)
+      }
+      if (status) {
+        produtosQuery = produtosQuery.eq('status', status)
+      }
+      
+      const { data: produtos, error: produtosError } = await produtosQuery
+      
+      if (produtosError) {
+        return res.status(500).json({
+          error: 'Erro ao buscar produtos para filtro',
+          message: produtosError.message
+        })
+      }
+      
+      produtoIds = produtos.map(p => p.id)
+      
+      // Se não houver produtos que atendem aos critérios, retornar vazio
+      if (produtoIds.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            pages: 0
+          }
+        })
+      }
+    }
+
+    // Filtrar por tipo_item (produto ou componente)
+    // Se tipo_item for componente, não aplicar filtros de produto
+    const isComponenteFilter = tipo_item === 'componente'
+    const isProdutoFilter = tipo_item === 'produto'
 
     // Primeiro, buscar as movimentações sem o join de componentes
     let query = supabaseAdmin
@@ -1178,6 +1223,8 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
           nome,
           unidade_medida,
           valor_unitario,
+          categoria_id,
+          status,
           categorias (
             id,
             nome
@@ -1186,20 +1233,35 @@ router.get('/movimentacoes', authenticateToken, requirePermission('estoque:visua
       `, { count: 'exact' })
       .order('data_movimentacao', { ascending: false })
 
+    // Aplicar filtros de produto
     if (produto_id) {
       query = query.eq('produto_id', produto_id)
+    } else if (produtoIds && !isComponenteFilter) {
+      // Se temos IDs de produtos filtrados, usar eles
+      query = query.in('produto_id', produtoIds)
     }
+    
     if (componente_id) {
       query = query.eq('componente_id', componente_id)
     }
+    
     if (tipo) {
       query = query.eq('tipo', tipo)
     }
+    
     if (data_inicio) {
       query = query.gte('data_movimentacao', data_inicio)
     }
+    
     if (data_fim) {
       query = query.lte('data_movimentacao', data_fim)
+    }
+    
+    // Filtrar por tipo_item (produto ou componente)
+    if (isComponenteFilter) {
+      query = query.not('componente_id', 'is', null)
+    } else if (isProdutoFilter) {
+      query = query.not('produto_id', 'is', null).is('componente_id', null)
     }
 
     query = query.range(offset, offset + limit - 1)

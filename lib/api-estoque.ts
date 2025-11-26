@@ -239,6 +239,9 @@ class EstoqueAPI {
     tipo?: string
     data_inicio?: string
     data_fim?: string
+    categoria_id?: number
+    status?: string
+    tipo_item?: string
   } = {}): Promise<{ success: boolean; data: Movimentacao[]; pagination: any }> {
     const queryParams = new URLSearchParams()
     
@@ -248,6 +251,9 @@ class EstoqueAPI {
     if (params.tipo) queryParams.append('tipo', params.tipo)
     if (params.data_inicio) queryParams.append('data_inicio', params.data_inicio)
     if (params.data_fim) queryParams.append('data_fim', params.data_fim)
+    if (params.categoria_id) queryParams.append('categoria_id', params.categoria_id.toString())
+    if (params.status) queryParams.append('status', params.status)
+    if (params.tipo_item) queryParams.append('tipo_item', params.tipo_item)
 
     const queryString = queryParams.toString()
     return this.request<{ success: boolean; data: Movimentacao[]; pagination: any }>(`/estoque/movimentacoes${queryString ? `?${queryString}` : ''}`)
