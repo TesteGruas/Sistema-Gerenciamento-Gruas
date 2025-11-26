@@ -114,6 +114,7 @@ import responsaveisTecnicosRoutes from './routes/responsaveis-tecnicos.js'
 import whatsappTestRoutes from './routes/whatsapp-test.js'
 import whatsappLogsRoutes from './routes/whatsapp-logs.js'
 import whatsappEvolutionRoutes from './routes/whatsapp-evolution.js'
+import complementosRoutes from './routes/complementos.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -351,6 +352,7 @@ app.use('/api/responsaveis-tecnicos', responsaveisTecnicosRoutes)
 app.use('/api/whatsapp', whatsappTestRoutes)
 app.use('/api/whatsapp-logs', whatsappLogsRoutes)
 app.use('/api/whatsapp-evolution', whatsappEvolutionRoutes)
+app.use('/api/complementos', complementosRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

@@ -30,12 +30,19 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+// Helper para obter o token correto
+const getAuthToken = () => {
+  return localStorage.getItem('access_token') || localStorage.getItem('token')
+}
+
 type TipoPrecificacao = 'mensal' | 'unico' | 'por_metro' | 'por_hora' | 'por_dia'
 type Unidade = 'm' | 'h' | 'unidade' | 'dia' | 'mes'
 type TipoComplemento = 'acessorio' | 'servico'
 
 interface ComplementoCatalogo {
-  id: string
+  id: number | string
   nome: string
   sku: string
   tipo: TipoComplemento
@@ -73,45 +80,47 @@ export default function ComplementosPage() {
     ativo: true,
   })
 
-  // Carregar dados (mockado por enquanto)
+  // Carregar dados da API
   useEffect(() => {
     const loadComplementos = async () => {
       setLoading(true)
       try {
-        // TODO: Integrar com API
-        const mockData: ComplementoCatalogo[] = [
-          // Acessórios
-          { id: '1', nome: 'Garfo Paleteiro', sku: 'ACESS-001', tipo: 'acessorio', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 50000, descricao: 'Garfo para movimentação de paletes', ativo: true },
-          { id: '2', nome: 'Balde de Concreto', sku: 'ACESS-002', tipo: 'acessorio', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 30000, descricao: 'Balde para transporte de concreto', ativo: true },
-          { id: '3', nome: 'Caçamba de Entulho', sku: 'ACESS-003', tipo: 'acessorio', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 40000, descricao: 'Caçamba para descarte de entulho', ativo: true },
-          { id: '4', nome: 'Plataforma de Descarga', sku: 'ACESS-004', tipo: 'acessorio', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 60000, descricao: 'Plataforma para descarga de materiais nos pavimentos', ativo: true },
-          { id: '5', nome: 'Estaiamentos', sku: 'ACESS-005', tipo: 'acessorio', tipo_precificacao: 'por_metro', unidade: 'm', preco_unitario_centavos: 65000, fator: 650, descricao: 'Estaiamentos para fixação lateral da grua', rule_key: 'estaiamento_por_altura', ativo: true },
-          { id: '6', nome: 'Chumbadores/Base de Fundação', sku: 'ACESS-006', tipo: 'acessorio', tipo_precificacao: 'unico', unidade: 'unidade', preco_unitario_centavos: 150000, descricao: 'Peças de ancoragem concretadas no bloco da grua', ativo: true },
-          { id: '7', nome: 'Auto-transformador (Energia)', sku: 'ACESS-007', tipo: 'acessorio', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 80000, descricao: 'Adequação elétrica 220/380V', rule_key: 'autotrafo_se_sem_380v', ativo: true },
-          { id: '8', nome: 'Plano de Rigging / ART de Engenheiro', sku: 'ACESS-008', tipo: 'acessorio', tipo_precificacao: 'unico', unidade: 'unidade', preco_unitario_centavos: 500000, descricao: 'Projeto técnico e responsabilidade civil', ativo: true },
-          { id: '9', nome: 'Seguro RC / Roubo', sku: 'ACESS-012', tipo: 'acessorio', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 120000, descricao: 'Seguro de responsabilidade civil e riscos', ativo: true },
-          
-          // Serviços
-          { id: '10', nome: 'Serviço de Montagem', sku: 'SERV-001', tipo: 'servico', tipo_precificacao: 'por_hora', unidade: 'h', preco_unitario_centavos: 15000, descricao: 'Mão de obra para montagem e fixação da grua', ativo: true },
-          { id: '11', nome: 'Serviço de Desmontagem', sku: 'SERV-002', tipo: 'servico', tipo_precificacao: 'por_hora', unidade: 'h', preco_unitario_centavos: 15000, descricao: 'Mão de obra para desmontagem da grua', ativo: true },
-          { id: '12', nome: 'Ascensão da Torre', sku: 'SERV-003', tipo: 'servico', tipo_precificacao: 'por_metro', unidade: 'm', preco_unitario_centavos: 65000, fator: 650, descricao: 'Serviço de elevação da torre conforme a obra cresce', ativo: true },
-          { id: '13', nome: 'Transporte de Ida e Retorno', sku: 'SERV-004', tipo: 'servico', tipo_precificacao: 'unico', unidade: 'unidade', preco_unitario_centavos: 300000, descricao: 'Transporte da grua até a obra e retorno ao depósito', ativo: true },
-          { id: '14', nome: 'Serviço de Operador', sku: 'SERV-005', tipo: 'servico', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 800000, descricao: 'Locação mensal de operador de grua', ativo: true },
-          { id: '15', nome: 'Serviço de Sinaleiro', sku: 'SERV-006', tipo: 'servico', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 600000, descricao: 'Locação mensal de sinaleiro', ativo: true },
-          { id: '16', nome: 'Serviço de Manutenção Preventiva', sku: 'SERV-007', tipo: 'servico', tipo_precificacao: 'mensal', unidade: 'unidade', preco_unitario_centavos: 200000, descricao: 'Manutenção preventiva mensal da grua', ativo: true },
-          { id: '17', nome: 'Serviço de Manutenção Corretiva', sku: 'SERV-008', tipo: 'servico', tipo_precificacao: 'por_hora', unidade: 'h', preco_unitario_centavos: 20000, descricao: 'Serviço de manutenção corretiva (cobrado por hora)', ativo: true },
-          { id: '18', nome: 'Serviço de Técnico de Segurança', sku: 'SERV-009', tipo: 'servico', tipo_precificacao: 'por_dia', unidade: 'dia', preco_unitario_centavos: 50000, descricao: 'Serviço de técnico de segurança (NR-18)', ativo: true },
-          { id: '19', nome: 'Consultoria Técnica', sku: 'SERV-010', tipo: 'servico', tipo_precificacao: 'por_hora', unidade: 'h', preco_unitario_centavos: 25000, descricao: 'Consultoria técnica especializada', ativo: true },
-          { id: '20', nome: 'Treinamento de Operadores', sku: 'SERV-011', tipo: 'servico', tipo_precificacao: 'unico', unidade: 'unidade', preco_unitario_centavos: 150000, descricao: 'Treinamento e capacitação de operadores', ativo: true },
-          { id: '21', nome: 'Inspeção Técnica', sku: 'SERV-012', tipo: 'servico', tipo_precificacao: 'unico', unidade: 'unidade', preco_unitario_centavos: 80000, descricao: 'Inspeção técnica periódica da grua', ativo: true },
-        ]
-        setComplementos(mockData)
+        const token = getAuthToken()
+        if (!token) {
+          toast({
+            title: "Erro",
+            description: "Token de autenticação não encontrado",
+            variant: "destructive"
+          })
+          setLoading(false)
+          return
+        }
+
+        const response = await fetch(`${API_URL}/api/complementos?limit=1000`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error('Erro ao carregar complementos')
+        }
+
+        const result = await response.json()
+        if (result.success && result.data) {
+          setComplementos(result.data)
+        } else {
+          setComplementos([])
+        }
       } catch (error) {
+        console.error('Erro ao carregar complementos:', error)
         toast({
           title: "Erro",
-          description: "Erro ao carregar complementos",
+          description: "Erro ao carregar complementos. Tente novamente.",
           variant: "destructive"
         })
+        setComplementos([])
       } finally {
         setLoading(false)
       }
@@ -181,7 +190,7 @@ export default function ComplementosPage() {
     })
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.nome || !formData.sku || !formData.tipo_precificacao || !formData.unidade) {
       toast({
         title: "Erro",
@@ -191,34 +200,18 @@ export default function ComplementosPage() {
       return
     }
 
-    if (editingItem) {
-      // Atualizar
-      setComplementos(complementos.map(item => 
-        item.id === editingItem.id 
-          ? {
-              ...item,
-              nome: formData.nome!,
-              sku: formData.sku!,
-              tipo: formData.tipo!,
-              tipo_precificacao: formData.tipo_precificacao!,
-              unidade: formData.unidade!,
-              preco_unitario_centavos: Math.round((formData.preco_unitario_centavos || 0) * 100),
-              fator: formData.fator,
-              descricao: formData.descricao,
-              rule_key: formData.rule_key,
-              ativo: formData.ativo ?? true,
-              updated_at: new Date().toISOString()
-            }
-          : item
-      ))
+    const token = getAuthToken()
+    if (!token) {
       toast({
-        title: "Sucesso",
-        description: "Complemento atualizado com sucesso",
+        title: "Erro",
+        description: "Token de autenticação não encontrado",
+        variant: "destructive"
       })
-    } else {
-      // Criar novo
-      const novoItem: ComplementoCatalogo = {
-        id: `comp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      return
+    }
+
+    try {
+      const payload = {
         nome: formData.nome!,
         sku: formData.sku!,
         tipo: formData.tipo!,
@@ -226,39 +219,198 @@ export default function ComplementosPage() {
         unidade: formData.unidade!,
         preco_unitario_centavos: Math.round((formData.preco_unitario_centavos || 0) * 100),
         fator: formData.fator,
-        descricao: formData.descricao,
-        rule_key: formData.rule_key,
-        ativo: formData.ativo ?? true,
-        created_at: new Date().toISOString()
+        descricao: formData.descricao || '',
+        rule_key: formData.rule_key || '',
+        ativo: formData.ativo ?? true
       }
-      setComplementos([...complementos, novoItem])
+
+      let response
+      if (editingItem) {
+        // Atualizar
+        response = await fetch(`${API_URL}/api/complementos/${editingItem.id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
+      } else {
+        // Criar novo
+        response = await fetch(`${API_URL}/api/complementos`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        })
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Erro ao salvar complemento')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        toast({
+          title: "Sucesso",
+          description: editingItem ? "Complemento atualizado com sucesso" : "Complemento criado com sucesso",
+        })
+        
+        // Recarregar lista
+        const loadResponse = await fetch(`${API_URL}/api/complementos?limit=1000`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (loadResponse.ok) {
+          const loadResult = await loadResponse.json()
+          if (loadResult.success && loadResult.data) {
+            setComplementos(loadResult.data)
+          }
+        }
+        
+        handleCloseDialog()
+      } else {
+        throw new Error(result.message || 'Erro ao salvar complemento')
+      }
+    } catch (error: any) {
+      console.error('Erro ao salvar complemento:', error)
       toast({
-        title: "Sucesso",
-        description: "Complemento criado com sucesso",
+        title: "Erro",
+        description: error.message || "Erro ao salvar complemento. Tente novamente.",
+        variant: "destructive"
       })
     }
-    
-    handleCloseDialog()
   }
 
-  const handleDelete = (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este complemento?")) {
-      setComplementos(complementos.filter(item => item.id !== id))
+  const handleDelete = async (id: number | string) => {
+    if (!confirm("Tem certeza que deseja excluir este complemento?")) {
+      return
+    }
+
+    const token = getAuthToken()
+    if (!token) {
       toast({
-        title: "Sucesso",
-        description: "Complemento excluído com sucesso",
+        title: "Erro",
+        description: "Token de autenticação não encontrado",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/complementos/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Erro ao excluir complemento')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        toast({
+          title: "Sucesso",
+          description: "Complemento excluído com sucesso",
+        })
+        
+        // Recarregar lista
+        const loadResponse = await fetch(`${API_URL}/api/complementos?limit=1000`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (loadResponse.ok) {
+          const loadResult = await loadResponse.json()
+          if (loadResult.success && loadResult.data) {
+            setComplementos(loadResult.data)
+          }
+        }
+      } else {
+        throw new Error(result.message || 'Erro ao excluir complemento')
+      }
+    } catch (error: any) {
+      console.error('Erro ao excluir complemento:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao excluir complemento. Tente novamente.",
+        variant: "destructive"
       })
     }
   }
 
-  const handleToggleAtivo = (id: string) => {
-    setComplementos(complementos.map(item => 
-      item.id === id ? { ...item, ativo: !item.ativo } : item
-    ))
-    toast({
-      title: "Sucesso",
-      description: "Status do complemento atualizado",
-    })
+  const handleToggleAtivo = async (id: number | string) => {
+    const token = getAuthToken()
+    if (!token) {
+      toast({
+        title: "Erro",
+        description: "Token de autenticação não encontrado",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/complementos/${id}/toggle-ativo`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Erro ao atualizar status')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        toast({
+          title: "Sucesso",
+          description: "Status do complemento atualizado",
+        })
+        
+        // Recarregar lista
+        const loadResponse = await fetch(`${API_URL}/api/complementos?limit=1000`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (loadResponse.ok) {
+          const loadResult = await loadResponse.json()
+          if (loadResult.success && loadResult.data) {
+            setComplementos(loadResult.data)
+          }
+        }
+      } else {
+        throw new Error(result.message || 'Erro ao atualizar status')
+      }
+    } catch (error: any) {
+      console.error('Erro ao atualizar status:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar status. Tente novamente.",
+        variant: "destructive"
+      })
+    }
   }
 
   const getTipoPrecificacaoLabel = (tipo: TipoPrecificacao) => {
