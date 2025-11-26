@@ -376,7 +376,10 @@ export const livroGruaApi = {
   async listarRelacoesGruaObra(
     funcionarioId?: number,
     page?: number,
-    limit?: number
+    limit?: number,
+    search?: string,
+    obraId?: string | number,
+    status?: string
   ): Promise<{success: boolean, data: any[], total?: number, page?: number, limit?: number, totalPages?: number}> {
     const searchParams = new URLSearchParams()
     
@@ -388,6 +391,15 @@ export const livroGruaApi = {
     }
     if (limit) {
       searchParams.append('limit', limit.toString())
+    }
+    if (search && search.trim()) {
+      searchParams.append('search', search.trim())
+    }
+    if (obraId && obraId !== 'all') {
+      searchParams.append('obra_id', obraId.toString())
+    }
+    if (status && status !== 'all') {
+      searchParams.append('status', status)
     }
     
     const params = searchParams.toString() ? `?${searchParams.toString()}` : ''

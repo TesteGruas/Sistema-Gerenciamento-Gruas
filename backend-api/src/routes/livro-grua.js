@@ -39,6 +39,12 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       })
     }
 
+    // Obter parâmetros de paginação e filtros
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100)
+    const offset = (page - 1) * limit
+    const { search, obra_id, status: statusFilter } = req.query
+
     console.log('🔍 DEBUG: Usuário autenticado (COMPLETO):', JSON.stringify(user, null, 2))
     console.log('🔍 DEBUG: Resumo do usuário:', {
       id: user.id,
@@ -79,10 +85,8 @@ router.get('/relacoes-grua-obra', async (req, res) => {
           estado,
           status
         )
-      `)
+      `, { count: 'exact' })
       .in('status', ['Ativa', 'Pausada'])
-      .order('obras(nome)', { ascending: true })
-      .order('gruas(id)', { ascending: true })
 
     // Se NÃO for admin/gerente, filtrar apenas obras onde o funcionário está alocado
     if (!isAdminOrManager) {
@@ -143,7 +147,35 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       console.log('✅ INFO: Admin/Gerente - mostrando todas as relações')
     }
 
-    const { data, error } = await query
+    // Aplicar filtro por obra_id se fornecido
+    if (obra_id && obra_id !== 'all') {
+      query = query.eq('obra_id', obra_id)
+    }
+
+    // Aplicar filtro por status se fornecido
+    if (statusFilter && statusFilter !== 'all') {
+      query = query.eq('status', statusFilter)
+    }
+
+    // Aplicar busca por texto (search)
+    if (search) {
+      // Decodificar o termo de busca (pode vir com + ou %20 para espaços)
+      let searchTerm = decodeURIComponent(search.replace(/\+/g, ' '))
+      
+      // Buscar em múltiplos campos: grua_id, modelo, fabricante, nome da obra, endereco
+      // Nota: Como estamos usando relacionamentos, precisamos fazer a busca após buscar os dados
+      // ou usar uma abordagem diferente. Por enquanto, vamos buscar nos dados retornados.
+      // Para uma solução mais eficiente, seria necessário criar uma view ou usar full-text search.
+    }
+
+    // Aplicar ordenação
+    query = query.order('obras(nome)', { ascending: true })
+      .order('gruas(id)', { ascending: true })
+
+    // Aplicar paginação
+    query = query.range(offset, offset + limit - 1)
+
+    const { data, error, count } = await query
 
     if (error) {
       console.error('❌ Erro ao buscar relações grua-obra:', error)
@@ -154,10 +186,10 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       })
     }
 
-    console.log('🔍 DEBUG: Total de relações encontradas:', data?.length || 0)
+    console.log('🔍 DEBUG: Total de relações encontradas:', data?.length || 0, 'Total:', count)
 
     // Transformar os dados para o formato esperado e filtrar dados inválidos
-    const relacoes = data
+    let relacoes = data
       .filter(row => row.gruas && row.obras) // Filtrar apenas relações com dados válidos
       .map(row => ({
         id: row.id,
@@ -172,12 +204,32 @@ router.get('/relacoes-grua-obra', async (req, res) => {
         obra: row.obras
       }))
 
-    console.log('✅ SUCCESS: Retornando', relacoes.length, 'relações')
+    // Aplicar busca por texto nos dados retornados (filtro local)
+    // Nota: Para melhor performance com muitos dados, considere mover isso para o backend
+    if (search) {
+      let searchTerm = decodeURIComponent(search.replace(/\+/g, ' ')).toLowerCase()
+      relacoes = relacoes.filter(relacao => {
+        const matchGruaId = relacao.grua?.id?.toLowerCase().includes(searchTerm) || false
+        const matchModelo = relacao.grua?.modelo?.toLowerCase().includes(searchTerm) || false
+        const matchFabricante = relacao.grua?.fabricante?.toLowerCase().includes(searchTerm) || false
+        const matchObraNome = relacao.obra?.nome?.toLowerCase().includes(searchTerm) || false
+        const matchEndereco = relacao.obra?.endereco?.toLowerCase().includes(searchTerm) || false
+        return matchGruaId || matchModelo || matchFabricante || matchObraNome || matchEndereco
+      })
+    }
+
+    const totalPages = Math.ceil((count || 0) / limit)
+
+    console.log('✅ SUCCESS: Retornando', relacoes.length, 'relações (página', page, 'de', totalPages, ')')
 
     res.json({
       success: true,
       data: relacoes,
-      filteredByUser: !isAdminOrManager
+      filteredByUser: !isAdminOrManager,
+      total: count || 0,
+      page: page,
+      limit: limit,
+      totalPages: totalPages
     })
 
   } catch (error) {

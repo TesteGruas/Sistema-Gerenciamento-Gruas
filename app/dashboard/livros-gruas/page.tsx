@@ -86,10 +86,17 @@ export default function LivrosGruasPage() {
         return
       }
 
-      // Buscar relações grua-obra (filtradas por perfil do usuário) com paginação
-      console.log(`⏳ [Preload] Buscando relações grua-obra (página ${page}, ${limit} por página)...`)
+      // Buscar relações grua-obra (filtradas por perfil do usuário) com paginação e pesquisa
+      console.log(`⏳ [Preload] Buscando relações grua-obra (página ${page}, ${limit} por página, busca: "${searchTerm}", obra: ${filterObra}, status: ${filterStatus})...`)
       const startTime = performance.now()
-      const response = await livroGruaApi.listarRelacoesGruaObra(undefined, page, limit)
+      const response = await livroGruaApi.listarRelacoesGruaObra(
+        undefined, 
+        page, 
+        limit,
+        searchTerm.trim() || undefined,
+        filterObra !== 'all' ? filterObra : undefined,
+        filterStatus !== 'all' ? filterStatus : undefined
+      )
       const duration = Math.round(performance.now() - startTime)
       
       if (response.success && response.data) {
@@ -142,32 +149,43 @@ export default function LivrosGruasPage() {
     carregarRelacoes(1, newItemsPerPage)
   }
 
-  // Filtrar relações
-  const relacoesFiltradas = relacoes.filter(relacao => {
-    // Verificar se os objetos existem antes de acessar suas propriedades
-    if (!relacao.grua || !relacao.obra) {
-      return false
+  // Usar dados diretamente da API (filtros já aplicados no backend)
+  const relacoesFiltradas = relacoes
+
+  // Estados para obras e status únicos (carregados separadamente)
+  const [obrasUnicas, setObrasUnicas] = useState<any[]>([])
+  const [statusUnicos, setStatusUnicos] = useState<string[]>([])
+
+  // Carregar obras únicas e status únicos (uma vez)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados || !user) return
+    
+    const carregarObrasEStatus = async () => {
+      try {
+        // Buscar todas as relações sem paginação para obter obras e status únicos
+        const response = await livroGruaApi.listarRelacoesGruaObra(undefined, 1, 1000)
+        if (response.success && response.data) {
+          // Obter obras únicas
+          const obrasMap = new Map()
+          response.data.forEach((r: any) => {
+            if (r.obra?.id && !obrasMap.has(r.obra.id)) {
+              obrasMap.set(r.obra.id, r.obra)
+            }
+          })
+          setObrasUnicas(Array.from(obrasMap.values()))
+          
+          // Obter status únicos
+          const statusSet = new Set(response.data.map((r: any) => r.status).filter(Boolean))
+          setStatusUnicos(Array.from(statusSet))
+        }
+      } catch (err) {
+        console.error('Erro ao carregar obras e status:', err)
+      }
     }
-
-    const matchSearch = 
-      (relacao.grua.id?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (relacao.grua.modelo?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (relacao.obra.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-      (relacao.obra.endereco?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
     
-    const matchObra = filterObra === "all" || filterObra === "" || relacao.obra.id?.toString() === filterObra
-    const matchStatus = filterStatus === "all" || filterStatus === "" || relacao.status === filterStatus
-    
-    return matchSearch && matchObra && matchStatus
-  })
-
-  // Obter obras únicas para filtro
-  const obrasUnicas = [...new Set(relacoes.filter(r => r.obra?.id).map(r => r.obra.id))].map(id => 
-    relacoes.find(r => r.obra?.id === id)?.obra
-  ).filter(Boolean)
-
-  // Obter status únicos para filtro
-  const statusUnicos = [...new Set(relacoes.map(r => r.status))]
+    carregarObrasEStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosIniciaisCarregados, user])
 
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
@@ -186,8 +204,23 @@ export default function LivrosGruasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userLoading, isAdmin, dadosIniciaisCarregados])
   
-  // Aplicar filtros localmente (filtros são aplicados no frontend)
-  // Nota: Se houver muitos dados, considerar mover filtros para o backend
+  // Recarregar quando filtros mudarem (com debounce)
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    
+    const timer = setTimeout(() => {
+      if (!loadingRelacoesRef.current) {
+        setCurrentPage(1) // Reset para primeira página ao filtrar
+        loadingRelacoesRef.current = true
+        carregarRelacoes(1, itemsPerPage).finally(() => {
+          loadingRelacoesRef.current = false
+        })
+      }
+    }, 300) // Debounce de 300ms
+    
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, filterObra, filterStatus, dadosIniciaisCarregados])
 
   // Tratamento de loading e erro
   if (loading) {

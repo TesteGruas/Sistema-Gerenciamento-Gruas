@@ -467,7 +467,7 @@ router.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
-    const { status, tipo } = req.query
+    const { status, tipo, search } = req.query
 
     // Construir query simples (sem relacionamentos por enquanto)
     let query = supabaseAdmin
@@ -480,6 +480,15 @@ router.get('/', async (req, res) => {
     }
     if (tipo) {
       query = query.eq('tipo', tipo)
+    }
+
+    // Aplicar busca por texto (search)
+    if (search) {
+      // Decodificar o termo de busca (pode vir com + ou %20 para espaços)
+      let searchTerm = decodeURIComponent(search.replace(/\+/g, ' '))
+      
+      // Buscar em múltiplos campos: id, name, modelo, fabricante
+      query = query.or(`id.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%,modelo.ilike.%${searchTerm}%,fabricante.ilike.%${searchTerm}%`)
     }
 
     // Aplicar paginação
