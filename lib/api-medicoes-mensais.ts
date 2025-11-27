@@ -2,7 +2,8 @@ import { api } from './api';
 
 export interface MedicaoMensal {
   id: number;
-  orcamento_id: number;
+  orcamento_id?: number | null; // Tornar opcional
+  obra_id?: number | null; // NOVO
   numero: string;
   periodo: string; // YYYY-MM
   data_medicao: string;
@@ -33,6 +34,17 @@ export interface MedicaoMensal {
       id: number;
       nome: string;
       cnpj_cpf?: string;
+    };
+  };
+  obras?: { // NOVO
+    id: number;
+    nome: string;
+    cliente_id: number;
+    status: string;
+    clientes?: {
+      id: number;
+      nome: string;
+      cnpj?: string;
     };
   };
   custos_mensais?: MedicaoCustoMensal[];
@@ -115,7 +127,8 @@ export interface MedicaoMensalUpdate extends Partial<MedicaoMensalCreate> {
 }
 
 export interface MedicaoMensalFilters {
-  orcamento_id?: number;
+  orcamento_id?: number | null;
+  obra_id?: number | null; // NOVO
   periodo?: string;
   status?: 'pendente' | 'finalizada' | 'cancelada' | 'enviada';
   data_inicio?: string;
@@ -143,6 +156,7 @@ export const medicoesMensaisApi = {
     const params = new URLSearchParams();
     
     if (filters.orcamento_id) params.append('orcamento_id', filters.orcamento_id.toString());
+    if (filters.obra_id) params.append('obra_id', filters.obra_id.toString()); // NOVO
     if (filters.periodo) params.append('periodo', filters.periodo);
     if (filters.status) params.append('status', filters.status);
     if (filters.data_inicio) params.append('data_inicio', filters.data_inicio);
@@ -201,6 +215,14 @@ export const medicoesMensaisApi = {
    */
   async listarPorOrcamento(orcamento_id: number): Promise<{ success: boolean; data: MedicaoMensal[]; total: number }> {
     const response = await api.get(`/medicoes-mensais/orcamento/${orcamento_id}`);
+    return response.data;
+  },
+
+  /**
+   * Listar todas as medições de uma obra (sem orçamento)
+   */
+  async listarPorObra(obra_id: number): Promise<{ success: boolean; data: MedicaoMensal[]; total: number }> {
+    const response = await api.get(`/medicoes-mensais/obra/${obra_id}`);
     return response.data;
   },
 

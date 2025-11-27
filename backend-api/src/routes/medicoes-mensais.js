@@ -24,14 +24,14 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       });
     }
 
-    const { orcamento_id, periodo, status, data_inicio, data_fim, mes_referencia, ano_referencia, page, limit } = value;
+    const { orcamento_id, obra_id, periodo, status, data_inicio, data_fim, mes_referencia, ano_referencia, page, limit } = value;
     const offset = (page - 1) * limit;
 
     let query = supabaseAdmin
       .from('medicoes_mensais')
       .select(`
         *,
-        orcamentos (
+        orcamentos:orcamento_id (
           id,
           numero,
           cliente_id,
@@ -45,11 +45,23 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
             cnpj,
             contato_cpf
           )
+        ),
+        obras:obra_id (
+          id,
+          nome,
+          cliente_id,
+          status,
+          clientes:cliente_id (
+            id,
+            nome,
+            cnpj
+          )
         )
       `, { count: 'exact' });
 
     // Aplicar filtros
     if (orcamento_id) query = query.eq('orcamento_id', orcamento_id);
+    if (obra_id) query = query.eq('obra_id', obra_id); // NOVO
     if (periodo) query = query.eq('periodo', periodo);
     if (status) query = query.eq('status', status);
     if (data_inicio) query = query.gte('data_medicao', data_inicio);
@@ -58,7 +70,8 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
     if (ano_referencia) query = query.eq('ano_referencia', ano_referencia);
 
     // Aplicar paginação e ordenação
-    query = query.order('data_medicao', { ascending: false })
+    query = query.order('periodo', { ascending: false })
+                 .order('data_medicao', { ascending: false })
                  .range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
@@ -77,7 +90,7 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
         page,
         limit,
         total: count || 0,
-        pages: Math.ceil((count || 0) / limit)
+        totalPages: Math.ceil((count || 0) / limit)
       }
     });
   } catch (error) {
@@ -97,12 +110,12 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
   try {
     const { id } = req.params;
 
-    // Buscar medição com orçamento
+    // Buscar medição com orçamento e/ou obra
     const { data: medicao, error: medicaoError } = await supabaseAdmin
       .from('medicoes_mensais')
       .select(`
         *,
-        orcamentos (
+        orcamentos:orcamento_id (
           id,
           numero,
           cliente_id,
@@ -114,6 +127,17 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
             nome,
             cnpj,
             contato_cpf
+          )
+        ),
+        obras:obra_id (
+          id,
+          nome,
+          cliente_id,
+          status,
+          clientes:cliente_id (
+            id,
+            nome,
+            cnpj
           )
         )
       `)
@@ -185,8 +209,84 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
       horas_extras, 
       servicos_adicionais, 
       aditivos,
+      obra_id,
+      orcamento_id,
       ...medicaoData 
     } = value;
+
+    // Validar que pelo menos um dos dois foi fornecido
+    if (!obra_id && !orcamento_id) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'É necessário fornecer obra_id ou orcamento_id'
+      });
+    }
+
+    // Se obra_id foi fornecido, verificar se a obra existe
+    if (obra_id) {
+      const { data: obra, error: obraError } = await supabaseAdmin
+        .from('obras')
+        .select('id')
+        .eq('id', obra_id)
+        .single();
+
+      if (obraError || !obra) {
+        return res.status(404).json({
+          error: 'Obra não encontrada',
+          message: 'A obra especificada não existe'
+        });
+      }
+    }
+
+    // Se orcamento_id foi fornecido, verificar se o orçamento existe
+    if (orcamento_id) {
+      const { data: orcamento, error: orcamentoError } = await supabaseAdmin
+        .from('orcamentos')
+        .select('id')
+        .eq('id', orcamento_id)
+        .single();
+
+      if (orcamentoError || !orcamento) {
+        return res.status(404).json({
+          error: 'Orçamento não encontrado',
+          message: 'O orçamento especificado não existe'
+        });
+      }
+    }
+
+    // Verificar se já existe medição para este período
+    let medicaoExistente;
+    if (orcamento_id) {
+      const { data } = await supabaseAdmin
+        .from('medicoes_mensais')
+        .select('id')
+        .eq('orcamento_id', orcamento_id)
+        .eq('periodo', medicaoData.periodo)
+        .single();
+      medicaoExistente = data;
+    } else if (obra_id) {
+      const { data } = await supabaseAdmin
+        .from('medicoes_mensais')
+        .select('id')
+        .eq('obra_id', obra_id)
+        .eq('periodo', medicaoData.periodo)
+        .is('orcamento_id', null)
+        .single();
+      medicaoExistente = data;
+    }
+
+    if (medicaoExistente) {
+      return res.status(400).json({
+        error: 'Medição já existe',
+        message: `Já existe uma medição para o período ${medicaoData.periodo}`,
+        data: { medicao_id: medicaoExistente.id }
+      });
+    }
+
+    // Adicionar obra_id e orcamento_id aos dados da medição
+    medicaoData.obra_id = obra_id || null;
+    medicaoData.orcamento_id = orcamento_id || null;
+    medicaoData.created_by = req.user?.id;
 
     // Criar medição
     const { data: medicao, error: medicaoError } = await supabaseAdmin
@@ -559,13 +659,16 @@ router.patch('/:id/finalizar', authenticateToken, requirePermission('obras:edita
       });
     }
 
-    // O trigger já atualiza o orçamento automaticamente, mas vamos garantir
-    // Buscar orçamento atualizado
-    const { data: orcamentoAtualizado } = await supabaseAdmin
-      .from('orcamentos')
-      .select('id, total_faturado_acumulado, ultima_medicao_periodo')
-      .eq('id', medicao.orcamento_id)
-      .single();
+    // O trigger já atualiza o orçamento automaticamente (se houver), mas vamos garantir
+    let orcamentoAtualizado = null;
+    if (medicao.orcamento_id) {
+      const { data } = await supabaseAdmin
+        .from('orcamentos')
+        .select('id, total_faturado_acumulado, ultima_medicao_periodo')
+        .eq('id', medicao.orcamento_id)
+        .single();
+      orcamentoAtualizado = data;
+    }
 
     res.json({
       success: true,
@@ -573,10 +676,63 @@ router.patch('/:id/finalizar', authenticateToken, requirePermission('obras:edita
         ...medicao,
         orcamento: orcamentoAtualizado
       },
-      message: 'Medição mensal finalizada com sucesso. Orçamento atualizado automaticamente.'
+      message: medicao.orcamento_id 
+        ? 'Medição mensal finalizada com sucesso. Orçamento atualizado automaticamente.'
+        : 'Medição mensal finalizada com sucesso.'
     });
   } catch (error) {
     console.error('Erro ao finalizar medição mensal:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/medicoes-mensais/obra/:obra_id
+ * Listar todas as medições de uma obra (sem orçamento)
+ */
+router.get('/obra/:obra_id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { obra_id } = req.params;
+
+    // Verificar se a obra existe
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome')
+      .eq('id', obra_id)
+      .single();
+
+    if (obraError || !obra) {
+      return res.status(404).json({
+        error: 'Obra não encontrada',
+        message: 'A obra especificada não existe'
+      });
+    }
+
+    // Buscar medições da obra (sem orçamento)
+    const { data: medicoes, error } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select('*')
+      .eq('obra_id', obra_id)
+      .is('orcamento_id', null)
+      .order('periodo', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao buscar medições da obra',
+        message: error.message
+      });
+    }
+
+    res.json({
+      success: true,
+      data: medicoes || [],
+      total: medicoes?.length || 0
+    });
+  } catch (error) {
+    console.error('Erro ao buscar medições da obra:', error);
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message

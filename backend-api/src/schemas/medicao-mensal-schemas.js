@@ -2,11 +2,18 @@ import Joi from 'joi';
 
 // Schema para criação de medição mensal
 const medicaoMensalSchema = Joi.object({
-  orcamento_id: Joi.number().integer().positive().required().messages({
+  // orcamento_id agora é opcional
+  orcamento_id: Joi.number().integer().positive().allow(null).optional().messages({
     'number.base': 'ID do orçamento deve ser um número',
     'number.integer': 'ID do orçamento deve ser um número inteiro',
-    'number.positive': 'ID do orçamento deve ser positivo',
-    'any.required': 'ID do orçamento é obrigatório'
+    'number.positive': 'ID do orçamento deve ser positivo'
+  }),
+  
+  // obra_id é novo campo opcional
+  obra_id: Joi.number().integer().positive().allow(null).optional().messages({
+    'number.base': 'ID da obra deve ser um número',
+    'number.integer': 'ID da obra deve ser um número inteiro',
+    'number.positive': 'ID da obra deve ser positivo'
   }),
   numero: Joi.string().min(1).max(50).required().messages({
     'string.min': 'Número da medição deve ter pelo menos 1 caractere',
@@ -100,6 +107,14 @@ const medicaoMensalSchema = Joi.object({
       observacoes: Joi.string().allow('').optional()
     })
   ).optional()
+}).custom((value, helpers) => {
+  // Validação customizada: pelo menos obra_id ou orcamento_id deve ser fornecido
+  if (!value.obra_id && !value.orcamento_id) {
+    return helpers.error('any.custom', {
+      message: 'É necessário fornecer obra_id ou orcamento_id'
+    });
+  }
+  return value;
 });
 
 // Schema para atualização de medição mensal
@@ -110,7 +125,8 @@ const medicaoMensalUpdateSchema = medicaoMensalSchema.fork(
 
 // Schema para filtros de medições mensais
 const medicaoMensalFiltersSchema = Joi.object({
-  orcamento_id: Joi.number().integer().positive().optional(),
+  orcamento_id: Joi.number().integer().positive().allow(null).optional(),
+  obra_id: Joi.number().integer().positive().allow(null).optional(), // NOVO
   periodo: Joi.string().pattern(/^\d{4}-\d{2}$/).optional(),
   status: Joi.string().valid('pendente', 'finalizada', 'cancelada', 'enviada').optional(),
   data_inicio: Joi.date().iso().optional(),
