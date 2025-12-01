@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { getFinancialData, createTransferencia, type FinancialData, type Transferencia } from "@/lib/api-financial"
+import { getFinancialData, createTransferencia, getVendas, type FinancialData, type Transferencia, type Venda } from "@/lib/api-financial"
+import { medicoesApi, type Medicao } from "@/lib/api-medicoes"
+import { receitasApi, type Receita } from "@/lib/api-receitas"
+import { custosApi, type Custo } from "@/lib/api-custos"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,7 +30,9 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Area,
+  AreaChart
 } from 'recharts'
 import { 
   DollarSign, 
@@ -57,8 +62,6 @@ import {
   Calculator,
   FileSpreadsheet,
   Printer,
-  Mail,
-  MessageSquare,
   Users,
   Package,
   Settings,
@@ -203,6 +206,50 @@ export default function FinanceiroPage() {
 
   const [selectedPeriod, setSelectedPeriod] = useState('mes')
   const [fluxoCaixaDiario, setFluxoCaixaDiario] = useState<any[]>([])
+  const [vendas, setVendas] = useState<Venda[]>([])
+  const [medicoes, setMedicoes] = useState<Medicao[]>([])
+  const [receitas, setReceitas] = useState<Receita[]>([])
+  const [custos, setCustos] = useState<Custo[]>([])
+
+  // Função para carregar vendas
+  const loadVendas = async () => {
+    try {
+      const data = await getVendas()
+      setVendas(data)
+    } catch (error) {
+      console.error('Erro ao carregar vendas:', error)
+    }
+  }
+
+  // Função para carregar medições
+  const loadMedicoes = async () => {
+    try {
+      const data = await medicoesApi.list()
+      setMedicoes(data.medicoes || [])
+    } catch (error) {
+      console.error('Erro ao carregar medições:', error)
+    }
+  }
+
+  // Função para carregar receitas
+  const loadReceitas = async () => {
+    try {
+      const data = await receitasApi.list()
+      setReceitas(data.receitas || [])
+    } catch (error) {
+      console.error('Erro ao carregar receitas:', error)
+    }
+  }
+
+  // Função para carregar custos
+  const loadCustos = async () => {
+    try {
+      const data = await custosApi.list({ page: 1, limit: 100 })
+      setCustos(data.custos || [])
+    } catch (error) {
+      console.error('Erro ao carregar custos:', error)
+    }
+  }
 
   // Função para carregar fluxo de caixa diário
   const loadDailyCashFlow = async () => {
@@ -242,6 +289,10 @@ export default function FinanceiroPage() {
   // Carregar dados quando o componente for montado ou quando o período mudar
   useEffect(() => {
     loadFinancialData()
+    loadVendas()
+    loadMedicoes()
+    loadReceitas()
+    loadCustos()
     if (selectedPeriod === 'hoje' || selectedPeriod === 'semana') {
       loadDailyCashFlow()
     }
@@ -334,12 +385,12 @@ export default function FinanceiroPage() {
 
   return (
     <ProtectedRoute permission="financeiro:visualizar">
-      <div className="space-y-6 w-full" style={{ padding: '10px' }}>
+      <div className="space-y-6 w-full">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Sistema Financeiro</h1>
-            <p className="text-gray-600">Gestão completa das finanças da empresa</p>
+            <p className="text-gray-600">Controle manual de entradas, saídas e saldo</p>
             {lastUpdated && (
               <p className="text-xs text-gray-500 mt-1">
                 Última atualização: {lastUpdated.toLocaleString('pt-BR')}
@@ -363,8 +414,8 @@ export default function FinanceiroPage() {
             </Button>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)}>
-                <CreditCard className="w-4 h-4 mr-2" />
-                Transferência Bancária
+                <Plus className="w-4 h-4 mr-2" />
+                Registrar Entrada/Saída
               </Button>
               <ExportButton
                 dados={financialData.fluxoCaixa}
@@ -387,14 +438,34 @@ export default function FinanceiroPage() {
 
       {/* Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="modules">Módulos</TabsTrigger>
-          <TabsTrigger value="integration">Integração Bancária</TabsTrigger>
         </TabsList>
 
         {/* Visão Geral */}
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center space-y-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <div className="text-lg font-medium">Carregando dados financeiros...</div>
+                <div className="text-sm text-gray-500">Aguarde enquanto buscamos as informações mais recentes</div>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center space-y-4">
+                <div className="text-red-500 text-6xl">⚠️</div>
+                <div className="text-lg font-medium text-red-600">Erro ao carregar dados</div>
+                <div className="text-sm text-gray-500">{error}</div>
+                <Button onClick={loadFinancialData} className="mt-4">
+                  Tentar Novamente
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             {stats.map((stat, index) => (
@@ -437,8 +508,18 @@ export default function FinanceiroPage() {
             </CardHeader>
           </Card>
 
-          {/* Gráficos */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Tabs de Gráficos */}
+          <Tabs defaultValue="fluxo-caixa" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="fluxo-caixa">Fluxo de Caixa</TabsTrigger>
+              <TabsTrigger value="vendas">Vendas</TabsTrigger>
+              <TabsTrigger value="medicoes">Medições</TabsTrigger>
+              <TabsTrigger value="receitas-custos">Receitas & Custos</TabsTrigger>
+            </TabsList>
+
+            {/* Tab Fluxo de Caixa */}
+            <TabsContent value="fluxo-caixa" className="space-y-2.5">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -521,17 +602,14 @@ export default function FinanceiroPage() {
                 )}
               </CardContent>
             </Card>
-          </div>
 
-          {/* Segunda linha de gráficos */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <PieChartIcon className="w-5 h-5" />
-                  Transferências Bancárias
+                  Movimentações Financeiras
                 </CardTitle>
-                <CardDescription>Últimas transferências realizadas</CardDescription>
+                <CardDescription>Últimas entradas e saídas registradas</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -557,14 +635,444 @@ export default function FinanceiroPage() {
                     ))
                   ) : (
                     <div className="text-center text-gray-500 py-8">
-                      <p>Nenhuma transferência registrada</p>
-                      <p className="text-sm">As transferências aparecerão aqui quando registradas</p>
+                      <p>Nenhuma movimentação registrada</p>
+                      <p className="text-sm">As entradas e saídas aparecerão aqui quando registradas</p>
                     </div>
                   )}
                 </div>
               </CardContent>
             </Card>
-          </div>
+              </div>
+            </TabsContent>
+
+            {/* Tab Vendas */}
+            <TabsContent value="vendas" className="space-y-2.5">
+              {vendas.length > 0 ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5" />
+                        Vendas por Mês
+                      </CardTitle>
+                      <CardDescription>Distribuição de vendas mensais</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={(() => {
+                          const vendasPorMes = vendas.reduce((acc: any, venda) => {
+                            const mes = new Date(venda.data_venda).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                            const existing = acc.find((item: any) => item.mes === mes)
+                            if (existing) {
+                              existing.valor += Number(venda.valor_total)
+                              existing.quantidade += 1
+                            } else {
+                              acc.push({ mes, valor: Number(venda.valor_total), quantidade: 1 })
+                            }
+                            return acc
+                          }, [])
+                          return vendasPorMes.slice(-6)
+                        })()}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="mes" />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value: number, name: string) => {
+                              if (name === 'valor') return [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Valor Total']
+                              return [value, 'Quantidade']
+                            }}
+                          />
+                          <Legend />
+                          <Bar dataKey="valor" fill="#10b981" name="Valor (R$)" />
+                          <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5" />
+                        Vendas por Status
+                      </CardTitle>
+                      <CardDescription>Distribuição por status</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={(() => {
+                              const statusCount = vendas.reduce((acc: any, venda) => {
+                                const status = venda.status
+                                const existing = acc.find((item: any) => item.name === status)
+                                if (existing) {
+                                  existing.value += 1
+                                } else {
+                                  acc.push({ name: status, value: 1 })
+                                }
+                                return acc
+                              }, [])
+                              return statusCount
+                            })()}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {vendas.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card informativo para preencher */}
+                  <Card className="flex items-center justify-center">
+                    <CardContent className="p-6 text-center">
+                      <FileBarChart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <CardTitle className="text-lg mb-2">Análise de Vendas</CardTitle>
+                      <CardDescription>
+                        Visualize informações detalhadas sobre vendas, status e tendências
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  <p>Nenhum dado de vendas disponível</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Tab Medições */}
+            <TabsContent value="medicoes" className="space-y-2.5">
+              {medicoes.length > 0 ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5" />
+                        Medições por Período
+                      </CardTitle>
+                      <CardDescription>Valor total das medições por mês</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={(() => {
+                          const medicoesPorPeriodo = medicoes
+                            .filter(m => m.status === 'finalizada')
+                            .reduce((acc: any, medicao) => {
+                              const periodo = medicao.periodo
+                              const existing = acc.find((item: any) => item.periodo === periodo)
+                              if (existing) {
+                                existing.valor += Number(medicao.valor_total)
+                              } else {
+                                acc.push({ periodo, valor: Number(medicao.valor_total) })
+                              }
+                              return acc
+                            }, [])
+                          return medicoesPorPeriodo.slice(-6)
+                        })()}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="periodo" />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          />
+                          <Legend />
+                          <Bar dataKey="valor" fill="#3b82f6" name="Valor Total (R$)" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5" />
+                        Evolução das Medições
+                      </CardTitle>
+                      <CardDescription>Valor ao longo do tempo</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={(() => {
+                          const medicoesPorPeriodo = medicoes
+                            .filter(m => m.status === 'finalizada')
+                            .reduce((acc: any, medicao) => {
+                              const periodo = medicao.periodo
+                              const existing = acc.find((item: any) => item.periodo === periodo)
+                              if (existing) {
+                                existing.valor += Number(medicao.valor_total)
+                              } else {
+                                acc.push({ periodo, valor: Number(medicao.valor_total) })
+                              }
+                              return acc
+                            }, [])
+                          return medicoesPorPeriodo.slice(-6)
+                        })()}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="periodo" />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="valor" 
+                            stroke="#10b981" 
+                            strokeWidth={2}
+                            name="Valor (R$)"
+                            dot={{ r: 4 }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card informativo para preencher */}
+                  <Card className="flex items-center justify-center">
+                    <CardContent className="p-6 text-center">
+                      <Calculator className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <CardTitle className="text-lg mb-2">Análise de Medições</CardTitle>
+                      <CardDescription>
+                        Acompanhe o desempenho das medições e sua evolução ao longo do tempo
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  <p>Nenhum dado de medições disponível</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Tab Receitas & Custos */}
+            <TabsContent value="receitas-custos" className="space-y-2.5">
+              {/* Primeira linha: Receitas */}
+              {receitas.length > 0 ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5" />
+                        Evolução de Receitas
+                      </CardTitle>
+                      <CardDescription>Receitas ao longo dos últimos 6 meses</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={(() => {
+                          const receitasPorMes = receitas
+                            .filter(r => r.status === 'confirmada')
+                            .reduce((acc: any, receita) => {
+                              const mes = new Date(receita.data_receita).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                              const existing = acc.find((item: any) => item.mes === mes)
+                              if (existing) {
+                                existing.valor += Number(receita.valor)
+                              } else {
+                                acc.push({ mes, valor: Number(receita.valor) })
+                              }
+                              return acc
+                            }, [])
+                          return receitasPorMes.slice(-6)
+                        })()}>
+                          <defs>
+                            <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="mes" />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          />
+                          <Area type="monotone" dataKey="valor" stroke="#10b981" fillOpacity={1} fill="url(#colorReceita)" name="Receitas" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <PieChartIcon className="w-5 h-5" />
+                        Receitas por Tipo
+                      </CardTitle>
+                      <CardDescription>Distribuição por tipo de receita</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={(() => {
+                              const tipoCount = receitas
+                                .filter(r => r.status === 'confirmada')
+                                .reduce((acc: any, receita) => {
+                                  const tipo = receita.tipo === 'locacao' ? 'Locação' : receita.tipo === 'servico' ? 'Serviço' : 'Venda'
+                                  const existing = acc.find((item: any) => item.name === tipo)
+                                  if (existing) {
+                                    existing.value += Number(receita.valor)
+                                  } else {
+                                    acc.push({ name: tipo, value: Number(receita.valor) })
+                                  }
+                                  return acc
+                                }, [])
+                              return tipoCount
+                            })()}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {receitas.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card informativo para preencher primeira linha */}
+                  <Card className="flex items-center justify-center">
+                    <CardContent className="p-6 text-center">
+                      <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <CardTitle className="text-lg mb-2">Receitas</CardTitle>
+                      <CardDescription>
+                        Acompanhe a evolução e distribuição das receitas
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  <p>Nenhum dado de receitas disponível</p>
+                </div>
+              )}
+
+              {/* Segunda linha: Custos */}
+              {custos.length > 0 ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5" />
+                        Custos por Mês
+                      </CardTitle>
+                      <CardDescription>Distribuição de custos mensais</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={(() => {
+                          const custosPorMes = custos
+                            .filter(c => c.status === 'confirmado')
+                            .reduce((acc: any, custo) => {
+                              const mes = new Date(custo.data_custo).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+                              const existing = acc.find((item: any) => item.mes === mes)
+                              if (existing) {
+                                existing.valor += Number(custo.valor)
+                              } else {
+                                acc.push({ mes, valor: Number(custo.valor) })
+                              }
+                              return acc
+                            }, [])
+                          return custosPorMes.slice(-6)
+                        })()}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="mes" />
+                          <YAxis />
+                          <Tooltip 
+                            formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                          />
+                          <Legend />
+                          <Bar dataKey="valor" fill="#ef4444" name="Custos (R$)" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <PieChartIcon className="w-5 h-5" />
+                        Custos por Tipo
+                      </CardTitle>
+                      <CardDescription>Distribuição por tipo de custo</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={(() => {
+                              const tipoCount = custos
+                                .filter(c => c.status === 'confirmado')
+                                .reduce((acc: any, custo) => {
+                                  const tipo = custo.tipo === 'salario' ? 'Salário' : 
+                                             custo.tipo === 'material' ? 'Material' : 
+                                             custo.tipo === 'servico' ? 'Serviço' : 'Manutenção'
+                                  const existing = acc.find((item: any) => item.name === tipo)
+                                  if (existing) {
+                                    existing.value += Number(custo.valor)
+                                  } else {
+                                    acc.push({ name: tipo, value: Number(custo.valor) })
+                                  }
+                                  return acc
+                                }, [])
+                              return tipoCount
+                            })()}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {custos.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card informativo para preencher segunda linha */}
+                  <Card className="flex items-center justify-center">
+                    <CardContent className="p-6 text-center">
+                      <TrendingDown className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <CardTitle className="text-lg mb-2">Custos</CardTitle>
+                      <CardDescription>
+                        Monitore os custos e sua distribuição por tipo
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  <p>Nenhum dado de custos disponível</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
 
           {/* Cadastro Rápido */}
           <Card>
@@ -604,6 +1112,8 @@ export default function FinanceiroPage() {
               </div>
             </CardContent>
           </Card>
+            </>
+          )}
         </TabsContent>
 
         {/* Módulos */}
@@ -672,152 +1182,15 @@ export default function FinanceiroPage() {
           </div>
         </TabsContent>
 
-        {/* Integração Bancária */}
-        <TabsContent value="integration" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5" />
-                  Contas Bancárias
-                </CardTitle>
-                <CardDescription>Sincronização com bancos parceiros</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Itaú</p>
-                        <p className="text-sm text-gray-500">Conta Corrente - 12345-6</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold">R$ 25.000,00</p>
-                      <Badge variant="default">Sincronizado</Badge>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-medium">Santander</p>
-                        <p className="text-sm text-gray-500">Conta Corrente - 78901-2</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold">R$ 20.000,00</p>
-                      <Badge variant="default">Sincronizado</Badge>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <RefreshCw className="w-5 h-5" />
-                  Sincronização Automática
-                </CardTitle>
-                <CardDescription>Configurações de sincronização</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Sincronização Automática</p>
-                      <p className="text-sm text-gray-500">Atualização a cada 30 minutos</p>
-                    </div>
-                    <Badge variant="default">Ativo</Badge>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Última Sincronização</p>
-                      <p className="text-sm text-gray-500">Há 15 minutos</p>
-                    </div>
-                    <Button size="sm" variant="outline">
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Sincronizar Agora
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Integração E-mail e WhatsApp */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="w-5 h-5" />
-                Integração de Comunicação
-              </CardTitle>
-              <CardDescription>Envio automático de documentos</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <Mail className="w-4 h-4" />
-                    E-mail
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Notas Fiscais</span>
-                      <Badge variant="default">Ativo</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Notas de Débito</span>
-                      <Badge variant="default">Ativo</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Boletos</span>
-                      <Badge variant="default">Ativo</Badge>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4" />
-                    WhatsApp
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Notas Fiscais</span>
-                      <Badge variant="secondary">Inativo</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Notas de Débito</span>
-                      <Badge variant="secondary">Inativo</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Boletos</span>
-                      <Badge variant="secondary">Inativo</Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
-      {/* Dialog de Transferência Bancária */}
+      {/* Dialog de Registro de Entrada/Saída */}
       <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Registrar Transferência Bancária</DialogTitle>
+            <DialogTitle>Registrar Entrada/Saída</DialogTitle>
             <DialogDescription>
-              Registre uma nova transferência bancária
+              Registre manualmente uma entrada ou saída financeira
             </DialogDescription>
           </DialogHeader>
           <TransferForm onClose={() => setIsTransferDialogOpen(false)} />
@@ -871,7 +1244,7 @@ export default function FinanceiroPage() {
                 className="h-20 flex flex-col items-center justify-center gap-2"
               >
                 <CreditCard className="w-6 h-6" />
-                <span>Transferências</span>
+                <span>Movimentações</span>
               </Button>
             </div>
           </div>
@@ -888,8 +1261,7 @@ function TransferForm({ onClose }: { onClose: () => void }) {
     valor: '',
     tipo: 'entrada',
     descricao: '',
-    bancoOrigem: '',
-    bancoDestino: '',
+    observacoes: '',
     documento: null as File | null
   })
 
@@ -901,10 +1273,8 @@ function TransferForm({ onClose }: { onClose: () => void }) {
         valor: parseFloat(formData.valor),
         tipo: formData.tipo as 'entrada' | 'saida',
         descricao: formData.descricao,
-        banco_origem: formData.bancoOrigem,
-        banco_destino: formData.bancoDestino,
         documento_comprobatório: formData.documento?.name,
-        status: 'pendente'
+        status: 'confirmada'
       })
       onClose()
       // Recarregar dados financeiros
@@ -941,7 +1311,7 @@ function TransferForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <div>
-        <Label htmlFor="tipo">Tipo de Transferência</Label>
+        <Label htmlFor="tipo">Tipo de Movimentação</Label>
         <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
           <SelectTrigger>
             <SelectValue />
@@ -954,35 +1324,25 @@ function TransferForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <div>
-        <Label htmlFor="descricao">Descrição</Label>
-        <Textarea
+        <Label htmlFor="descricao">Descrição *</Label>
+        <Input
           id="descricao"
           value={formData.descricao}
           onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-          rows={3}
+          placeholder="Ex: Recebimento de cliente, Pagamento de fornecedor..."
           required
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="bancoOrigem">Banco de Origem</Label>
-          <Input
-            id="bancoOrigem"
-            value={formData.bancoOrigem}
-            onChange={(e) => setFormData({ ...formData, bancoOrigem: e.target.value })}
-            placeholder="Ex: Itaú, Santander..."
-          />
-        </div>
-        <div>
-          <Label htmlFor="bancoDestino">Banco de Destino</Label>
-          <Input
-            id="bancoDestino"
-            value={formData.bancoDestino}
-            onChange={(e) => setFormData({ ...formData, bancoDestino: e.target.value })}
-            placeholder="Ex: Cliente, Fornecedor..."
-          />
-        </div>
+      <div>
+        <Label htmlFor="observacoes">Observações</Label>
+        <Textarea
+          id="observacoes"
+          value={formData.observacoes}
+          onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+          rows={3}
+          placeholder="Informações adicionais sobre a movimentação..."
+        />
       </div>
 
       <div>
@@ -1006,7 +1366,7 @@ function TransferForm({ onClose }: { onClose: () => void }) {
           Cancelar
         </Button>
         <Button type="submit">
-          Registrar Transferência
+          Registrar Movimentação
         </Button>
       </div>
     </form>

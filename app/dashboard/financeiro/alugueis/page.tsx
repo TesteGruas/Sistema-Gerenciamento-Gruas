@@ -272,6 +272,17 @@ export default function AlugueisIntegradoPage() {
   }
 
   // Filtros
+  // Componente de Loading padronizado
+  const LoadingContent = () => (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="text-center space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <div className="text-lg font-medium">Carregando aluguéis...</div>
+        <div className="text-sm text-gray-500">Aguarde enquanto buscamos as informações mais recentes</div>
+      </div>
+    </div>
+  )
+
   const aluguelsFiltrados = alugueis.filter(a => {
     const matchStatus = filtroStatus === 'todos' || a.status === filtroStatus
     const matchBusca = !busca || 
@@ -313,6 +324,10 @@ export default function AlugueisIntegradoPage() {
       case 'atrasado': return 'text-red-600'
       default: return 'text-gray-600'
     }
+  }
+
+  if (loading) {
+    return <LoadingContent />
   }
 
   return (

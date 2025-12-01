@@ -576,6 +576,17 @@ export default function RelatoriosPage() {
     carregarDados()
   }, [selectedPeriod])
 
+  // Componente de Loading padronizado
+  const LoadingContent = () => (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="text-center space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <div className="text-lg font-medium">Carregando relatórios...</div>
+        <div className="text-sm text-gray-500">Aguarde enquanto buscamos as informações mais recentes</div>
+      </div>
+    </div>
+  )
+
   const gerarRelatorio = async () => {
     try {
       // Simplesmente recarregar todos os dados com os filtros atuais
@@ -678,6 +689,10 @@ export default function RelatoriosPage() {
       default:
         return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  if (isLoading) {
+    return <LoadingContent />
   }
 
   return (
