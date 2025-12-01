@@ -29,7 +29,7 @@ export const tiposCertificados = [
 
 // Interface compatível com o componente
 export interface Certificado {
-  id: string | number
+  id: string
   colaborador_id: number
   tipo: string
   nome: string
@@ -152,7 +152,7 @@ export default function CertificadosPage() {
 
       if (editingCertificado) {
         const response = await colaboradoresDocumentosApi.certificados.atualizar(
-          editingCertificado.id.toString(),
+          editingCertificado.id,
           {
             tipo: formData.tipo,
             nome: formData.nome,
@@ -194,11 +194,11 @@ export default function CertificadosPage() {
     }
   }
 
-  const handleDelete = async (id: string | number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este certificado?")) return
 
     try {
-      await colaboradoresDocumentosApi.certificados.excluir(id.toString())
+      await colaboradoresDocumentosApi.certificados.excluir(id)
       toast({
         title: "Sucesso",
         description: "Certificado excluído"

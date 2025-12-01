@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 
 export interface CertificadoColaborador {
-  id?: number
+  id?: string
   colaborador_id: number
   tipo: string
   nome: string
@@ -65,7 +65,7 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
       if (response.success && response.data) {
         // Converter CertificadoBackend para CertificadoColaborador
         const certificadosConvertidos: CertificadoColaborador[] = response.data.map((cert: CertificadoBackend) => ({
-          id: parseInt(cert.id),
+          id: cert.id,
           colaborador_id: cert.funcionario_id,
           tipo: cert.tipo,
           nome: cert.nome,
@@ -203,7 +203,7 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
       if (editingCertificado?.id) {
         // Atualizar certificado existente
         await colaboradoresDocumentosApi.certificados.atualizar(
-          editingCertificado.id.toString(),
+          editingCertificado.id,
           certificadoData
         )
         toast({
@@ -234,11 +234,11 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este certificado?")) return
 
     try {
-      await colaboradoresDocumentosApi.certificados.excluir(id.toString())
+      await colaboradoresDocumentosApi.certificados.excluir(id)
       toast({
         title: "Sucesso",
         description: "Certificado excluído com sucesso"

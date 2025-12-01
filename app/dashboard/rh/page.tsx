@@ -513,7 +513,7 @@ export default function RHPage() {
         </TabsList>
 
         {/* Tab: Funcionários */}
-        <TabsContent value="funcionarios" className="space-y-6">
+        <TabsContent value="funcionarios" className="space-y-0">
           {/* Estatísticas */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
@@ -580,7 +580,7 @@ export default function RHPage() {
           </div>
 
           {/* Filtros e Tabela */}
-          <Card>
+          <Card className="mt-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Funcionários</CardTitle>
@@ -693,8 +693,8 @@ export default function RHPage() {
         </TabsContent>
 
         {/* Tab: Cargos */}
-        <TabsContent value="cargos" className="space-y-6">
-          <Card>
+        <TabsContent value="cargos" className="space-y-0">
+          <Card className="mt-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Cargos</CardTitle>

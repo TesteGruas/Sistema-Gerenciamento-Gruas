@@ -89,6 +89,15 @@ router.put('/certificados/:id', requirePermission('rh:editar'), async (req, res)
     const { id } = req.params
     const { tipo, nome, data_validade, arquivo } = req.body
 
+    // Validar que o ID é um UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ 
+        error: 'ID inválido', 
+        message: 'O ID do certificado deve ser um UUID válido' 
+      })
+    }
+
     const schema = Joi.object({
       tipo: Joi.string().optional(),
       nome: Joi.string().min(2).optional(),
@@ -130,6 +139,15 @@ router.put('/certificados/:id', requirePermission('rh:editar'), async (req, res)
 router.delete('/certificados/:id', requirePermission('rh:editar'), async (req, res) => {
   try {
     const { id } = req.params
+
+    // Validar que o ID é um UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ 
+        error: 'ID inválido', 
+        message: 'O ID do certificado deve ser um UUID válido' 
+      })
+    }
 
     const { error } = await supabaseAdmin
       .from('certificados_colaboradores')
