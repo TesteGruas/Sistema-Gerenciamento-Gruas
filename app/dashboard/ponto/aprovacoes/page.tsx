@@ -19,11 +19,18 @@ import {
   Filter,
   Download,
   Eye,
-  RefreshCw
+  RefreshCw,
+  FileText
 } from "lucide-react"
 import AdminGuard from "@/components/admin-guard"
 import { WhatsAppTestButton } from "@/components/whatsapp-test-button"
 import api from "@/lib/api"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface Aprovacao {
   id: string
@@ -37,6 +44,7 @@ interface Aprovacao {
   observacoes?: string
   aprovado_por?: number
   data_aprovacao?: string
+  created_at?: string
   assinatura_digital_path?: string
   funcionario: {
     nome: string
@@ -81,6 +89,11 @@ export default function AprovacoesDashboard() {
     carregarAprovacoes()
     carregarEstatisticas()
   }, [filtros, paginacao.page])
+  
+  // Recarregar estatísticas quando filtros mudarem
+  useEffect(() => {
+    carregarEstatisticas()
+  }, [filtros.data_inicio, filtros.data_fim])
 
   const carregarAprovacoes = async () => {
     try {
@@ -138,27 +151,62 @@ export default function AprovacoesDashboard() {
     try {
       const response = await api.get('ponto-eletronico/relatorios/horas-extras', {
         params: {
-          data_inicio: '2024-01-01',
-          data_fim: '2024-12-31'
+          data_inicio: filtros.data_inicio || '2024-01-01',
+          data_fim: filtros.data_fim || '2024-12-31'
         }
       })
       const result = response.data
       
       if (result.success) {
         // Calcular estatísticas básicas
-          const totalRegistros = result.data.registros.length
-          const aprovados = result.data.registros.filter((r: Aprovacao) => r.status === 'Aprovado').length
-          const rejeitados = result.data.registros.filter((r: Aprovacao) => r.status === 'Rejeitado').length
-          const pendentes = result.data.registros.filter((r: Aprovacao) => r.status === 'Pendente Aprovação').length
+        const registros = result.data.registros || []
+        const totalRegistros = registros.length
+        const aprovados = registros.filter((r: Aprovacao) => r.status === 'Aprovado').length
+        const rejeitados = registros.filter((r: Aprovacao) => r.status === 'Rejeitado').length
+        const pendentes = registros.filter((r: Aprovacao) => r.status === 'Pendente Aprovação').length
+        
+        // Calcular tempo médio de aprovação baseado em data_aprovacao - created_at
+        const calcularTempoMedioAprovacao = (registros: Aprovacao[]): number => {
+          const aprovadosComDatas = registros.filter((r: Aprovacao) => 
+            r.status === 'Aprovado' && 
+            r.data_aprovacao && 
+            r.created_at
+          )
           
-          setEstatisticas({
-            total_pendentes: pendentes,
-            total_aprovados: aprovados,
-            total_rejeitados: rejeitados,
-            tempo_medio_aprovacao: 2.5, // Mock - calcular baseado em data_aprovacao - created_at
-            taxa_aprovacao: totalRegistros > 0 ? (aprovados / totalRegistros) * 100 : 0
-          })
+          if (aprovadosComDatas.length === 0) return 0
+          
+          const tempos = aprovadosComDatas.map((r: Aprovacao) => {
+            try {
+              const criado = new Date(r.created_at!)
+              const aprovado = new Date(r.data_aprovacao!)
+              
+              // Calcular diferença em horas
+              const diffMs = aprovado.getTime() - criado.getTime()
+              const diffHoras = diffMs / (1000 * 60 * 60)
+              
+              return diffHoras
+            } catch (error) {
+              console.warn('Erro ao calcular tempo de aprovação:', error)
+              return 0
+            }
+          }).filter(t => t > 0) // Remover valores inválidos
+          
+          if (tempos.length === 0) return 0
+          
+          const soma = tempos.reduce((a, b) => a + b, 0)
+          return soma / tempos.length
         }
+        
+        const tempoMedio = calcularTempoMedioAprovacao(registros)
+        
+        setEstatisticas({
+          total_pendentes: pendentes,
+          total_aprovados: aprovados,
+          total_rejeitados: rejeitados,
+          tempo_medio_aprovacao: tempoMedio,
+          taxa_aprovacao: totalRegistros > 0 ? (aprovados / totalRegistros) * 100 : 0
+        })
+      }
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error)
     }
@@ -185,7 +233,7 @@ export default function AprovacoesDashboard() {
     return horario || '-'
   }
 
-  const exportarRelatorio = async () => {
+  const exportarRelatorio = async (tipo: 'csv' | 'pdf' | 'json' = 'csv') => {
     try {
       const params: any = {}
       
@@ -198,23 +246,165 @@ export default function AprovacoesDashboard() {
       if (filtros.data_fim) {
         params.data_fim = filtros.data_fim
       }
+      if (filtros.funcionario) {
+        params.funcionario = filtros.funcionario
+      }
 
       const response = await api.get('ponto-eletronico/relatorios/horas-extras', { params })
       const result = response.data
       
-      if (result.success) {
-          // Aqui você implementaria a lógica de exportação
-          toast({
-            title: "Sucesso",
-            description: "Relatório exportado com sucesso",
-            variant: "default"
+      if (!result.success || !result.data?.registros) {
+        throw new Error('Dados não disponíveis para exportação')
+      }
+
+      const registros = result.data.registros || []
+      
+      if (tipo === 'csv') {
+        // Gerar CSV
+        const headers = ['Funcionário', 'Cargo', 'Data', 'Entrada', 'Saída', 'Horas Trabalhadas', 'Horas Extras', 'Status', 'Aprovado Por', 'Data Aprovação']
+        const rows = registros.map((r: Aprovacao) => [
+          r.funcionario?.nome || '',
+          r.funcionario?.cargo || '',
+          formatarData(r.data),
+          r.entrada || '-',
+          r.saida || '-',
+          (r.horas_trabalhadas || 0).toFixed(2),
+          (r.horas_extras || 0).toFixed(2),
+          r.status,
+          r.aprovador?.nome || '-',
+          r.data_aprovacao ? formatarData(r.data_aprovacao) : '-'
+        ])
+        
+        const csvContent = [
+          headers.join(','),
+          ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ].join('\n')
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `aprovacoes_horas_extras_${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+        
+      } else if (tipo === 'json') {
+        // Gerar JSON
+        const jsonContent = JSON.stringify(registros, null, 2)
+        const blob = new Blob([jsonContent], { type: 'application/json' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `aprovacoes_horas_extras_${new Date().toISOString().split('T')[0]}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+        
+      } else if (tipo === 'pdf') {
+        // Gerar PDF usando jsPDF
+        try {
+          const { jsPDF } = await import('jspdf')
+          const autoTable = (await import('jspdf-autotable')).default
+          
+          const doc = new jsPDF('landscape', 'mm', 'a4')
+          
+          // Adicionar logos no cabeçalho se disponível
+          let yPos = 15
+          try {
+            const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+            yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+            yPos += 5
+          } catch {
+            yPos = 20
+          }
+          
+          // Título
+          doc.setFontSize(18)
+          doc.setFont('helvetica', 'bold')
+          doc.text('RELATÓRIO DE APROVAÇÕES - HORAS EXTRAS', doc.internal.pageSize.getWidth() / 2, yPos, { align: 'center' })
+          yPos += 10
+          
+          // Informações do período
+          doc.setFontSize(11)
+          doc.setFont('helvetica', 'normal')
+          const periodoTexto = filtros.data_inicio && filtros.data_fim
+            ? `Período: ${formatarData(filtros.data_inicio)} a ${formatarData(filtros.data_fim)}`
+            : 'Período: Todos os registros'
+          doc.text(periodoTexto, 14, yPos)
+          yPos += 6
+          doc.text(`Total de registros: ${registros.length}`, 14, yPos)
+          yPos += 10
+          
+          // Dados da tabela
+          const tableData = registros.map((r: Aprovacao) => [
+            r.funcionario?.nome || '-',
+            r.funcionario?.cargo || '-',
+            formatarData(r.data),
+            r.entrada || '-',
+            r.saida || '-',
+            `${(r.horas_trabalhadas || 0).toFixed(2)}h`,
+            `${(r.horas_extras || 0).toFixed(2)}h`,
+            r.status,
+            r.aprovador?.nome || '-',
+            r.data_aprovacao ? formatarData(r.data_aprovacao) : '-'
+          ])
+          
+          autoTable(doc, {
+            head: [['Funcionário', 'Cargo', 'Data', 'Entrada', 'Saída', 'Horas', 'Extras', 'Status', 'Aprovado Por', 'Data Aprovação']],
+            body: tableData,
+            startY: yPos,
+            styles: { 
+              fontSize: 8,
+              cellPadding: 2,
+              textColor: [0, 0, 0]
+            },
+            headStyles: { 
+              fillColor: [66, 139, 202],
+              textColor: [255, 255, 255],
+              fontStyle: 'bold',
+              fontSize: 8
+            },
+            alternateRowStyles: {
+              fillColor: [245, 245, 245]
+            },
+            margin: { left: 14, right: 14 }
           })
+          
+          // Data de geração
+          const finalY = (doc as any).lastAutoTable.finalY + 10
+          doc.setFontSize(8)
+          doc.setTextColor(128, 128, 128)
+          doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, doc.internal.pageSize.getWidth() / 2, finalY, { align: 'center' })
+          
+          // Adicionar rodapé se disponível
+          try {
+            const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+            adicionarRodapeEmpresaFrontend(doc)
+          } catch {
+            // Continuar sem rodapé
+          }
+          
+          // Salvar PDF
+          doc.save(`aprovacoes_horas_extras_${new Date().toISOString().split('T')[0]}.pdf`)
+        } catch (error) {
+          console.error('Erro ao gerar PDF:', error)
+          throw new Error('Erro ao gerar PDF. Certifique-se de que os dados estão carregados.')
         }
+      }
+      
+      toast({
+        title: "Sucesso",
+        description: `Relatório exportado em ${tipo.toUpperCase()} com sucesso`,
+        variant: "default"
+      })
     } catch (error) {
       console.error("Erro ao exportar relatório:", error)
       toast({
         title: "Erro",
-        description: "Erro ao exportar relatório",
+        description: error instanceof Error ? error.message : "Erro ao exportar relatório",
         variant: "destructive"
       })
     }
@@ -249,16 +439,34 @@ export default function AprovacoesDashboard() {
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Atualizar
             </Button>
-            <Button onClick={exportarRelatorio}>
-              <Download className="w-4 h-4 mr-2" />
-              Exportar
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportarRelatorio('csv')}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Exportar CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportarRelatorio('json')}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Exportar JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportarRelatorio('pdf')}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Exportar PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
         {/* Estatísticas */}
         {estatisticas && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -305,7 +513,20 @@ export default function AprovacoesDashboard() {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-blue-100 rounded-lg">
-                    <AlertCircle className="w-5 h-5 text-blue-600" />
+                    <Clock className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Tempo Médio Aprovação</p>
+                    <p className="text-2xl font-bold">{estatisticas.tempo_medio_aprovacao.toFixed(1)}h</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Taxa Aprovação</p>
