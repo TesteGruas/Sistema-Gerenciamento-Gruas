@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,6 +47,7 @@ import { PontoTestButtons } from "@/components/ponto-test-buttons"
 import { FuncionarioSearch } from "@/components/funcionario-search"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { JustificativaDialog } from "@/components/justificativa-dialog"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -77,12 +78,13 @@ export default function PontoPage() {
   const [selectedFuncionario, setSelectedFuncionario] = useState("")
   const [data, setData] = useState(estadoInicial)
   const [searchTerm, setSearchTerm] = useState("")
+  // Debounce do termo de busca para melhorar performance ao digitar
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 500)
   const [isJustificativaOpen, setIsJustificativaOpen] = useState(false)
   const [justificativaDetalhes, setJustificativaDetalhes] = useState<Justificativa | null>(null)
   const [isModalDetalhesOpen, setIsModalDetalhesOpen] = useState(false)
   
   // Estados para filtros e ordenação
-  const [filtroFuncionario, setFiltroFuncionario] = useState("todos")
   const [filtroData, setFiltroData] = useState("")
   
   // Estados para aprovação de horas extras
@@ -147,6 +149,29 @@ export default function PontoPage() {
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
   const [searchFuncionario, setSearchFuncionario] = useState("")
 
+  // 1. Cria uma versão do termo de busca que atualiza com menos prioridade que a digitação
+  const deferredSearchFuncionario = useDeferredValue(searchFuncionario)
+
+  // 2. Memoiza e LIMITA a lista para não renderizar 1000 itens de uma vez
+  const funcionariosFiltrados = useMemo(() => {
+    // Se não tiver busca, retorna os primeiros 50 para não pesar
+    if (!deferredSearchFuncionario) {
+      return todosFuncionarios.slice(0, 50)
+    }
+
+    const search = deferredSearchFuncionario.toLowerCase()
+    
+    // Filtra e pega apenas os top 50 resultados
+    return todosFuncionarios
+      .filter((f) => 
+        f.name?.toLowerCase().includes(search) ||
+        f.nome?.toLowerCase().includes(search) ||
+        f.role?.toLowerCase().includes(search) ||
+        f.cargo?.toLowerCase().includes(search)
+      )
+      .slice(0, 50) // <--- O PULO DO GATO: Limita a renderização visual
+  }, [todosFuncionarios, deferredSearchFuncionario])
+
   // Carregar todos os funcionários para o select
   useEffect(() => {
     const carregarFuncionarios = async () => {
@@ -204,6 +229,65 @@ export default function PontoPage() {
   // Flag para controlar se já carregou dados iniciais
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
+  // Estado para controlar loading da tabela durante busca/filtros
+  const [loadingTabela, setLoadingTabela] = useState(false)
+
+  // Função para carregar dados com filtros aplicados (declarada antes dos useEffects que a usam)
+  const carregarDadosComFiltros = useCallback(async () => {
+    try {
+      setLoadingTabela(true)
+      
+      // Construir parâmetros de filtro
+      const filtros: any = {
+        page: currentPage,
+        limit: pageSize
+      }
+
+      // Adicionar filtros se não forem vazios
+      if (filtroData) {
+        filtros.data = filtroData
+      }
+
+      // Adicionar busca textual se houver termo de pesquisa (usando valor debounced)
+      if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
+        filtros.search = debouncedSearchTerm.trim()
+      }
+
+      // Carregar registros com filtros
+      const registrosResponse = await apiRegistrosPonto.listar({
+        ...filtros,
+        recalcular: false, // ✨ Não recalcular em filtros para melhor performance
+      })
+      
+      // Notificar se houve recalculação
+      if (registrosResponse.recalculated) {
+        toast({
+          title: "✨ Dados Atualizados",
+          description: "Alguns registros foram recalculados automaticamente"
+        })
+      }
+      
+      const registros = registrosResponse.data || []
+      const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }
+
+      // Atualizar apenas os registros e paginação, mantendo outros dados
+      setData(prev => ({
+        ...prev,
+        registrosPonto: registros
+      }))
+      
+      setPagination(paginationData)
+    } catch (error) {
+      console.error('Erro ao carregar dados com filtros:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao aplicar filtros. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingTabela(false)
+    }
+  }, [currentPage, pageSize, filtroData, debouncedSearchTerm, toast])
 
   // Carregar dados iniciais apenas uma vez
   useEffect(() => {
@@ -216,15 +300,16 @@ export default function PontoPage() {
     }
   }, [dadosIniciaisCarregados])
 
-  // Resetar página quando termo de busca mudar
+  // Resetar página quando termo de busca debounced mudar
   useEffect(() => {
-    if (dadosIniciaisCarregados && searchTerm !== undefined) {
+    if (dadosIniciaisCarregados && debouncedSearchTerm !== undefined) {
       setCurrentPage(1)
     }
-  }, [searchTerm, dadosIniciaisCarregados])
+  }, [debouncedSearchTerm, dadosIniciaisCarregados])
 
-  // Recarregar dados quando filtros ou paginação mudarem (com debounce)
+  // Recarregar dados quando filtros ou paginação mudarem
   // NÃO recarregar quando modais estiverem abertos para melhorar performance
+  // O debounce do searchTerm é feito pelo hook useDebouncedValue
   useEffect(() => {
     // Só recarregar se os dados iniciais já foram carregados
     if (!dadosIniciaisCarregados) return
@@ -234,18 +319,14 @@ export default function PontoPage() {
       return
     }
     
-    // Debounce aumentado para reduzir chamadas
-    const timer = setTimeout(() => {
-      if (!loadingRef.current) {
-        loadingRef.current = true
-        carregarDadosComFiltros().finally(() => {
-          loadingRef.current = false
-        })
-      }
-    }, 500) // Aumentado de 300ms para 500ms
-    
-    return () => clearTimeout(timer)
-  }, [filtroFuncionario, filtroData, searchTerm, currentPage, pageSize, dadosIniciaisCarregados, isJustificativaOpen, isModalDetalhesOpen, isEditarOpen, isAprovacaoOpen, isModalAprovacaoOpen])
+    // Usar debouncedSearchTerm que já tem debounce aplicado pelo hook
+    if (!loadingRef.current) {
+      loadingRef.current = true
+      carregarDadosComFiltros().finally(() => {
+        loadingRef.current = false
+      })
+    }
+  }, [filtroData, debouncedSearchTerm, currentPage, pageSize, dadosIniciaisCarregados, isJustificativaOpen, isModalDetalhesOpen, isEditarOpen, isAprovacaoOpen, isModalAprovacaoOpen, carregarDadosComFiltros])
 
   // Debug dos registros e filtros (apenas uma vez após carregar)
   useEffect(() => {
@@ -311,66 +392,9 @@ export default function PontoPage() {
     }
   }
 
-  // Função para carregar dados com filtros aplicados
-  const carregarDadosComFiltros = async () => {
-    try {
-      // Construir parâmetros de filtro
-      const filtros: any = {
-        page: currentPage,
-        limit: pageSize
-      }
-
-      // Adicionar filtros se não forem "todos" ou vazios
-      if (filtroFuncionario !== "todos") {
-        filtros.funcionario_id = filtroFuncionario
-      }
-      
-      if (filtroData) {
-        filtros.data = filtroData
-      }
-
-      // Adicionar busca textual se houver termo de pesquisa
-      if (searchTerm && searchTerm.trim()) {
-        filtros.search = searchTerm.trim()
-      }
-
-      // Carregar registros com filtros
-      const registrosResponse = await apiRegistrosPonto.listar({
-        ...filtros,
-        recalcular: false, // ✨ Não recalcular em filtros para melhor performance
-      })
-      
-      // Notificar se houve recalculação
-      if (registrosResponse.recalculated) {
-        toast({
-          title: "✨ Dados Atualizados",
-          description: "Alguns registros foram recalculados automaticamente"
-        })
-      }
-      
-      const registros = registrosResponse.data || []
-      const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }
-
-      // Atualizar apenas os registros e paginação, mantendo outros dados
-      setData(prev => ({
-        ...prev,
-        registrosPonto: registros
-      }))
-      
-      setPagination(paginationData)
-    } catch (error) {
-      console.error('Erro ao carregar dados com filtros:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao aplicar filtros. Tente novamente.",
-        variant: "destructive"
-      })
-    }
-  }
 
   // Função para limpar todos os filtros
   const limparFiltros = () => {
-    setFiltroFuncionario("todos")
     setFiltroData("")
     setSearchTerm("")
     
@@ -503,9 +527,6 @@ export default function PontoPage() {
         limit: 100
       }
 
-      if (filtroFuncionario !== 'todos') {
-        params.funcionario_id = filtroFuncionario
-      }
       if (filtroData) {
         params.data = filtroData
       }
@@ -1031,7 +1052,7 @@ export default function PontoPage() {
     }, 400)
     
     return () => clearTimeout(timer)
-  }, [filtroFuncionario, filtroData, dadosIniciaisCarregados])
+  }, [filtroData, dadosIniciaisCarregados])
 
   // Os dados já vêm filtrados da API, então não precisamos filtrar novamente
   // Memoizar para evitar recálculo a cada render
@@ -1838,44 +1859,6 @@ export default function PontoPage() {
             <CardDescription>Registre entrada, saída e intervalos</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Status do Registro Atual */}
-            {(() => {
-              const status = getStatusRegistroAtual()
-              if (!status) return null
-
-              return (
-                <div className="bg-gray-50 dark:bg-gray-900/50 border rounded-lg p-4">
-                  <h4 className="font-medium text-sm mb-3">Status do Registro de Hoje</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${status.temEntrada ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temEntrada ? 'text-green-700 dark:text-green-400' : 'text-gray-500'}>
-                        Entrada: {status.temEntrada ? status.registro.entrada : 'Não registrada'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${status.temSaida ? 'bg-red-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temSaida ? 'text-red-700 dark:text-red-400' : 'text-gray-500'}>
-                        Saída: {status.temSaida ? status.registro.saida : 'Não registrada'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${status.temSaidaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temSaidaAlmoco ? 'text-yellow-700 dark:text-yellow-400' : 'text-gray-500'}>
-                        Saída Almoço: {status.temSaidaAlmoco ? status.registro.saida_almoco : 'Não registrada'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${status.temVoltaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temVoltaAlmoco ? 'text-yellow-700 dark:text-yellow-400' : 'text-gray-500'}>
-                        Volta Almoço: {status.temVoltaAlmoco ? status.registro.volta_almoco : 'Não registrada'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-
             {/* Seleção de Funcionário */}
             <div className="space-y-2">
               <Label htmlFor="funcionario">Funcionário</Label>
@@ -1988,46 +1971,23 @@ export default function PontoPage() {
               <CardDescription>Visualize todos os registros de ponto dos funcionários</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4 mb-6">
-                {/* Barra de busca */}
-                <div className="flex items-center gap-4">
-                  <div className="relative flex-1">
+              <div className="mb-6 space-y-4">
+                {/* Barra de busca e filtros */}
+                <div className="flex items-end gap-3 flex-wrap">
+                  {/* Barra de busca */}
+                  <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
+                    <DebouncedInput
                       placeholder="Buscar por funcionário, data ou status..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(value) => setSearchTerm(value)}
                       className="pl-10"
                     />
                   </div>
-                </div>
-
-                {/* Filtros avançados */}
-                <div className="flex items-end gap-4">
-                  {/* Filtro por funcionário */}
-                  <div className="space-y-2 flex-1">
-                    <Label htmlFor="filtro-funcionario">Funcionário</Label>
-                    <Select
-                      value={filtroFuncionario}
-                      onValueChange={setFiltroFuncionario}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os funcionários" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os funcionários</SelectItem>
-                        {data.funcionarios.map((func) => (
-                          <SelectItem key={func.id} value={func.id.toString()}>
-                            {func.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
 
                   {/* Filtro por data */}
-                  <div className="space-y-2 flex-1">
-                    <Label htmlFor="filtro-data">Data</Label>
+                  <div className="space-y-2 w-[160px]">
+                    <Label htmlFor="filtro-data" className="text-xs">Data</Label>
                     <Input
                       id="filtro-data"
                       type="date"
@@ -2040,75 +2000,74 @@ export default function PontoPage() {
                   <Button
                     variant="outline"
                     onClick={limparFiltros}
+                    className="h-9"
                   >
-                    Limpar Filtros
+                    Limpar
                   </Button>
                 </div>
 
-                {/* Indicador de resultados */}
-                <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                {/* Informações de resultados e exportar - cada um em uma ponta */}
+                <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-900/50 px-3 py-2 rounded-md">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-gray-600" />
                     <span className="text-sm text-gray-600">
-                      {sortedRegistros.length} registro(s) encontrado(s)
+                      {sortedRegistros.length} registro(s)
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {filtroData && `Data: ${filtroData}`}
+                      {!filtroData && " | Ordenado: Mais recente"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm text-gray-500">
-                      {filtroFuncionario !== "todos" && `Funcionário: ${filtroFuncionario}`}
-                      {filtroData && ` | Data: ${filtroData}`}
-                      {(!filtroFuncionario || filtroFuncionario === "todos") && !filtroData && " | Ordenado: Mais recente"}
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          disabled={sortedRegistros.length === 0}
-                          size="sm"
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          Exportar
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={async () => {
-                            if (sortedRegistros.length > 0) {
-                              await exportarRelatorio('csv')
-                            }
-                          }}
-                          disabled={sortedRegistros.length === 0}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          Exportar CSV
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={async () => {
-                            if (sortedRegistros.length > 0) {
-                              await exportarRelatorio('json')
-                            }
-                          }}
-                          disabled={sortedRegistros.length === 0}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          Exportar JSON
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={async () => {
-                            if (sortedRegistros.length > 0) {
-                              await exportarRelatorio('pdf')
-                            }
-                          }}
-                          disabled={sortedRegistros.length === 0}
-                        >
-                          <FileText className="w-4 h-4 mr-2" />
-                          Exportar PDF
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        disabled={sortedRegistros.length === 0}
+                        size="sm"
+                        className="h-8"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Exportar
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={async () => {
+                          if (sortedRegistros.length > 0) {
+                            await exportarRelatorio('csv')
+                          }
+                        }}
+                        disabled={sortedRegistros.length === 0}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Exportar CSV
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={async () => {
+                          if (sortedRegistros.length > 0) {
+                            await exportarRelatorio('json')
+                          }
+                        }}
+                        disabled={sortedRegistros.length === 0}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Exportar JSON
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={async () => {
+                          if (sortedRegistros.length > 0) {
+                            await exportarRelatorio('pdf')
+                          }
+                        }}
+                        disabled={sortedRegistros.length === 0}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        Exportar PDF
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
                 </div>
-              </div>
 
               <div className="rounded-md border">
                 <Table>
@@ -2126,7 +2085,14 @@ export default function PontoPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedRegistros.map((registro) => {
+                    {loadingTabela ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="h-32">
+                          <TableLoading />
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      sortedRegistros.map((registro) => {
                       // Verificar se está em atraso (múltiplas variações do status)
                       const isAtraso = registro.status === 'Atraso' || 
                                       registro.status === 'atraso' || 
@@ -2244,7 +2210,8 @@ export default function PontoPage() {
                         </TableCell>
                       </TableRow>
                       )
-                    })}
+                    })
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -3015,34 +2982,23 @@ export default function PontoPage() {
                             />
                           </div>
                           <div className="max-h-[250px] overflow-y-auto">
-                            {todosFuncionarios
-                              .filter((f) => {
-                                if (!searchFuncionario) return true
-                                const search = searchFuncionario.toLowerCase()
-                                return (
-                                  f.name?.toLowerCase().includes(search) ||
-                                  f.nome?.toLowerCase().includes(search) ||
-                                  f.role?.toLowerCase().includes(search) ||
-                                  f.cargo?.toLowerCase().includes(search)
-                                )
-                              })
-                              .map((funcionario) => (
-                                <SelectItem key={funcionario.id} value={funcionario.id} className="truncate">
-                                  <span className="font-medium truncate">{funcionario.name || funcionario.nome}</span>
-                                </SelectItem>
-                              ))}
-                            {todosFuncionarios.filter((f) => {
-                              if (!searchFuncionario) return false
-                              const search = searchFuncionario.toLowerCase()
-                              return (
-                                f.name?.toLowerCase().includes(search) ||
-                                f.nome?.toLowerCase().includes(search) ||
-                                f.role?.toLowerCase().includes(search) ||
-                                f.cargo?.toLowerCase().includes(search)
-                              )
-                            }).length === 0 && searchFuncionario && (
+                            {funcionariosFiltrados.map((funcionario) => (
+                              <SelectItem key={funcionario.id} value={funcionario.id} className="truncate">
+                                <span className="font-medium truncate">{funcionario.name || funcionario.nome}</span>
+                              </SelectItem>
+                            ))}
+                            
+                            {/* Mensagem se não encontrar nada */}
+                            {funcionariosFiltrados.length === 0 && deferredSearchFuncionario && (
                               <div className="p-4 text-sm text-gray-500 text-center">
                                 Nenhum funcionário encontrado
+                              </div>
+                            )}
+                            
+                            {/* Mensagem informativa se houver muitos resultados (opcional) */}
+                            {deferredSearchFuncionario === "" && todosFuncionarios.length > 50 && (
+                              <div className="p-2 text-xs text-center text-gray-400 border-t">
+                                Mostrando 50 de {todosFuncionarios.length} funcionários. Digite para buscar.
                               </div>
                             )}
                           </div>
@@ -3631,5 +3587,35 @@ export default function PontoPage() {
       </Dialog>
       </div>
     </ProtectedRoute>
+  )
+}
+
+// Componente otimizado para busca que evita re-renderizar a página inteira ao digitar
+const DebouncedInput = ({ value: initialValue, onChange, debounce = 500, ...props }: {
+  value: string
+  onChange: (value: string) => void
+  debounce?: number
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange">) => {
+  const [value, setValue] = React.useState(initialValue)
+
+  // Sincroniza com o valor externo se ele mudar (ex: botão limpar filtros)
+  React.useEffect(() => {
+    setValue(initialValue)
+  }, [initialValue])
+
+  React.useEffect(() => {
+    const timeout = setTimeout(() => {
+      onChange(value)
+    }, debounce)
+
+    return () => clearTimeout(timeout)
+  }, [value, debounce, onChange])
+
+  return (
+    <Input
+      {...props}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+    />
   )
 }
