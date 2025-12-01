@@ -106,7 +106,9 @@ const vendaItemSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { search } = req.query;
+    
+    let query = supabase
       .from('vendas')
       .select(`
         *,
@@ -114,6 +116,38 @@ router.get('/', async (req, res) => {
         obras(nome, endereco)
       `)
       .order('created_at', { ascending: false });
+
+    // Aplicar busca se fornecida
+    if (search && search.trim()) {
+      const searchTerm = search.trim().toLowerCase();
+      
+      // Buscar todas as vendas primeiro para poder filtrar por relacionamentos
+      const { data: allVendas, error: allError } = await supabase
+        .from('vendas')
+        .select(`
+          *,
+          clientes(nome, cnpj),
+          obras(nome, endereco)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (allError) throw allError;
+
+      // Filtrar no JavaScript para permitir busca em relacionamentos
+      const filteredVendas = (allVendas || []).filter(venda => {
+        const numeroMatch = venda.numero_venda?.toLowerCase().includes(searchTerm);
+        const clienteMatch = venda.clientes?.nome?.toLowerCase().includes(searchTerm);
+        const obraMatch = venda.obras?.nome?.toLowerCase().includes(searchTerm);
+        return numeroMatch || clienteMatch || obraMatch;
+      });
+
+      return res.json({
+        success: true,
+        data: filteredVendas || []
+      });
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 

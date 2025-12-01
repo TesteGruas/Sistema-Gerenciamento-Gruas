@@ -17,6 +17,7 @@ import {
 } from "@/lib/api-financial"
 import { 
   getOrcamentos, 
+  getOrcamento,
   createOrcamento, 
   deleteOrcamento,
   enviarOrcamento,
@@ -43,21 +44,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-  ResponsiveContainer
-} from 'recharts'
 import { 
   Plus, 
   Search, 
@@ -80,15 +66,10 @@ import {
   ArrowRight,
   MoreHorizontal,
   CheckCircle,
-  TrendingUp,
-  BarChart3 as BarChartIcon
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { clientesApi } from "@/lib/api-clientes"
 import { estoqueAPI, type Produto } from "@/lib/api-estoque"
-
-// Cores para gráficos
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
 // Função utilitária para cores de status
 const getStatusColor = (status: string) => {
@@ -109,12 +90,21 @@ export default function VendasPage() {
   // Estados para vendas
   const [vendas, setVendas] = useState<Venda[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [vendasPagination, setVendasPagination] = useState({
+    page: 1,
+    limit: 10
+  })
   
   // Estados para orçamentos
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
   const [orcamentosLoading, setOrcamentosLoading] = useState(false)
+  const [isExportingOrcamentos, setIsExportingOrcamentos] = useState(false)
+  const [orcamentoSearchTerm, setOrcamentoSearchTerm] = useState("")
+  const [isSearchingOrcamentos, setIsSearchingOrcamentos] = useState(false)
   const [isCreateOrcamentoDialogOpen, setIsCreateOrcamentoDialogOpen] = useState(false)
   const [selectedOrcamento, setSelectedOrcamento] = useState<Orcamento | null>(null)
   const [isEditOrcamentoDialogOpen, setIsEditOrcamentoDialogOpen] = useState(false)
@@ -126,7 +116,8 @@ export default function VendasPage() {
     limit: 10,
     status: undefined as string | undefined,
     data_inicio: undefined as string | undefined,
-    data_fim: undefined as string | undefined
+    data_fim: undefined as string | undefined,
+    search: undefined as string | undefined
   })
   const [orcamentoPagination, setOrcamentoPagination] = useState({
     page: 1,
@@ -136,10 +127,14 @@ export default function VendasPage() {
   })
 
   // Carregar vendas
-  const loadVendas = async () => {
+  const loadVendas = async (search?: string, isSearch = false) => {
     try {
-      setIsLoading(true)
-      const data = await getVendas()
+      if (isSearch) {
+        setIsSearching(true)
+      } else {
+        setIsLoading(true)
+      }
+      const data = await getVendas(search)
       setVendas(data)
     } catch (error) {
       console.error('Erro ao carregar vendas:', error)
@@ -149,13 +144,22 @@ export default function VendasPage() {
         variant: "destructive"
       })
     } finally {
-      setIsLoading(false)
+      if (isSearch) {
+        setIsSearching(false)
+      } else {
+        setIsLoading(false)
+      }
     }
   }
 
   // Carregar orçamentos
   const loadOrcamentos = async () => {
-    setOrcamentosLoading(true)
+    const isSearch = !!orcamentoFilters.search
+    if (isSearch) {
+      setIsSearchingOrcamentos(true)
+    } else {
+      setOrcamentosLoading(true)
+    }
     try {
       const response = await getOrcamentos(orcamentoFilters)
       setOrcamentos(response.data)
@@ -168,13 +172,20 @@ export default function VendasPage() {
         variant: "destructive"
       })
     } finally {
-      setOrcamentosLoading(false)
+      if (isSearch) {
+        setIsSearchingOrcamentos(false)
+      } else {
+        setOrcamentosLoading(false)
+      }
     }
   }
 
+  // Carregar vendas iniciais
   useEffect(() => {
-    loadVendas()
-  }, [])
+    if (activeTab === 'vendas' && !searchTerm) {
+      loadVendas()
+    }
+  }, [activeTab])
 
   useEffect(() => {
     if (activeTab === 'orcamentos') {
@@ -182,12 +193,53 @@ export default function VendasPage() {
     }
   }, [activeTab, orcamentoFilters])
 
-  // Filtrar vendas
-  const filteredVendas = vendas.filter(venda =>
-    venda.numero_venda.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    venda.clientes?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    venda.obras?.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Buscar orçamentos via API quando o termo de busca mudar (com debounce)
+  useEffect(() => {
+    if (activeTab !== 'orcamentos') return
+
+    // Se o campo estiver vazio, não fazer nada (mantém os orçamentos já carregados)
+    if (!orcamentoSearchTerm || orcamentoSearchTerm.trim() === '') {
+      setOrcamentoFilters(prev => ({ ...prev, search: undefined, page: 1 }))
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      setOrcamentoFilters(prev => ({ ...prev, search: orcamentoSearchTerm.trim(), page: 1 }))
+    }, 500) // Debounce de 500ms
+
+    return () => clearTimeout(timeoutId)
+  }, [orcamentoSearchTerm, activeTab])
+
+  // Buscar vendas via API quando o termo de busca mudar (com debounce)
+  useEffect(() => {
+    if (activeTab !== 'vendas') return
+
+    // Se o campo estiver vazio, não fazer nada (mantém as vendas já carregadas)
+    if (!searchTerm || searchTerm.trim() === '') {
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      loadVendas(searchTerm || undefined, true)
+    }, 500) // Debounce de 500ms
+
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm])
+
+  // Usar vendas diretamente (já filtradas pela API)
+  const filteredVendas = vendas
+
+  // Calcular paginação
+  const totalVendas = filteredVendas.length
+  const totalPages = Math.ceil(totalVendas / vendasPagination.limit)
+  const startIndex = (vendasPagination.page - 1) * vendasPagination.limit
+  const endIndex = startIndex + vendasPagination.limit
+  const paginatedVendas = filteredVendas.slice(startIndex, endIndex)
+
+  // Resetar página quando o filtro mudar
+  useEffect(() => {
+    setVendasPagination(prev => ({ ...prev, page: 1 }))
+  }, [searchTerm])
 
   const getTipoVendaColor = (tipo: string) => {
     switch (tipo) {
@@ -291,9 +343,45 @@ export default function VendasPage() {
     }
   }
 
-  const handleEditOrcamento = (orcamento: Orcamento) => {
-    setSelectedOrcamento(orcamento)
-    setIsEditOrcamentoDialogOpen(true)
+  const handleEditOrcamento = async (orcamento: Orcamento) => {
+    try {
+      // Carregar dados completos do orçamento via API
+      const response = await getOrcamento(orcamento.id)
+      
+      if (response.success && response.data) {
+        // Mapear dados da API para o formato esperado
+        const data = response.data as any
+        const orcamentoCompleto: Orcamento = {
+          ...data,
+          // Garantir que os itens estejam mapeados corretamente
+          itens: data.itens || data.orcamento_itens || [],
+          // Garantir que os relacionamentos estejam presentes
+          clientes: data.clientes || orcamento.clientes,
+          funcionarios: data.funcionarios || orcamento.funcionarios
+        }
+        setSelectedOrcamento(orcamentoCompleto)
+        setIsEditOrcamentoDialogOpen(true)
+      } else {
+        // Se falhar, usar dados da listagem
+        setSelectedOrcamento(orcamento)
+        setIsEditOrcamentoDialogOpen(true)
+        toast({
+          title: "Aviso",
+          description: "Alguns dados podem estar incompletos",
+          variant: "default"
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar orçamento:', error)
+      // Em caso de erro, usar dados da listagem
+      setSelectedOrcamento(orcamento)
+      setIsEditOrcamentoDialogOpen(true)
+      toast({
+        title: "Aviso",
+        description: "Erro ao carregar dados completos. Usando dados da listagem.",
+        variant: "default"
+      })
+    }
   }
 
   const handleViewVenda = (venda: Venda) => {
@@ -324,6 +412,558 @@ export default function VendasPage() {
     }
   }
 
+  // Funções de exportação
+  const exportarVendasCSV = async () => {
+    try {
+      setIsExporting(true)
+      
+      // Buscar TODAS as vendas (sem paginação) para exportação
+      let todasVendas = filteredVendas
+      
+      // Se houver termo de busca, garantir que busca todos os resultados
+      if (searchTerm && searchTerm.trim()) {
+        try {
+          todasVendas = await getVendas(searchTerm)
+        } catch (error) {
+          console.error('Erro ao buscar todas as vendas:', error)
+          todasVendas = filteredVendas
+        }
+      } else {
+        // Se não houver busca, carregar todas as vendas
+        try {
+          todasVendas = await getVendas()
+        } catch (error) {
+          console.error('Erro ao carregar todas as vendas:', error)
+          todasVendas = filteredVendas
+        }
+      }
+
+      if (todasVendas.length === 0) {
+        toast({
+          title: "Aviso",
+          description: "Não há vendas para exportar",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const dadosParaExportar = todasVendas.map(venda => ({
+        'ID': venda.id,
+        'Número da Venda': venda.numero_venda,
+        'Cliente': venda.clientes?.nome || 'N/A',
+        'Obra': venda.obras?.nome || 'N/A',
+        'Data da Venda': new Date(venda.data_venda).toLocaleDateString('pt-BR'),
+        'Valor Total': `R$ ${venda.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        'Tipo': venda.tipo_venda,
+        'Status': venda.status,
+        'Observações': venda.observacoes || ''
+      }))
+
+      // Criar CSV
+      const headers = Object.keys(dadosParaExportar[0] || {})
+      const csvContent = [
+        headers.join(','),
+        ...dadosParaExportar.map(row => 
+          headers.map(header => {
+            const value = row[header as keyof typeof row] || ''
+            // Escapar vírgulas e aspas
+            return `"${String(value).replace(/"/g, '""')}"`
+          }).join(',')
+        )
+      ].join('\n')
+
+      // Criar blob e fazer download
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const fileName = searchTerm && searchTerm.trim() 
+        ? `vendas_${searchTerm.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
+        : `vendas_${new Date().toISOString().split('T')[0]}.csv`
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "Sucesso",
+        description: `${todasVendas.length} venda(s) exportada(s) em CSV com sucesso!`,
+      })
+    } catch (error) {
+      console.error('Erro ao exportar CSV:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar vendas em CSV",
+        variant: "destructive"
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const exportarVendasPDF = async () => {
+    try {
+      setIsExporting(true)
+      
+      // Buscar TODAS as vendas (sem paginação) para exportação
+      let todasVendas = filteredVendas
+      
+      // Se houver termo de busca, garantir que busca todos os resultados
+      if (searchTerm && searchTerm.trim()) {
+        try {
+          todasVendas = await getVendas(searchTerm)
+        } catch (error) {
+          console.error('Erro ao buscar todas as vendas:', error)
+          // Usar as vendas já carregadas como fallback
+          todasVendas = filteredVendas
+        }
+      } else {
+        // Se não houver busca, carregar todas as vendas
+        try {
+          todasVendas = await getVendas()
+        } catch (error) {
+          console.error('Erro ao carregar todas as vendas:', error)
+          todasVendas = filteredVendas
+        }
+      }
+
+      if (todasVendas.length === 0) {
+        toast({
+          title: "Aviso",
+          description: "Não há vendas para exportar",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const { jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+
+      const doc = new jsPDF('landscape', 'mm', 'a4')
+      
+      // Título
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Relatório de Vendas', 14, 15)
+      
+      // Data de geração
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 22)
+      
+      // Informações do filtro (se houver busca)
+      if (searchTerm && searchTerm.trim()) {
+        doc.setFontSize(9)
+        doc.text(`Filtro aplicado: "${searchTerm}"`, 14, 28)
+      }
+      
+      // Total de vendas
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Total de vendas: ${todasVendas.length}`, 14, searchTerm && searchTerm.trim() ? 34 : 28)
+      
+      // Valor total
+      const valorTotal = todasVendas.reduce((sum, venda) => sum + Number(venda.valor_total), 0)
+      const yPos = searchTerm && searchTerm.trim() ? 40 : 34
+      doc.text(`Valor total: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 14, yPos)
+
+      // Preparar dados para a tabela (TODAS as vendas, sem paginação)
+      const tableData = todasVendas.map(venda => [
+        venda.id.toString(),
+        venda.numero_venda || '',
+        (venda.clientes?.nome || 'N/A').substring(0, 30), // Limitar tamanho
+        (venda.obras?.nome || 'N/A').substring(0, 25), // Limitar tamanho
+        new Date(venda.data_venda).toLocaleDateString('pt-BR'),
+        `R$ ${Number(venda.valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        venda.tipo_venda || '',
+        venda.status || ''
+      ])
+
+      // Adicionar tabela com suporte a múltiplas páginas
+      autoTable(doc, {
+        head: [['ID', 'Número', 'Cliente', 'Obra', 'Data', 'Valor Total', 'Tipo', 'Status']],
+        body: tableData,
+        startY: yPos + 8,
+        styles: { 
+          fontSize: 7,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          cellWidth: 'wrap'
+        },
+        headStyles: { 
+          fillColor: [59, 130, 246], 
+          textColor: 255, 
+          fontStyle: 'bold',
+          fontSize: 8
+        },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        columnStyles: {
+          0: { cellWidth: 15 }, // ID
+          1: { cellWidth: 35 }, // Número
+          2: { cellWidth: 50 }, // Cliente
+          3: { cellWidth: 45 }, // Obra
+          4: { cellWidth: 25 }, // Data
+          5: { cellWidth: 35 }, // Valor Total
+          6: { cellWidth: 30 }, // Tipo
+          7: { cellWidth: 30 }  // Status
+        },
+        margin: { top: yPos + 8, left: 14, right: 14 },
+        didDrawPage: (data: any) => {
+          // Adicionar número da página em todas as páginas
+          const pageCount = doc.getNumberOfPages()
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(128, 128, 128)
+          doc.text(
+            `Página ${data.pageNumber} de ${pageCount}`,
+            doc.internal.pageSize.getWidth() / 2,
+            doc.internal.pageSize.getHeight() - 10,
+            { align: 'center' }
+          )
+          doc.setTextColor(0, 0, 0)
+        }
+      })
+
+      // Adicionar resumo no final
+      const finalY = (doc as any).lastAutoTable?.finalY || yPos + 8
+      
+      // Verificar se há espaço na última página, senão criar nova
+      if (finalY > doc.internal.pageSize.getHeight() - 30) {
+        doc.addPage()
+      }
+      
+      const summaryY = finalY > doc.internal.pageSize.getHeight() - 30 ? 20 : finalY + 10
+      
+      // Linha separadora
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.5)
+      doc.line(14, summaryY - 2, doc.internal.pageSize.getWidth() - 14, summaryY - 2)
+      
+      // Resumo
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Resumo', 14, summaryY + 5)
+      
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.text(`• Total de vendas: ${todasVendas.length}`, 14, summaryY + 12)
+      doc.text(`• Valor total: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 14, summaryY + 18)
+      
+      // Estatísticas por status
+      const vendasPorStatus = todasVendas.reduce((acc: any, venda) => {
+        const status = venda.status || 'N/A'
+        acc[status] = (acc[status] || 0) + 1
+        return acc
+      }, {})
+      
+      let yOffset = summaryY + 24
+      doc.text('• Vendas por status:', 14, yOffset)
+      yOffset += 6
+      Object.entries(vendasPorStatus).forEach(([status, count]) => {
+        doc.text(`  - ${status}: ${count}`, 14, yOffset)
+        yOffset += 6
+      })
+
+      // Salvar PDF
+      const fileName = searchTerm && searchTerm.trim() 
+        ? `vendas_${searchTerm.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+        : `vendas_${new Date().toISOString().split('T')[0]}.pdf`
+      
+      doc.save(fileName)
+
+      toast({
+        title: "Sucesso",
+        description: `${todasVendas.length} venda(s) exportada(s) em PDF com sucesso!`,
+      })
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar vendas em PDF",
+        variant: "destructive"
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Funções de exportação de orçamentos
+  const exportarOrcamentosCSV = async () => {
+    try {
+      setIsExportingOrcamentos(true)
+      
+      // Buscar TODOS os orçamentos (sem paginação) para exportação
+      let todosOrcamentos = orcamentos
+      
+      // Se houver filtros ou busca, garantir que busca todos os resultados
+      const filtersForExport = {
+        ...orcamentoFilters,
+        page: undefined,
+        limit: undefined
+      }
+      
+      try {
+        const response = await getOrcamentos(filtersForExport)
+        todosOrcamentos = response.data
+      } catch (error) {
+        console.error('Erro ao buscar todos os orçamentos:', error)
+        todosOrcamentos = orcamentos
+      }
+
+      if (todosOrcamentos.length === 0) {
+        toast({
+          title: "Aviso",
+          description: "Não há orçamentos para exportar",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const dadosParaExportar = todosOrcamentos.map(orcamento => ({
+        'ID': orcamento.id,
+        'Número': `#${orcamento.id.toString().padStart(4, '0')}`,
+        'Cliente': orcamento.clientes?.nome || 'N/A',
+        'Email Cliente': orcamento.clientes?.email || 'N/A',
+        'Data Orçamento': new Date(orcamento.data_orcamento).toLocaleDateString('pt-BR'),
+        'Data Validade': new Date(orcamento.data_validade).toLocaleDateString('pt-BR'),
+        'Tipo': formatarTipoOrcamento(orcamento.tipo_orcamento),
+        'Valor Total': `R$ ${orcamento.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        'Desconto': `R$ ${(orcamento.desconto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        'Status': formatarStatusOrcamento(orcamento.status).label,
+        'Observações': orcamento.observacoes || ''
+      }))
+
+      // Criar CSV
+      const headers = Object.keys(dadosParaExportar[0] || {})
+      const csvContent = [
+        headers.join(','),
+        ...dadosParaExportar.map(row => 
+          headers.map(header => {
+            const value = row[header as keyof typeof row] || ''
+            // Escapar vírgulas e aspas
+            return `"${String(value).replace(/"/g, '""')}"`
+          }).join(',')
+        )
+      ].join('\n')
+
+      // Criar blob e fazer download
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const fileName = orcamentoSearchTerm && orcamentoSearchTerm.trim() 
+        ? `orcamentos_${orcamentoSearchTerm.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
+        : `orcamentos_${new Date().toISOString().split('T')[0]}.csv`
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "Sucesso",
+        description: `${todosOrcamentos.length} orçamento(s) exportado(s) em CSV com sucesso!`,
+      })
+    } catch (error) {
+      console.error('Erro ao exportar CSV:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar orçamentos em CSV",
+        variant: "destructive"
+      })
+    } finally {
+      setIsExportingOrcamentos(false)
+    }
+  }
+
+  const exportarOrcamentosPDF = async () => {
+    try {
+      setIsExportingOrcamentos(true)
+      
+      // Buscar TODOS os orçamentos (sem paginação) para exportação
+      let todosOrcamentos = orcamentos
+      
+      // Se houver filtros ou busca, garantir que busca todos os resultados
+      const filtersForExport = {
+        ...orcamentoFilters,
+        page: undefined,
+        limit: undefined
+      }
+      
+      try {
+        const response = await getOrcamentos(filtersForExport)
+        todosOrcamentos = response.data
+      } catch (error) {
+        console.error('Erro ao buscar todos os orçamentos:', error)
+        todosOrcamentos = orcamentos
+      }
+
+      if (todosOrcamentos.length === 0) {
+        toast({
+          title: "Aviso",
+          description: "Não há orçamentos para exportar",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const { jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+
+      const doc = new jsPDF('landscape', 'mm', 'a4')
+      
+      // Título
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Relatório de Orçamentos', 14, 15)
+      
+      // Data de geração
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 22)
+      
+      // Informações do filtro (se houver busca ou filtros)
+      let yPos = 28
+      if (orcamentoSearchTerm && orcamentoSearchTerm.trim()) {
+        doc.setFontSize(9)
+        doc.text(`Filtro aplicado: "${orcamentoSearchTerm}"`, 14, yPos)
+        yPos += 6
+      }
+      if (orcamentoFilters.status) {
+        doc.setFontSize(9)
+        doc.text(`Status: ${formatarStatusOrcamento(orcamentoFilters.status).label}`, 14, yPos)
+        yPos += 6
+      }
+      
+      // Total de orçamentos
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Total de orçamentos: ${todosOrcamentos.length}`, 14, yPos)
+      
+      // Valor total
+      const valorTotal = todosOrcamentos.reduce((sum, orcamento) => sum + Number(orcamento.valor_total), 0)
+      yPos += 6
+      doc.text(`Valor total: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 14, yPos)
+
+      // Preparar dados para a tabela (TODOS os orçamentos, sem paginação)
+      const tableData = todosOrcamentos.map(orcamento => [
+        `#${orcamento.id.toString().padStart(4, '0')}`,
+        (orcamento.clientes?.nome || 'N/A').substring(0, 30), // Limitar tamanho
+        new Date(orcamento.data_orcamento).toLocaleDateString('pt-BR'),
+        new Date(orcamento.data_validade).toLocaleDateString('pt-BR'),
+        formatarTipoOrcamento(orcamento.tipo_orcamento).substring(0, 15),
+        `R$ ${Number(orcamento.valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        formatarStatusOrcamento(orcamento.status).label
+      ])
+
+      // Adicionar tabela com suporte a múltiplas páginas
+      autoTable(doc, {
+        head: [['Número', 'Cliente', 'Data', 'Validade', 'Tipo', 'Valor Total', 'Status']],
+        body: tableData,
+        startY: yPos + 8,
+        styles: { 
+          fontSize: 7,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          cellWidth: 'wrap'
+        },
+        headStyles: { 
+          fillColor: [59, 130, 246], 
+          textColor: 255, 
+          fontStyle: 'bold',
+          fontSize: 8
+        },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        columnStyles: {
+          0: { cellWidth: 25 }, // Número
+          1: { cellWidth: 50 }, // Cliente
+          2: { cellWidth: 25 }, // Data
+          3: { cellWidth: 25 }, // Validade
+          4: { cellWidth: 30 }, // Tipo
+          5: { cellWidth: 35 }, // Valor Total
+          6: { cellWidth: 30 }  // Status
+        },
+        margin: { top: yPos + 8, left: 14, right: 14 },
+        didDrawPage: (data: any) => {
+          // Adicionar número da página em todas as páginas
+          const pageCount = doc.getNumberOfPages()
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(128, 128, 128)
+          doc.text(
+            `Página ${data.pageNumber} de ${pageCount}`,
+            doc.internal.pageSize.getWidth() / 2,
+            doc.internal.pageSize.getHeight() - 10,
+            { align: 'center' }
+          )
+          doc.setTextColor(0, 0, 0)
+        }
+      })
+
+      // Adicionar resumo no final
+      const finalY = (doc as any).lastAutoTable?.finalY || yPos + 8
+      
+      // Verificar se há espaço na última página, senão criar nova
+      if (finalY > doc.internal.pageSize.getHeight() - 30) {
+        doc.addPage()
+      }
+      
+      const summaryY = finalY > doc.internal.pageSize.getHeight() - 30 ? 20 : finalY + 10
+      
+      // Linha separadora
+      doc.setDrawColor(200, 200, 200)
+      doc.setLineWidth(0.5)
+      doc.line(14, summaryY - 2, doc.internal.pageSize.getWidth() - 14, summaryY - 2)
+      
+      // Resumo
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Resumo', 14, summaryY + 5)
+      
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.text(`• Total de orçamentos: ${todosOrcamentos.length}`, 14, summaryY + 12)
+      doc.text(`• Valor total: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 14, summaryY + 18)
+      
+      // Estatísticas por status
+      const orcamentosPorStatus = todosOrcamentos.reduce((acc: any, orcamento) => {
+        const status = formatarStatusOrcamento(orcamento.status).label
+        acc[status] = (acc[status] || 0) + 1
+        return acc
+      }, {})
+      
+      let yOffset = summaryY + 24
+      doc.text('• Orçamentos por status:', 14, yOffset)
+      yOffset += 6
+      Object.entries(orcamentosPorStatus).forEach(([status, count]) => {
+        doc.text(`  - ${status}: ${count}`, 14, yOffset)
+        yOffset += 6
+      })
+
+      // Salvar PDF
+      const fileName = orcamentoSearchTerm && orcamentoSearchTerm.trim() 
+        ? `orcamentos_${orcamentoSearchTerm.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+        : `orcamentos_${new Date().toISOString().split('T')[0]}.pdf`
+      
+      doc.save(fileName)
+
+      toast({
+        title: "Sucesso",
+        description: `${todosOrcamentos.length} orçamento(s) exportado(s) em PDF com sucesso!`,
+      })
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao exportar orçamentos em PDF",
+        variant: "destructive"
+      })
+    } finally {
+      setIsExportingOrcamentos(false)
+    }
+  }
+
   return (
     <div className="space-y-6 w-full">
       {/* Header */}
@@ -334,10 +974,42 @@ export default function VendasPage() {
         </div>
         <div className="flex gap-2">
           {activeTab === 'vendas' ? (
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <>
+              {filteredVendas.length > 0 && (
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="h-9 px-4 py-2"
+                    onClick={exportarVendasCSV}
+                    disabled={isLoading || isSearching || isExporting}
+                  >
+                    {isExporting ? (
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2" />
+                    )}
+                    Exportar CSV
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="h-9 px-4 py-2"
+                    onClick={exportarVendasPDF}
+                    disabled={isLoading || isSearching || isExporting}
+                  >
+                    {isExporting ? (
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2" />
+                    )}
+                    Exportar PDF
+                  </Button>
+                </div>
+              )}
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Venda
               </Button>
+            </>
           ) : (
             <Button onClick={() => setIsCreateOrcamentoDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
@@ -347,94 +1019,6 @@ export default function VendasPage() {
         </div>
       </div>
 
-      {/* Gráficos de Estatísticas */}
-      {activeTab === 'vendas' && vendas.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChartIcon className="w-5 h-5" />
-                Vendas por Mês
-              </CardTitle>
-              <CardDescription>Distribuição de vendas mensais</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={(() => {
-                  const vendasPorMes = vendas.reduce((acc: any, venda) => {
-                    const mes = new Date(venda.data_venda).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
-                    const existing = acc.find((item: any) => item.mes === mes)
-                    if (existing) {
-                      existing.valor += Number(venda.valor_total)
-                      existing.quantidade += 1
-                    } else {
-                      acc.push({ mes, valor: Number(venda.valor_total), quantidade: 1 })
-                    }
-                    return acc
-                  }, [])
-                  return vendasPorMes.slice(-6)
-                })()}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="mes" />
-                  <YAxis />
-                  <RechartsTooltip 
-                    formatter={(value: number, name: string) => {
-                      if (name === 'valor') return [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Valor Total']
-                      return [value, 'Quantidade']
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="valor" fill="#10b981" name="Valor (R$)" />
-                  <Bar dataKey="quantidade" fill="#3b82f6" name="Quantidade" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                Vendas por Status
-              </CardTitle>
-              <CardDescription>Distribuição por status</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={(() => {
-                      const statusCount = vendas.reduce((acc: any, venda) => {
-                        const status = venda.status
-                        const existing = acc.find((item: any) => item.name === status)
-                        if (existing) {
-                          existing.value += 1
-                        } else {
-                          acc.push({ name: status, value: 1 })
-                        }
-                        return acc
-                      }, [])
-                      return statusCount
-                    })()}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {vendas.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -448,30 +1032,70 @@ export default function VendasPage() {
           {/* Filtros */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                <Search className="w-5 h-5" />
-                Filtros
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <Search className="w-5 h-5" />
+                    Filtros
+                  </CardTitle>
+                  {filteredVendas.length > 0 && (
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="h-9 px-4 py-2"
+                        onClick={exportarVendasCSV}
+                        disabled={isLoading || isSearching || isExporting}
+                      >
+                        {isExporting ? (
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-2" />
+                        )}
+                        Exportar CSV
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="h-9 px-4 py-2"
+                        onClick={exportarVendasPDF}
+                        disabled={isLoading || isSearching || isExporting}
+                      >
+                        {isExporting ? (
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-2" />
+                        )}
+                        Exportar PDF
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="flex gap-4">
-                  <div className="flex-1">
+                  <div className="flex-1 relative">
                     <Label htmlFor="search">Buscar</Label>
+                    <div className="relative">
                       <Input
                         id="search"
-                    placeholder="Buscar por número, cliente ou obra..."
+                        placeholder="Buscar por número, cliente ou obra..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
+                        className={isSearching ? "pr-10" : ""}
                       />
+                      {isSearching && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <RefreshCw className="w-4 h-4 animate-spin text-gray-400" />
+                        </div>
+                      )}
                     </div>
                   </div>
+                </div>
             </CardContent>
           </Card>
 
           {/* Lista de Vendas */}
           <Card>
             <CardHeader>
-              <CardTitle>Vendas ({filteredVendas.length})</CardTitle>
+              <CardTitle>Vendas ({totalVendas})</CardTitle>
               <CardDescription>Lista de todas as vendas registradas</CardDescription>
             </CardHeader>
             <CardContent>
@@ -485,6 +1109,7 @@ export default function VendasPage() {
                   <p className="text-gray-500">Nenhuma venda encontrada</p>
                 </div>
               ) : (
+                <>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -500,7 +1125,7 @@ export default function VendasPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredVendas.map((venda) => (
+                    {paginatedVendas.map((venda) => (
                         <TableRow key={venda.id}>
                         <TableCell className="font-medium">{venda.id}</TableCell>
                         <TableCell className="font-medium">{venda.numero_venda}</TableCell>
@@ -603,6 +1228,37 @@ export default function VendasPage() {
                     ))}
                   </TableBody>
                 </Table>
+
+                {/* Paginação */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-gray-500">
+                      Mostrando {startIndex + 1} a {Math.min(endIndex, totalVendas)} de {totalVendas} vendas
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setVendasPagination({ ...vendasPagination, page: vendasPagination.page - 1 })}
+                        disabled={vendasPagination.page === 1}
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-sm">
+                        Página {vendasPagination.page} de {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setVendasPagination({ ...vendasPagination, page: vendasPagination.page + 1 })}
+                        disabled={vendasPagination.page === totalPages}
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -613,13 +1269,62 @@ export default function VendasPage() {
           {/* Filtros de Orçamentos */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Filtros
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="w-5 h-5" />
+                  Filtros
+                </CardTitle>
+                {orcamentos.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="h-9 px-4 py-2"
+                      onClick={exportarOrcamentosCSV}
+                      disabled={orcamentosLoading || isExportingOrcamentos}
+                    >
+                      {isExportingOrcamentos ? (
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      Exportar CSV
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="h-9 px-4 py-2"
+                      onClick={exportarOrcamentosPDF}
+                      disabled={orcamentosLoading || isExportingOrcamentos}
+                    >
+                      {isExportingOrcamentos ? (
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      Exportar PDF
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="md:col-span-1">
+                  <Label htmlFor="orcamento-search">Buscar</Label>
+                  <div className="relative">
+                    <Input
+                      id="orcamento-search"
+                      placeholder="Buscar por número, cliente..."
+                      value={orcamentoSearchTerm}
+                      onChange={(e) => setOrcamentoSearchTerm(e.target.value)}
+                      className={isSearchingOrcamentos ? "pr-10" : ""}
+                    />
+                    {isSearchingOrcamentos && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <RefreshCw className="w-4 h-4 animate-spin text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <div>
                   <Label htmlFor="status">Status</Label>
                   <Select 
@@ -638,7 +1343,7 @@ export default function VendasPage() {
                       <SelectItem value="vencido">Vencido</SelectItem>
                     </SelectContent>
                   </Select>
-                          </div>
+                </div>
                 <div>
                   <Label htmlFor="data_inicio">Data Início</Label>
                   <Input
@@ -826,7 +1531,7 @@ export default function VendasPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setOrcamentoFilters({ ...orcamentoFilters, page: orcamentoPagination.page - 1 })}
+                          onClick={() => setOrcamentoFilters({ ...orcamentoFilters, page: (orcamentoFilters.page || 1) - 1 })}
                           disabled={orcamentoPagination.page === 1}
                         >
                           <ArrowLeft className="w-4 h-4" />
@@ -837,7 +1542,7 @@ export default function VendasPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setOrcamentoFilters({ ...orcamentoFilters, page: orcamentoPagination.page + 1 })}
+                          onClick={() => setOrcamentoFilters({ ...orcamentoFilters, page: (orcamentoFilters.page || 1) + 1 })}
                           disabled={orcamentoPagination.page === orcamentoPagination.pages}
                         >
                           <ArrowRight className="w-4 h-4" />
@@ -1481,6 +2186,28 @@ function OrcamentoForm({
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loadingProdutos, setLoadingProdutos] = useState(false)
 
+  // Atualizar formulário quando orçamento mudar (quando dados completos forem carregados)
+  useEffect(() => {
+    if (orcamento) {
+      setFormData({
+        cliente_id: orcamento.cliente_id || 0,
+        data_orcamento: orcamento.data_orcamento || new Date().toISOString().split('T')[0],
+        data_validade: orcamento.data_validade || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        valor_total: orcamento.valor_total || 0,
+        desconto: orcamento.desconto || 0,
+        observacoes: orcamento.observacoes || '',
+        status: orcamento.status || 'rascunho',
+        vendedor_id: orcamento.vendedor_id || undefined,
+        condicoes_pagamento: orcamento.condicoes_pagamento || '',
+        prazo_entrega: orcamento.prazo_entrega || '',
+        tipo_orcamento: orcamento.tipo_orcamento || 'servico',
+        itens: orcamento.itens || []
+      })
+      // Atualizar itens também
+      setItens(orcamento.itens || [])
+    }
+  }, [orcamento])
+
   // Carregar produtos quando tipo de orçamento mudar
   useEffect(() => {
     carregarProdutos()
@@ -1569,7 +2296,7 @@ function OrcamentoForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit}>
       {/* Dados Básicos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -1684,8 +2411,8 @@ function OrcamentoForm({
 
       {/* Itens do Orçamento */}
       <div>
-        <div className="flex justify-between items-center mb-4">
-          <Label>Itens do Orçamento</Label>
+        <div className="mb-4">
+          <Label className="mb-3 block">Itens do Orçamento</Label>
           <Button type="button" onClick={addItem} size="sm">
             <Plus className="w-4 h-4 mr-2" />
             Adicionar Item
@@ -1844,7 +2571,7 @@ function OrcamentoForm({
       </Card>
 
       {/* Botões */}
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-2 mt-6">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
                             </Button>

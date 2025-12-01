@@ -179,9 +179,14 @@ export const getFinancialData = async (): Promise<FinancialData> => {
 }
 
 // Vendas (com retry logic)
-export const getVendas = async (): Promise<Venda[]> => {
+export const getVendas = async (search?: string): Promise<Venda[]> => {
   return apiWithRetry(async () => {
-    const response = await api.get('/vendas')
+    const params = new URLSearchParams()
+    if (search && search.trim()) {
+      params.append('search', search.trim())
+    }
+    const url = params.toString() ? `/vendas?${params.toString()}` : '/vendas'
+    const response = await api.get(url)
     return response.data.data
   })
 }
