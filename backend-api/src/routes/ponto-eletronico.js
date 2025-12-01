@@ -1398,6 +1398,19 @@ router.post('/registros', async (req, res) => {
       });
     }
 
+    // Validar que a data não seja futura
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0); // Zerar horas para comparar apenas a data
+    const dataRegistro = new Date(data);
+    dataRegistro.setHours(0, 0, 0, 0);
+    
+    if (dataRegistro > hoje) {
+      return res.status(400).json({
+        success: false,
+        message: 'Não é possível registrar ponto para uma data futura. A data deve ser hoje ou uma data passada.'
+      });
+    }
+
     // Validar horários se fornecidos
     if (entrada && !validarHorario(entrada)) {
       return res.status(400).json({
@@ -2550,6 +2563,19 @@ router.post('/justificativas', async (req, res) => {
       });
     }
 
+    // Validar que a data não seja futura
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const dataRegistro = new Date(data);
+    dataRegistro.setHours(0, 0, 0, 0);
+    
+    if (dataRegistro > hoje) {
+      return res.status(400).json({
+        success: false,
+        message: 'Não é possível criar justificativa para uma data futura. A data deve ser hoje ou uma data passada.'
+      });
+    }
+
     const tiposValidos = ['Atraso', 'Falta', 'Saída Antecipada', 'Ausência Parcial'];
     if (!tiposValidos.includes(tipo)) {
       return res.status(400).json({
@@ -3441,8 +3467,20 @@ router.get('/relatorios/mensal', async (req, res) => {
       });
     }
 
-    const dataInicio = `${ano}-${mes.padStart(2, '0')}-01`;
-    const dataFim = `${ano}-${mes.padStart(2, '0')}-31`;
+    // Garantir que mes e ano são números
+    const mesNum = parseInt(mes);
+    const anoNum = parseInt(ano);
+    
+    if (isNaN(mesNum) || isNaN(anoNum) || mesNum < 1 || mesNum > 12) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês e ano devem ser números válidos'
+      });
+    }
+
+    const dataInicio = `${anoNum}-${String(mesNum).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(anoNum, mesNum, 0).getDate();
+    const dataFim = `${anoNum}-${String(mesNum).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
 
     let query = supabaseAdmin
       .from('registros_ponto')
@@ -3475,8 +3513,8 @@ router.get('/relatorios/mensal', async (req, res) => {
       success: true,
       data: {
         periodo: {
-          mes: parseInt(mes),
-          ano: parseInt(ano),
+          mes: mesNum,
+          ano: anoNum,
           data_inicio: dataInicio,
           data_fim: dataFim
         },

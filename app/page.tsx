@@ -31,25 +31,35 @@ function LoginPageContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState(null)
+  const [mounted, setMounted] = useState(false)
   const { showAuthError, showSuccess } = useEnhancedToast()
   const { empresa, getEnderecoCompleto, getContatoCompleto } = useEmpresa()
 
-  // Carregar email salvo ao montar o componente
+  // Marcar componente como montado (apenas no cliente)
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Carregar email salvo ao montar o componente (apenas no cliente)
+  useEffect(() => {
+    if (!mounted) return
+    
     const savedEmail = localStorage.getItem('remembered_email')
     if (savedEmail) {
       setEmail(savedEmail)
       setRememberEmail(true)
     }
-  }, [])
+  }, [mounted])
 
-  // Verificar se já está logado
+  // Verificar se já está logado (apenas no cliente)
   useEffect(() => {
+    if (!mounted) return
+    
     if (AuthService.isAuthenticated()) {
       // Se já tem token, redirecionar para dashboard
       window.location.href = '/dashboard'
     }
-  }, [])
+  }, [mounted])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -245,7 +255,7 @@ function LoginPageContent() {
             {empresa.horario_funcionamento && (
               <p className="text-xs text-gray-600">{empresa.horario_funcionamento}</p>
             )}
-            <p className="text-xs text-gray-500 mt-2">© {new Date().getFullYear()} - Todos os direitos reservados</p>
+            <p className="text-xs text-gray-500 mt-2">© {mounted ? new Date().getFullYear() : 2025} - Todos os direitos reservados</p>
           </div>
         </div>
       </footer>

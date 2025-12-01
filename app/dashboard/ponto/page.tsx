@@ -38,6 +38,7 @@ import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/c
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 import { ProtectedRoute } from "@/components/protected-route"
 import { WhatsAppTestButton } from "@/components/whatsapp-test-button"
+import { PontoTestButtons } from "@/components/ponto-test-buttons"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -78,10 +79,7 @@ export default function PontoPage() {
   
   // Estados para filtros e ordenação
   const [filtroFuncionario, setFiltroFuncionario] = useState("todos")
-  const [filtroDataInicio, setFiltroDataInicio] = useState("")
-  const [filtroDataFim, setFiltroDataFim] = useState("")
-  const [ordenacaoHorasExtras, setOrdenacaoHorasExtras] = useState("data") // Ordenar por data (mais recente primeiro)
-  const [filtroStatus, setFiltroStatus] = useState("todos")
+  const [filtroData, setFiltroData] = useState("")
   
   // Estados para aprovação de horas extras
   const [isAprovacaoOpen, setIsAprovacaoOpen] = useState(false)
@@ -132,6 +130,8 @@ export default function PontoPage() {
   // Estados para relatório mensal
   const [mesRelatorio, setMesRelatorio] = useState(new Date().getMonth() + 1)
   const [anoRelatorio, setAnoRelatorio] = useState(new Date().getFullYear())
+  const [dadosRelatorioMensal, setDadosRelatorioMensal] = useState<any>(null)
+  const [loadingRelatorioMensal, setLoadingRelatorioMensal] = useState(false)
 
   // Atualizar relógio a cada segundo (apenas no cliente)
   useEffect(() => {
@@ -159,6 +159,13 @@ export default function PontoPage() {
     }
   }, [dadosIniciaisCarregados])
 
+  // Resetar página quando termo de busca mudar
+  useEffect(() => {
+    if (dadosIniciaisCarregados && searchTerm !== undefined) {
+      setCurrentPage(1)
+    }
+  }, [searchTerm, dadosIniciaisCarregados])
+
   // Recarregar dados quando filtros ou paginação mudarem (com debounce)
   useEffect(() => {
     // Só recarregar se os dados iniciais já foram carregados
@@ -175,14 +182,12 @@ export default function PontoPage() {
     }, 300)
     
     return () => clearTimeout(timer)
-  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, currentPage, pageSize, dadosIniciaisCarregados])
+  }, [filtroFuncionario, filtroData, searchTerm, currentPage, pageSize, dadosIniciaisCarregados])
 
   // Debug dos registros e filtros (apenas uma vez após carregar)
   useEffect(() => {
     if (data.registrosPonto.length > 0) {
-      console.log('🔍 Debug após carregamento:')
-      console.log('  Total registros:', data.registrosPonto.length)
-      console.log('  Filtros:', { filtroFuncionario, filtroStatus, filtroDataInicio, filtroDataFim, searchTerm })
+      // Debug removido
     }
   }, [data.registrosPonto.length])
 
@@ -217,16 +222,6 @@ export default function PontoPage() {
       const registros = registrosResponse.data || []
       const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }
       
-      console.log('📊 Total de registros carregados:', registros.length)
-      console.log('📊 Paginação:', paginationData)
-      console.log('📅 Primeiros 5 registros:', registros.slice(0, 5).map(r => ({
-        id: r.id,
-        funcionario: r.funcionario?.nome,
-        data: r.data,
-        entrada: r.entrada,
-        status: r.status
-      })))
-      
       setData(prev => ({
         ...prev,
         funcionarios: funcionarios,
@@ -255,7 +250,6 @@ export default function PontoPage() {
 
   // Função para carregar dados com filtros aplicados
   const carregarDadosComFiltros = async () => {
-    console.log('🚀 carregarDadosComFiltros chamada!')
     try {
       // Construir parâmetros de filtro
       const filtros: any = {
@@ -268,36 +262,20 @@ export default function PontoPage() {
         filtros.funcionario_id = filtroFuncionario
       }
       
-      if (filtroDataInicio) {
-        filtros.data_inicio = filtroDataInicio
-      }
-      
-      if (filtroDataFim) {
-        filtros.data_fim = filtroDataFim
-      }
-      
-      if (filtroStatus !== "todos") {
-        filtros.status = filtroStatus
+      if (filtroData) {
+        filtros.data = filtroData
       }
 
-      console.log('🔍 Aplicando filtros:', filtros)
+      // Adicionar busca textual se houver termo de pesquisa
+      if (searchTerm && searchTerm.trim()) {
+        filtros.search = searchTerm.trim()
+      }
 
       // Carregar registros com filtros
-      console.log('📡 Chamando API...')
       const registrosResponse = await apiRegistrosPonto.listar({
         ...filtros,
         recalcular: false, // ✨ Não recalcular em filtros para melhor performance
-        // 🆕 NOVOS FILTROS DISPONÍVEIS:
-        // search: 'termo de busca', // Busca textual em nome, data, status, observações
-        // order_by: 'horas_extras', // Ordenar por: data, funcionario, horas_trabalhadas, horas_extras, status, created_at
-        // order_direction: 'desc', // Direção: asc ou desc
-        // obra_id: 123, // Filtrar por obra
-        // cargo: 'Operador', // Filtrar por cargo
-        // turno: 'Manhã', // Filtrar por turno
-        // horas_extras_min: 2, // Mínimo de horas extras
-        // horas_extras_max: 8, // Máximo de horas extras
       })
-      console.log('📡 Resposta da API:', registrosResponse)
       
       // Notificar se houve recalculação
       if (registrosResponse.recalculated) {
@@ -309,10 +287,6 @@ export default function PontoPage() {
       
       const registros = registrosResponse.data || []
       const paginationData = registrosResponse.pagination || { page: 1, limit: pageSize, total: registros.length, pages: 1 }
-      
-      console.log('📊 Registros filtrados:', registros.length)
-      console.log('📊 Paginação filtrada:', paginationData)
-      console.log('📊 Primeiros registros filtrados:', registros.slice(0, 3))
 
       // Atualizar apenas os registros e paginação, mantendo outros dados
       setData(prev => ({
@@ -321,9 +295,6 @@ export default function PontoPage() {
       }))
       
       setPagination(paginationData)
-
-      // Debug: verificar se os dados foram atualizados
-      console.log('📊 Estado atualizado - registrosPonto.length:', registros.length)
     } catch (error) {
       console.error('Erro ao carregar dados com filtros:', error)
       toast({
@@ -337,10 +308,7 @@ export default function PontoPage() {
   // Função para limpar todos os filtros
   const limparFiltros = () => {
     setFiltroFuncionario("todos")
-    setFiltroDataInicio("")
-    setFiltroDataFim("")
-    setFiltroStatus("todos")
-    setOrdenacaoHorasExtras("data")
+    setFiltroData("")
     setSearchTerm("")
     
     // Recarregar dados sem filtros
@@ -468,7 +436,6 @@ export default function PontoPage() {
     setLoadingHorasExtras(true)
     try {
       const params: any = {
-        ordenacao: ordenacaoHorasExtras,
         page: 1,
         limit: 100
       }
@@ -476,14 +443,8 @@ export default function PontoPage() {
       if (filtroFuncionario !== 'todos') {
         params.funcionario_id = filtroFuncionario
       }
-      if (filtroDataInicio) {
-        params.data_inicio = filtroDataInicio
-      }
-      if (filtroDataFim) {
-        params.data_fim = filtroDataFim
-      }
-      if (filtroStatus !== 'todos') {
-        params.status = filtroStatus
+      if (filtroData) {
+        params.data = filtroData
       }
 
       // Buscar registros com os filtros aplicados
@@ -599,12 +560,15 @@ export default function PontoPage() {
 
   const carregarRelatorioMensal = async () => {
     try {
-      // Filtrar registros pelo mês e ano selecionados
-      const dataInicio = new Date(anoRelatorio, mesRelatorio - 1, 1)
-      const dataFim = new Date(anoRelatorio, mesRelatorio, 0)
+      setLoadingRelatorioMensal(true)
       
-      // Recarregar dados com filtro de data
-      await carregarDadosComFiltros()
+      // Buscar relatório mensal da API
+      const relatorio = await apiRelatorios.mensal({
+        mes: mesRelatorio,
+        ano: anoRelatorio
+      })
+      
+      setDadosRelatorioMensal(relatorio)
       
       toast({
         title: "Relatório Atualizado",
@@ -618,6 +582,8 @@ export default function PontoPage() {
         description: "Não foi possível carregar o relatório mensal",
         variant: "destructive"
       })
+    } finally {
+      setLoadingRelatorioMensal(false)
     }
   }
 
@@ -628,9 +594,8 @@ export default function PontoPage() {
   // Exportar relatório
   const exportarRelatorio = async (tipo: 'csv' | 'json' | 'pdf') => {
     try {
-      const hoje = new Date()
-      const mes = hoje.getMonth() + 1
-      const ano = hoje.getFullYear()
+      const mes = mesRelatorio
+      const ano = anoRelatorio
 
       if (tipo === 'pdf') {
         // Para PDF, fazer requisição direta para baixar o arquivo
@@ -690,6 +655,20 @@ export default function PontoPage() {
     }
   }
 
+  // Carregar horas extras quando os dados iniciais forem carregados
+  useEffect(() => {
+    if (dadosIniciaisCarregados && !loadingRef.current) {
+      carregarHorasExtras()
+    }
+  }, [dadosIniciaisCarregados])
+
+  // Carregar relatório mensal automaticamente quando os dados iniciais forem carregados
+  useEffect(() => {
+    if (dadosIniciaisCarregados && !loadingRelatorioMensal) {
+      carregarRelatorioMensal()
+    }
+  }, [dadosIniciaisCarregados])
+
   // useEffect para carregar horas extras quando filtros mudarem (com debounce)
   useEffect(() => {
     // Só carregar se os dados iniciais já foram carregados
@@ -703,89 +682,15 @@ export default function PontoPage() {
     }, 400)
     
     return () => clearTimeout(timer)
-  }, [filtroFuncionario, filtroDataInicio, filtroDataFim, filtroStatus, ordenacaoHorasExtras, dadosIniciaisCarregados])
+  }, [filtroFuncionario, filtroData, dadosIniciaisCarregados])
 
-
-  // Debug: mostrar total de registros antes do filtro
-  console.log('🔍 Total de registros antes do filtro:', data.registrosPonto.length)
-  console.log('🔍 Filtros aplicados:', {
-    searchTerm,
-    filtroFuncionario,
-    filtroDataInicio,
-    filtroDataFim,
-    filtroStatus
-  })
-
+  // Os dados já vêm filtrados da API, então não precisamos filtrar novamente
   const filteredRegistros = data.registrosPonto
-    .filter((registro) => {
-      // Filtro por termo de busca
-      const matchesSearch = 
-        (registro.funcionario?.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        registro.data.includes(searchTerm) ||
-        (registro.status || '').toLowerCase().includes(searchTerm.toLowerCase())
-      
-      // Filtro por funcionário
-      const matchesFuncionario = 
-        filtroFuncionario === "todos" || 
-        registro.funcionario_id === parseInt(filtroFuncionario)
-      
-      // Filtro por data
-      const registroData = new Date(registro.data)
-      const dataInicio = filtroDataInicio ? new Date(filtroDataInicio) : null
-      const dataFim = filtroDataFim ? new Date(filtroDataFim) : null
-      
-      const matchesData = 
-        (!dataInicio || registroData >= dataInicio) &&
-        (!dataFim || registroData <= dataFim)
-      
-      // Filtro por status
-      const matchesStatus = 
-        filtroStatus === "todos" || 
-        (registro.status || '') === filtroStatus
-      
-      // Debug: log para entender por que está filtrando
-      if (registro.funcionario_id === 100) {
-        console.log('🔍 Debug filtro para funcionário 100:', {
-          registro: {
-            id: registro.id,
-            funcionario_id: registro.funcionario_id,
-            data: registro.data,
-            status: registro.status
-          },
-          filtros: {
-            searchTerm,
-            filtroFuncionario,
-            filtroDataInicio,
-            filtroDataFim,
-            filtroStatus
-          },
-          matches: {
-            matchesSearch,
-            matchesFuncionario,
-            matchesData,
-            matchesStatus
-          },
-          final: matchesSearch && matchesFuncionario && matchesData && matchesStatus
-        })
-      }
-      
-      return matchesSearch && matchesFuncionario && matchesData && matchesStatus
-    })
-
-  // Debug: mostrar total de registros após o filtro
-  console.log('🔍 Total de registros após o filtro:', filteredRegistros.length)
 
   const sortedRegistros = filteredRegistros
     .sort((a, b) => {
-      // Ordenação por horas extras
-      if (ordenacaoHorasExtras === "maior") {
-        return (b.horas_extras || 0) - (a.horas_extras || 0)
-      } else if (ordenacaoHorasExtras === "menor") {
-        return (a.horas_extras || 0) - (b.horas_extras || 0)
-      } else {
-        // Ordenação por data (mais recente primeiro)
-        return new Date(b.data).getTime() - new Date(a.data).getTime()
-      }
+      // Ordenação por data (mais recente primeiro)
+      return new Date(b.data).getTime() - new Date(a.data).getTime()
     })
 
   const getStatusBadge = (status: string) => {
@@ -1201,11 +1106,6 @@ export default function PontoPage() {
     try {
       // Simular envio para aprovação
       // Em produção, isso chamaria a API real
-      console.log('Enviando para aprovação:', {
-        registroId: registroParaAprovacao.id,
-        gestorId,
-        observacoes
-      })
 
       // Atualizar status do registro
       await apiRegistrosPonto.atualizar(registroParaAprovacao.id || '', {
@@ -1389,6 +1289,11 @@ export default function PontoPage() {
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar" showAccessDenied={true}>
       <div className="space-y-6">
+        {/* Botões de Teste - Apenas em desenvolvimento */}
+        {process.env.NODE_ENV === 'development' && (
+          <PontoTestButtons />
+        )}
+        
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Ponto Eletrônico</h1>
@@ -1858,7 +1763,7 @@ export default function PontoPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="registros" className="space-y-6">
+      <Tabs defaultValue="registros">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="registros">Registros de Ponto</TabsTrigger>
           <TabsTrigger value="horas-extras">Controle de Horas Extras</TabsTrigger>
@@ -1888,9 +1793,9 @@ export default function PontoPage() {
                 </div>
 
                 {/* Filtros avançados */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="flex items-end gap-4">
                   {/* Filtro por funcionário */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 flex-1">
                     <Label htmlFor="filtro-funcionario">Funcionário</Label>
                     <Select
                       value={filtroFuncionario}
@@ -1910,72 +1815,18 @@ export default function PontoPage() {
                     </Select>
                   </div>
 
-                  {/* Filtro por data início */}
-                  <div className="space-y-2">
-                    <Label htmlFor="filtro-data-inicio">Data Início</Label>
+                  {/* Filtro por data */}
+                  <div className="space-y-2 flex-1">
+                    <Label htmlFor="filtro-data">Data</Label>
                     <Input
-                      id="filtro-data-inicio"
+                      id="filtro-data"
                       type="date"
-                      value={filtroDataInicio}
-                      onChange={(e) => setFiltroDataInicio(e.target.value)}
+                      value={filtroData}
+                      onChange={(e) => setFiltroData(e.target.value)}
                     />
                   </div>
 
-                  {/* Filtro por data fim */}
-                  <div className="space-y-2">
-                    <Label htmlFor="filtro-data-fim">Data Fim</Label>
-                    <Input
-                      id="filtro-data-fim"
-                      type="date"
-                      value={filtroDataFim}
-                      onChange={(e) => setFiltroDataFim(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Filtro por status */}
-                  <div className="space-y-2">
-                    <Label htmlFor="filtro-status">Status</Label>
-                    <Select
-                      value={filtroStatus}
-                      onValueChange={setFiltroStatus}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todos os status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todos">Todos os status</SelectItem>
-                        <SelectItem value="Completo">Completo</SelectItem>
-                        <SelectItem value="Em Andamento">Aberto</SelectItem>
-                        <SelectItem value="Atraso">Atraso</SelectItem>
-                        <SelectItem value="Falta">Falta</SelectItem>
-                        <SelectItem value="Pendente Aprovação">Pendente Aprovação</SelectItem>
-                        <SelectItem value="Aprovado">Aprovado</SelectItem>
-                        <SelectItem value="Rejeitado">Rejeitado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Ordenação por horas extras */}
-                  <div className="space-y-2">
-                    <Label htmlFor="ordenacao-horas">Ordenar por Horas Extras</Label>
-                    <Select
-                      value={ordenacaoHorasExtras}
-                      onValueChange={setOrdenacaoHorasExtras}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Ordenar" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="data">Mais Recente</SelectItem>
-                        <SelectItem value="maior">Maior Número de Horas Extras</SelectItem>
-                        <SelectItem value="menor">Menor Número de Horas Extras</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Botão para limpar filtros */}
-                <div className="flex justify-end">
+                  {/* Botão para limpar filtros */}
                   <Button
                     variant="outline"
                     onClick={limparFiltros}
@@ -1994,11 +1845,8 @@ export default function PontoPage() {
                   </div>
                   <div className="text-sm text-gray-500">
                     {filtroFuncionario !== "todos" && `Funcionário: ${filtroFuncionario}`}
-                    {filtroDataInicio && ` | Período: ${filtroDataInicio} até ${filtroDataFim || "hoje"}`}
-                    {filtroStatus !== "todos" && ` | Status: ${filtroStatus}`}
-                    {ordenacaoHorasExtras === "maior" && " | Ordenado: Maior horas extras"}
-                    {ordenacaoHorasExtras === "menor" && " | Ordenado: Menor horas extras"}
-                    {ordenacaoHorasExtras === "data" && " | Ordenado: Mais recente"}
+                    {filtroData && ` | Data: ${filtroData}`}
+                    {(!filtroFuncionario || filtroFuncionario === "todos") && !filtroData && " | Ordenado: Mais recente"}
                   </div>
                 </div>
               </div>
@@ -2192,7 +2040,7 @@ export default function PontoPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
+              <div >
                 {/* Estatísticas de Horas Extras */}
                 {estatisticasHorasExtras && (
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2250,23 +2098,6 @@ export default function PontoPage() {
                     </Card>
                   </div>
                 )}
-
-                {/* Filtros */}
-                <div className="flex gap-4">
-                  <Select value={ordenacaoHorasExtras} onValueChange={setOrdenacaoHorasExtras}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Ordenar por" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="data">Data (mais recente)</SelectItem>
-                      <SelectItem value="maior">Maior horas extras</SelectItem>
-                      <SelectItem value="menor">Menor horas extras</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={carregarHorasExtras} variant="outline" size="sm">
-                    Atualizar
-                  </Button>
-                </div>
 
                 {/* Tabela de Horas Extras */}
                 {loadingHorasExtras ? (
@@ -2378,7 +2209,7 @@ export default function PontoPage() {
                                               title: "Sucesso",
                                               description: resultado.message || "Notificação enviada com sucesso!",
                                             })
-                                            carregarHorasExtras()
+                                            // Não recarregar para manter o item na tabela
                                           } else {
                                             throw new Error(resultado.message || 'Erro ao enviar notificação')
                                           }
@@ -2506,26 +2337,7 @@ export default function PontoPage() {
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
-                                {just.status === 'Pendente' && (
-                                  <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8"
-                                      onClick={() => handleAprovarJustificativa(String(just.id || ''))}
-                                    >
-                                      <Check className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8"
-                                      onClick={() => handleRejeitarJustificativa(String(just.id || ''))}
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </Button>
-                                  </div>
-                                )}
+                                {/* Justificativa já é a validação, não precisa de aprovação */}
                               </TableCell>
                             </TableRow>
                             
@@ -2589,27 +2401,6 @@ export default function PontoPage() {
                                       </div>
                                     )}
 
-                                    {/* Ações (apenas para pendentes) */}
-                                    {just.status === 'Pendente' && (
-                                      <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
-                                        <Button
-                                          size="sm"
-                                          variant="default"
-                                          onClick={() => handleAprovarJustificativa(String(just.id || ''))}
-                                        >
-                                          <Check className="w-4 h-4 mr-2" />
-                                          Aprovar
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="destructive"
-                                          onClick={() => handleRejeitarJustificativa(String(just.id || ''))}
-                                        >
-                                          <X className="w-4 h-4 mr-2" />
-                                          Rejeitar
-                                        </Button>
-                                      </div>
-                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -2652,10 +2443,6 @@ export default function PontoPage() {
                   <Button onClick={() => exportarRelatorio('csv')} variant="outline" size="sm">
                     <FileText className="w-4 h-4 mr-2" />
                     Exportar CSV
-                  </Button>
-                  <Button onClick={() => exportarRelatorio('json')} variant="outline" size="sm">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Exportar JSON
                   </Button>
                 </div>
               </div>
@@ -2703,72 +2490,132 @@ export default function PontoPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead className="text-center">Horas Trabalhadas</TableHead>
-                      <TableHead className="text-center">Dias Presentes</TableHead>
-                      <TableHead className="text-center">Atrasos</TableHead>
-                      <TableHead className="text-center">Faltas</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.funcionarios.map((func) => {
-                      const registrosFuncionario = data.registrosPonto.filter(r => r.funcionario_id === func.id)
-                      const totalHoras = registrosFuncionario.reduce((total, r) => total + (r.horas_trabalhadas || 0), 0)
-                      const diasPresentes = registrosFuncionario.filter(r => (r.status || '') !== 'Falta').length
-                      const atrasos = registrosFuncionario.filter(r => (r.status || '') === 'Atraso').length
-                      const faltas = registrosFuncionario.filter(r => (r.status || '') === 'Falta').length
-                      
-                      // Determinar status geral
-                      let status = "Regular"
-                      let statusColor = "bg-green-100 text-green-800"
-                      
-                      if (faltas > 3) {
-                        status = "Irregular"
-                        statusColor = "bg-red-100 text-red-800"
-                      } else if (atrasos > 5) {
-                        status = "Atenção"
-                        statusColor = "bg-yellow-100 text-yellow-800"
-                      }
-                      
-                      return (
-                        <TableRow key={func.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                <User className="w-4 h-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <p className="font-medium">{func.nome}</p>
-                                <p className="text-sm text-gray-500">{func.cargo || 'Sem cargo'}</p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className="font-medium">{(totalHoras || 0).toFixed(1)}h</span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className="font-medium">{diasPresentes} dias</span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className="font-medium text-yellow-600">{atrasos}</span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className="font-medium text-red-600">{faltas}</span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge className={statusColor}>
-                              {status}
-                            </Badge>
-                          </TableCell>
+                {loadingRelatorioMensal ? (
+                  <div className="flex items-center justify-center h-64">
+                    <Loading />
+                  </div>
+                ) : dadosRelatorioMensal ? (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Funcionário</TableHead>
+                          <TableHead className="text-center">Horas Trabalhadas</TableHead>
+                          <TableHead className="text-center">Dias Presentes</TableHead>
+                          <TableHead className="text-center">Atrasos</TableHead>
+                          <TableHead className="text-center">Faltas</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
                         </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {dadosRelatorioMensal.resumo?.funcionarios?.map((resumoFunc: any) => {
+                          const funcionario = data.funcionarios.find(f => f.id === resumoFunc.funcionario_id)
+                          if (!funcionario) return null
+                          
+                          // Determinar status geral
+                          let status = "Regular"
+                          let statusColor = "bg-green-100 text-green-800"
+                          
+                          if (resumoFunc.faltas > 3) {
+                            status = "Irregular"
+                            statusColor = "bg-red-100 text-red-800"
+                          } else if (resumoFunc.atrasos > 5) {
+                            status = "Atenção"
+                            statusColor = "bg-yellow-100 text-yellow-800"
+                          }
+                          
+                          return (
+                            <TableRow key={funcionario.id}>
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <User className="w-4 h-4 text-blue-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">{funcionario.nome}</p>
+                                    <p className="text-sm text-gray-500">{funcionario.cargo || 'Sem cargo'}</p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium">{(resumoFunc.horas_trabalhadas || 0).toFixed(1)}h</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium">{resumoFunc.dias_presentes || 0} dias</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium text-yellow-600">{resumoFunc.atrasos || 0}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium text-red-600">{resumoFunc.faltas || 0}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge className={statusColor}>
+                                  {status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        }) || data.funcionarios.map((func) => {
+                          const registrosFuncionario = (dadosRelatorioMensal.registros || []).filter((r: any) => r.funcionario_id === func.id)
+                          const totalHoras = registrosFuncionario.reduce((total: number, r: any) => total + (r.horas_trabalhadas || 0), 0)
+                          const diasPresentes = registrosFuncionario.filter((r: any) => (r.status || '') !== 'Falta').length
+                          const atrasos = registrosFuncionario.filter((r: any) => (r.status || '') === 'Atraso').length
+                          const faltas = registrosFuncionario.filter((r: any) => (r.status || '') === 'Falta').length
+                          
+                          // Determinar status geral
+                          let status = "Regular"
+                          let statusColor = "bg-green-100 text-green-800"
+                          
+                          if (faltas > 3) {
+                            status = "Irregular"
+                            statusColor = "bg-red-100 text-red-800"
+                          } else if (atrasos > 5) {
+                            status = "Atenção"
+                            statusColor = "bg-yellow-100 text-yellow-800"
+                          }
+                          
+                          return (
+                            <TableRow key={func.id}>
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <User className="w-4 h-4 text-blue-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">{func.nome}</p>
+                                    <p className="text-sm text-gray-500">{func.cargo || 'Sem cargo'}</p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium">{(totalHoras || 0).toFixed(1)}h</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium">{diasPresentes} dias</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium text-yellow-600">{atrasos}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-medium text-red-600">{faltas}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge className={statusColor}>
+                                  {status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    Selecione um mês e ano e clique em "Atualizar" para carregar o relatório
+                  </div>
+                )}
                 
                 {/* Resumo Geral */}
                 <div className="mt-6 p-4 bg-gray-50 rounded-lg">

@@ -57,7 +57,7 @@ export function AdvancedPagination({
   const visiblePages = getVisiblePages()
 
   return (
-    <div className={`bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm ${className}`}>
+    <div className={`bg-card text-card-foreground flex flex-col gap-6 rounded-xl py-6 shadow-sm my-[10px] ${className}`}>
       <div className="p-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           {/* Informações e seletor de itens por página */}

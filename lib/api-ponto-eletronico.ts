@@ -511,6 +511,15 @@ export const apiRelatorios = {
     return response.data.data || response.data;
   },
 
+  async mensal(params: {
+    mes: number;
+    ano: number;
+    funcionario_id?: number | string;
+  }): Promise<any> {
+    const response = await api.get('ponto-eletronico/relatorios/mensal', { params });
+    return response.data.data || response.data;
+  },
+
   async mensalFuncionario(
     funcionario_id: number,
     params: {

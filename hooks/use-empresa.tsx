@@ -56,8 +56,10 @@ const EmpresaContext = createContext<EmpresaContextType | undefined>(undefined)
 export function EmpresaProvider({ children }: { children: ReactNode }) {
   const [empresa, setEmpresa] = useState<EmpresaData>(EMPRESA_DEFAULT)
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     loadEmpresa()
   }, [])
 
@@ -65,12 +67,14 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
     try {
       // Por enquanto, usar dados mockados
       // No futuro, buscar do backend
-      const stored = localStorage.getItem('empresa_data')
-      if (stored) {
-        setEmpresa(JSON.parse(stored))
-      } else {
-        setEmpresa(EMPRESA_DEFAULT)
-        localStorage.setItem('empresa_data', JSON.stringify(EMPRESA_DEFAULT))
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('empresa_data')
+        if (stored) {
+          setEmpresa(JSON.parse(stored))
+        } else {
+          setEmpresa(EMPRESA_DEFAULT)
+          localStorage.setItem('empresa_data', JSON.stringify(EMPRESA_DEFAULT))
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados da empresa:', error)
