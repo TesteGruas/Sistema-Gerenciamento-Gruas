@@ -392,12 +392,21 @@ export default function AssinaturaDocumentoPage() {
       
       // Abrir documento em nova aba
       window.open(download_url, '_blank')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao abrir documento:', error)
+      
+      // Verificar se é erro de arquivo não encontrado
+      const errorMessage = error?.response?.data?.message || error?.message || 'Erro desconhecido'
+      const isNotFound = error?.response?.status === 404 || 
+                        errorMessage?.toLowerCase().includes('não encontrado') ||
+                        errorMessage?.toLowerCase().includes('not found')
+      
       toast({
-        title: "Informação",
-        description: "Erro ao abrir documento",
-        variant: "default"
+        title: isNotFound ? "Arquivo não encontrado" : "Erro ao abrir documento",
+        description: isNotFound 
+          ? "O arquivo do documento não foi encontrado. Pode ter sido removido ou nunca foi enviado."
+          : errorMessage,
+        variant: isNotFound ? "destructive" : "default"
       })
     } finally {
       setIsLoading(false)

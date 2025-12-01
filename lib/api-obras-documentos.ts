@@ -167,8 +167,25 @@ export const obrasDocumentosApi = {
 
   // Download do arquivo
   async download(obraId: number, documentoId: number): Promise<{ download_url: string; nome_arquivo: string }> {
-    const response = await api.get(`/obras-documentos/${obraId}/documentos/${documentoId}/download`)
-    return response.data.data
+    try {
+      const response = await api.get(`/obras-documentos/${obraId}/documentos/${documentoId}/download`)
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Erro ao obter URL de download')
+      }
+      
+      return response.data.data
+    } catch (error: any) {
+      // Propagar o erro com informações adicionais
+      if (error.response) {
+        // Erro da API
+        const apiError = new Error(error.response.data?.message || error.response.data?.error || 'Erro ao obter URL de download')
+        ;(apiError as any).response = error.response
+        ;(apiError as any).status = error.response.status
+        throw apiError
+      }
+      throw error
+    }
   },
 
   // Obter URL de download direto

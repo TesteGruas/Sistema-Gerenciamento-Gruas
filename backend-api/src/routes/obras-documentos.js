@@ -1230,13 +1230,58 @@ router.get('/:obraId/documentos/:documentoId/download', authenticateToken, requi
       })
     }
 
-    // Gerar URL assinada para download
+    // Verificar se o caminho_arquivo existe
+    if (!documento.caminho_arquivo) {
+      console.error(`Documento ${documentoId} não possui caminho_arquivo`)
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo do documento não encontrado',
+        error: 'O documento não possui um arquivo associado'
+      })
+    }
+
+    // Verificar se o arquivo existe no storage antes de gerar a URL
+    const { data: fileList, error: listError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .list(documento.caminho_arquivo.split('/').slice(0, -1).join('/') || '', {
+        limit: 1000,
+        search: documento.caminho_arquivo.split('/').pop()
+      })
+
+    // Verificar se o arquivo existe diretamente
+    const fileName = documento.caminho_arquivo.split('/').pop()
+    const fileExists = fileList?.some(file => file.name === fileName)
+
+    if (!fileExists && listError) {
+      console.error(`Arquivo não encontrado no storage: ${documento.caminho_arquivo}`, listError)
+    }
+
+    // Tentar gerar URL assinada mesmo se não encontrou na listagem (pode ser problema de permissão)
     const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
       .from('arquivos-obras')
       .createSignedUrl(documento.caminho_arquivo, 3600) // 1 hora
 
     if (urlError) {
-      console.error('Erro ao gerar URL:', urlError)
+      console.error('Erro ao gerar URL:', {
+        error: urlError,
+        caminho_arquivo: documento.caminho_arquivo,
+        documentoId,
+        obraId
+      })
+      
+      // Verificar se é erro de arquivo não encontrado
+      if (urlError.statusCode === '404' || urlError.message?.includes('not found') || urlError.message?.includes('Object not found')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Arquivo não encontrado no storage',
+          error: 'O arquivo do documento não foi encontrado. Pode ter sido removido ou nunca foi enviado.',
+          details: {
+            caminho_arquivo: documento.caminho_arquivo,
+            documento_id: documentoId
+          }
+        })
+      }
+
       return res.status(500).json({
         success: false,
         message: 'Erro ao gerar link de download',

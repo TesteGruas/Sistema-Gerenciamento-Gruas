@@ -604,13 +604,41 @@ router.get('/documento/:id/download', authenticateToken, async (req, res) => {
       })
     }
 
+    // Verificar se o caminho_arquivo existe
+    if (!documento.caminho_arquivo) {
+      console.error(`Documento ${id} não possui caminho_arquivo`)
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo do documento não encontrado',
+        error: 'O documento não possui um arquivo associado'
+      })
+    }
+
     // Gerar URL assinada para download
     const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
       .from('arquivos-obras')
       .createSignedUrl(documento.caminho_arquivo, 3600) // 1 hora
 
     if (urlError) {
-      console.error('Erro ao gerar URL:', urlError)
+      console.error('Erro ao gerar URL:', {
+        error: urlError,
+        caminho_arquivo: documento.caminho_arquivo,
+        documentoId: id
+      })
+      
+      // Verificar se é erro de arquivo não encontrado
+      if (urlError.statusCode === '404' || urlError.message?.includes('not found') || urlError.message?.includes('Object not found')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Arquivo não encontrado no storage',
+          error: 'O arquivo do documento não foi encontrado. Pode ter sido removido ou nunca foi enviado.',
+          details: {
+            caminho_arquivo: documento.caminho_arquivo,
+            documento_id: id
+          }
+        })
+      }
+
       return res.status(500).json({
         success: false,
         message: 'Erro ao gerar link de download',
@@ -620,6 +648,16 @@ router.get('/documento/:id/download', authenticateToken, async (req, res) => {
 
     // Fazer download do arquivo e retornar como blob
     const fileResponse = await fetch(signedUrl.signedUrl)
+    
+    if (!fileResponse.ok) {
+      console.error(`Erro ao baixar arquivo: ${fileResponse.status} ${fileResponse.statusText}`)
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo não encontrado no storage',
+        error: 'O arquivo não pôde ser baixado'
+      })
+    }
+
     const fileBlob = await fileResponse.arrayBuffer()
 
     res.setHeader('Content-Type', 'application/pdf')
