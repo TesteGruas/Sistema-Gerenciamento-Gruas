@@ -81,41 +81,6 @@ export default function PWAHoleritesPage() {
     }
   }, [])
 
-  // Função para gerar holerites mockados
-  const gerarHoleritesMockados = (): Holerite[] => {
-    const hoje = new Date()
-    const holerites: Holerite[] = []
-    const currentUser = user || { id: 1 }
-    
-    // Gerar holerites para os últimos 12 meses
-    for (let i = 0; i < 12; i++) {
-      const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
-      const ano = data.getFullYear()
-      const mes = String(data.getMonth() + 1).padStart(2, '0')
-      const mesReferencia = `${ano}-${mes}`
-      
-      // Alguns holerites assinados (últimos 3 meses)
-      const estaAssinado = i < 3
-      // Alguns holerites recebidos (últimos 5 meses)
-      const estaRecebido = i < 5
-      
-      holerites.push({
-        id: `mock-${i + 1}`,
-        funcionario_id: currentUser.id || 1,
-        mes_referencia: mesReferencia,
-        arquivo: `/uploads/holerites/holerite-${mesReferencia}.pdf`,
-        assinatura_digital: estaAssinado ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' : undefined,
-        assinado_por: estaAssinado ? (currentUser.id || 1) : undefined,
-        assinado_em: estaAssinado ? new Date(ano, parseInt(mes) - 1, 15).toISOString() : undefined,
-        recebido_em: estaRecebido ? new Date(ano, parseInt(mes) - 1, 5).toISOString() : undefined,
-        created_at: new Date(ano, parseInt(mes) - 1, 1).toISOString(),
-        updated_at: new Date(ano, parseInt(mes) - 1, 15).toISOString()
-      })
-    }
-    
-    return holerites
-  }
-
   const carregarHolerites = useCallback(async () => {
     setLoading(true)
     try {
@@ -131,30 +96,27 @@ export default function PWAHoleritesPage() {
             variant: "default"
           })
         } else {
-          // Se não houver cache, usar dados mockados
-          setHolerites(gerarHoleritesMockados())
+          setHolerites([])
+          toast({
+            title: "Sem conexão",
+            description: "Não há holerites em cache. Conecte-se à internet para carregar seus holerites.",
+            variant: "default"
+          })
         }
         
         return
       }
 
       if (!user?.id) {
-        // Se não houver usuário, usar dados mockados
-        await new Promise(resolve => setTimeout(resolve, 500))
-        setHolerites(gerarHoleritesMockados())
-        return
+        throw new Error('Usuário não identificado. Faça login novamente.')
       }
 
       const token = localStorage.getItem('access_token')
       if (!token) {
-        // Se não houver token, usar dados mockados
-        await new Promise(resolve => setTimeout(resolve, 500))
-        setHolerites(gerarHoleritesMockados())
-        return
+        throw new Error('Token de autenticação não encontrado. Faça login novamente.')
       }
 
-      try {
-        // Obter ID do funcionário com tratamento de erro melhorado
+      // Obter ID do funcionário
         let funcionarioId: number | null = null
         
         try {
@@ -164,22 +126,20 @@ export default function PWAHoleritesPage() {
             'ID do funcionário não encontrado'
           )
         } catch (funcionarioError: any) {
-          // Se der erro 403 ou qualquer erro ao buscar funcionário, usar dados mockados
-          console.warn('Erro ao buscar ID do funcionário, usando dados mockados:', funcionarioError)
-          setHolerites(gerarHoleritesMockados())
-          return
+        if (funcionarioError?.response?.status === 403 || funcionarioError?.status === 403) {
+          throw new Error('Você não tem permissão para acessar holerites')
         }
+        throw new Error(funcionarioError.message || 'Erro ao buscar ID do funcionário')
+      }
 
-        // Se não conseguiu obter o ID, usar dados mockados
         if (!funcionarioId) {
-          setHolerites(gerarHoleritesMockados())
-          return
+        throw new Error('ID do funcionário não encontrado')
         }
 
         // Buscar holerites
         const response = await colaboradoresDocumentosApi.holerites.listar(funcionarioId)
         
-        if (response.success && response.data && response.data.length > 0) {
+      if (response.success && response.data) {
           // Converter formato do backend para frontend
           const holeritesFormatados = response.data.map((h: any) => ({
             id: h.id,
@@ -198,19 +158,21 @@ export default function PWAHoleritesPage() {
           
           // Salvar no cache
           localStorage.setItem('cached_holerites', JSON.stringify(holeritesFormatados))
-        } else {
-          // Se não houver dados, usar mockados
-          setHolerites(gerarHoleritesMockados())
+        
+        if (holeritesFormatados.length === 0) {
+          toast({
+            title: "Nenhum holerite encontrado",
+            description: "Você ainda não possui holerites disponíveis.",
+            variant: "default"
+          })
         }
-      } catch (apiError: any) {
-        // Tratar erros 403 ou outros erros da API
-        if (apiError?.response?.status === 403 || apiError?.status === 403) {
-          console.warn('Acesso negado (403), usando dados mockados')
         } else {
-          console.warn('Erro ao buscar holerites da API, usando dados mockados:', apiError)
-        }
-        // Usar dados mockados em caso de erro na API
-        setHolerites(gerarHoleritesMockados())
+        setHolerites([])
+        toast({
+          title: "Nenhum holerite encontrado",
+          description: "Você ainda não possui holerites disponíveis.",
+          variant: "default"
+        })
       }
 
     } catch (error: any) {
@@ -223,16 +185,15 @@ export default function PWAHoleritesPage() {
         setHolerites(JSON.parse(cachedHolerites))
         toast({
           title: "Erro ao carregar holerites",
-          description: "Exibindo holerites em cache. Verifique sua conexão.",
+          description: error.message || "Exibindo holerites em cache. Verifique sua conexão.",
           variant: "destructive"
         })
       } else {
-        // Usar dados mockados como fallback
-        setHolerites(gerarHoleritesMockados())
+        setHolerites([])
         toast({
-          title: "Modo de Demonstração",
-          description: "Exibindo dados de exemplo. Conecte-se para carregar seus holerites reais.",
-          variant: "default"
+          title: "Erro ao carregar holerites",
+          description: error.message || "Não foi possível carregar seus holerites. Verifique sua conexão e tente novamente.",
+          variant: "destructive"
         })
       }
     } finally {
@@ -273,32 +234,6 @@ export default function PWAHoleritesPage() {
     }
 
     try {
-      // Verificar se é um holerite mockado
-      const isMock = holerite.id.startsWith('mock-')
-      
-      if (isMock) {
-        // Para dados mockados, apenas atualizar localmente
-        const holeritesAtualizados = holerites.map(h => 
-          h.id === holerite.id 
-            ? { 
-                ...h, 
-                assinatura_digital: assinaturaDataUrl,
-                assinado_por: user?.id || 1,
-                assinado_em: new Date().toISOString()
-              }
-            : h
-        )
-        setHolerites(holeritesAtualizados)
-        
-        // Salvar no cache
-        localStorage.setItem('cached_holerites', JSON.stringify(holeritesAtualizados))
-        
-        toast({
-          title: "Sucesso",
-          description: "Holerite assinado com sucesso (modo demonstração)"
-        })
-      } else {
-        // Para dados reais, chamar a API
         await colaboradoresDocumentosApi.holerites.assinar(holerite.id, {
           assinatura_digital: assinaturaDataUrl
         })
@@ -310,16 +245,27 @@ export default function PWAHoleritesPage() {
         
         // Recarregar holerites
         carregarHolerites()
-      }
 
       setIsAssinaturaDialogOpen(false)
       setAssinaturaDataUrl('')
       setHoleriteSelecionado(null)
     } catch (error: any) {
       console.error('Erro ao assinar holerite:', error)
+      
+      let errorMessage = "Erro ao assinar holerite"
+      if (error?.response?.status === 401 || error?.status === 401) {
+        errorMessage = "Sessão expirada. Faça login novamente."
+      } else if (error?.response?.status === 403 || error?.status === 403) {
+        errorMessage = "Você não tem permissão para assinar este holerite"
+      } else if (error?.response?.status >= 500 || error?.status >= 500) {
+        errorMessage = "Erro no servidor. Tente novamente mais tarde."
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
       toast({
         title: "Erro",
-        description: error.message || "Erro ao assinar holerite",
+        description: errorMessage,
         variant: "destructive"
       })
     }
@@ -327,18 +273,8 @@ export default function PWAHoleritesPage() {
 
   const handleDownload = async (holerite: Holerite) => {
     try {
-      // Verificar se é um holerite mockado
-      const isMock = holerite.id.startsWith('mock-')
-      
-      if (isMock) {
-        // Para dados mockados, apenas confirmar recebimento
-        await confirmarRecebimento(holerite)
-        toast({
-          title: "Modo Demonstração",
-          description: "Em produção, o arquivo PDF seria baixado. Recebimento confirmado.",
-          variant: "default"
-        })
-        return
+      if (!holerite.arquivo) {
+        throw new Error('Arquivo do holerite não disponível')
       }
       
       // Construir URL do arquivo
@@ -355,8 +291,8 @@ export default function PWAHoleritesPage() {
     } catch (error: any) {
       console.error('Erro ao baixar holerite:', error)
       toast({
-        title: "Erro",
-        description: error.message || "Erro ao baixar holerite",
+        title: "Erro ao baixar holerite",
+        description: error.message || "Não foi possível baixar o holerite",
         variant: "destructive"
       })
     }
@@ -368,16 +304,6 @@ export default function PWAHoleritesPage() {
     
     // Confirmar recebimento ao visualizar
     await confirmarRecebimento(holerite)
-    
-    // Se for mockado, mostrar aviso
-    const isMock = holerite.id.startsWith('mock-')
-    if (isMock) {
-      toast({
-        title: "Modo Demonstração",
-        description: "Em produção, o PDF do holerite seria exibido aqui.",
-        variant: "default"
-      })
-    }
   }
 
   const confirmarRecebimento = async (holerite: Holerite) => {
@@ -769,13 +695,24 @@ export default function PWAHoleritesPage() {
                   </div>
                 </div>
 
-                {holeriteSelecionado.id.startsWith('mock-') ? (
+                {holeriteSelecionado.arquivo ? (
+                  <div className="border rounded-lg p-4">
+                    <iframe
+                      src={holeriteSelecionado.arquivo.startsWith('http') 
+                        ? holeriteSelecionado.arquivo 
+                        : `${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}/uploads/${holeriteSelecionado.arquivo}`
+                      }
+                      className="w-full h-[600px] border-0"
+                      title="Visualização do Holerite"
+                    />
+                  </div>
+                ) : (
                   <div className="border rounded-lg p-8 bg-gray-50">
                     <div className="text-center">
                       <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Modo Demonstração</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Arquivo não disponível</h3>
                       <p className="text-sm text-gray-600 mb-4">
-                        Em produção, o PDF do holerite de {formatarMesReferencia(holeriteSelecionado.mes_referencia)} seria exibido aqui.
+                        O arquivo PDF do holerite de {formatarMesReferencia(holeriteSelecionado.mes_referencia)} não está disponível.
                       </p>
                       <div className="bg-white rounded-lg p-4 border border-gray-200">
                         <p className="text-xs text-gray-500 mb-2">Informações do Holerite:</p>
@@ -789,17 +726,6 @@ export default function PWAHoleritesPage() {
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="border rounded-lg p-4">
-                    <iframe
-                      src={holeriteSelecionado.arquivo.startsWith('http') 
-                        ? holeriteSelecionado.arquivo 
-                        : `${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}/uploads/${holeriteSelecionado.arquivo}`
-                      }
-                      className="w-full h-[600px] border-0"
-                      title="Visualização do Holerite"
-                    />
                   </div>
                 )}
 

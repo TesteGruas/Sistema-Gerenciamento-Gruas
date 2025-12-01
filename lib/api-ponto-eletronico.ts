@@ -297,9 +297,33 @@ export const apiJustificativas = {
     }
   },
 
-  async criar(payload: JustificativaPayload): Promise<Justificativa> {
-    const response = await api.post('ponto-eletronico/justificativas', payload);
-    return response.data.data || response.data;
+  async criar(payload: JustificativaPayload, arquivo?: File): Promise<Justificativa> {
+    const formData = new FormData();
+    formData.append('funcionario_id', payload.funcionario_id.toString());
+    formData.append('data', payload.data);
+    formData.append('tipo', payload.tipo);
+    formData.append('motivo', payload.motivo);
+    
+    if (arquivo) {
+      formData.append('anexo', arquivo);
+    }
+
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/ponto-eletronico/justificativas`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Erro ao criar justificativa' }));
+      throw new Error(errorData.message || 'Erro ao criar justificativa');
+    }
+
+    const data = await response.json();
+    return data.data || data;
   },
 
   async aprovar(id: string | number): Promise<Justificativa> {

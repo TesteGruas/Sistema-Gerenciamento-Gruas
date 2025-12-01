@@ -16,7 +16,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { FileText, Download, Mail, Loader2, User, Calendar, Clock, CheckCircle, AlertTriangle, XCircle, Search, X } from 'lucide-react'
+import { FileText, Download, Mail, Loader2, User, Calendar, Clock, CheckCircle, AlertTriangle, XCircle, Search, X, RefreshCw } from 'lucide-react'
 import { funcionariosApi } from '@/lib/api-funcionarios'
 
 interface Funcionario {
@@ -161,9 +161,15 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
     }
     try {
       setLoading(true)
+      setError(null)
       const token = localStorage.getItem('access_token')
       
-      const response = await fetch(
+      if (!token) {
+        throw new Error('Token de autenticação não encontrado. Faça login novamente.')
+      }
+      
+      // Tentar primeiro o endpoint específico de espelho-ponto
+      let response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}`,
         {
           headers: {
@@ -172,64 +178,84 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
         }
       )
 
-      if (!response.ok) {
-        // Fallback para dados mockados se API não estiver disponível
-        const mockData: EspelhoData = {
-          funcionario_id: funcionarioId,
-          funcionario_nome: "João Silva",
-          matricula: "001",
-          cargo: "Operador de Grua",
-          jornada_diaria: 8,
-          mes: mes.toString().padStart(2, '0'),
-          ano: ano,
-          registros: [
-            {
-              data: "2025-10-01",
-              entrada: "08:00",
-              saida_almoco: "12:00",
-              volta_almoco: "13:00",
-              saida: "17:00",
-              horas_trabalhadas: 8,
-              horas_extras: 0,
-              status: "completo"
-            },
-            {
-              data: "2025-10-02",
-              entrada: "08:00",
-              saida_almoco: "12:00",
-              volta_almoco: "13:00",
-              saida: "18:00",
-              horas_trabalhadas: 9,
-              horas_extras: 1,
-              status: "completo"
-            },
-            {
-              data: "2025-10-03",
-              entrada: "08:00",
-              saida_almoco: "12:00",
-              volta_almoco: "13:00",
-              saida: "17:00",
-              horas_trabalhadas: 8,
-              horas_extras: 0,
-              status: "completo"
+      // Se o endpoint não existir (404), tentar usar o relatório mensal
+      if (response.status === 404) {
+        response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/relatorios/mensal?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
             }
-          ],
-          total_dias_trabalhados: 3,
-          total_horas_trabalhadas: 25,
-          total_horas_extras: 1,
-          total_faltas: 0
+          }
+        )
+        
+        if (response.ok) {
+          const relatorioData = await response.json()
+          
+          if (relatorioData.success && relatorioData.data) {
+            // Transformar dados do relatório mensal no formato do espelho
+            const registros = relatorioData.data.registros || []
+            const resumo = relatorioData.data.resumo || {}
+            const funcionario = funcionarioSelecionado
+            
+            const espelhoFormatado: EspelhoData = {
+              funcionario_id: funcionarioSelecionado.id,
+              funcionario_nome: funcionario.nome || 'Funcionário',
+              matricula: funcionario.id.toString().padStart(3, '0'),
+              cargo: funcionario.cargo || 'Não informado',
+              jornada_diaria: 8, // Valor padrão, pode ser ajustado
+              mes: mes.toString().padStart(2, '0'),
+              ano: ano,
+              registros: registros.map((r: any) => ({
+                data: r.data,
+                entrada: r.entrada || undefined,
+                saida_almoco: r.saida_almoco || undefined,
+                volta_almoco: r.volta_almoco || undefined,
+                saida: r.saida || undefined,
+                horas_trabalhadas: r.horas_trabalhadas || 0,
+                horas_extras: r.horas_extras || 0,
+                status: r.status || 'completo'
+              })),
+              total_dias_trabalhados: resumo.total_dias_trabalhados || registros.length,
+              total_horas_trabalhadas: resumo.total_horas_trabalhadas || 0,
+              total_horas_extras: resumo.total_horas_extras || 0,
+              total_faltas: resumo.total_faltas || 0
+            }
+            
+            setEspelhoData(espelhoFormatado)
+            return
+          }
         }
-        setEspelhoData(mockData)
-        return
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Erro ao carregar espelho de ponto' }))
+        
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Você não tem permissão para acessar este espelho de ponto')
+        } else if (response.status === 404) {
+          throw new Error('Espelho de ponto não encontrado para o período selecionado')
+        } else if (response.status >= 500) {
+          throw new Error('Erro no servidor. Tente novamente mais tarde.')
+        } else {
+          throw new Error(errorData.message || `Erro ao carregar espelho de ponto (${response.status})`)
+        }
       }
 
       const data = await response.json()
+      
+      if (!data || !data.data) {
+        throw new Error('Dados do espelho de ponto não encontrados')
+      }
+      
       setEspelhoData(data.data)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao carregar espelho:', error)
+      const errorMessage = error.message || 'Não foi possível carregar o espelho de ponto'
+      setError(errorMessage)
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar o espelho de ponto",
+        title: "Erro ao carregar espelho",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {
@@ -247,12 +273,34 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       return
     }
 
+    if (!funcionarioSelecionado) {
+      toast({
+        title: "Funcionário obrigatório",
+        description: "Selecione um funcionário primeiro",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!espelhoData) {
+      toast({
+        title: "Dados não disponíveis",
+        description: "Carregue o espelho de ponto antes de baixar",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
       setLoading(true)
       const token = localStorage.getItem('access_token')
       
+      if (!token) {
+        throw new Error('Token de autenticação não encontrado. Faça login novamente.')
+      }
+      
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioId}&mes=${mes}&ano=${ano}&formato=pdf`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}&formato=pdf`,
         {
           method: 'POST',
           headers: {
@@ -267,9 +315,15 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       )
 
       if (!response.ok) {
-        // Fallback: gerar PDF local
-        await gerarPDFLocal()
-        return
+        const errorData = await response.json().catch(() => ({ message: 'Erro ao gerar PDF' }))
+        
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Você não tem permissão para baixar este espelho de ponto')
+        } else if (response.status >= 500) {
+          throw new Error('Erro no servidor ao gerar PDF. Tente novamente mais tarde.')
+        } else {
+          throw new Error(errorData.message || `Erro ao gerar PDF (${response.status})`)
+        }
       }
 
       const blob = await response.blob()
@@ -286,11 +340,11 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
         title: "Sucesso!",
         description: "Espelho de ponto baixado com sucesso",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao baixar PDF:', error)
       toast({
-        title: "Erro",
-        description: "Não foi possível baixar o PDF",
+        title: "Erro ao baixar PDF",
+        description: error.message || "Não foi possível baixar o PDF",
         variant: "destructive"
       })
     } finally {
@@ -375,9 +429,22 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       return
     }
 
+    if (!funcionarioSelecionado) {
+      toast({
+        title: "Funcionário obrigatório",
+        description: "Selecione um funcionário primeiro",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
       setLoading(true)
       const token = localStorage.getItem('access_token')
+      
+      if (!token) {
+        throw new Error('Token de autenticação não encontrado. Faça login novamente.')
+      }
       
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto/enviar-email`,
@@ -388,7 +455,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            funcionario_id: funcionarioId,
+            funcionario_id: funcionarioSelecionado.id,
             mes: mes,
             ano: ano,
             assinatura_funcionario: assinaturaFuncionario,
@@ -398,23 +465,26 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       )
 
       if (!response.ok) {
-        toast({
-          title: "Erro",
-          description: "Não foi possível enviar por e-mail",
-          variant: "destructive"
-        })
-        return
+        const errorData = await response.json().catch(() => ({ message: 'Erro ao enviar e-mail' }))
+        
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Você não tem permissão para enviar este espelho de ponto')
+        } else if (response.status >= 500) {
+          throw new Error('Erro no servidor. Tente novamente mais tarde.')
+        } else {
+          throw new Error(errorData.message || `Erro ao enviar e-mail (${response.status})`)
+        }
       }
 
       toast({
         title: "E-mail enviado!",
         description: "Espelho de ponto enviado por e-mail com sucesso",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao enviar e-mail:', error)
       toast({
-        title: "Erro",
-        description: "Não foi possível enviar por e-mail",
+        title: "Erro ao enviar e-mail",
+        description: error.message || "Não foi possível enviar por e-mail",
         variant: "destructive"
       })
     } finally {
@@ -608,6 +678,18 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-8 h-8 animate-spin" />
             <span className="ml-2">Carregando espelho de ponto...</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-8 space-y-4">
+            <AlertTriangle className="w-12 h-12 text-red-500" />
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Erro ao carregar espelho</h3>
+              <p className="text-sm text-gray-600 mb-4">{error}</p>
+              <Button onClick={carregarEspelho} variant="outline">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Tentar novamente
+              </Button>
+            </div>
           </div>
         ) : espelhoData ? (
           <div className="space-y-6">

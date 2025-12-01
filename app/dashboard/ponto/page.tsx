@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,9 +17,15 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download } from "lucide-react"
+import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image, Upload, Eye } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
 import { AuthService } from "@/app/lib/auth"
 import { 
@@ -33,12 +39,14 @@ import {
   type RegistroPonto,
   type Justificativa
 } from "@/lib/api-ponto-eletronico"
-import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 import { ProtectedRoute } from "@/components/protected-route"
 import { WhatsAppTestButton } from "@/components/whatsapp-test-button"
 import { PontoTestButtons } from "@/components/ponto-test-buttons"
+import { FuncionarioSearch } from "@/components/funcionario-search"
+import { funcionariosApi } from "@/lib/api-funcionarios"
+import { JustificativaDialog } from "@/components/justificativa-dialog"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -70,12 +78,8 @@ export default function PontoPage() {
   const [data, setData] = useState(estadoInicial)
   const [searchTerm, setSearchTerm] = useState("")
   const [isJustificativaOpen, setIsJustificativaOpen] = useState(false)
-  const [justificativaData, setJustificativaData] = useState({
-    funcionario_id: "",
-    data: "",
-    tipo: "",
-    motivo: "",
-  })
+  const [justificativaDetalhes, setJustificativaDetalhes] = useState<Justificativa | null>(null)
+  const [isModalDetalhesOpen, setIsModalDetalhesOpen] = useState(false)
   
   // Estados para filtros e ordenação
   const [filtroFuncionario, setFiltroFuncionario] = useState("todos")
@@ -133,16 +137,69 @@ export default function PontoPage() {
   const [dadosRelatorioMensal, setDadosRelatorioMensal] = useState<any>(null)
   const [loadingRelatorioMensal, setLoadingRelatorioMensal] = useState(false)
 
+  // Estados para histórico de ponto
+  const [funcionarioHistorico, setFuncionarioHistorico] = useState<Funcionario | null>(null)
+  const [mesHistorico, setMesHistorico] = useState(new Date().getMonth() + 1)
+  const [anoHistorico, setAnoHistorico] = useState(new Date().getFullYear())
+  const [historicoRegistros, setHistoricoRegistros] = useState<RegistroPonto[]>([])
+  const [loadingHistorico, setLoadingHistorico] = useState(false)
+  const [todosFuncionarios, setTodosFuncionarios] = useState<any[]>([])
+  const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
+  const [searchFuncionario, setSearchFuncionario] = useState("")
+
+  // Carregar todos os funcionários para o select
+  useEffect(() => {
+    const carregarFuncionarios = async () => {
+      try {
+        setLoadingFuncionarios(true)
+        const response = await funcionariosApi.listarFuncionarios({
+          page: 1,
+          limit: 1000, // Carregar todos
+          status: 'Ativo'
+        })
+        
+        if (response.success && response.data) {
+          // Converter para o formato esperado
+          const funcionariosConvertidos = response.data.map((f: any) => ({
+            id: f.id.toString(),
+            name: f.nome,
+            nome: f.nome,
+            role: f.cargo,
+            cargo: f.cargo,
+            status: f.status,
+            telefone: f.telefone,
+            email: f.email
+          }))
+          setTodosFuncionarios(funcionariosConvertidos)
+        }
+      } catch (error) {
+        console.error('Erro ao carregar funcionários:', error)
+        toast({
+          title: "Erro",
+          description: "Não foi possível carregar a lista de funcionários",
+          variant: "destructive"
+        })
+      } finally {
+        setLoadingFuncionarios(false)
+      }
+    }
+    
+    carregarFuncionarios()
+  }, [toast])
+
   // Atualizar relógio a cada segundo (apenas no cliente)
   useEffect(() => {
     setIsClient(true)
     setCurrentTime(new Date())
     
+    // Só atualizar o relógio se não estiver em um modal (melhora performance)
     const timer = setInterval(() => {
-      setCurrentTime(new Date())
+      if (!isJustificativaOpen && !isModalDetalhesOpen && !isEditarOpen && !isAprovacaoOpen && !isModalAprovacaoOpen) {
+        setCurrentTime(new Date())
+      }
     }, 1000)
     return () => clearInterval(timer)
-  }, [])
+  }, [isJustificativaOpen, isModalDetalhesOpen, isEditarOpen, isAprovacaoOpen, isModalAprovacaoOpen])
 
   // Flag para controlar se já carregou dados iniciais
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
@@ -167,11 +224,17 @@ export default function PontoPage() {
   }, [searchTerm, dadosIniciaisCarregados])
 
   // Recarregar dados quando filtros ou paginação mudarem (com debounce)
+  // NÃO recarregar quando modais estiverem abertos para melhorar performance
   useEffect(() => {
     // Só recarregar se os dados iniciais já foram carregados
     if (!dadosIniciaisCarregados) return
     
-    // Debounce para evitar múltiplas chamadas rápidas
+    // Não recarregar se algum modal estiver aberto (melhora performance significativamente)
+    if (isJustificativaOpen || isModalDetalhesOpen || isEditarOpen || isAprovacaoOpen || isModalAprovacaoOpen) {
+      return
+    }
+    
+    // Debounce aumentado para reduzir chamadas
     const timer = setTimeout(() => {
       if (!loadingRef.current) {
         loadingRef.current = true
@@ -179,10 +242,10 @@ export default function PontoPage() {
           loadingRef.current = false
         })
       }
-    }, 300)
+    }, 500) // Aumentado de 300ms para 500ms
     
     return () => clearTimeout(timer)
-  }, [filtroFuncionario, filtroData, searchTerm, currentPage, pageSize, dadosIniciaisCarregados])
+  }, [filtroFuncionario, filtroData, searchTerm, currentPage, pageSize, dadosIniciaisCarregados, isJustificativaOpen, isModalDetalhesOpen, isEditarOpen, isAprovacaoOpen, isModalAprovacaoOpen])
 
   // Debug dos registros e filtros (apenas uma vez após carregar)
   useEffect(() => {
@@ -655,6 +718,292 @@ export default function PontoPage() {
     }
   }
 
+  // Carregar histórico de ponto do funcionário
+  const carregarHistorico = async () => {
+    if (!funcionarioHistorico) {
+      toast({
+        title: "Funcionário obrigatório",
+        description: "Selecione um funcionário para visualizar o histórico",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setLoadingHistorico(true)
+      
+      // Calcular datas do mês
+      const dataInicio = `${anoHistorico}-${String(mesHistorico).padStart(2, '0')}-01`
+      const ultimoDia = new Date(anoHistorico, mesHistorico, 0).getDate()
+      const dataFim = `${anoHistorico}-${String(mesHistorico).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`
+      
+      // Buscar registros do funcionário no período
+      // O ID pode vir como string do FuncionarioSearch, converter para número
+      const funcionarioId = typeof funcionarioHistorico.id === 'string' 
+        ? parseInt(funcionarioHistorico.id) 
+        : funcionarioHistorico.id
+      
+      const registros = await apiRegistrosPonto.listar({
+        funcionario_id: funcionarioId,
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        limit: 1000 // Buscar todos os registros do mês
+      })
+      
+      setHistoricoRegistros(registros.data || [])
+      
+      toast({
+        title: "Histórico carregado",
+        description: `${registros.data?.length || 0} registro(s) encontrado(s) para ${mesHistorico}/${anoHistorico}`,
+        variant: "default"
+      })
+    } catch (error) {
+      console.error('Erro ao carregar histórico:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar o histórico de ponto",
+        variant: "destructive"
+      })
+      setHistoricoRegistros([])
+    } finally {
+      setLoadingHistorico(false)
+    }
+  }
+
+  // Exportar histórico
+  const exportarHistorico = async (tipo: 'csv' | 'json' | 'pdf') => {
+    if (!funcionarioHistorico || historicoRegistros.length === 0) {
+      toast({
+        title: "Dados insuficientes",
+        description: "Selecione um funcionário e carregue o histórico antes de exportar",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const mes = mesHistorico
+      const ano = anoHistorico
+      
+      // Garantir que temos um nome válido para o arquivo
+      // O funcionário pode ter 'nome' ou 'name' dependendo da origem
+      let nomeFuncionario = 'funcionario'
+      const nome = funcionarioHistorico?.nome || (funcionarioHistorico as any)?.name
+      if (nome && typeof nome === 'string') {
+        nomeFuncionario = nome.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '_')
+      } else if (funcionarioHistorico?.id) {
+        nomeFuncionario = `funcionario_${funcionarioHistorico.id}`
+      }
+
+      if (tipo === 'csv') {
+        // Criar CSV manualmente
+        const headers = ['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas Trabalhadas', 'Horas Extras', 'Status']
+        const rows = historicoRegistros.map(r => [
+          utilsPonto.formatarData(r.data || ''),
+          r.entrada || '-',
+          r.saida_almoco || '-',
+          r.volta_almoco || '-',
+          r.saida || '-',
+          (r.horas_trabalhadas || 0).toFixed(2),
+          (r.horas_extras || 0).toFixed(2),
+          r.status || '-'
+        ])
+        
+        const csvContent = [
+          headers.join(','),
+          ...rows.map(row => row.join(','))
+        ].join('\n')
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `historico_ponto_${nomeFuncionario}_${mes}_${ano}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      } else if (tipo === 'json') {
+        const jsonContent = JSON.stringify(historicoRegistros, null, 2)
+        const blob = new Blob([jsonContent], { type: 'application/json' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `historico_ponto_${nomeFuncionario}_${mes}_${ano}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      } else if (tipo === 'pdf') {
+        // Gerar PDF localmente usando os dados já carregados
+        try {
+          const { jsPDF } = await import('jspdf')
+          const autoTable = (await import('jspdf-autotable')).default
+
+          const doc = new jsPDF('landscape', 'mm', 'a4')
+          
+          // Adicionar logos no cabeçalho se disponível
+          let yPos = 15
+          try {
+            const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+            yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+            yPos += 5
+          } catch {
+            // Se não houver logos, começar na posição padrão
+            yPos = 20
+          }
+          
+          // Título principal
+          doc.setFontSize(18)
+          doc.setFont('helvetica', 'bold')
+          doc.text('HISTÓRICO DE PONTO', doc.internal.pageSize.getWidth() / 2, yPos, { align: 'center' })
+          yPos += 10
+          
+          // Linha separadora
+          doc.setDrawColor(200, 200, 200)
+          doc.setLineWidth(0.5)
+          doc.line(14, yPos, doc.internal.pageSize.getWidth() - 14, yPos)
+          yPos += 8
+          
+          // Informações do funcionário e período
+          doc.setFontSize(11)
+          doc.setFont('helvetica', 'normal')
+          const nomeFunc = funcionarioHistorico?.nome || (funcionarioHistorico as any)?.name || 'Funcionário'
+          doc.text(`Funcionário: ${nomeFunc}`, 14, yPos)
+          yPos += 6
+          doc.text(`Período: ${mes}/${ano}`, 14, yPos)
+          yPos += 6
+          doc.text(`Total de registros: ${historicoRegistros.length}`, 14, yPos)
+          yPos += 10
+
+          // Calcular totais
+          const totalHoras = historicoRegistros.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0)
+          const totalExtras = historicoRegistros.reduce((sum, r) => sum + (r.horas_extras || 0), 0)
+          
+          // Função para formatar hora (remover segundos se presente)
+          const formatarHora = (hora: string | null | undefined) => {
+            if (!hora || hora === '-') return '-'
+            // Se tiver segundos (HH:MM:SS), remover
+            if (hora.length === 8) {
+              return hora.substring(0, 5)
+            }
+            return hora
+          }
+          
+          // Função para formatar status
+          const formatarStatus = (status: string | null | undefined) => {
+            if (!status) return '-'
+            const statusMap: { [key: string]: string } = {
+              'Completo': 'Completo',
+              'Pendente Aprovação': 'Pendente',
+              'Pendente': 'Pendente',
+              'Em Andamento': 'Em Andamento',
+              'Incompleto': 'Incompleto',
+              'Atraso': 'Atraso'
+            }
+            return statusMap[status] || status.substring(0, 15) // Limitar tamanho
+          }
+          
+          // Dados da tabela
+          const tableData = historicoRegistros.map(registro => [
+            utilsPonto.formatarData(registro.data || ''),
+            formatarHora(registro.entrada),
+            formatarHora(registro.saida_almoco),
+            formatarHora(registro.volta_almoco),
+            formatarHora(registro.saida),
+            `${(registro.horas_trabalhadas || 0).toFixed(2)}h`,
+            registro.horas_extras && registro.horas_extras > 0 
+              ? `+${(registro.horas_extras || 0).toFixed(2)}h` 
+              : '0.00h',
+            formatarStatus(registro.status)
+          ])
+
+          autoTable(doc, {
+            head: [['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras', 'Status']],
+            body: tableData,
+            startY: yPos,
+            styles: { 
+              fontSize: 9,
+              cellPadding: 3,
+              textColor: [0, 0, 0]
+            },
+            headStyles: { 
+              fillColor: [66, 139, 202],
+              textColor: [255, 255, 255],
+              fontStyle: 'bold',
+              fontSize: 9
+            },
+            alternateRowStyles: {
+              fillColor: [245, 245, 245]
+            },
+            columnStyles: {
+              0: { cellWidth: 28, halign: 'center' }, // Data
+              1: { cellWidth: 22, halign: 'center' }, // Entrada
+              2: { cellWidth: 22, halign: 'center' }, // Saída Almoço
+              3: { cellWidth: 22, halign: 'center' }, // Volta Almoço
+              4: { cellWidth: 22, halign: 'center' }, // Saída
+              5: { cellWidth: 20, halign: 'center' }, // Horas
+              6: { cellWidth: 20, halign: 'center' }, // Extras
+              7: { cellWidth: 30, halign: 'center' }  // Status
+            },
+            margin: { left: 14, right: 14 }
+          })
+
+          // Totalizadores
+          const finalY = (doc as any).lastAutoTable.finalY + 12
+          
+          // Linha separadora antes dos totais
+          doc.setDrawColor(200, 200, 200)
+          doc.setLineWidth(0.5)
+          doc.line(14, finalY - 4, doc.internal.pageSize.getWidth() - 14, finalY - 4)
+          
+          doc.setFontSize(11)
+          doc.setFont('helvetica', 'bold')
+          doc.text('RESUMO DO PERÍODO', 14, finalY)
+          
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(10)
+          doc.text(`Total de horas trabalhadas: ${totalHoras.toFixed(2)}h`, 14, finalY + 7)
+          doc.text(`Total de horas extras: ${totalExtras.toFixed(2)}h`, 14, finalY + 12)
+          
+          // Data de geração no rodapé
+          const dataGeracao = new Date().toLocaleString('pt-BR')
+          doc.setFontSize(8)
+          doc.setTextColor(128, 128, 128)
+          doc.text(`Gerado em: ${dataGeracao}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' })
+          
+          // Adicionar rodapé com informações da empresa se disponível
+          try {
+            const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
+            adicionarRodapeEmpresaFrontend(doc)
+          } catch {
+            // Se não houver função de rodapé, continuar
+          }
+
+          // Salvar PDF
+          doc.save(`historico_ponto_${nomeFuncionario}_${mes}_${ano}.pdf`)
+        } catch (error) {
+          console.error('Erro ao gerar PDF:', error)
+          throw new Error('Erro ao gerar PDF. Certifique-se de que os dados estão carregados.')
+        }
+      }
+
+      toast({
+        title: "Sucesso",
+        description: `Histórico exportado em ${tipo.toUpperCase()}`
+      })
+    } catch (error) {
+      console.error('Erro ao exportar histórico:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível exportar o histórico",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Removido: histórico só carrega quando o usuário clicar no botão "Carregar Histórico"
+
   // Carregar horas extras quando os dados iniciais forem carregados
   useEffect(() => {
     if (dadosIniciaisCarregados && !loadingRef.current) {
@@ -685,13 +1034,18 @@ export default function PontoPage() {
   }, [filtroFuncionario, filtroData, dadosIniciaisCarregados])
 
   // Os dados já vêm filtrados da API, então não precisamos filtrar novamente
-  const filteredRegistros = data.registrosPonto
+  // Memoizar para evitar recálculo a cada render
+  const filteredRegistros = useMemo(() => {
+    return data.registrosPonto
+  }, [data.registrosPonto])
 
-  const sortedRegistros = filteredRegistros
-    .sort((a, b) => {
-      // Ordenação por data (mais recente primeiro)
-      return new Date(b.data).getTime() - new Date(a.data).getTime()
-    })
+  const sortedRegistros = useMemo(() => {
+    return filteredRegistros
+      .sort((a, b) => {
+        // Ordenação por data (mais recente primeiro)
+        return new Date(b.data).getTime() - new Date(a.data).getTime()
+      })
+  }, [filteredRegistros])
 
   const getStatusBadge = (status: string) => {
     // Tratar "Em Andamento" como "Incompleto"
@@ -850,40 +1204,17 @@ export default function PontoPage() {
     }
   }
 
-  const handleJustificativa = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    try {
-      await apiJustificativas.criar({
-        funcionario_id: parseInt(justificativaData.funcionario_id),
-        data: justificativaData.data,
-        tipo: justificativaData.tipo,
-        motivo: justificativaData.motivo
-      })
-
-      toast({
-        title: "Informação",
-        description: "Justificativa enviada com sucesso!",
-        variant: "default"
-      })
-      setJustificativaData({
-        funcionario_id: "",
-        data: "",
-        tipo: "",
-        motivo: "",
-      })
-      setIsJustificativaOpen(false)
-      
-      // Recarregar dados
+  // Handler para quando a justificativa for criada com sucesso
+  const handleJustificativaSuccess = useCallback(() => {
+    // Recarregar dados após criar justificativa
+    setTimeout(() => {
       carregarDados()
-    } catch (error) {
-      console.error('Erro ao criar justificativa:', error)
-      toast({
-        title: "Informação",
-        description: "Erro ao enviar justificativa. Tente novamente.",
-        variant: "default"
-      })
-    }
+    }, 100)
+  }, [])
+
+  const abrirDetalhesJustificativa = (justificativa: Justificativa) => {
+    setJustificativaDetalhes(justificativa)
+    setIsModalDetalhesOpen(true)
   }
 
   const handleAprovarJustificativa = async (id: string) => {
@@ -1010,12 +1341,8 @@ export default function PontoPage() {
   }
 
   const abrirJustificativa = (registro: RegistroPonto) => {
-    setJustificativaData({
-      funcionario_id: registro.funcionario_id.toString(),
-      data: registro.data,
-      tipo: "Falta de Horas",
-      motivo: "",
-    })
+    // O estado do formulário agora está no componente JustificativaDialog
+    // Apenas abrir o modal - o componente filho gerencia seu próprio estado
     setIsJustificativaOpen(true)
   }
 
@@ -1259,32 +1586,44 @@ export default function PontoPage() {
     }
   }
 
-  const stats = [
-    {
-      title: "Funcionários Presentes",
-      value: data.registrosPonto.filter((r) => r.status === "Em Andamento" || r.status === "Completo").length,
-      icon: CheckCircle,
-      color: "bg-green-500",
-    },
-    {
-      title: "Atrasos Hoje",
-      value: data.registrosPonto.filter((r) => r.status === "Atraso").length,
-      icon: AlertCircle,
-      color: "bg-yellow-500",
-    },
-    {
-      title: "Horas Extras Pendentes",
-      value: data.registrosPonto.filter((r) => r.status === "Pendente Aprovação").length,
-      icon: Clock,
-      color: "bg-orange-500",
-    },
-    {
-      title: "Total Horas Extras",
-      value: data.registrosPonto.reduce((total, r) => total + (r.horas_extras || 0), 0),
-      icon: Clock,
-      color: "bg-purple-500",
-    },
-  ]
+  // Memoizar stats para evitar recálculo a cada render
+  const stats = useMemo(() => {
+    return [
+      {
+        title: "Funcionários Presentes",
+        value: data.registrosPonto.filter((r) => r.status === "Em Andamento" || r.status === "Completo").length,
+        icon: CheckCircle,
+        color: "bg-green-500",
+      },
+      {
+        title: "Atrasos Hoje",
+        value: data.registrosPonto.filter((r) => r.status === "Atraso").length,
+        icon: AlertCircle,
+        color: "bg-yellow-500",
+      },
+      {
+        title: "Horas Extras Pendentes",
+        value: data.registrosPonto.filter((r) => r.status === "Pendente Aprovação").length,
+        icon: Clock,
+        color: "bg-orange-500",
+      },
+      {
+        title: "Total Horas Extras",
+        value: data.registrosPonto.reduce((total, r) => total + (r.horas_extras || 0), 0),
+        icon: Clock,
+        color: "bg-purple-500",
+      },
+    ]
+  }, [data.registrosPonto])
+
+  // Mostrar loading enquanto os dados iniciais (especialmente funcionários) não foram carregados
+  if (!dadosIniciaisCarregados || data.loading || data.funcionarios.length === 0) {
+    return (
+      <ProtectedRoute permission="ponto_eletronico:visualizar" showAccessDenied={true}>
+        <PageLoading text="Carregando funcionários e dados iniciais..." />
+      </ProtectedRoute>
+    )
+  }
 
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar" showAccessDenied={true}>
@@ -1301,22 +1640,6 @@ export default function PontoPage() {
         </div>
         <div className="flex gap-2">
           <WhatsAppTestButton variant="outline" size="default" />
-          <ExportButton
-            dados={sortedRegistros}
-            tipo="ponto"
-            nomeArquivo="relatorio-ponto"
-            titulo="Relatório de Ponto Eletrônico"
-            onExport={async (formato) => {
-              if (formato === 'pdf') {
-                await exportarRelatorio('pdf')
-              } else if (formato === 'csv') {
-                await exportarRelatorio('csv')
-              } else {
-                // Excel/JSON
-                await exportarRelatorio('json')
-              }
-            }}
-          />
           <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 bg-transparent">
@@ -1324,83 +1647,13 @@ export default function PontoPage() {
                 Justificativa
               </Button>
             </DialogTrigger>
-            <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Registrar Justificativa</DialogTitle>
-              <DialogDescription>Registre justificativas para atrasos, faltas ou saídas antecipadas</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleJustificativa} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="funcionario">Funcionário</Label>
-                <Select
-                  value={justificativaData.funcionario_id}
-                  onValueChange={(value) => setJustificativaData({ ...justificativaData, funcionario_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um funcionário" />
-                  </SelectTrigger>
-                <SelectContent>
-                  {data.funcionarios.map((func) => (
-                    <SelectItem key={func.id} value={func.id.toString()}>
-                      {func.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="data">Data</Label>
-                  <Input
-                    id="data"
-                    type="date"
-                    value={justificativaData.data}
-                    onChange={(e) => setJustificativaData({ ...justificativaData, data: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tipo">Tipo</Label>
-                  <Select
-                    value={justificativaData.tipo}
-                    onValueChange={(value) => setJustificativaData({ ...justificativaData, tipo: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Atraso">Atraso</SelectItem>
-                      <SelectItem value="Falta">Falta</SelectItem>
-                      <SelectItem value="Saída Antecipada">Saída Antecipada</SelectItem>
-                      <SelectItem value="Ausência Parcial">Ausência Parcial</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="motivo">Motivo</Label>
-                <Textarea
-                  id="motivo"
-                  value={justificativaData.motivo}
-                  onChange={(e) => setJustificativaData({ ...justificativaData, motivo: e.target.value })}
-                  placeholder="Descreva o motivo da justificativa..."
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsJustificativaOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                  Registrar
-                </Button>
-              </div>
-            </form>
-            </DialogContent>
           </Dialog>
+          <JustificativaDialog
+            isOpen={isJustificativaOpen}
+            setIsOpen={setIsJustificativaOpen}
+            funcionarios={data.funcionarios}
+            onSuccess={handleJustificativaSuccess}
+          />
         </div>
       </div>
 
@@ -1573,202 +1826,171 @@ export default function PontoPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Registro de Ponto */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Registrar Ponto
-            </CardTitle>
-            <CardDescription>Registre entrada, saída e intervalos</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Relógio Digital */}
-            <div className="text-center">
-              <div className="text-4xl font-mono font-bold text-blue-600">
-                {isClient && currentTime ? currentTime.toTimeString().slice(0, 8) : '--:--:--'}
-              </div>
-              <div className="text-sm text-gray-500 mt-1">
-                {isClient && currentTime ? currentTime.toLocaleDateString("pt-BR", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                }) : 'Carregando...'}
-              </div>
+      {/* Registro de Ponto */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Registrar Ponto
+          </CardTitle>
+          <CardDescription>Registre entrada, saída e intervalos</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Relógio Digital */}
+          <div className="text-center">
+            <div className="text-4xl font-mono font-bold text-blue-600">
+              {isClient && currentTime ? currentTime.toTimeString().slice(0, 8) : '--:--:--'}
             </div>
+            <div className="text-sm text-gray-500 mt-1">
+              {isClient && currentTime ? currentTime.toLocaleDateString("pt-BR", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              }) : 'Carregando...'}
+            </div>
+          </div>
 
-            {/* Status do Registro Atual */}
+          {/* Status do Registro Atual */}
+          {(() => {
+            const status = getStatusRegistroAtual()
+            if (!status) return null
+
+            return (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">Status do Registro de Hoje</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${status.temEntrada ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    <span className={status.temEntrada ? 'text-green-700' : 'text-gray-500'}>
+                      Entrada: {status.temEntrada ? status.registro.entrada : 'Não registrada'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${status.temSaida ? 'bg-red-500' : 'bg-gray-300'}`}></div>
+                    <span className={status.temSaida ? 'text-red-700' : 'text-gray-500'}>
+                      Saída: {status.temSaida ? status.registro.saida : 'Não registrada'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${status.temSaidaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
+                    <span className={status.temSaidaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
+                      Saída Almoço: {status.temSaidaAlmoco ? status.registro.saida_almoco : 'Não registrada'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${status.temVoltaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
+                    <span className={status.temVoltaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
+                      Volta Almoço: {status.temVoltaAlmoco ? status.registro.volta_almoco : 'Não registrada'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Seleção de Funcionário */}
+          <div className="space-y-2">
+            <Label htmlFor="funcionario">Funcionário</Label>
+            <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um funcionário" />
+              </SelectTrigger>
+              <SelectContent>
+                {data.funcionarios.length > 0 ? (
+                  data.funcionarios.map((func) => (
+                    <SelectItem key={func.id} value={func.id.toString()}>
+                      {func.nome} - {func.cargo || 'Sem cargo'}
+                      {data.usuarioAtual?.id === func.id && ' (Você)'}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="px-2 py-1.5 text-sm text-gray-500">
+                    Nenhum funcionário disponível
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+            {selectedFuncionario && data.usuarioAtual?.id === parseInt(selectedFuncionario) && (
+              <p className="text-xs text-gray-500">Seu registro de ponto</p>
+            )}
+          </div>
+
+          {/* Botões de Registro */}
+          <div className="grid grid-cols-2 gap-3">
             {(() => {
               const status = getStatusRegistroAtual()
-              if (!status) return null
+              const podeEntrada = !status || (!status.temEntrada || status.temSaida)
+              const podeSaida = status && status.temEntrada && !status.temSaida
+              const podeSaidaAlmoco = status && status.temEntrada && !status.temSaidaAlmoco
+              const podeVoltaAlmoco = status && status.temSaidaAlmoco && !status.temVoltaAlmoco
 
               return (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">Status do Registro de Hoje</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${status.temEntrada ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temEntrada ? 'text-green-700' : 'text-gray-500'}>
-                        Entrada: {status.temEntrada ? status.registro.entrada : 'Não registrada'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${status.temSaida ? 'bg-red-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temSaida ? 'text-red-700' : 'text-gray-500'}>
-                        Saída: {status.temSaida ? status.registro.saida : 'Não registrada'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${status.temSaidaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temSaidaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
-                        Saída Almoço: {status.temSaidaAlmoco ? status.registro.saida_almoco : 'Não registrada'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${status.temVoltaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
-                      <span className={status.temVoltaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
-                        Volta Almoço: {status.temVoltaAlmoco ? status.registro.volta_almoco : 'Não registrada'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <>
+                  <Button
+                    onClick={() => registrarPonto("Entrada")}
+                    disabled={!podeEntrada}
+                    className={`flex items-center gap-2 ${
+                      podeEntrada 
+                        ? "bg-green-600 hover:bg-green-700" 
+                        : "bg-gray-400 cursor-not-allowed"
+                    }`}
+                    title={!podeEntrada ? "Já existe uma entrada sem saída registrada" : ""}
+                  >
+                    <Play className="w-4 h-4" />
+                    Entrada
+                  </Button>
+                  <Button
+                    onClick={() => registrarPonto("Saída")}
+                    disabled={!podeSaida}
+                    className={`flex items-center gap-2 ${
+                      podeSaida 
+                        ? "bg-red-600 hover:bg-red-700" 
+                        : "bg-gray-400 cursor-not-allowed"
+                    }`}
+                    title={!podeSaida ? "Registre a entrada primeiro" : ""}
+                  >
+                    <Square className="w-4 h-4" />
+                    Saída
+                  </Button>
+                  <Button
+                    onClick={() => registrarPonto("Saída Almoço")}
+                    disabled={!podeSaidaAlmoco}
+                    variant="outline"
+                    className={`flex items-center gap-2 ${
+                      !podeSaidaAlmoco ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                    title={!podeSaidaAlmoco ? "Registre a entrada primeiro" : ""}
+                  >
+                    <Coffee className="w-4 h-4" />
+                    Saída Almoço
+                  </Button>
+                  <Button
+                    onClick={() => registrarPonto("Volta Almoço")}
+                    disabled={!podeVoltaAlmoco}
+                    variant="outline"
+                    className={`flex items-center gap-2 ${
+                      !podeVoltaAlmoco ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                    title={!podeVoltaAlmoco ? "Registre a saída para almoço primeiro" : ""}
+                  >
+                    <Coffee className="w-4 h-4" />
+                    Volta Almoço
+                  </Button>
+                </>
               )
             })()}
-
-            {/* Seleção de Funcionário */}
-            <div className="space-y-2">
-              <Label htmlFor="funcionario">Funcionário</Label>
-              <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um funcionário" />
-                </SelectTrigger>
-                <SelectContent>
-                  {data.funcionarios.length > 0 ? (
-                    data.funcionarios.map((func) => (
-                      <SelectItem key={func.id} value={func.id.toString()}>
-                        {func.nome} - {func.cargo || 'Sem cargo'}
-                        {data.usuarioAtual?.id === func.id && ' (Você)'}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <div className="px-2 py-1.5 text-sm text-gray-500">
-                      Nenhum funcionário disponível
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-              {selectedFuncionario && data.usuarioAtual?.id === parseInt(selectedFuncionario) && (
-                <p className="text-xs text-gray-500">Seu registro de ponto</p>
-              )}
-            </div>
-
-            {/* Botões de Registro */}
-            <div className="grid grid-cols-2 gap-3">
-              {(() => {
-                const status = getStatusRegistroAtual()
-                const podeEntrada = !status || (!status.temEntrada || status.temSaida)
-                const podeSaida = status && status.temEntrada && !status.temSaida
-                const podeSaidaAlmoco = status && status.temEntrada && !status.temSaidaAlmoco
-                const podeVoltaAlmoco = status && status.temSaidaAlmoco && !status.temVoltaAlmoco
-
-                return (
-                  <>
-                    <Button
-                      onClick={() => registrarPonto("Entrada")}
-                      disabled={!podeEntrada}
-                      className={`flex items-center gap-2 ${
-                        podeEntrada 
-                          ? "bg-green-600 hover:bg-green-700" 
-                          : "bg-gray-400 cursor-not-allowed"
-                      }`}
-                      title={!podeEntrada ? "Já existe uma entrada sem saída registrada" : ""}
-                    >
-                      <Play className="w-4 h-4" />
-                      Entrada
-                    </Button>
-                    <Button
-                      onClick={() => registrarPonto("Saída")}
-                      disabled={!podeSaida}
-                      className={`flex items-center gap-2 ${
-                        podeSaida 
-                          ? "bg-red-600 hover:bg-red-700" 
-                          : "bg-gray-400 cursor-not-allowed"
-                      }`}
-                      title={!podeSaida ? "Registre a entrada primeiro" : ""}
-                    >
-                      <Square className="w-4 h-4" />
-                      Saída
-                    </Button>
-                    <Button
-                      onClick={() => registrarPonto("Saída Almoço")}
-                      disabled={!podeSaidaAlmoco}
-                      variant="outline"
-                      className={`flex items-center gap-2 ${
-                        !podeSaidaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                      title={!podeSaidaAlmoco ? "Registre a entrada primeiro" : ""}
-                    >
-                      <Coffee className="w-4 h-4" />
-                      Saída Almoço
-                    </Button>
-                    <Button
-                      onClick={() => registrarPonto("Volta Almoço")}
-                      disabled={!podeVoltaAlmoco}
-                      variant="outline"
-                      className={`flex items-center gap-2 ${
-                        !podeVoltaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                      title={!podeVoltaAlmoco ? "Registre a saída para almoço primeiro" : ""}
-                    >
-                      <Coffee className="w-4 h-4" />
-                      Volta Almoço
-                    </Button>
-                  </>
-                )
-              })()}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Registros Recentes */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Registros de Hoje</CardTitle>
-            <CardDescription>Acompanhe os registros de ponto do dia atual</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {data.registrosPonto.slice(0, 4).map((registro) => (
-                <div key={registro.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                      <User className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium">{registro.funcionario?.nome || 'Funcionário não encontrado'}</p>
-                      <p className="text-sm text-gray-500">
-                        Entrada: {registro.entrada || 'Não registrada'} | Saída: {registro.saida || "Em andamento"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    {getStatusBadge(registro.status || '')}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="registros">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="registros">Registros de Ponto</TabsTrigger>
           <TabsTrigger value="horas-extras">Controle de Horas Extras</TabsTrigger>
           <TabsTrigger value="justificativas">Justificativas</TabsTrigger>
           <TabsTrigger value="relatorio">Relatório Mensal</TabsTrigger>
+          <TabsTrigger value="historico">Espelho de Ponto</TabsTrigger>
         </TabsList>
 
         <TabsContent value="registros">
@@ -1843,10 +2065,59 @@ export default function PontoPage() {
                       {sortedRegistros.length} registro(s) encontrado(s)
                     </span>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    {filtroFuncionario !== "todos" && `Funcionário: ${filtroFuncionario}`}
-                    {filtroData && ` | Data: ${filtroData}`}
-                    {(!filtroFuncionario || filtroFuncionario === "todos") && !filtroData && " | Ordenado: Mais recente"}
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm text-gray-500">
+                      {filtroFuncionario !== "todos" && `Funcionário: ${filtroFuncionario}`}
+                      {filtroData && ` | Data: ${filtroData}`}
+                      {(!filtroFuncionario || filtroFuncionario === "todos") && !filtroData && " | Ordenado: Mais recente"}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          disabled={sortedRegistros.length === 0}
+                          size="sm"
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Exportar
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            if (sortedRegistros.length > 0) {
+                              await exportarRelatorio('csv')
+                            }
+                          }}
+                          disabled={sortedRegistros.length === 0}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Exportar CSV
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            if (sortedRegistros.length > 0) {
+                              await exportarRelatorio('json')
+                            }
+                          }}
+                          disabled={sortedRegistros.length === 0}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Exportar JSON
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            if (sortedRegistros.length > 0) {
+                              await exportarRelatorio('pdf')
+                            }
+                          }}
+                          disabled={sortedRegistros.length === 0}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Exportar PDF
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
@@ -2337,7 +2608,47 @@ export default function PontoPage() {
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
-                                {/* Justificativa já é a validação, não precisa de aprovação */}
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      abrirDetalhesJustificativa(just)
+                                    }}
+                                  >
+                                    <Eye className="w-4 h-4 mr-1" />
+                                    Ver Detalhes
+                                  </Button>
+                                  {just.status === 'Pendente' && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleAprovarJustificativa(just.id.toString())
+                                        }}
+                                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      >
+                                        <Check className="w-4 h-4 mr-1" />
+                                        Aprovar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleRejeitarJustificativa(just.id.toString())
+                                        }}
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      >
+                                        <X className="w-4 h-4 mr-1" />
+                                        Rejeitar
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                             
@@ -2661,6 +2972,392 @@ export default function PontoPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="historico">
+          <div className="space-y-6">
+            {/* Card de Filtros */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="w-5 h-5" />
+                  Filtros de Busca
+                </CardTitle>
+                <CardDescription>
+                  Selecione o funcionário e o período para visualizar o histórico completo
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                  {/* Busca de Funcionário */}
+                  <div className="space-y-2 min-w-0">
+                    <Label htmlFor="funcionario-historico" className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Funcionário *
+                    </Label>
+                    <div className="relative w-full">
+                      <Select
+                        value={funcionarioHistorico?.id?.toString() || ""}
+                        onValueChange={(value) => {
+                          const func = todosFuncionarios.find(f => f.id === value)
+                          setFuncionarioHistorico(func || null)
+                          setSearchFuncionario("") // Limpar busca ao selecionar
+                        }}
+                        disabled={loadingFuncionarios}
+                      >
+                        <SelectTrigger id="funcionario-historico" className="w-full max-w-full">
+                          <SelectValue placeholder={loadingFuncionarios ? "Carregando..." : "Selecione um funcionário"} />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px] w-[var(--radix-select-trigger-width)]">
+                          <div className="p-2 border-b sticky top-0 bg-white z-10">
+                            <Input
+                              placeholder="Buscar funcionário..."
+                              value={searchFuncionario}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                setSearchFuncionario(e.target.value)
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                e.stopPropagation()
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                }
+                              }}
+                              className="h-8 w-full"
+                            />
+                          </div>
+                          <div className="max-h-[250px] overflow-y-auto">
+                            {todosFuncionarios
+                              .filter((f) => {
+                                if (!searchFuncionario) return true
+                                const search = searchFuncionario.toLowerCase()
+                                return (
+                                  f.name?.toLowerCase().includes(search) ||
+                                  f.nome?.toLowerCase().includes(search) ||
+                                  f.role?.toLowerCase().includes(search) ||
+                                  f.cargo?.toLowerCase().includes(search)
+                                )
+                              })
+                              .map((funcionario) => (
+                                <SelectItem key={funcionario.id} value={funcionario.id} className="truncate">
+                                  <span className="font-medium truncate">{funcionario.name || funcionario.nome}</span>
+                                </SelectItem>
+                              ))}
+                            {todosFuncionarios.filter((f) => {
+                              if (!searchFuncionario) return false
+                              const search = searchFuncionario.toLowerCase()
+                              return (
+                                f.name?.toLowerCase().includes(search) ||
+                                f.nome?.toLowerCase().includes(search) ||
+                                f.role?.toLowerCase().includes(search) ||
+                                f.cargo?.toLowerCase().includes(search)
+                              )
+                            }).length === 0 && searchFuncionario && (
+                              <div className="p-4 text-sm text-gray-500 text-center">
+                                Nenhum funcionário encontrado
+                              </div>
+                            )}
+                          </div>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Filtro de Mês */}
+                  <div className="space-y-2">
+                    <Label htmlFor="mes-historico" className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Mês
+                    </Label>
+                    <Select
+                      value={mesHistorico.toString()}
+                      onValueChange={(value) => setMesHistorico(parseInt(value))}
+                    >
+                      <SelectTrigger id="mes-historico">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mes) => (
+                          <SelectItem key={mes} value={mes.toString()}>
+                            {new Date(2000, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Filtro de Ano */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ano-historico" className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Ano
+                    </Label>
+                    <Input
+                      id="ano-historico"
+                      type="number"
+                      min="2020"
+                      max="2030"
+                      value={anoHistorico}
+                      onChange={(e) => setAnoHistorico(parseInt(e.target.value) || new Date().getFullYear())}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Botão de Ação */}
+                  <div className="space-y-2">
+                    <Label className="opacity-0">Ação</Label>
+                    <Button
+                      onClick={carregarHistorico}
+                      disabled={!funcionarioHistorico || loadingHistorico}
+                      className="w-full"
+                      size="default"
+                    >
+                      {loadingHistorico ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Carregando...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4 mr-2" />
+                          Carregar Histórico
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Exportar */}
+                  <div className="space-y-2">
+                    <Label className="opacity-0">Exportar</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          disabled={historicoRegistros.length === 0 || loadingHistorico}
+                          className="w-full"
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Exportar
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => exportarHistorico('csv')}
+                          disabled={historicoRegistros.length === 0 || loadingHistorico}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Exportar CSV
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => exportarHistorico('json')}
+                          disabled={historicoRegistros.length === 0 || loadingHistorico}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          Exportar JSON
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => exportarHistorico('pdf')}
+                          disabled={historicoRegistros.length === 0 || loadingHistorico}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Exportar PDF
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+
+            {/* Resumo do Histórico - Mostrar antes da tabela se houver dados */}
+            {historicoRegistros.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-700 mb-1">Total de Registros</p>
+                        <p className="text-3xl font-bold text-blue-900">{historicoRegistros.length}</p>
+                      </div>
+                      <div className="p-3 bg-blue-200 rounded-full">
+                        <BarChart3 className="w-6 h-6 text-blue-700" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-purple-700 mb-1">Total de Horas</p>
+                        <p className="text-3xl font-bold text-purple-900">
+                          {historicoRegistros
+                            .reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0)
+                            .toFixed(2)}h
+                        </p>
+                      </div>
+                      <div className="p-3 bg-purple-200 rounded-full">
+                        <Clock className="w-6 h-6 text-purple-700" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-green-200 bg-gradient-to-br from-green-50 to-green-100/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-green-700 mb-1">Horas Extras</p>
+                        <p className="text-3xl font-bold text-green-900">
+                          +{historicoRegistros
+                            .reduce((sum, r) => sum + (r.horas_extras || 0), 0)
+                            .toFixed(2)}h
+                        </p>
+                      </div>
+                      <div className="p-3 bg-green-200 rounded-full">
+                        <TrendingUp className="w-6 h-6 text-green-700" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100/50">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-orange-700 mb-1">Média Diária</p>
+                        <p className="text-3xl font-bold text-orange-900">
+                          {historicoRegistros.length > 0
+                            ? (
+                                historicoRegistros.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0) /
+                                historicoRegistros.length
+                              ).toFixed(2)
+                            : '0.00'}
+                          h
+                        </p>
+                      </div>
+                      <div className="p-3 bg-orange-200 rounded-full">
+                        <TrendingUp className="w-6 h-6 text-orange-700" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Tabela de Histórico */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  Histórico de Registros
+                  {historicoRegistros.length > 0 && (
+                    <Badge variant="secondary" className="ml-2">
+                      {historicoRegistros.length} registro(s)
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {funcionarioHistorico 
+                    ? `Registros de ${funcionarioHistorico.nome || (funcionarioHistorico as any)?.name || 'Funcionário'} - ${mesHistorico}/${anoHistorico}`
+                    : 'Selecione um funcionário para visualizar o histórico'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingHistorico ? (
+                  <TableLoading />
+                ) : historicoRegistros.length === 0 ? (
+                  <div className="text-center py-16">
+                    <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                      <Clock className="w-12 h-12 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {funcionarioHistorico ? 'Nenhum registro encontrado' : 'Selecione um funcionário'}
+                    </h3>
+                    <p className="text-gray-600 max-w-md mx-auto">
+                      {funcionarioHistorico
+                        ? `Não há registros de ponto para ${funcionarioHistorico.nome || (funcionarioHistorico as any)?.name || 'o funcionário selecionado'} no período de ${mesHistorico}/${anoHistorico}`
+                        : 'Use o campo de busca acima para selecionar um funcionário e visualizar seu histórico de ponto'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden bg-white">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-50">
+                            <TableHead className="font-semibold">Data</TableHead>
+                            <TableHead className="font-semibold">Entrada</TableHead>
+                            <TableHead className="font-semibold">Saída Almoço</TableHead>
+                            <TableHead className="font-semibold">Volta Almoço</TableHead>
+                            <TableHead className="font-semibold">Saída</TableHead>
+                            <TableHead className="font-semibold text-center">Horas</TableHead>
+                            <TableHead className="font-semibold text-center">Extras</TableHead>
+                            <TableHead className="font-semibold text-center">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {historicoRegistros.map((registro, index) => (
+                            <TableRow 
+                              key={registro.id}
+                              className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
+                            >
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-gray-400" />
+                                  {utilsPonto.formatarData(registro.data || '')}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-mono text-sm">
+                                  {registro.entrada || <span className="text-gray-400">-</span>}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-mono text-sm">
+                                  {registro.saida_almoco || <span className="text-gray-400">-</span>}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-mono text-sm">
+                                  {registro.volta_almoco || <span className="text-gray-400">-</span>}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-mono text-sm">
+                                  {registro.saida || <span className="text-gray-400">-</span>}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="font-semibold text-gray-900">
+                                  {(registro.horas_trabalhadas || 0).toFixed(2)}h
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {registro.horas_extras && registro.horas_extras > 0 ? (
+                                  <Badge className="bg-green-100 text-green-800 border-green-300 font-semibold">
+                                    +{(registro.horas_extras || 0).toFixed(2)}h
+                                  </Badge>
+                                ) : (
+                                  <span className="text-gray-400 text-sm">0.00h</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {getStatusBadge(registro.status || '')}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* Dialog de Aprovação de Horas Extras */}
@@ -2669,6 +3366,182 @@ export default function PontoPage() {
         onClose={fecharAprovacao}
         registro={registroParaAprovacao}
       />
+
+      {/* Modal de Detalhes da Justificativa */}
+      <Dialog open={isModalDetalhesOpen} onOpenChange={setIsModalDetalhesOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Detalhes da Justificativa
+            </DialogTitle>
+            <DialogDescription>
+              Informações completas da justificativa
+            </DialogDescription>
+          </DialogHeader>
+          
+          {justificativaDetalhes && (
+            <div className="space-y-6">
+              {/* Informações do Funcionário */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Funcionário
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Nome</p>
+                    <p className="font-medium">{justificativaDetalhes.funcionario?.nome || 'Não informado'}</p>
+                  </div>
+                  {justificativaDetalhes.funcionario?.cargo && (
+                    <div>
+                      <p className="text-sm text-gray-600">Cargo</p>
+                      <p className="font-medium">{justificativaDetalhes.funcionario.cargo}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Informações da Justificativa */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Data</p>
+                  <p className="font-medium">{utilsPonto.formatarData(justificativaDetalhes.data)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Tipo</p>
+                  <Badge variant="outline" className="font-medium">
+                    {justificativaDetalhes.tipo}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Status</p>
+                  {(() => {
+                    const statusBadge = utilsPonto.obterBadgeStatus(justificativaDetalhes.status)
+                    return (
+                      <Badge className={statusBadge.className}>
+                        {statusBadge.text}
+                      </Badge>
+                    )
+                  })()}
+                </div>
+                {justificativaDetalhes.data_aprovacao && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Data de Aprovação</p>
+                    <p className="font-medium">
+                      {new Date(justificativaDetalhes.data_aprovacao).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Motivo */}
+              <div>
+                <h3 className="font-semibold text-gray-800 mb-2">Motivo</h3>
+                <div className="bg-gray-50 p-4 rounded-lg border">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {justificativaDetalhes.motivo}
+                  </p>
+                </div>
+              </div>
+
+              {/* Observações */}
+              {justificativaDetalhes.observacoes && (
+                <div>
+                  <h3 className="font-semibold text-gray-800 mb-2">Observações</h3>
+                  <div className="bg-gray-50 p-4 rounded-lg border">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {justificativaDetalhes.observacoes}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Anexos */}
+              {justificativaDetalhes.anexos && justificativaDetalhes.anexos.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Image className="w-4 h-4" />
+                    Arquivos Anexados
+                  </h3>
+                  <div className="space-y-3">
+                    {justificativaDetalhes.anexos.map((anexo, index) => {
+                      const isImage = typeof anexo === 'string' && 
+                        /\.(jpg|jpeg|png|gif|webp)$/i.test(anexo)
+                      const nomeArquivo = typeof anexo === 'string' 
+                        ? anexo.split('/').pop() || `arquivo-${index + 1}` 
+                        : `arquivo-${index + 1}`
+                      
+                      return (
+                        <div
+                          key={index}
+                          className="border rounded-lg p-4 bg-white"
+                        >
+                          <div className="flex items-start gap-4">
+                            {isImage ? (
+                              <div className="flex-shrink-0">
+                                <img
+                                  src={anexo}
+                                  alt={nomeArquivo}
+                                  className="w-24 h-24 object-cover rounded border"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none'
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex-shrink-0 w-24 h-24 bg-gray-100 rounded border flex items-center justify-center">
+                                <FileText className="w-8 h-8 text-gray-400" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{nomeArquivo}</p>
+                              <div className="flex gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => window.open(anexo, '_blank')}
+                                  className="h-8"
+                                >
+                                  <Eye className="w-4 h-4 mr-1" />
+                                  Visualizar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDownloadArquivo(anexo, nomeArquivo)}
+                                  className="h-8"
+                                >
+                                  <Download className="w-4 h-4 mr-1" />
+                                  Download
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Aprovador */}
+              {justificativaDetalhes.aprovador && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-blue-800 mb-2">Aprovado por</h3>
+                  <p className="text-blue-700">{justificativaDetalhes.aprovador.nome}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4">
+            <Button variant="outline" onClick={() => setIsModalDetalhesOpen(false)}>
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Aprovação/Rejeição */}
       <Dialog open={isModalAprovacaoOpen} onOpenChange={setIsModalAprovacaoOpen}>

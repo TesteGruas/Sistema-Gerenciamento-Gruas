@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
@@ -24,6 +25,34 @@ import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
 
 const router = express.Router();
+
+// Configuração do multer para upload de arquivos de justificativa
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB por arquivo
+  },
+  fileFilter: (req, file, cb) => {
+    // Tipos de arquivo permitidos: imagens e documentos
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de arquivo não permitido. Use PDF, Word ou imagens (JPG, PNG, GIF, WEBP)'), false);
+    }
+  }
+});
 
 // REMOVIDO: Função verificarSeAdministrador - agora usamos req.user.level do middleware authenticateToken
 // A informação de nível já vem normalizada no req.user após autenticação
@@ -2524,7 +2553,7 @@ router.get('/justificativas', async (req, res) => {
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/justificativas', async (req, res) => {
+router.post('/justificativas', authenticateToken, upload.single('anexo'), async (req, res) => {
   try {
     const {
       funcionario_id,
@@ -2584,17 +2613,71 @@ router.post('/justificativas', async (req, res) => {
       });
     }
 
+    // Processar upload de arquivo se houver
+    let anexos = [];
+    if (req.file) {
+      try {
+        // Gerar nome único para o arquivo
+        const timestamp = Date.now();
+        const randomString = Math.random().toString(36).substring(2, 15);
+        const extension = req.file.originalname.split('.').pop();
+        const fileName = `justificativa_${funcionario_id}_${timestamp}_${randomString}.${extension}`;
+        const filePath = `justificativas/${funcionario_id}/${fileName}`;
+
+        // Upload para o Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+          .from('arquivos-obras')
+          .upload(filePath, req.file.buffer, {
+            contentType: req.file.mimetype,
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Erro no upload do arquivo:', uploadError);
+          return res.status(500).json({
+            success: false,
+            message: 'Erro ao fazer upload do arquivo',
+            error: uploadError.message
+          });
+        }
+
+        // Obter URL pública do arquivo
+        const { data: urlData } = supabaseAdmin.storage
+          .from('arquivos-obras')
+          .getPublicUrl(filePath);
+
+        const arquivoUrl = urlData?.publicUrl || `${process.env.SUPABASE_URL}/storage/v1/object/public/arquivos-obras/${filePath}`;
+        anexos = [arquivoUrl];
+      } catch (uploadErr) {
+        console.error('Erro ao processar upload:', uploadErr);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao processar arquivo anexado'
+        });
+      }
+    }
+
     // Criar justificativa
+    // Não incluir 'id' pois é SERIAL (gerado automaticamente pelo banco)
     const novaJustificativa = {
-      id: gerarIdJustificativa(),
-      funcionario_id,
+      funcionario_id: parseInt(funcionario_id),
       data,
       tipo,
       motivo,
-      status: 'Pendente',
+      anexos: anexos.length > 0 ? anexos : null,
+      status: 'pendente',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+
+    console.log('Tentando criar justificativa:', {
+      funcionario_id: novaJustificativa.funcionario_id,
+      data: novaJustificativa.data,
+      tipo: novaJustificativa.tipo,
+      temAnexos: anexos.length > 0,
+      anexos: anexos
+    });
 
     const { data: justificativa, error } = await supabaseAdmin
       .from('justificativas')
@@ -2607,9 +2690,13 @@ router.post('/justificativas', async (req, res) => {
 
     if (error) {
       console.error('Erro ao criar justificativa:', error);
+      console.error('Detalhes do erro:', JSON.stringify(error, null, 2));
+      console.error('Dados tentados:', JSON.stringify(novaJustificativa, null, 2));
       return res.status(500).json({
         success: false,
-        message: 'Erro ao criar justificativa'
+        message: 'Erro ao criar justificativa',
+        error: error.message || 'Erro desconhecido',
+        details: process.env.NODE_ENV === 'development' ? error : undefined
       });
     }
 
