@@ -72,7 +72,7 @@ import { obraGruasApi } from "@/lib/api-obra-gruas"
 import { useObraStore } from "@/lib/obra-store"
 import { sinaleirosApi } from "@/lib/api-sinaleiros"
 import { DocumentoUpload } from "@/components/documento-upload"
-import api from "@/lib/api"
+import api, { fetchWithAuth } from "@/lib/api"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { clientesApi } from "@/lib/api-clientes"
 import { ValorMonetarioOculto, ValorFormatadoOculto } from "@/components/valor-oculto"
@@ -356,30 +356,33 @@ function ObraDetailsPageContent() {
       }
       
       // 3. Buscar medições diretamente pela obra (sem orçamento)
-      // Usando o filtro geral com obra_id através dos orçamentos
-      // Se não houver orçamentos, ainda podemos ter medições criadas diretamente
       try {
-        const medicoesGeralResponse = await medicoesMensaisApi.listar({})
-        if (medicoesGeralResponse.success && medicoesGeralResponse.data) {
-          // Filtrar medições que pertencem a orçamentos desta obra
-          const medicoesDaObra = medicoesGeralResponse.data.filter((medicao: MedicaoMensal) => {
-            // Se a medição tem orçamento, verificar se o orçamento pertence à obra
-            if (medicao.orcamento_id && medicao.orcamentos) {
-              return orcamentos.some(orc => orc.id === medicao.orcamento_id)
-            }
-            // Se não tem orçamento, pode ser uma medição direta da obra (precisa verificar no backend)
-            return false
-          })
-          
+        const medicoesObraResponse = await medicoesMensaisApi.listarPorObra(parseInt(obraId))
+        if (medicoesObraResponse.success && medicoesObraResponse.data) {
           // Adicionar apenas medições que ainda não foram adicionadas
-          medicoesDaObra.forEach((medicao: MedicaoMensal) => {
+          medicoesObraResponse.data.forEach((medicao: MedicaoMensal) => {
             if (!todasMedicoes.find(m => m.id === medicao.id)) {
               todasMedicoes.push(medicao)
             }
           })
         }
       } catch (error) {
-        console.error('Erro ao carregar medições gerais:', error)
+        console.error('Erro ao carregar medições da obra:', error)
+      }
+      
+      // 4. Também buscar usando filtro obra_id para garantir que não perdemos nenhuma
+      try {
+        const medicoesFiltradasResponse = await medicoesMensaisApi.listar({ obra_id: parseInt(obraId) })
+        if (medicoesFiltradasResponse.success && medicoesFiltradasResponse.data) {
+          // Adicionar apenas medições que ainda não foram adicionadas
+          medicoesFiltradasResponse.data.forEach((medicao: MedicaoMensal) => {
+            if (!todasMedicoes.find(m => m.id === medicao.id)) {
+              todasMedicoes.push(medicao)
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Erro ao carregar medições com filtro obra_id:', error)
       }
       
       // Ordenar por período (mais recente primeiro)
@@ -441,7 +444,6 @@ function ObraDetailsPageContent() {
         valor_aditivos: 0,
         valor_custos_extras: 0,
         valor_descontos: 0,
-        valor_total: medicaoFormData.valor_mensal_bruto || 0,
         status: 'pendente' as const,
         observacoes: medicaoFormData.observacoes || undefined
       }
@@ -484,18 +486,47 @@ function ObraDetailsPageContent() {
   // Função para gerar PDF de medição mensal
   const handleGerarPDFMedicao = async (medicao: MedicaoMensal) => {
     try {
+      // Verificar se a medição tem orçamento
+      if (!medicao.orcamento_id) {
+        toast({
+          title: "Aviso",
+          description: "Esta medição não possui orçamento vinculado. O PDF só pode ser gerado para medições com orçamento.",
+          variant: "destructive"
+        })
+        return
+      }
+
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const token = localStorage.getItem('token')
       
-      const response = await fetch(`${API_URL}/api/relatorios/medicoes/${medicao.orcamento_id}/pdf?medicao_id=${medicao.id}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
+      // Usar fetchWithAuth que trata refresh de token automaticamente
+      const response = await fetchWithAuth(
+        `${API_URL}/api/relatorios/medicoes/${medicao.orcamento_id}/pdf?medicao_id=${medicao.id}`,
+        {
+          method: 'GET',
+        }
+      )
 
       if (!response.ok) {
-        throw new Error('Erro ao gerar PDF')
+        // Tentar ler a mensagem de erro da resposta
+        let errorMessage = 'Erro ao gerar PDF'
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch {
+          // Se não conseguir ler JSON, usar mensagem padrão
+        }
+        
+        // Se for erro de autenticação, sugerir refresh
+        if (response.status === 401 || response.status === 403) {
+          toast({
+            title: "Erro de autenticação",
+            description: "Sua sessão expirou. Por favor, recarregue a página e tente novamente.",
+            variant: "destructive"
+          })
+          return
+        }
+        
+        throw new Error(errorMessage)
       }
 
       // Obter o blob do PDF
@@ -515,11 +546,11 @@ function ObraDetailsPageContent() {
         title: "Sucesso",
         description: "PDF da medição gerado com sucesso!",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao gerar PDF da medição:', error)
       toast({
         title: "Erro",
-        description: "Erro ao gerar PDF da medição. Tente novamente.",
+        description: error.message || "Erro ao gerar PDF da medição. Tente novamente.",
         variant: "destructive"
       })
     }
@@ -4674,7 +4705,10 @@ function ObraDetailsPageContent() {
                             <TableRow key={medicao.id}>
                               <TableCell className="font-medium">{medicao.numero}</TableCell>
                               <TableCell>
-                                {medicao.orcamentos?.numero || `ORC-${medicao.orcamento_id}`}
+                                {medicao.orcamento_id 
+                                  ? (medicao.orcamentos?.numero || `ORC-${medicao.orcamento_id}`)
+                                  : <span className="text-gray-400 italic">Sem orçamento</span>
+                                }
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
@@ -4724,16 +4758,18 @@ function ObraDetailsPageContent() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      window.open(`/dashboard/orcamentos/${medicao.orcamento_id}`, '_blank')
-                                    }}
-                                    title="Ver orçamento"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </Button>
+                                  {medicao.orcamento_id && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        window.open(`/dashboard/orcamentos/${medicao.orcamento_id}`, '_blank')
+                                      }}
+                                      title="Ver orçamento"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -4749,10 +4785,7 @@ function ObraDetailsPageContent() {
                                         variant="outline"
                                         onClick={async () => {
                                           try {
-                                            const response = await medicoesMensaisApi.atualizar(medicao.id, {
-                                              status: 'finalizada',
-                                              data_finalizacao: new Date().toISOString()
-                                            })
+                                            const response = await medicoesMensaisApi.finalizar(medicao.id)
                                             
                                             if (response.success) {
                                               toast({

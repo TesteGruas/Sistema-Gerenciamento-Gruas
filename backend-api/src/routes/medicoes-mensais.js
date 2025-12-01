@@ -343,9 +343,16 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
     }
 
     // Recalcular valores (trigger já faz isso, mas garantimos)
-    await supabaseAdmin.rpc('recalcular_valores_medicao', { p_medicao_id: medicao.id }).catch(() => {
+    try {
+      const { error: rpcError } = await supabaseAdmin.rpc('recalcular_valores_medicao', { p_medicao_id: medicao.id });
+      if (rpcError) {
+        // Se a função não existir, não é crítico (o trigger já calcula)
+        console.log('Aviso: função recalcular_valores_medicao não disponível ou erro:', rpcError.message);
+      }
+    } catch (error) {
       // Se a função não existir, não é crítico (o trigger já calcula)
-    });
+      console.log('Aviso: função recalcular_valores_medicao não disponível');
+    }
 
     // Buscar medição atualizada
     const { data: medicaoAtualizada } = await supabaseAdmin
