@@ -1807,182 +1807,170 @@ export default function PontoPage() {
           </DialogContent>
         </Dialog>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-full ${stat.color}`}>
-                  <stat.icon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Registro de Ponto */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5" />
-            Registrar Ponto
-          </CardTitle>
-          <CardDescription>Registre entrada, saída e intervalos</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Relógio Digital */}
-          <div className="text-center">
-            <div className="text-4xl font-mono font-bold text-blue-600">
-              {isClient && currentTime ? currentTime.toTimeString().slice(0, 8) : '--:--:--'}
-            </div>
-            <div className="text-sm text-gray-500 mt-1">
-              {isClient && currentTime ? currentTime.toLocaleDateString("pt-BR", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              }) : 'Carregando...'}
-            </div>
-          </div>
-
-          {/* Status do Registro Atual */}
-          {(() => {
-            const status = getStatusRegistroAtual()
-            if (!status) return null
-
-            return (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Status do Registro de Hoje</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${status.temEntrada ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                    <span className={status.temEntrada ? 'text-green-700' : 'text-gray-500'}>
-                      Entrada: {status.temEntrada ? status.registro.entrada : 'Não registrada'}
-                    </span>
+      {/* Stats Cards e Registro de Ponto */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 gap-4">
+          {stats.map((stat, index) => (
+            <Card key={index}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${status.temSaida ? 'bg-red-500' : 'bg-gray-300'}`}></div>
-                    <span className={status.temSaida ? 'text-red-700' : 'text-gray-500'}>
-                      Saída: {status.temSaida ? status.registro.saida : 'Não registrada'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${status.temSaidaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
-                    <span className={status.temSaidaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
-                      Saída Almoço: {status.temSaidaAlmoco ? status.registro.saida_almoco : 'Não registrada'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${status.temVoltaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
-                    <span className={status.temVoltaAlmoco ? 'text-yellow-700' : 'text-gray-500'}>
-                      Volta Almoço: {status.temVoltaAlmoco ? status.registro.volta_almoco : 'Não registrada'}
-                    </span>
+                  <div className={`p-3 rounded-full ${stat.color}`}>
+                    <stat.icon className="w-6 h-6 text-white" />
                   </div>
                 </div>
-              </div>
-            )
-          })()}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-          {/* Seleção de Funcionário */}
-          <div className="space-y-2">
-            <Label htmlFor="funcionario">Funcionário</Label>
-            <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione um funcionário" />
-              </SelectTrigger>
-              <SelectContent>
-                {data.funcionarios.length > 0 ? (
-                  data.funcionarios.map((func) => (
-                    <SelectItem key={func.id} value={func.id.toString()}>
-                      {func.nome} - {func.cargo || 'Sem cargo'}
-                      {data.usuarioAtual?.id === func.id && ' (Você)'}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <div className="px-2 py-1.5 text-sm text-gray-500">
-                    Nenhum funcionário disponível
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
-            {selectedFuncionario && data.usuarioAtual?.id === parseInt(selectedFuncionario) && (
-              <p className="text-xs text-gray-500">Seu registro de ponto</p>
-            )}
-          </div>
-
-          {/* Botões de Registro */}
-          <div className="grid grid-cols-2 gap-3">
+        {/* Registro de Ponto */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Registrar Ponto
+            </CardTitle>
+            <CardDescription>Registre entrada, saída e intervalos</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Status do Registro Atual */}
             {(() => {
               const status = getStatusRegistroAtual()
-              const podeEntrada = !status || (!status.temEntrada || status.temSaida)
-              const podeSaida = status && status.temEntrada && !status.temSaida
-              const podeSaidaAlmoco = status && status.temEntrada && !status.temSaidaAlmoco
-              const podeVoltaAlmoco = status && status.temSaidaAlmoco && !status.temVoltaAlmoco
+              if (!status) return null
 
               return (
-                <>
-                  <Button
-                    onClick={() => registrarPonto("Entrada")}
-                    disabled={!podeEntrada}
-                    className={`flex items-center gap-2 ${
-                      podeEntrada 
-                        ? "bg-green-600 hover:bg-green-700" 
-                        : "bg-gray-400 cursor-not-allowed"
-                    }`}
-                    title={!podeEntrada ? "Já existe uma entrada sem saída registrada" : ""}
-                  >
-                    <Play className="w-4 h-4" />
-                    Entrada
-                  </Button>
-                  <Button
-                    onClick={() => registrarPonto("Saída")}
-                    disabled={!podeSaida}
-                    className={`flex items-center gap-2 ${
-                      podeSaida 
-                        ? "bg-red-600 hover:bg-red-700" 
-                        : "bg-gray-400 cursor-not-allowed"
-                    }`}
-                    title={!podeSaida ? "Registre a entrada primeiro" : ""}
-                  >
-                    <Square className="w-4 h-4" />
-                    Saída
-                  </Button>
-                  <Button
-                    onClick={() => registrarPonto("Saída Almoço")}
-                    disabled={!podeSaidaAlmoco}
-                    variant="outline"
-                    className={`flex items-center gap-2 ${
-                      !podeSaidaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                    title={!podeSaidaAlmoco ? "Registre a entrada primeiro" : ""}
-                  >
-                    <Coffee className="w-4 h-4" />
-                    Saída Almoço
-                  </Button>
-                  <Button
-                    onClick={() => registrarPonto("Volta Almoço")}
-                    disabled={!podeVoltaAlmoco}
-                    variant="outline"
-                    className={`flex items-center gap-2 ${
-                      !podeVoltaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                    title={!podeVoltaAlmoco ? "Registre a saída para almoço primeiro" : ""}
-                  >
-                    <Coffee className="w-4 h-4" />
-                    Volta Almoço
-                  </Button>
-                </>
+                <div className="bg-gray-50 dark:bg-gray-900/50 border rounded-lg p-4">
+                  <h4 className="font-medium text-sm mb-3">Status do Registro de Hoje</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${status.temEntrada ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temEntrada ? 'text-green-700 dark:text-green-400' : 'text-gray-500'}>
+                        Entrada: {status.temEntrada ? status.registro.entrada : 'Não registrada'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${status.temSaida ? 'bg-red-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temSaida ? 'text-red-700 dark:text-red-400' : 'text-gray-500'}>
+                        Saída: {status.temSaida ? status.registro.saida : 'Não registrada'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${status.temSaidaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temSaidaAlmoco ? 'text-yellow-700 dark:text-yellow-400' : 'text-gray-500'}>
+                        Saída Almoço: {status.temSaidaAlmoco ? status.registro.saida_almoco : 'Não registrada'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${status.temVoltaAlmoco ? 'bg-yellow-500' : 'bg-gray-300'}`}></div>
+                      <span className={status.temVoltaAlmoco ? 'text-yellow-700 dark:text-yellow-400' : 'text-gray-500'}>
+                        Volta Almoço: {status.temVoltaAlmoco ? status.registro.volta_almoco : 'Não registrada'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               )
             })()}
-          </div>
-        </CardContent>
-      </Card>
+
+            {/* Seleção de Funcionário */}
+            <div className="space-y-2">
+              <Label htmlFor="funcionario">Funcionário</Label>
+              <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um funcionário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.funcionarios.length > 0 ? (
+                    data.funcionarios.map((func) => (
+                      <SelectItem key={func.id} value={func.id.toString()}>
+                        {func.nome} - {func.cargo || 'Sem cargo'}
+                        {data.usuarioAtual?.id === func.id && ' (Você)'}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1.5 text-sm text-gray-500">
+                      Nenhum funcionário disponível
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedFuncionario && data.usuarioAtual?.id === parseInt(selectedFuncionario) && (
+                <p className="text-xs text-gray-500">Seu registro de ponto</p>
+              )}
+            </div>
+
+            {/* Botões de Registro */}
+            <div className="grid grid-cols-2 gap-3">
+              {(() => {
+                const status = getStatusRegistroAtual()
+                const podeEntrada = !status || (!status.temEntrada || status.temSaida)
+                const podeSaida = status && status.temEntrada && !status.temSaida
+                const podeSaidaAlmoco = status && status.temEntrada && !status.temSaidaAlmoco
+                const podeVoltaAlmoco = status && status.temSaidaAlmoco && !status.temVoltaAlmoco
+
+                return (
+                  <>
+                    <Button
+                      onClick={() => registrarPonto("Entrada")}
+                      disabled={!podeEntrada}
+                      className={`flex items-center gap-2 ${
+                        podeEntrada 
+                          ? "bg-green-600 hover:bg-green-700" 
+                          : "bg-gray-400 cursor-not-allowed"
+                      }`}
+                      title={!podeEntrada ? "Já existe uma entrada sem saída registrada" : ""}
+                    >
+                      <Play className="w-4 h-4" />
+                      Entrada
+                    </Button>
+                    <Button
+                      onClick={() => registrarPonto("Saída")}
+                      disabled={!podeSaida}
+                      className={`flex items-center gap-2 ${
+                        podeSaida 
+                          ? "bg-red-600 hover:bg-red-700" 
+                          : "bg-gray-400 cursor-not-allowed"
+                      }`}
+                      title={!podeSaida ? "Registre a entrada primeiro" : ""}
+                    >
+                      <Square className="w-4 h-4" />
+                      Saída
+                    </Button>
+                    <Button
+                      onClick={() => registrarPonto("Saída Almoço")}
+                      disabled={!podeSaidaAlmoco}
+                      variant="outline"
+                      className={`flex items-center gap-2 ${
+                        !podeSaidaAlmoco ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
+                      title={!podeSaidaAlmoco ? "Registre a entrada primeiro" : ""}
+                    >
+                      <Coffee className="w-4 h-4" />
+                      Saída Almoço
+                    </Button>
+                    <Button
+                      onClick={() => registrarPonto("Volta Almoço")}
+                      disabled={!podeVoltaAlmoco}
+                      variant="outline"
+                      className={`flex items-center gap-2 ${
+                        !podeVoltaAlmoco ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
+                      title={!podeVoltaAlmoco ? "Registre a saída para almoço primeiro" : ""}
+                    >
+                      <Coffee className="w-4 h-4" />
+                      Volta Almoço
+                    </Button>
+                  </>
+                )
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <Tabs defaultValue="registros">
         <TabsList className="grid w-full grid-cols-5">
