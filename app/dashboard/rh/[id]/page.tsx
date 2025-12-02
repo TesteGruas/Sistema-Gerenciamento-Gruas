@@ -53,6 +53,7 @@ import { useToast } from "@/hooks/use-toast"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { rhApi } from "@/lib/api-rh-completo"
 import { apiRegistrosPonto } from "@/lib/api-ponto-eletronico"
+import { obrasApi } from "@/lib/api-obras"
 import { ColaboradorCertificados } from "@/components/colaborador-certificados"
 import { ColaboradorDocumentosAdmissionais } from "@/components/colaborador-documentos-admissionais"
 import { ColaboradorHolerites } from "@/components/colaborador-holerites"
@@ -212,6 +213,8 @@ export default function FuncionarioDetalhesPage() {
   const [obrasFuncionario, setObrasFuncionario] = useState<any[]>([])
   const [holerites, setHolerites] = useState<any[]>([])
   const [certificadosVencendo, setCertificadosVencendo] = useState<any[]>([])
+  const [obraCompleta, setObraCompleta] = useState<any>(null)
+  const [carregandoObra, setCarregandoObra] = useState(false)
   
   // Estados para cálculo de salário
   const [mesCalculo, setMesCalculo] = useState(() => {
@@ -391,6 +394,24 @@ export default function FuncionarioDetalhesPage() {
     }
   }
 
+  // Função para carregar dados completos da obra
+  const carregarDadosObra = async (obraId: number) => {
+    try {
+      setCarregandoObra(true)
+      const response = await obrasApi.obterObra(obraId)
+      if (response.success && response.data) {
+        setObraCompleta(response.data)
+      } else {
+        setObraCompleta(null)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados da obra:', error)
+      setObraCompleta(null)
+    } finally {
+      setCarregandoObra(false)
+    }
+  }
+
   // Carregar tipos de benefícios disponíveis
   useEffect(() => {
     const carregarTiposBeneficios = async () => {
@@ -442,6 +463,13 @@ export default function FuncionarioDetalhesPage() {
         }
         
         setFuncionario(funcionarioMapeado)
+        
+        // Carregar dados completos da obra se o funcionário estiver atrelado a uma
+        if (funcionarioMapeado.obra_atual?.id) {
+          await carregarDadosObra(funcionarioMapeado.obra_atual.id)
+        } else {
+          setObraCompleta(null)
+        }
         
         // Carregar dados das tabs
         await carregarDadosTabs(funcionarioId)
@@ -1835,6 +1863,148 @@ export default function FuncionarioDetalhesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Área de Obra Atrelada */}
+      {funcionario.obra_atual ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Obra Atrelada
+            </CardTitle>
+            <CardDescription>
+              Informações sobre a obra em que este funcionário está alocado
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {carregandoObra ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                <span className="ml-2 text-gray-600">Carregando dados da obra...</span>
+              </div>
+            ) : obraCompleta ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Nome da Obra</Label>
+                      <p className="text-lg font-semibold">{obraCompleta.nome}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Status</Label>
+                      <div className="mt-1">
+                        <Badge className={`${
+                          obraCompleta.status === 'Em Andamento' ? 'bg-green-100 text-green-800' :
+                          obraCompleta.status === 'Planejamento' ? 'bg-blue-100 text-blue-800' :
+                          obraCompleta.status === 'Pausada' ? 'bg-yellow-100 text-yellow-800' :
+                          obraCompleta.status === 'Concluída' ? 'bg-gray-100 text-gray-800' :
+                          'bg-red-100 text-red-800'
+                        } border`}>
+                          {obraCompleta.status}
+                        </Badge>
+                      </div>
+                    </div>
+                    {obraCompleta.clientes && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-500">Cliente</Label>
+                        <p className="text-sm font-semibold">{obraCompleta.clientes.nome}</p>
+                        {obraCompleta.clientes.cnpj && (
+                          <p className="text-xs text-gray-500 mt-1">CNPJ: {obraCompleta.clientes.cnpj}</p>
+                        )}
+                      </div>
+                    )}
+                    {obraCompleta.tipo && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-500">Tipo</Label>
+                        <p className="text-sm">{obraCompleta.tipo}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-4">
+                    {obraCompleta.endereco && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-500">Endereço</Label>
+                        <p className="text-sm">{obraCompleta.endereco}</p>
+                        {(obraCompleta.cidade || obraCompleta.estado) && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            {obraCompleta.cidade}{obraCompleta.cidade && obraCompleta.estado ? ', ' : ''}{obraCompleta.estado}
+                          </p>
+                        )}
+                        {obraCompleta.cep && (
+                          <p className="text-xs text-gray-500 mt-1">CEP: {obraCompleta.cep}</p>
+                        )}
+                      </div>
+                    )}
+                    {obraCompleta.data_inicio && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-500">Data de Início</Label>
+                        <p className="text-sm">{format(new Date(obraCompleta.data_inicio), 'dd/MM/yyyy', { locale: ptBR })}</p>
+                      </div>
+                    )}
+                    {obraCompleta.data_fim && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-500">Data de Término</Label>
+                        <p className="text-sm">{format(new Date(obraCompleta.data_fim), 'dd/MM/yyyy', { locale: ptBR })}</p>
+                      </div>
+                    )}
+                    {obraCompleta.telefone_obra && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-500">Telefone da Obra</Label>
+                        <p className="text-sm">{obraCompleta.telefone_obra}</p>
+                      </div>
+                    )}
+                    {obraCompleta.email_obra && (
+                      <div>
+                        <Label className="text-sm font-medium text-gray-500">Email da Obra</Label>
+                        <p className="text-sm">{obraCompleta.email_obra}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {obraCompleta.descricao && (
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Descrição</Label>
+                    <p className="text-sm text-gray-700 mt-1">{obraCompleta.descricao}</p>
+                  </div>
+                )}
+                {obraCompleta.observacoes && (
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Observações</Label>
+                    <p className="text-sm text-gray-700 mt-1">{obraCompleta.observacoes}</p>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/dashboard/obras/${obraCompleta.id}`)}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Ver Detalhes da Obra
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-600">Não foi possível carregar os dados completos da obra</p>
+                <p className="text-sm text-gray-500 mt-1">Obra: {funcionario.obra_atual.nome}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3 text-gray-500">
+              <Building2 className="w-5 h-5" />
+              <div>
+                <p className="font-medium">Funcionário não está atrelado a nenhuma obra no momento</p>
+                <p className="text-sm mt-1">Este funcionário não possui alocação ativa em nenhuma obra.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs de Detalhes */}
       <Tabs defaultValue="informacoes" className="w-full">

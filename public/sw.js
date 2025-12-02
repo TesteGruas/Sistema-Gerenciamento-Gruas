@@ -317,6 +317,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
+  // ⚠️ CRÍTICO: NÃO interceptar arquivos estáticos do Next.js
+  // Estes arquivos (CSS, JS, fontes) devem ser servidos diretamente pelo servidor
+  // para evitar problemas de MIME type e dependências circulares
+  if (
+    urlPath.startsWith('/_next/') ||  // Arquivos estáticos do Next.js
+    urlPath.startsWith('/static/') || // Outros arquivos estáticos
+    urlPath.match(/\.(css|js|woff|woff2|ttf|otf|eot)$/i) // Extensões de arquivos estáticos
+  ) {
+    // Não interceptar - deixar passar diretamente
+    return;
+  }
+  
   // ⚠️ IMPORTANTE: Apenas interceptar rotas do PWA
   // Deixar o dashboard e outras rotas passarem normalmente
   if (!urlPath.startsWith('/pwa')) {

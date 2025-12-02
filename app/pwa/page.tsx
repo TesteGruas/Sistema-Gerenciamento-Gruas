@@ -24,7 +24,11 @@ import {
   ChevronRight,
   Zap,
   Receipt,
-  Play
+  Play,
+  DollarSign,
+  Gift,
+  Award,
+  FileCheck
 } from "lucide-react"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { useToast } from "@/hooks/use-toast"
@@ -37,7 +41,6 @@ export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
   const [isClient, setIsClient] = useState(false)
-  const [isNavigating, setIsNavigating] = useState(false)
   const [isRegistrandoPonto, setIsRegistrandoPonto] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
@@ -52,8 +55,7 @@ export default function PWAMainPage() {
   // Obter role também do perfil (fallback)
   const [roleFromPerfil, setRoleFromPerfil] = useState<string | null>(null)
   const [roleFromUserData, setRoleFromUserData] = useState<string | null>(null)
-  const [temObraAtiva, setTemObraAtiva] = useState<boolean>(false)
-  const [isCheckingObra, setIsCheckingObra] = useState(true)
+  // Validação de obra ativa removida - não é mais necessária
   
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -77,54 +79,6 @@ export default function PWAMainPage() {
     }
   }, [])
   
-  // Verificar se funcionário tem obra ativa
-  useEffect(() => {
-    const verificarObraAtiva = async () => {
-      if (typeof window === 'undefined') return
-      
-      try {
-        setIsCheckingObra(true)
-        const token = localStorage.getItem('access_token')
-        if (!token) {
-          setIsCheckingObra(false)
-          return
-        }
-        
-        const funcionarioId = await getFuncionarioIdWithFallback(
-          pwaUserData.user,
-          token,
-          'ID do funcionário não encontrado'
-        )
-        
-        if (funcionarioId) {
-          console.log('[PWA Dashboard] Verificando obra ativa para funcionário ID:', funcionarioId)
-          const alocacoes = await getAlocacoesAtivasFuncionario(funcionarioId)
-          console.log('[PWA Dashboard] Resposta da API:', {
-            success: alocacoes.success,
-            dataLength: alocacoes.data?.length || 0,
-            data: alocacoes.data,
-            pagination: alocacoes.pagination
-          })
-          const temObra = alocacoes.data && alocacoes.data.length > 0
-          setTemObraAtiva(temObra)
-          console.log('[PWA Dashboard] Funcionário tem obra ativa?', temObra, alocacoes.data)
-        } else {
-          console.warn('[PWA Dashboard] Funcionário ID não encontrado')
-          setTemObraAtiva(false)
-        }
-      } catch (error) {
-        console.warn('[PWA Dashboard] Erro ao verificar obra ativa:', error)
-        setTemObraAtiva(false)
-      } finally {
-        setIsCheckingObra(false)
-      }
-    }
-    
-    if (pwaUserData.user && !pwaUserData.loading) {
-      verificarObraAtiva()
-    }
-  }, [pwaUserData.user, pwaUserData.loading])
-  
   // Usar role do perfil primeiro (mais confiável), depois do hook, ignorando 'authenticated'
   // Priorizar roleFromPerfil porque userRole pode ser 'authenticated' (não é um role válido)
   const currentUserRole = roleFromPerfil || 
@@ -133,25 +87,10 @@ export default function PWAMainPage() {
                          pwaUserData.user?.role || 
                          pwaUserData.user?.cargo
 
-  // Função de navegação com loading imediato
+  // Função de navegação direta
   const handleNavigation = (href: string) => {
-    setIsNavigating(true)
-    setTimeout(() => {
-      router.push(href)
-    }, 0)
+    router.push(href)
   }
-
-  // Ocultar loading quando a navegação terminar (página mudou)
-  useEffect(() => {
-    if (isNavigating) {
-      // Ocultar loading após um pequeno delay para garantir que a página renderizou
-      const timer = setTimeout(() => {
-        setIsNavigating(false)
-      }, 200)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [pathname, isNavigating])
 
   // Verificar se estamos no cliente
   useEffect(() => {
@@ -312,13 +251,13 @@ export default function PWAMainPage() {
       requiresObra: true // Requer obra ativa
     },
     {
-      title: "Documentos",
-      description: "Assinar documentos",
-      icon: FileSignature,
-      href: "/pwa/documentos",
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
-      borderColor: "border-orange-100"
+      title: "Notificações",
+      description: "Ver notificações",
+      icon: Bell,
+      href: "/pwa/notificacoes",
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-100"
     },
     {
       title: "Perfil",
@@ -357,6 +296,42 @@ export default function PWAMainPage() {
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "border-green-100"
+    },
+    {
+      title: "Salários",
+      description: "Ver folhas de pagamento",
+      icon: DollarSign,
+      href: "/pwa/perfil?tab=salarios",
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-50",
+      borderColor: "border-emerald-100"
+    },
+    {
+      title: "Benefícios",
+      description: "Meus benefícios",
+      icon: Gift,
+      href: "/pwa/perfil?tab=beneficios",
+      color: "text-pink-600",
+      bgColor: "bg-pink-50",
+      borderColor: "border-pink-100"
+    },
+    {
+      title: "Certificados",
+      description: "Gerenciar certificados",
+      icon: Award,
+      href: "/pwa/perfil?tab=certificados",
+      color: "text-amber-600",
+      bgColor: "bg-amber-50",
+      borderColor: "border-amber-100"
+    },
+    {
+      title: "Admissionais",
+      description: "Documentos admissionais",
+      icon: FileCheck,
+      href: "/pwa/perfil?tab=documentos-admissionais",
+      color: "text-cyan-600",
+      bgColor: "bg-cyan-50",
+      borderColor: "border-cyan-100"
     }
   ]
 
@@ -648,7 +623,7 @@ export default function PWAMainPage() {
   }
 
   // Mostrar loading enquanto carrega dados do usuário ou durante navegação
-  if (pwaUserData.loading || isNavigating) {
+  if (pwaUserData.loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -675,7 +650,7 @@ export default function PWAMainPage() {
               <h2 className="text-2xl font-bold">{pwaUserData.user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
             </div>
             <div className="flex items-center gap-2">
-              {getProximoRegistro() && temObraAtiva && (
+              {getProximoRegistro() && (
                 <button
                   onClick={handleRegistrarPonto}
                   disabled={isRegistrandoPonto}
@@ -714,21 +689,17 @@ export default function PWAMainPage() {
           </div>
 
           {/* Mini stats */}
-          <div className={`grid gap-2 mt-6 ${temObraAtiva ? 'grid-cols-3' : 'grid-cols-1'}`}>
-            {temObraAtiva && (
-              <>
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-                  <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
-                  <p className="text-sm font-bold">
-                    {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-                  </p>
-                </div>
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-                  <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
-                  <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
-                </div>
-              </>
-            )}
+          <div className="grid gap-2 mt-6 grid-cols-3">
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+              <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
+              <p className="text-sm font-bold">
+                {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
+              </p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+              <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
+              <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
+            </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
               <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
@@ -738,61 +709,57 @@ export default function PWAMainPage() {
       </div>
 
       {/* Status Rápido */}
-      <div className={`grid gap-3 ${temObraAtiva ? 'grid-cols-3' : 'grid-cols-1'}`}>
-        {temObraAtiva && (
-          <>
-            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-              <div className="flex flex-col items-center text-center">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
-                  pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
-                }`}>
-                  <CheckCircle className={`w-6 h-6 ${
-                    pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
-                  }`} />
-                </div>
-                <p className="text-base font-bold text-gray-900">
-                  {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-                </p>
-                <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
-              </div>
+      <div className="grid gap-3 grid-cols-3">
+        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+          <div className="flex flex-col items-center text-center">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
+              pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
+            }`}>
+              <CheckCircle className={`w-6 h-6 ${
+                pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
+              }`} />
             </div>
-            
-            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
-                  <Clock className="w-6 h-6 text-[#871b0b]" />
-                </div>
-                <p className="text-base font-bold text-gray-900">
-                  {pwaUserData.pontoHoje?.saida
-                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
-                    : pwaUserData.pontoHoje?.volta_almoco
-                    ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
-                    : pwaUserData.pontoHoje?.saida_almoco
-                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
-                    : '--:--'}
-                </p>
-                <p className="text-[10px] text-gray-500 font-medium">
-                  {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
-                   pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
-                   pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
-                   'Saída'}
-                </p>
-              </div>
+            <p className="text-base font-bold text-gray-900">
+              {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
+            </p>
+            <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
+          </div>
+        </div>
+        
+        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
+              <Clock className="w-6 h-6 text-[#871b0b]" />
             </div>
-          </>
-        )}
+            <p className="text-base font-bold text-gray-900">
+              {pwaUserData.pontoHoje?.saida
+                ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
+                : pwaUserData.pontoHoje?.volta_almoco
+                ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
+                : pwaUserData.pontoHoje?.saida_almoco
+                ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
+                : '--:--'}
+            </p>
+            <p className="text-[10px] text-gray-500 font-medium">
+              {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
+               pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
+               pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
+               'Saída'}
+            </p>
+          </div>
+        </div>
         
         <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
           <div className="flex flex-col items-center text-center">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
-              pwaUserData.documentosPendentes > 0 ? 'bg-orange-100 animate-pulse' : 'bg-gray-100'
+              pwaUserData.documentosPendentes > 0 ? 'bg-blue-100 animate-pulse' : 'bg-gray-100'
             }`}>
-              <FileSignature className={`w-6 h-6 ${
-                pwaUserData.documentosPendentes > 0 ? 'text-orange-600' : 'text-gray-400'
+              <Bell className={`w-6 h-6 ${
+                pwaUserData.documentosPendentes > 0 ? 'text-blue-600' : 'text-gray-400'
               }`} />
             </div>
             <p className="text-base font-bold text-gray-900">{pwaUserData.documentosPendentes}</p>
-            <p className="text-[10px] text-gray-500 font-medium">Pendentes</p>
+            <p className="text-[10px] text-gray-500 font-medium">Não lidas</p>
           </div>
         </div>
       </div>
@@ -803,29 +770,11 @@ export default function PWAMainPage() {
           {quickActions
             .filter(action => {
               // Filtrar itens que requerem obra ativa (Ponto e Gruas)
-              if (action.requiresObra) {
-                if (!temObraAtiva) {
-                  console.log(`[PWA Dashboard] ${action.title} requer obra ativa, ocultando`)
-                  return false
-                }
-              }
+              // Validação de obra removida - todos os itens estão disponíveis
               
               // Filtrar Aprovações para Operários - apenas Supervisor para cima
               if (action.requiresSupervisor) {
                 const roleLower = (currentUserRole || '').toLowerCase()
-                
-                // Debug: log do role detectado (remover em produção)
-                if (action.title === 'Aprovações') {
-                  console.log('[PWA Dashboard] Role detectado:', {
-                    userRole,
-                    roleFromPerfil,
-                    roleFromUserData,
-                    userRoleFromData: pwaUserData.user?.role,
-                    userCargoFromData: pwaUserData.user?.cargo,
-                    currentUserRole,
-                    roleLower
-                  })
-                }
                 
                 // Verificar se é Operário (todas as variações) - se for, não mostrar
                 const isOperario = roleLower.includes('operário') || 
@@ -838,7 +787,6 @@ export default function PWAMainPage() {
                                   roleLower === '4' // Nível 4 = Operários
                 
                 if (isOperario) {
-                  console.log('[PWA Dashboard] Operário detectado, ocultando Aprovações')
                   return false // Não mostrar para Operários
                 }
                 
@@ -849,10 +797,6 @@ export default function PWAMainPage() {
                               roleLower === 'gestor' || 
                               roleLower === 'admin' || 
                               roleLower === 'administrador'
-                
-                if (action.title === 'Aprovações') {
-                  console.log('[PWA Dashboard] Pode ver Aprovações?', canSee)
-                }
                 
                 return canSee
               }
@@ -890,23 +834,23 @@ export default function PWAMainPage() {
 
       {/* Dica ou Alerta */}
       {pwaUserData.documentosPendentes > 0 && (
-        <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200 rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-500">
-          <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <AlertCircle className="w-5 h-5 text-orange-600" />
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-500">
+          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Bell className="w-5 h-5 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-sm text-orange-900 mb-1">
-              {pwaUserData.documentosPendentes} documento{pwaUserData.documentosPendentes > 1 ? 's' : ''} pendente{pwaUserData.documentosPendentes > 1 ? 's' : ''}
+            <h3 className="font-semibold text-sm text-blue-900 mb-1">
+              {pwaUserData.documentosPendentes} notificação{pwaUserData.documentosPendentes > 1 ? 'ões' : ''} não lida{pwaUserData.documentosPendentes > 1 ? 's' : ''}
             </h3>
-            <p className="text-xs text-orange-700 mb-2">
-              Você tem documentos aguardando sua assinatura digital
+            <p className="text-xs text-blue-700 mb-2">
+              Você tem notificações aguardando sua atenção
             </p>
             <Button 
               size="sm" 
-              onClick={() => handleNavigation('/pwa/documentos')}
-              className="bg-orange-600 hover:bg-orange-700 text-white h-8 text-xs"
+              onClick={() => handleNavigation('/pwa/notificacoes')}
+              className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs"
             >
-              Ver documentos
+              Ver notificações
               <ChevronRight className="w-3 h-3 ml-1" />
             </Button>
           </div>

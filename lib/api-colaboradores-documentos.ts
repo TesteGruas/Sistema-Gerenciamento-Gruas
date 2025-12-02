@@ -111,16 +111,29 @@ export interface HoleriteResponse {
 
 const apiRequest = async (url: string, options: RequestInit = {}) => {
   try {
+    console.log('[API-REQUEST] Fazendo requisição para:', url)
+    console.log('[API-REQUEST] Opções:', { method: options.method || 'GET', headers: options.headers })
+    
     const response = await fetchWithAuth(url, options)
+    
+    console.log('[API-REQUEST] Resposta recebida:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
+    })
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('[API-REQUEST] Erro na resposta:', errorData)
       throw new Error(errorData.message || errorData.error || `Erro ${response.status}: ${response.statusText}`)
     }
     
-    return await response.json()
+    const data = await response.json()
+    console.log('[API-REQUEST] Dados recebidos:', data)
+    return data
   } catch (error) {
-    console.error('API request error:', error)
+    console.error('[API-REQUEST] Erro na requisição:', error)
     throw error
   }
 }

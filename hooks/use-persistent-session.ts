@@ -76,7 +76,6 @@ export function usePersistentSession() {
           localStorage.setItem('refresh_token', session.refreshToken)
         }
         
-        console.log('[PersistentSession] Sessão restaurada com sucesso')
         return true
       } else {
         // Nenhuma sessão encontrada

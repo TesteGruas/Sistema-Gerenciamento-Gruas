@@ -147,14 +147,65 @@ export default function GruaComplementosManager({
     condicoes_locacao: ''
   })
 
-  // Carregar complementos do catálogo quando necessário
-  // O componente permite adicionar complementos do catálogo através da UI
-  // Não há necessidade de carregar automaticamente, pois o usuário seleciona do catálogo
+  // Função para carregar complementos do catálogo via API
+  const loadComplementos = async () => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      if (!token) {
+        console.warn('Token de autenticação não encontrado para carregar complementos')
+        // Não exibir erro, apenas não carregar dados
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/complementos?limit=1000&ativo=true`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        console.warn('Erro ao carregar complementos do catálogo:', response.statusText)
+        // Não exibir erro, apenas não carregar dados
+        return
+      }
+
+      const result = await response.json()
+      
+      if (result.success && result.data && Array.isArray(result.data)) {
+        // Converter dados do catálogo para o formato esperado pelo componente
+        // Nota: O catálogo retorna complementos disponíveis, mas não os complementos
+        // já adicionados a esta obra/grua. Por enquanto, mantemos a lista vazia
+        // e o usuário pode adicionar complementos do catálogo manualmente.
+        // Se no futuro houver endpoint para buscar complementos por obra/grua,
+        // essa função deve ser atualizada.
+        
+        // Por enquanto, não preenchemos automaticamente para não sobrescrever
+        // complementos já adicionados pelo usuário
+        // setComplementos([])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar complementos:', error)
+      // Não exibir erro ao usuário, apenas logar
+    }
+  }
+
+  // Carregar complementos do catálogo quando o componente montar
   useEffect(() => {
-    // Inicializar com array vazio - complementos serão adicionados pelo usuário
-    // através da interface de seleção do catálogo
-    setComplementos([])
+    loadComplementos()
   }, [])
+
+  // Atualizar datas quando mudarem
+  useEffect(() => {
+    // Atualizar datas dos complementos existentes quando dataInicioLocacao ou mesesLocacao mudarem
+    setComplementos(prev => prev.map(comp => ({
+      ...comp,
+      inicio_cobranca: dataInicioLocacao || comp.inicio_cobranca,
+      meses_cobranca: mesesLocacao || comp.meses_cobranca
+    })))
+  }, [dataInicioLocacao, mesesLocacao])
 
   const totais = useMemo((): TotaisComplementos => {
     const incluidos = complementos.filter(c => c.incluido)

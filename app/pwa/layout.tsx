@@ -7,7 +7,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { 
   Clock, 
-  FileSignature, 
+  FileSignature,
+  Bell, 
   FileText,
   Settings,
   User, 
@@ -18,7 +19,6 @@ import {
   Smartphone,
   Wifi,
   WifiOff,
-  Bell,
   UserCircle,
   Briefcase,
   Home,
@@ -52,10 +52,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   const [user, setUser] = useState<{ id: number; nome: string; cargo?: string; profile?: any } | null>(null)
   // Inicializar como false e atualizar no useEffect para evitar erro de hidratação
   const [isClient, setIsClient] = useState(false)
-  const [documentosPendentes, setDocumentosPendentes] = useState(0)
-  const [isNavigating, setIsNavigating] = useState(false)
+  const [notificacoesNaoLidas, setNotificacoesNaoLidas] = useState(0)
   const [previousPathname, setPreviousPathname] = useState<string | null>(null)
-  const [temObraAtiva, setTemObraAtiva] = useState<boolean>(false)
+  const [temObraAtiva] = useState<boolean>(true) // Sempre true - validação removida
   
   // Hook de sessão persistente
   const {
@@ -92,46 +91,16 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       return
     }
 
-    // Se a rota mudou e estamos navegando, ocultar loading após renderizar
-    if (previousPathname !== pathname && isNavigating) {
-      setPreviousPathname(pathname)
-      
-      // Ocultar loading após a página renderizar
-      // Usar múltiplas estratégias para garantir que desaparece
-      const hideLoading = () => {
-        setIsNavigating(false)
-      }
-      
-      // Estratégia 1: Aguardar o próximo frame de renderização (muito rápido)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          // Estratégia 2: Pequeno delay para garantir transição suave
-          setTimeout(hideLoading, 150)
-        })
-      })
-      
-      // Fallback: timeout máximo para garantir que sempre desaparece (1s)
-      const maxTimer = setTimeout(hideLoading, 1000)
-      
-      return () => {
-        clearTimeout(maxTimer)
-      }
-    } else if (previousPathname !== pathname) {
-      // Se a rota mudou mas não estávamos navegando, atualizar pathname
+    // Se a rota mudou, atualizar pathname anterior
+    if (previousPathname !== pathname) {
       setPreviousPathname(pathname)
     }
-  }, [pathname, previousPathname, isNavigating])
+  }, [pathname, previousPathname])
 
-  // Função wrapper para navegação com loading
+  // Função de navegação direta
   const handleNavigation = (href: string) => {
-    // Mostrar loading IMEDIATAMENTE ao clicar
-    setIsNavigating(true)
     setIsMenuOpen(false) // Fechar menu ao navegar
-    
-    // Usar setTimeout para garantir que o estado foi atualizado antes da navegação
-    setTimeout(() => {
-      router.push(href)
-    }, 0)
+    router.push(href) // Redirecionamento direto sem loading
   }
 
   // Verificar status de conexão
@@ -173,25 +142,75 @@ function PWALayoutContent({ children }: PWALayoutProps) {
           ...(parsedUser.profile && { profile: parsedUser.profile })
         })
         
-        carregarDocumentosPendentes(parsedUser.id)
+        carregarNotificacoesNaoLidas(parsedUser.id)
       } catch (error) {
         console.error('Erro ao carregar dados do usuário:', error)
       }
     }
   }, [])
+  
+  // Atualizar notificações periodicamente
+  useEffect(() => {
+    if (!user?.id) return
+    
+    const intervalId = setInterval(() => {
+      carregarNotificacoesNaoLidas(user.id)
+    }, 60000) // Atualizar a cada 1 minuto
+    
+    return () => clearInterval(intervalId)
+  }, [user?.id])
 
-  const carregarDocumentosPendentes = async (userId: number) => {
+  const carregarNotificacoesNaoLidas = async (userId: number) => {
     try {
-      const cachedDocs = localStorage.getItem(`documentos_pendentes_${userId}`)
-      if (cachedDocs) {
-        const docs = JSON.parse(cachedDocs)
-        setDocumentosPendentes(docs.length)
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        setNotificacoesNaoLidas(0)
+        return
+      }
+
+      // Verificar se o token não está expirado
+      try {
+        const tokenParts = token.split('.')
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]))
+          if (payload.exp) {
+            const isExpired = payload.exp * 1000 < Date.now()
+            if (isExpired) {
+              setNotificacoesNaoLidas(0)
+              return
+            }
+          }
+        }
+      } catch (tokenError) {
+        // Se não conseguir decodificar, continuar
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+      const response = await fetch(
+        `${apiUrl}/api/notificacoes/count/nao-lidas`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      // Se receber 403 ou 401, token é inválido - não tentar novamente
+      if (response.status === 403 || response.status === 401) {
+        setNotificacoesNaoLidas(0)
+        return
+      }
+
+      if (response.ok) {
+        const data = await response.json()
+        setNotificacoesNaoLidas(data.count || 0)
       } else {
-        setDocumentosPendentes(0)
+        setNotificacoesNaoLidas(0)
       }
     } catch (error) {
-      console.error('Erro ao carregar documentos pendentes:', error)
-      setDocumentosPendentes(0)
+      // Não logar erros de rede silenciosamente
+      setNotificacoesNaoLidas(0)
     }
   }
 
@@ -200,203 +219,13 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     
     await persistentLogout()
     setUser(null)
-    setDocumentosPendentes(0)
-    setTemObraAtiva(false)
+    setNotificacoesNaoLidas(0)
   }
   
-  // Verificar se funcionário tem obra ativa
-  useEffect(() => {
-    console.log('[PWA Layout] ⚡ useEffect verificarObraAtiva disparado', { 
-      user: user ? 'existe' : 'null', 
-      persistentUser: persistentUser ? 'existe' : 'null',
-      sessionLoading 
-    })
-    
-    const verificarObraAtiva = async () => {
-      console.log('[PWA Layout] 🔍 Iniciando verificarObraAtiva')
-      if (typeof window === 'undefined') {
-        console.log('[PWA Layout] ❌ window undefined, retornando')
-        return
-      }
-      
-      // Usar user ou persistentUser como fallback
-      const userParaUsar = user || persistentUser
-      console.log('[PWA Layout] 👤 userParaUsar:', userParaUsar ? 'existe' : 'null', 'sessionLoading:', sessionLoading)
-      
-      if (!userParaUsar || sessionLoading) {
-        console.log('[PWA Layout] ⏳ user ou sessionLoading não pronto, retornando')
-        return
-      }
-      
-      try {
-        // Primeiro, verificar se já existe obra validada no localStorage
-        const obraValidada = localStorage.getItem('tem_obra_ativa')
-        const obraAtivaData = localStorage.getItem('obra_ativa')
-        
-        if (obraValidada === 'true' && obraAtivaData) {
-          try {
-            const obraData = JSON.parse(obraAtivaData)
-            console.log('[PWA Layout] ✅ Obra já validada encontrada no localStorage:', obraData.obra?.nome)
-            setTemObraAtiva(true)
-            return
-          } catch (e) {
-            console.warn('[PWA Layout] Erro ao ler obra validada, continuando busca...')
-          }
-        }
+  // Validação de obra ativa removida - não é mais necessária
 
-        const token = localStorage.getItem('access_token')
-        console.log('[PWA Layout] token:', token ? 'existe' : 'não existe')
-        if (!token) {
-          console.log('[PWA Layout] Sem token, setando temObraAtiva = false')
-          setTemObraAtiva(false)
-          return
-        }
-        
-        const userData = localStorage.getItem('user_data')
-        console.log('[PWA Layout] userData:', userData ? 'existe' : 'não existe')
-        if (!userData) {
-          console.log('[PWA Layout] Sem userData, setando temObraAtiva = false')
-          setTemObraAtiva(false)
-          return
-        }
-        
-        // Usar userData do localStorage ou userParaUsar
-        let parsedUser
-        if (userData) {
-          parsedUser = JSON.parse(userData)
-        } else if (userParaUsar) {
-          parsedUser = userParaUsar
-        } else {
-          console.log('[PWA Layout] ❌ Sem userData nem userParaUsar')
-          setTemObraAtiva(false)
-          return
-        }
-        
-        console.log('[PWA Layout] 👤 parsedUser:', parsedUser?.id, parsedUser?.email, parsedUser?.nome)
-        console.log('[PWA Layout] 🔍 parsedUser completo:', {
-          id: parsedUser?.id,
-          email: parsedUser?.email,
-          nome: parsedUser?.nome,
-          funcionario_id: parsedUser?.funcionario_id,
-          profile: parsedUser?.profile
-        })
-        
-        // Tentar usar funcionario_id diretamente se estiver disponível
-        let funcionarioId: number | null = null
-        if (parsedUser?.funcionario_id && !isNaN(Number(parsedUser.funcionario_id))) {
-          funcionarioId = Number(parsedUser.funcionario_id)
-          console.log('[PWA Layout] ✅ funcionarioId encontrado diretamente no parsedUser:', funcionarioId)
-        } else if (parsedUser?.user_metadata?.funcionario_id && !isNaN(Number(parsedUser.user_metadata.funcionario_id))) {
-          funcionarioId = Number(parsedUser.user_metadata.funcionario_id)
-          console.log('[PWA Layout] ✅ funcionarioId encontrado no user_metadata:', funcionarioId)
-        } else if (parsedUser?.profile?.funcionario_id && !isNaN(Number(parsedUser.profile.funcionario_id))) {
-          funcionarioId = Number(parsedUser.profile.funcionario_id)
-          console.log('[PWA Layout] ✅ funcionarioId encontrado no profile:', funcionarioId)
-        } else {
-          console.log('[PWA Layout] 🔍 Buscando funcionarioId via API...')
-          try {
-            funcionarioId = await getFuncionarioIdWithFallback(
-              parsedUser,
-              token,
-              'ID do funcionário não encontrado'
-            )
-            console.log('[PWA Layout] ✅ funcionarioId obtido via API:', funcionarioId)
-          } catch (error) {
-          console.error('[PWA Layout] ❌ Erro ao buscar funcionarioId:', error)
-          console.error('[PWA Layout] ❌ Erro completo:', JSON.stringify(error, null, 2))
-          // Tentar buscar diretamente pelo email ou ID do usuário
-          console.log('[PWA Layout] 🔄 INICIANDO busca alternativa...')
-          console.log('[PWA Layout] 📧 Email para busca:', parsedUser?.email || 'NÃO DEFINIDO')
-          console.log('[PWA Layout] 🆔 User ID para busca:', parsedUser?.id || 'NÃO DEFINIDO')
-          console.log('[PWA Layout] 📝 parsedUser completo:', JSON.stringify(parsedUser, null, 2))
-          
-          try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-            console.log('[PWA Layout] 🌐 API URL:', apiUrl)
-            
-            // Tentar buscar pelo email primeiro
-            if (parsedUser.email) {
-              const searchUrl = `${apiUrl}/api/funcionarios?search=${encodeURIComponent(parsedUser.email)}&limit=20`
-              console.log('[PWA Layout] 🔍 Buscando em:', searchUrl)
-              
-              const response = await fetch(searchUrl, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                }
-              })
-              
-              console.log('[PWA Layout] 📡 Response status:', response.status)
-              
-              if (response.ok) {
-                const data = await response.json()
-                console.log('[PWA Layout] 📦 Funcionários encontrados:', data.data?.length || 0)
-                const funcionarios = data.data || []
-                
-                // Procurar funcionário que corresponde ao usuário
-                const funcionario = funcionarios.find((f: any) => {
-                  const matchUsuarioId = f.usuario?.id === parsedUser.id
-                  const matchUsuarioEmail = f.usuario?.email === parsedUser.email
-                  const matchEmail = f.email === parsedUser.email
-                  console.log('[PWA Layout] 🔍 Verificando funcionário:', {
-                    id: f.id,
-                    nome: f.nome,
-                    email: f.email,
-                    usuarioId: f.usuario?.id,
-                    usuarioEmail: f.usuario?.email,
-                    matchUsuarioId,
-                    matchUsuarioEmail,
-                    matchEmail
-                  })
-                  return matchUsuarioId || matchUsuarioEmail || matchEmail
-                })
-                
-                if (funcionario && funcionario.id) {
-                  funcionarioId = typeof funcionario.id === 'number' ? funcionario.id : parseInt(funcionario.id)
-                  console.log('[PWA Layout] ✅ funcionarioId encontrado via busca direta:', funcionarioId)
-                } else {
-                  console.warn('[PWA Layout] ⚠️ Funcionário não encontrado na lista retornada')
-                }
-              } else {
-                const errorText = await response.text()
-                console.error('[PWA Layout] ❌ Erro na resposta da API:', response.status, errorText)
-              }
-            } else {
-              console.warn('[PWA Layout] ⚠️ parsedUser não tem email para busca')
-            }
-          } catch (searchError) {
-            console.error('[PWA Layout] ❌ Erro na busca direta:', searchError)
-          }
-          }
-        }
-        
-        if (funcionarioId) {
-          console.log('[PWA Layout] Verificando obra ativa para funcionário ID:', funcionarioId)
-          const alocacoes = await getAlocacoesAtivasFuncionario(funcionarioId)
-          console.log('[PWA Layout] Resposta da API:', {
-            success: alocacoes.success,
-            dataLength: alocacoes.data?.length || 0,
-            data: alocacoes.data,
-            pagination: alocacoes.pagination
-          })
-          const temObra = alocacoes.data && alocacoes.data.length > 0
-          setTemObraAtiva(temObra)
-          console.log('[PWA Layout] Funcionário tem obra ativa?', temObra, alocacoes.data)
-        } else {
-          console.warn('[PWA Layout] Funcionário ID não encontrado')
-          setTemObraAtiva(false)
-        }
-      } catch (error) {
-        console.error('[PWA Layout] Erro ao verificar obra ativa:', error)
-        setTemObraAtiva(false)
-      }
-    }
-    
-    verificarObraAtiva()
-  }, [user, persistentUser, sessionLoading])
-
-  // Rotas que não precisam do layout (login, redirect e validar-obra) - renderizar children diretamente
-  const noLayoutPaths = ['/pwa/login', '/pwa/redirect', '/pwa/validar-obra']
+  // Rotas que não precisam do layout (login e redirect) - renderizar children diretamente
+  const noLayoutPaths = ['/pwa/login', '/pwa/redirect']
   const shouldShowLayout = !noLayoutPaths.some(path => pathname === path)
   
   // Se for uma rota sem layout, renderizar children diretamente sem verificação de cliente
@@ -433,14 +262,6 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   
   const allNavigationItems = itemsToUse
     .filter(item => item && item.icon) // Filtrar itens inválidos ou sem ícone
-    .filter(item => {
-      // Filtrar "Ponto Eletrônico" e "Gruas" se não tiver obra ativa
-      if ((item.path === '/pwa/ponto' || item.path === '/pwa/gruas') && !temObraAtiva) {
-        console.log(`[PWA Layout] ${item.label} requer obra ativa, ocultando`)
-        return false
-      }
-      return true
-    })
     .map(item => {
       // Mapear labels para nomes mais curtos para o menu inferior
       const labelMap: Record<string, string> = {
@@ -473,8 +294,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     })
   }
 
-  // Adicionar notificações com badge se houver documentos pendentes
-  if (canViewNotifications() && documentosPendentes > 0) {
+  // Adicionar notificações com badge se houver notificações não lidas
+  if (canViewNotifications() && notificacoesNaoLidas > 0) {
     const notificacaoItem = pwaMenuItems.find(item => item.path === '/pwa/notificacoes')
     if (notificacaoItem && !allNavigationItems.find(item => item.href === '/pwa/notificacoes')) {
       allNavigationItems.push({
@@ -493,7 +314,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   const priorityOrder = [
     'Ponto Eletrônico',
     'Espelho de Ponto',
-    'Documentos',
+    'Notificações',
     'Aprovações',
     'Gruas',
     'Holerites',
@@ -556,16 +377,14 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   }
   
   const essentialNavItems = [
-    // Ponto - apenas se tiver obra ativa
-    ...(temObraAtiva ? [
-      allNavigationItems.find(item => item.href === '/pwa/ponto') || {
-        name: 'Ponto',
-        href: '/pwa/ponto',
-        icon: Clock,
-        label: 'Ponto',
-        description: 'Registrar ponto'
-      }
-    ] : []),
+    // Ponto - sempre disponível
+    allNavigationItems.find(item => item.href === '/pwa/ponto') || {
+      name: 'Ponto',
+      href: '/pwa/ponto',
+      icon: Clock,
+      label: 'Ponto',
+      description: 'Registrar ponto'
+    },
     // Espelho
     allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
       name: 'Espelho',
@@ -582,19 +401,19 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       label: 'Home',
       description: 'Página inicial'
     },
-    // Docs
-    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
-      name: 'Docs',
-      href: '/pwa/documentos',
-      icon: FileSignature,
-      label: 'Docs',
-      description: 'Documentos'
+    // Notificações
+    allNavigationItems.find(item => item.href === '/pwa/notificacoes') || {
+      name: 'Notif',
+      href: '/pwa/notificacoes',
+      icon: Bell,
+      label: 'Notificações',
+      description: 'Notificações'
     },
     // Perfil - SEMPRE presente
     perfilItem
   ].filter(Boolean) // Remove itens undefined
 
-  // Usar apenas os 5 itens essenciais na navegação inferior (ou menos se não tiver obra ativa)
+  // Usar apenas os 5 itens essenciais na navegação inferior
   const filteredNavigationItems = essentialNavItems.slice(0, 5)
 
   // Para o menu lateral (drawer), separar em "Principal" e "Mais"
@@ -881,21 +700,14 @@ function PWALayoutContent({ children }: PWALayoutProps) {
               </>
             )}
 
-            {/* Loading Overlay durante navegação */}
-            {isNavigating && (
-              <div className="fixed inset-0 bg-white/90 backdrop-blur-sm z-[100] flex items-center justify-center">
-                <PageLoader text="Carregando página..." />
-              </div>
-            )}
-
             {/* Conteúdo principal */}
-            <main className={`px-4 pt-4 pb-24 transition-opacity duration-200 ${isNavigating ? 'opacity-50' : 'opacity-100'}`}>
+            <main className="px-4 pt-4 pb-24 transition-opacity duration-200 opacity-100">
               {children}
             </main>
 
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb overflow-visible">
-              <div className={`grid h-16 relative ${temObraAtiva ? 'grid-cols-5' : 'grid-cols-4'}`}>
+              <div className="grid h-16 relative grid-cols-5">
                 {filteredNavigationItems.length > 0 ? (
                   filteredNavigationItems
                     .filter(item => item && item.icon) // Filtrar itens sem ícone
@@ -915,19 +727,15 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                               : "text-gray-500 active:bg-gray-100"
                           }`}
                         >
-                          {/* Meio círculo por cima quando item está ativo */}
-                          {isActive && (
-                            <div 
-                              className="absolute -top-5 left-1/2 -translate-x-1/2 w-20 h-10 bg-white rounded-t-full border-t-2 border-l-2 border-r-2 border-[#871b0b] shadow-2xl transition-all duration-200"
-                              style={{ 
-                                zIndex: 0,
-                                boxShadow: '0 -4px 12px rgba(135, 27, 11, 0.25)'
-                              }}
-                            />
-                          )}
                           
                           <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`} style={{ zIndex: isActive ? 10 : 1 }}>
                             <Icon className={`w-6 h-6 relative ${isActive ? 'stroke-[2.5]' : ''} ${isActive ? 'text-[#871b0b]' : ''}`} />
+                            {/* Badge de notificações não lidas */}
+                            {item.href === '/pwa/notificacoes' && notificacoesNaoLidas > 0 && (
+                              <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white text-[10px] font-bold border-2 border-white">
+                                {notificacoesNaoLidas > 9 ? '9+' : notificacoesNaoLidas}
+                              </Badge>
+                            )}
                           </div>
                           <span className={`text-xs font-medium whitespace-nowrap relative ${isActive ? 'font-semibold' : ''}`} style={{ zIndex: isActive ? 10 : 1 }}>
                             {item.name}
