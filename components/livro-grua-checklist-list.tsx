@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback, memo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -123,8 +123,8 @@ export function LivroGruaChecklistList({
     carregarChecklists()
   }, [gruaId])
 
-  // Filtrar checklists
-  const checklistsFiltrados = checklists.filter(checklist => {
+  // Filtrar checklists - memoizado para evitar recálculo desnecessário
+  const checklistsFiltrados = useMemo(() => checklists.filter(checklist => {
     const matchSearch = !searchTerm || 
       checklist.funcionario_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       checklist.data.includes(searchTerm)
@@ -132,9 +132,9 @@ export function LivroGruaChecklistList({
     const matchData = !filtroData || checklist.data === filtroData
 
     return matchSearch && matchData
-  })
+  }), [checklists, searchTerm, filtroData])
 
-  const contarItensMarcados = (checklist: ChecklistDiario): number => {
+  const contarItensMarcados = useCallback((checklist: ChecklistDiario): number => {
     return [
       checklist.cabos,
       checklist.polias,
@@ -145,7 +145,7 @@ export function LivroGruaChecklistList({
       checklist.indicadores,
       checklist.aterramento
     ].filter(Boolean).length
-  }
+  }, [])
 
   return (
     <Card>

@@ -1920,16 +1920,35 @@ router.get('/performance-gruas', async (req, res) => {
       return ordem === 'asc' ? valorA - valorB : valorB - valorA
     })
 
-    // Calcular totais
-    const totais = {
+    // Calcular totais e resumo geral
+    const totalHorasTrabalhadas = relatorioFiltrado.reduce((sum, item) => sum + item.metricas.horas_trabalhadas, 0)
+    const totalHorasDisponiveis = relatorioFiltrado.reduce((sum, item) => sum + item.metricas.horas_disponiveis, 0)
+    const receitaTotal = relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.receita_total, 0)
+    const custoTotal = relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.custo_total, 0)
+    const lucroTotal = relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.lucro_bruto, 0)
+    const taxaUtilizacaoMedia = relatorioFiltrado.length > 0
+      ? Math.round((relatorioFiltrado.reduce((sum, item) => sum + item.metricas.taxa_utilizacao, 0) / relatorioFiltrado.length) * 100) / 100
+      : 0
+    
+    // Calcular ROI médio
+    const investimentoTotal = relatorioFiltrado.reduce((sum, item) => sum + (item.roi.investimento_inicial || 0), 0)
+    const roiMedio = investimentoTotal > 0
+      ? Math.round(((receitaTotal - custoTotal) / investimentoTotal) * 100 * 100) / 100
+      : 0
+
+    const resumoGeral = {
       total_gruas: relatorioFiltrado.length,
-      receita_total: relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.receita_total, 0),
-      custo_total: relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.custo_total, 0),
-      lucro_total: relatorioFiltrado.reduce((sum, item) => sum + item.financeiro.lucro_bruto, 0),
-      taxa_utilizacao_media: relatorioFiltrado.length > 0
-        ? Math.round((relatorioFiltrado.reduce((sum, item) => sum + item.metricas.taxa_utilizacao, 0) / relatorioFiltrado.length) * 100) / 100
-        : 0
+      total_horas_trabalhadas: Math.round(totalHorasTrabalhadas * 100) / 100,
+      total_horas_disponiveis: Math.round(totalHorasDisponiveis * 100) / 100,
+      taxa_utilizacao_media: taxaUtilizacaoMedia,
+      receita_total: Math.round(receitaTotal * 100) / 100,
+      custo_total: Math.round(custoTotal * 100) / 100,
+      lucro_total: Math.round(lucroTotal * 100) / 100,
+      roi_medio: roiMedio
     }
+
+    // Calcular dias úteis (aproximadamente 70% dos dias totais)
+    const diasUteis = Math.floor(diasPeriodo * 0.7)
 
     // Aplicar paginação
     const total = relatorioFiltrado.length
@@ -1937,27 +1956,21 @@ router.get('/performance-gruas', async (req, res) => {
     const offset = (pagina - 1) * limite
     const relatorioPaginado = relatorioFiltrado.slice(offset, offset + limite)
 
-    // Preparar resposta
+    // Preparar resposta no formato esperado pelo frontend
     const responseData = {
       periodo: {
         data_inicio,
-        data_fim
+        data_fim,
+        dias_totais: diasPeriodo,
+        dias_uteis: diasUteis
       },
-      filtros: {
-        grua_id: grua_id || null,
-        obra_id: obra_id || null,
-        agrupar_por,
-        incluir_projecao,
-        ordenar_por,
-        ordem
-      },
-      totais,
-      relatorio: relatorioPaginado,
+      resumo_geral: resumoGeral,
+      performance_por_grua: relatorioPaginado,
       paginacao: {
-        page: pagina,
-        limit: limite,
-        total: total,
-        pages: totalPages
+        pagina_atual: pagina,
+        total_paginas: totalPages,
+        total_registros: total,
+        limite: limite
       }
     }
 

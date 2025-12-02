@@ -69,7 +69,7 @@ router.get('/clientes/buscar', async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from('clientes')
       .select('id, nome, cnpj, email, telefone, contato')
-      .or(`nome.ilike.%${q}%,cnpj.ilike.%${q}%`)
+      .or(`nome.ilike.%${sanitizedQuery}%,cnpj.ilike.%${sanitizedQuery}%`)
       .limit(10)
 
     if (error) {
@@ -687,6 +687,14 @@ router.get('/export', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    
+    // Validar ID
+    if (!id || (isNaN(Number(id)) && !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))) {
+      return res.status(400).json({
+        error: 'ID inválido',
+        message: 'O ID deve ser um número ou UUID válido'
+      })
+    }
 
     // Buscar grua com dados relacionados
     const { data: grua, error: gruaError } = await supabaseAdmin
@@ -1019,6 +1027,14 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    
+    // Validar ID
+    if (!id || (isNaN(Number(id)) && !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))) {
+      return res.status(400).json({
+        error: 'ID inválido',
+        message: 'O ID deve ser um número ou UUID válido'
+      })
+    }
 
     // Validar dados
     const { error, value } = gruaInputSchema.validate(req.body)
@@ -1139,6 +1155,14 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    
+    // Validar ID
+    if (!id || (isNaN(Number(id)) && !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))) {
+      return res.status(400).json({
+        error: 'ID inválido',
+        message: 'O ID deve ser um número ou UUID válido'
+      })
+    }
 
     const { error } = await supabaseAdmin
       .from('gruas')

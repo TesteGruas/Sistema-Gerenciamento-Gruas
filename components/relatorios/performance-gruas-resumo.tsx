@@ -1,14 +1,15 @@
 "use client"
 
+import { useMemo, memo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { TrendingUp, TrendingDown, DollarSign, Clock, BarChart3, Wrench } from "lucide-react"
-import type { PerformanceGruasResponse } from "@/lib/mocks/performance-gruas-mocks"
+import type { PerformanceGruasResponse } from "@/lib/types/performance-gruas"
 
 interface PerformanceGruasResumoProps {
   resumo?: PerformanceGruasResponse['resumo_geral'] | null
 }
 
-export function PerformanceGruasResumo({ resumo }: PerformanceGruasResumoProps) {
+export const PerformanceGruasResumo = memo(function PerformanceGruasResumo({ resumo }: PerformanceGruasResumoProps) {
   // Wrapper try-catch para capturar qualquer erro
   try {
     // Verificação inicial - se não houver resumo válido, retornar imediatamente
@@ -46,64 +47,65 @@ export function PerformanceGruasResumo({ resumo }: PerformanceGruasResumoProps) 
     const lucroTotal = getSafeValue(resumoObj, 'lucro_total', 0)
     const roiMedio = getSafeValue(resumoObj, 'roi_medio', 0)
 
-    const cards = [
-    {
-      title: "Total de Gruas",
-      value: totalGruas,
-      icon: Wrench,
-      color: "bg-blue-500",
-      subtitle: "Analisadas no período"
-    },
-    {
-      title: "Taxa de Utilização Média",
-      value: `${taxaUtilizacaoMedia.toFixed(1)}%`,
-      icon: BarChart3,
-      color: taxaUtilizacaoMedia >= 80 ? "bg-green-500" : taxaUtilizacaoMedia >= 60 ? "bg-yellow-500" : "bg-red-500",
-      subtitle: `${totalHorasTrabalhadas.toLocaleString('pt-BR')}h trabalhadas`
-    },
-    {
-      title: "Receita Total",
-      value: `R$ ${receitaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      icon: TrendingUp,
-      color: "bg-green-500",
-      subtitle: "Período selecionado"
-    },
-    {
-      title: "Custo Total",
-      value: `R$ ${custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      icon: DollarSign,
-      color: "bg-orange-500",
-      subtitle: "Operação + Manutenção"
-    },
-    {
-      title: "Lucro Total",
-      value: `R$ ${lucroTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      icon: lucroTotal >= 0 ? TrendingUp : TrendingDown,
-      color: lucroTotal >= 0 ? "bg-green-500" : "bg-red-500",
-      subtitle: `Margem: ${receitaTotal > 0 ? ((lucroTotal / receitaTotal) * 100).toFixed(1) : '0.0'}%`
-    },
-    {
-      title: "ROI Médio",
-      value: `${roiMedio.toFixed(1)}%`,
-      icon: BarChart3,
-      color: roiMedio >= 50 ? "bg-green-500" : roiMedio >= 20 ? "bg-yellow-500" : "bg-red-500",
-      subtitle: "Retorno sobre investimento"
-    },
-    {
-      title: "Horas Trabalhadas",
-      value: totalHorasTrabalhadas.toLocaleString('pt-BR'),
-      icon: Clock,
-      color: "bg-purple-500",
-      subtitle: `${totalHorasDisponiveis.toLocaleString('pt-BR')}h disponíveis`
-    },
-    {
-      title: "Horas Ociosas",
-      value: (totalHorasDisponiveis - totalHorasTrabalhadas).toLocaleString('pt-BR'),
-      icon: Clock,
-      color: "bg-gray-500",
-      subtitle: "Tempo não utilizado"
-    }
-  ]
+    // Memoizar cards para evitar recálculo desnecessário
+    const cards = useMemo(() => [
+      {
+        title: "Total de Gruas",
+        value: totalGruas,
+        icon: Wrench,
+        color: "bg-blue-500",
+        subtitle: "Analisadas no período"
+      },
+      {
+        title: "Taxa de Utilização Média",
+        value: `${taxaUtilizacaoMedia.toFixed(1)}%`,
+        icon: BarChart3,
+        color: taxaUtilizacaoMedia >= 80 ? "bg-green-500" : taxaUtilizacaoMedia >= 60 ? "bg-yellow-500" : "bg-red-500",
+        subtitle: `${totalHorasTrabalhadas.toLocaleString('pt-BR')}h trabalhadas`
+      },
+      {
+        title: "Receita Total",
+        value: `R$ ${receitaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        icon: TrendingUp,
+        color: "bg-green-500",
+        subtitle: "Período selecionado"
+      },
+      {
+        title: "Custo Total",
+        value: `R$ ${custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        icon: DollarSign,
+        color: "bg-orange-500",
+        subtitle: "Operação + Manutenção"
+      },
+      {
+        title: "Lucro Total",
+        value: `R$ ${lucroTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+        icon: lucroTotal >= 0 ? TrendingUp : TrendingDown,
+        color: lucroTotal >= 0 ? "bg-green-500" : "bg-red-500",
+        subtitle: `Margem: ${receitaTotal > 0 ? ((lucroTotal / receitaTotal) * 100).toFixed(1) : '0.0'}%`
+      },
+      {
+        title: "ROI Médio",
+        value: `${roiMedio.toFixed(1)}%`,
+        icon: BarChart3,
+        color: roiMedio >= 50 ? "bg-green-500" : roiMedio >= 20 ? "bg-yellow-500" : "bg-red-500",
+        subtitle: "Retorno sobre investimento"
+      },
+      {
+        title: "Horas Trabalhadas",
+        value: totalHorasTrabalhadas.toLocaleString('pt-BR'),
+        icon: Clock,
+        color: "bg-purple-500",
+        subtitle: `${totalHorasDisponiveis.toLocaleString('pt-BR')}h disponíveis`
+      },
+      {
+        title: "Horas Ociosas",
+        value: (totalHorasDisponiveis - totalHorasTrabalhadas).toLocaleString('pt-BR'),
+        icon: Clock,
+        color: "bg-gray-500",
+        subtitle: "Tempo não utilizado"
+      }
+    ], [totalGruas, taxaUtilizacaoMedia, totalHorasTrabalhadas, totalHorasDisponiveis, receitaTotal, custoTotal, lucroTotal, roiMedio])
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -133,5 +135,5 @@ export function PerformanceGruasResumo({ resumo }: PerformanceGruasResumoProps) 
       </div>
     )
   }
-}
+})
 

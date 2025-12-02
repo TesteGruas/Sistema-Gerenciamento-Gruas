@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo, useCallback, memo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Eye, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react"
-import type { GruaPerformance } from "@/lib/mocks/performance-gruas-mocks"
+import type { GruaPerformance } from "@/lib/types/performance-gruas"
 
 interface PerformanceGruasTabelaProps {
   dados?: GruaPerformance[] | null
@@ -18,7 +18,7 @@ interface PerformanceGruasTabelaProps {
   onLimiteChange?: (limite: number) => void
 }
 
-export function PerformanceGruasTabela({
+export const PerformanceGruasTabela = memo(function PerformanceGruasTabela({
   dados = [],
   pagina = 1,
   totalPaginas = 1,
@@ -29,10 +29,10 @@ export function PerformanceGruasTabela({
   const [gruaDetalhes, setGruaDetalhes] = useState<GruaPerformance | null>(null)
   const [showDetalhes, setShowDetalhes] = useState(false)
 
-  // Garantir que dados é um array válido
-  const dadosArray = Array.isArray(dados) ? dados : []
+  // Garantir que dados é um array válido - memoizado
+  const dadosArray = useMemo(() => Array.isArray(dados) ? dados : [], [dados])
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = useCallback((status: string) => {
     const statusMap: Record<string, { color: string; label: string }> = {
       'Operacional': { color: 'bg-green-100 text-green-800', label: 'Operacional' },
       'Manutenção': { color: 'bg-yellow-100 text-yellow-800', label: 'Manutenção' },
@@ -43,7 +43,7 @@ export function PerformanceGruasTabela({
     return <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
   }
 
-  const getUtilizacaoBadge = (taxa: number) => {
+  const getUtilizacaoBadge = useCallback((taxa: number) => {
     if (taxa >= 80) {
       return <Badge className="bg-green-100 text-green-800">{taxa.toFixed(1)}%</Badge>
     } else if (taxa >= 60) {
@@ -51,9 +51,9 @@ export function PerformanceGruasTabela({
     } else {
       return <Badge className="bg-red-100 text-red-800">{taxa.toFixed(1)}%</Badge>
     }
-  }
+  }, [])
 
-  const getROIBadge = (roi: number) => {
+  const getROIBadge = useCallback((roi: number) => {
     if (roi >= 50) {
       return <Badge className="bg-green-100 text-green-800">{roi.toFixed(1)}%</Badge>
     } else if (roi >= 20) {
@@ -61,16 +61,26 @@ export function PerformanceGruasTabela({
     } else {
       return <Badge className="bg-red-100 text-red-800">{roi.toFixed(1)}%</Badge>
     }
-  }
+  }, [])
 
-  const handleVerDetalhes = (grua: GruaPerformance) => {
+  const handleVerDetalhes = useCallback((grua: GruaPerformance) => {
     setGruaDetalhes(grua)
     setShowDetalhes(true)
-  }
+  }, [])
 
-  const inicio = (pagina - 1) * limite
-  const fim = inicio + limite
-  const dadosPagina = dadosArray.slice(inicio, fim)
+  // Memoizar dados paginados e cálculos de paginação
+  const { dadosPagina, inicio, fim, totalPaginasCalculado } = useMemo(() => {
+    const inicioCalc = (pagina - 1) * limite
+    const fimCalc = inicioCalc + limite
+    const dadosPaginaCalc = dadosArray.slice(inicioCalc, fimCalc)
+    const totalPaginasCalc = Math.ceil(dadosArray.length / limite)
+    return {
+      dadosPagina: dadosPaginaCalc,
+      inicio: inicioCalc,
+      fim: fimCalc,
+      totalPaginasCalculado: totalPaginasCalc
+    }
+  }, [dadosArray, pagina, limite])
 
   return (
     <>
@@ -171,13 +181,13 @@ export function PerformanceGruasTabela({
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
                 <span className="text-sm text-gray-600">
-                  Página {pagina} de {Math.ceil(dadosArray.length / limite)}
+                  Página {pagina} de {totalPaginasCalculado}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => onPaginaChange?.(pagina + 1)}
-                  disabled={pagina >= Math.ceil(dadosArray.length / limite)}
+                  disabled={pagina >= totalPaginasCalculado}
                 >
                   <ChevronRight className="w-4 h-4" />
                 </Button>
@@ -336,5 +346,5 @@ export function PerformanceGruasTabela({
       </Dialog>
     </>
   )
-}
+})
 

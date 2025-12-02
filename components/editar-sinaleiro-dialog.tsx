@@ -11,9 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentoUpload } from "./documento-upload"
 import { Plus, Trash2, Save, Shield, FileText, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { mockSinaleirosAPI, type Sinaleiro } from "@/lib/mocks/sinaleiros-mocks"
 import { DocumentosSinaleiroList } from "./documentos-sinaleiro-list"
-import { sinaleirosApi } from "@/lib/api-sinaleiros"
+import { sinaleirosApi, type SinaleiroBackend } from "@/lib/api-sinaleiros"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -32,9 +31,9 @@ interface Certificado {
 interface EditarSinaleiroDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  sinaleiro: Sinaleiro | null
+  sinaleiro: SinaleiroBackend | null
   obraId?: number
-  onSave: (sinaleiro: Sinaleiro) => void
+  onSave: (sinaleiro: SinaleiroBackend) => void
   readOnly?: boolean
 }
 
@@ -355,7 +354,7 @@ export function EditarSinaleiroDialog({
               email: formData.email
             }
         
-        const sinaleiroAtualizado: Sinaleiro = {
+        const sinaleiroAtualizado: SinaleiroBackend = {
           ...sinaleiro,
           id: response.data[0].id,
           ...dadosAtualizados,
@@ -374,33 +373,35 @@ export function EditarSinaleiroDialog({
         
         onSave(sinaleiroAtualizado)
         onOpenChange(false)
-      } else if (!temIdValido) {
-        // Se não tem ID válido, usar mock (compatibilidade)
-        const sinaleiroAtualizado: Sinaleiro = {
-          ...sinaleiro,
+      } else if (!temIdValido && obraId) {
+        // Se não tem ID válido, criar novo sinaleiro via API
+        const response = await sinaleirosApi.criarOuAtualizar(obraId, [{
           nome: formData.nome,
-          cpf: formData.cpf,
-          rg: formData.rg,
           rg_cpf: formData.cpf || formData.rg,
           telefone: formData.telefone,
           email: formData.email,
-          certificados: certificados.map(cert => ({
-            nome: cert.nome,
-            tipo: cert.tipo,
-            numero: cert.numero,
-            validade: cert.validade
-          }))
-        }
-
-        await mockSinaleirosAPI.atualizar(sinaleiro.id, sinaleiroAtualizado)
+          tipo: sinaleiro?.tipo || 'principal'
+        }])
         
-        toast({
-          title: "Sucesso",
-          description: "Sinaleiro atualizado com sucesso"
-        })
+        if (response.success && response.data && response.data.length > 0) {
+          const sinaleiroAtualizado: SinaleiroBackend = {
+            ...response.data[0],
+            certificados: certificados.map(cert => ({
+              nome: cert.nome,
+              tipo: cert.tipo,
+              numero: cert.numero,
+              validade: cert.validade
+            })) as any
+          }
+          
+          toast({
+            title: "Sucesso",
+            description: "Sinaleiro cadastrado com sucesso"
+          })
 
-        onSave(sinaleiroAtualizado)
-        onOpenChange(false)
+          onSave(sinaleiroAtualizado)
+          onOpenChange(false)
+        }
       }
     } catch (error: any) {
       toast({

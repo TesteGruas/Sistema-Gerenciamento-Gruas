@@ -147,62 +147,14 @@ export default function GruaComplementosManager({
     condicoes_locacao: ''
   })
 
+  // Carregar complementos do catálogo quando necessário
+  // O componente permite adicionar complementos do catálogo através da UI
+  // Não há necessidade de carregar automaticamente, pois o usuário seleciona do catálogo
   useEffect(() => {
-    const mockComplementos: ComplementoItem[] = [
-      {
-        id: '1',
-        nome: 'Garfo Paleteiro',
-        sku: 'ACESS-001',
-        tipo_precificacao: 'mensal',
-        unidade: 'unidade',
-        preco_unitario_centavos: 50000,
-        quantidade: 1,
-        descricao: 'Garfo para movimentação de paletes',
-        inicio_cobranca: dataInicioLocacao,
-        meses_cobranca: mesesLocacao,
-        taxavel: true,
-        aliquota: 18,
-        desconto_percentual: 0,
-        status: 'rascunho',
-        incluido: true
-      },
-      {
-        id: '2',
-        nome: 'Estaiamentos',
-        sku: 'ACESS-005',
-        tipo_precificacao: 'por_metro',
-        unidade: 'm',
-        preco_unitario_centavos: 65000,
-        quantidade: 30,
-        fator: 650,
-        descricao: 'Estaiamentos para fixação lateral',
-        inicio_cobranca: dataInicioLocacao,
-        taxavel: true,
-        aliquota: 18,
-        desconto_percentual: 0,
-        status: 'rascunho',
-        rule_key: 'estaiamento_por_altura',
-        incluido: true
-      },
-      {
-        id: '3',
-        nome: 'Chumbadores/Base de Fundação',
-        sku: 'ACESS-006',
-        tipo_precificacao: 'unico',
-        unidade: 'unidade',
-        preco_unitario_centavos: 150000,
-        quantidade: 1,
-        descricao: 'Peças de ancoragem concretadas',
-        inicio_cobranca: dataInicioLocacao,
-        taxavel: true,
-        aliquota: 18,
-        desconto_percentual: 0,
-        status: 'aprovado',
-        incluido: true
-      }
-    ]
-    setComplementos(mockComplementos)
-  }, [dataInicioLocacao, mesesLocacao])
+    // Inicializar com array vazio - complementos serão adicionados pelo usuário
+    // através da interface de seleção do catálogo
+    setComplementos([])
+  }, [])
 
   const totais = useMemo((): TotaisComplementos => {
     const incluidos = complementos.filter(c => c.incluido)

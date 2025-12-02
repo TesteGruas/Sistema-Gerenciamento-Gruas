@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import rateLimit from 'express-rate-limit'
@@ -115,6 +116,7 @@ import whatsappTestRoutes from './routes/whatsapp-test.js'
 import whatsappLogsRoutes from './routes/whatsapp-logs.js'
 import whatsappEvolutionRoutes from './routes/whatsapp-evolution.js'
 import complementosRoutes from './routes/complementos.js'
+import alugueisResidenciasRoutes from './routes/alugueis-residencias.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -123,33 +125,59 @@ import { inicializarScheduler } from './jobs/scheduler.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 
+// Inicializar Redis (opcional, não bloqueia se falhar)
+initRedis().catch(err => {
+  console.error('Erro ao inicializar Redis:', err)
+})
+
 // ========================================
-// CORS DEFINITIVO - FUNCIONA 100%
+// CORS RESTRITO - SEGURANÇA
 // ========================================
 
-// CORS manual com logs detalhados
+// Configurar origens permitidas
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
+const allowedOrigins = [
+  FRONTEND_URL,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  // Adicionar outras origens permitidas se necessário (produção, staging, etc.)
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
+].filter(Boolean)
+
+// CORS restrito com validação de origem
 app.use((req, res, next) => {
   const origin = req.headers.origin
   const method = req.method
   const url = req.url
   
-  console.log(`🌐 ${method} ${url} - Origin: ${origin || 'sem origin'}`)
+  // Verificar se a origem é permitida
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin)
+    res.header('Access-Control-Allow-Credentials', 'true')
+  } else if (!origin) {
+    // Permitir requisições sem origin (ex: Postman, curl, etc.) apenas em desenvolvimento
+    if (process.env.NODE_ENV === 'development') {
+      res.header('Access-Control-Allow-Origin', '*')
+    }
+  } else {
+    // Bloquear origem não permitida
+    console.warn(`🚫 CORS bloqueado: Origin ${origin} não está na lista de origens permitidas`)
+    if (method === 'OPTIONS') {
+      return res.status(403).json({ error: 'Origin not allowed' })
+    }
+  }
   
-  // Headers CORS obrigatórios para TODAS as requisições
-  res.header('Access-Control-Allow-Origin', origin || '*')
+  // Headers CORS permitidos
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD')
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, User-Agent, X-Forwarded-For')
-  res.header('Access-Control-Allow-Credentials', 'true')
   res.header('Access-Control-Max-Age', '86400')
   res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range')
   
   // Para requisições OPTIONS (preflight), responder imediatamente
   if (method === 'OPTIONS') {
-    console.log(`✅ PREFLIGHT respondido para ${origin}`)
     return res.status(200).end()
   }
   
-  console.log(`➡️ Requisição ${method} prosseguindo para ${url}`)
   next()
 })
 
@@ -198,6 +226,21 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }))
 
+// Compressão de respostas HTTP (gzip/deflate)
+// Comprime respostas JSON, HTML, CSS, JS, etc. para reduzir o tamanho das transferências
+app.use(compression({
+  level: 6, // Nível de compressão (0-9, 6 é um bom equilíbrio entre velocidade e tamanho)
+  threshold: 1024, // Comprimir apenas respostas maiores que 1KB
+  filter: (req, res) => {
+    // Não comprimir se o cliente não suporta compressão
+    if (req.headers['x-no-compression']) {
+      return false
+    }
+    // Usar o filtro padrão do compression
+    return compression.filter(req, res)
+  }
+}))
+
 // Rate limiting (permissivo)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -228,7 +271,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     environment: process.env.NODE_ENV || 'development',
-    cors: 'ENABLED - Manual configuration',
+    cors: `RESTRICTED - Allowed origins: ${allowedOrigins.join(', ')}`,
     request: {
       origin: req.headers.origin,
       method: req.method,
@@ -353,6 +396,7 @@ app.use('/api/whatsapp', whatsappTestRoutes)
 app.use('/api/whatsapp-logs', whatsappLogsRoutes)
 app.use('/api/whatsapp-evolution', whatsappEvolutionRoutes)
 app.use('/api/complementos', complementosRoutes)
+app.use('/api/alugueis-residencias', alugueisResidenciasRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {
@@ -428,7 +472,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🧪 Teste CORS: http://localhost:${PORT}/test-cors`)
   console.log(`🔑 Teste Login: http://localhost:${PORT}/test-login`)
   console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`)
-  console.log(`🔓 CORS: CONFIGURAÇÃO MANUAL - TOTALMENTE LIBERADO`)
+  console.log(`🔒 CORS: RESTRITO - Origens permitidas: ${allowedOrigins.join(', ')}`)
   console.log('🚀 ==========================================')
 })
 

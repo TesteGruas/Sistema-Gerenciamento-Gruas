@@ -582,8 +582,9 @@ function ObraDetailsPageContent() {
         }))
         setSinaleirosReais(sinaleirosConvertidos)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao carregar sinaleiros:', error)
+      toast.error('Erro ao carregar sinaleiros: ' + (error.message || 'Erro desconhecido'))
     } finally {
       setLoadingSinaleiros(false)
     }
@@ -1176,14 +1177,13 @@ function ObraDetailsPageContent() {
       setMesesDisponiveis(meses)
       setIsNovoMesOpen(true)
     } catch (error: any) {
-      // Fallback para função mockada
-      const mesesStrings = gerarMesesDisponiveis()
-      const meses = mesesStrings.map(mes => ({
-        value: mes,
-        label: formatarMes(mes.split('-')[1]) + ' ' + mes.split('-')[0]
-      }))
-      setMesesDisponiveis(meses)
-      setIsNovoMesOpen(true)
+      console.error('Erro ao obter meses disponíveis:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar meses disponíveis. Por favor, tente novamente.",
+        variant: "destructive"
+      })
+      // Não abrir o diálogo se houver erro
     }
   }
 

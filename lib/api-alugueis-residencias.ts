@@ -1,468 +1,455 @@
-// API de Aluguéis de Residências (Mock)
+// API de Aluguéis de Residências
 
-export type StatusAluguel = 'ativo' | 'encerrado' | 'pendente' | 'cancelado';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+function getAuthToken(): string | null {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('access_token')
+  }
+  return null
+}
+
+async function apiRequest(endpoint: string, options: RequestInit = {}) {
+  const token = getAuthToken()
+  
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : '',
+      ...options.headers,
+    },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro na requisição' }))
+    throw new Error(error.message || error.error || 'Erro na requisição')
+  }
+
+  const result = await response.json()
+  return result.success ? result.data : result
+}
+
+export type StatusAluguel = 'ativo' | 'encerrado' | 'pendente' | 'cancelado'
 
 export interface AluguelResidencia {
-  id: string;
+  id: string
   residencia: {
-    id: string;
-    nome: string;
-    endereco: string;
-    cidade: string;
-    estado: string;
-    cep: string;
-    quartos: number;
-    banheiros: number;
-    area: number; // m²
-    mobiliada: boolean;
-  };
+    id: string
+    nome: string
+    endereco: string
+    cidade: string
+    estado: string
+    cep: string
+    quartos: number
+    banheiros: number
+    area: number
+    mobiliada: boolean
+    valor_base?: number
+    disponivel?: boolean
+    fotos?: string[]
+  }
   funcionario: {
-    id: string;
-    nome: string;
-    cargo: string;
-    cpf: string;
-  };
+    id: number | string
+    nome: string
+    cargo: string
+    cpf: string
+  }
   contrato: {
-    dataInicio: string;
-    dataFim?: string;
-    valorMensal: number;
-    diaVencimento: number; // dia do mês para pagamento
-    descontoFolha: boolean; // se desconta direto da folha de pagamento
-    porcentagemDesconto?: number; // % que a empresa subsidia
-  };
+    dataInicio: string
+    dataFim?: string
+    valorMensal: number
+    diaVencimento: number
+    descontoFolha: boolean
+    porcentagemDesconto?: number
+  }
   pagamentos: {
-    mes: string; // YYYY-MM
-    valorPago: number;
-    dataPagamento?: string;
-    status: 'pago' | 'pendente' | 'atrasado';
-  }[];
-  status: StatusAluguel;
-  observacoes?: string;
-  createdAt: string;
-  updatedAt: string;
+    mes: string
+    valorPago: number
+    dataPagamento?: string
+    status: 'pago' | 'pendente' | 'atrasado'
+  }[]
+  status: StatusAluguel
+  observacoes?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Residencia {
-  id: string;
-  nome: string;
-  endereco: string;
-  cidade: string;
-  estado: string;
-  cep: string;
-  quartos: number;
-  banheiros: number;
-  area: number;
-  mobiliada: boolean;
-  valorBase: number;
-  disponivel: boolean;
-  fotos?: string[];
+  id: string
+  nome: string
+  endereco: string
+  cidade: string
+  estado: string
+  cep: string
+  quartos: number
+  banheiros: number
+  area: number
+  mobiliada: boolean
+  valorBase: number
+  disponivel: boolean
+  fotos?: string[]
 }
 
-// Dados mockados
-const residenciasMock: Residencia[] = [
-  {
-    id: '1',
-    nome: 'Casa Vila Nova',
-    endereco: 'Rua das Flores, 123',
-    cidade: 'São Paulo',
-    estado: 'SP',
-    cep: '01234-567',
-    quartos: 3,
-    banheiros: 2,
-    area: 120,
-    mobiliada: true,
-    valorBase: 2500,
-    disponivel: false,
-  },
-  {
-    id: '2',
-    nome: 'Apartamento Centro',
-    endereco: 'Av. Paulista, 1000 - Apto 501',
-    cidade: 'São Paulo',
-    estado: 'SP',
-    cep: '01311-000',
-    quartos: 2,
-    banheiros: 1,
-    area: 65,
-    mobiliada: true,
-    valorBase: 1800,
-    disponivel: false,
-  },
-  {
-    id: '3',
-    nome: 'Casa Jardim América',
-    endereco: 'Rua dos Lírios, 456',
-    cidade: 'São Paulo',
-    estado: 'SP',
-    cep: '05678-901',
-    quartos: 4,
-    banheiros: 3,
-    area: 180,
-    mobiliada: false,
-    valorBase: 3500,
-    disponivel: true,
-  },
-  {
-    id: '4',
-    nome: 'Kitnet Vila Mariana',
-    endereco: 'Rua Domingos de Morais, 789',
-    cidade: 'São Paulo',
-    estado: 'SP',
-    cep: '04010-100',
-    quartos: 1,
-    banheiros: 1,
-    area: 35,
-    mobiliada: true,
-    valorBase: 1200,
-    disponivel: true,
-  },
-];
-
-const aluguelResMock: AluguelResidencia[] = [
-  {
-    id: '1',
-    residencia: residenciasMock[0],
-    funcionario: {
-      id: '101',
-      nome: 'João Silva Santos',
-      cargo: 'Operador de Grua Sênior',
-      cpf: '123.456.789-00',
-    },
-    contrato: {
-      dataInicio: '2024-01-01',
-      valorMensal: 2500,
-      diaVencimento: 5,
-      descontoFolha: true,
-      porcentagemDesconto: 50, // empresa paga 50%
-    },
-    pagamentos: [
-      {
-        mes: '2024-10',
-        valorPago: 1250,
-        dataPagamento: '2024-10-05',
-        status: 'pago',
-      },
-      {
-        mes: '2024-09',
-        valorPago: 1250,
-        dataPagamento: '2024-09-05',
-        status: 'pago',
-      },
-      {
-        mes: '2024-08',
-        valorPago: 1250,
-        dataPagamento: '2024-08-05',
-        status: 'pago',
-      },
-    ],
-    status: 'ativo',
-    observacoes: 'Contrato com desconto de 50% subsidiado pela empresa',
-    createdAt: '2024-01-01T10:00:00Z',
-    updatedAt: '2024-10-05T14:30:00Z',
-  },
-  {
-    id: '2',
-    residencia: residenciasMock[1],
-    funcionario: {
-      id: '102',
-      nome: 'Maria Costa Oliveira',
-      cargo: 'Técnica de Manutenção',
-      cpf: '987.654.321-00',
-    },
-    contrato: {
-      dataInicio: '2024-03-15',
-      valorMensal: 1800,
-      diaVencimento: 10,
-      descontoFolha: true,
-      porcentagemDesconto: 30,
-    },
-    pagamentos: [
-      {
-        mes: '2024-10',
-        valorPago: 1260,
-        status: 'pendente',
-      },
-      {
-        mes: '2024-09',
-        valorPago: 1260,
-        dataPagamento: '2024-09-10',
-        status: 'pago',
-      },
-    ],
-    status: 'ativo',
-    createdAt: '2024-03-15T09:00:00Z',
-    updatedAt: '2024-09-10T11:20:00Z',
-  },
-  {
-    id: '3',
+// Função auxiliar para transformar dados do backend para o formato esperado pelo frontend
+function transformarAluguelBackendParaFrontend(aluguelBackend: any): AluguelResidencia {
+  return {
+    id: aluguelBackend.id,
     residencia: {
-      ...residenciasMock[0],
-      id: '5', // residência que não existe mais no sistema
-      nome: 'Casa Vila Antiga (Encerrada)',
+      id: aluguelBackend.residencias?.id || aluguelBackend.residencia_id,
+      nome: aluguelBackend.residencias?.nome || '',
+      endereco: aluguelBackend.residencias?.endereco || '',
+      cidade: aluguelBackend.residencias?.cidade || '',
+      estado: aluguelBackend.residencias?.estado || '',
+      cep: aluguelBackend.residencias?.cep || '',
+      quartos: aluguelBackend.residencias?.quartos || 0,
+      banheiros: aluguelBackend.residencias?.banheiros || 0,
+      area: parseFloat(aluguelBackend.residencias?.area || 0),
+      mobiliada: aluguelBackend.residencias?.mobiliada || false,
+      valor_base: parseFloat(aluguelBackend.residencias?.valor_base || 0),
+      disponivel: aluguelBackend.residencias?.disponivel ?? true,
+      fotos: aluguelBackend.residencias?.fotos || []
     },
     funcionario: {
-      id: '103',
-      nome: 'Pedro Alves Lima',
-      cargo: 'Supervisor de Obras',
-      cpf: '456.789.123-00',
+      id: aluguelBackend.funcionarios?.id || aluguelBackend.funcionario_id,
+      nome: aluguelBackend.funcionarios?.nome || '',
+      cargo: aluguelBackend.funcionarios?.cargo || '',
+      cpf: aluguelBackend.funcionarios?.cpf || ''
     },
     contrato: {
-      dataInicio: '2023-06-01',
-      dataFim: '2024-05-31',
-      valorMensal: 2200,
-      diaVencimento: 15,
-      descontoFolha: false,
+      dataInicio: aluguelBackend.data_inicio,
+      dataFim: aluguelBackend.data_fim || undefined,
+      valorMensal: parseFloat(aluguelBackend.valor_mensal || 0),
+      diaVencimento: aluguelBackend.dia_vencimento,
+      descontoFolha: aluguelBackend.desconto_folha || false,
+      porcentagemDesconto: aluguelBackend.porcentagem_desconto ? parseFloat(aluguelBackend.porcentagem_desconto) : undefined
     },
-    pagamentos: [
-      {
-        mes: '2024-05',
-        valorPago: 2200,
-        dataPagamento: '2024-05-15',
-        status: 'pago',
-      },
-    ],
-    status: 'encerrado',
-    observacoes: 'Contrato encerrado - Funcionário mudou para outro estado',
-    createdAt: '2023-06-01T08:00:00Z',
-    updatedAt: '2024-05-31T16:00:00Z',
-  },
-];
+    pagamentos: (aluguelBackend.pagamentos || []).map((p: any) => ({
+      mes: p.mes,
+      valorPago: parseFloat(p.valor_pago || 0),
+      dataPagamento: p.data_pagamento || undefined,
+      status: p.status
+    })),
+    status: aluguelBackend.status,
+    observacoes: aluguelBackend.observacoes || undefined,
+    createdAt: aluguelBackend.created_at,
+    updatedAt: aluguelBackend.updated_at
+  }
+}
 
-// Simula chamadas de API
-let alugueis = [...aluguelResMock];
-let residencias = [...residenciasMock];
+function transformarResidenciaBackendParaFrontend(residenciaBackend: any): Residencia {
+  return {
+    id: residenciaBackend.id,
+    nome: residenciaBackend.nome,
+    endereco: residenciaBackend.endereco,
+    cidade: residenciaBackend.cidade,
+    estado: residenciaBackend.estado,
+    cep: residenciaBackend.cep,
+    quartos: residenciaBackend.quartos,
+    banheiros: residenciaBackend.banheiros,
+    area: parseFloat(residenciaBackend.area || 0),
+    mobiliada: residenciaBackend.mobiliada || false,
+    valorBase: parseFloat(residenciaBackend.valor_base || 0),
+    disponivel: residenciaBackend.disponivel ?? true,
+    fotos: residenciaBackend.fotos || []
+  }
+}
 
 export const AlugueisAPI = {
   // Listar todos os aluguéis
   listar: async (): Promise<AluguelResidencia[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([...alugueis].sort((a, b) => 
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        ));
-      }, 300);
-    });
+    try {
+      const data = await apiRequest('/api/alugueis-residencias')
+      return Array.isArray(data) ? data.map(transformarAluguelBackendParaFrontend) : []
+    } catch (error) {
+      console.error('Erro ao listar aluguéis:', error)
+      throw error
+    }
   },
 
   // Listar apenas aluguéis ativos
   listarAtivos: async (): Promise<AluguelResidencia[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(alugueis.filter(a => a.status === 'ativo'));
-      }, 300);
-    });
+    try {
+      const data = await apiRequest('/api/alugueis-residencias/ativos')
+      return Array.isArray(data) ? data.map(transformarAluguelBackendParaFrontend) : []
+    } catch (error) {
+      console.error('Erro ao listar aluguéis ativos:', error)
+      throw error
+    }
   },
 
   // Buscar por ID
   buscarPorId: async (id: string): Promise<AluguelResidencia | null> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const aluguel = alugueis.find(a => a.id === id);
-        resolve(aluguel || null);
-      }, 200);
-    });
+    try {
+      const data = await apiRequest(`/api/alugueis-residencias/${id}`)
+      return data ? transformarAluguelBackendParaFrontend(data) : null
+    } catch (error: any) {
+      if (error.message?.includes('não encontrado')) {
+        return null
+      }
+      console.error('Erro ao buscar aluguel:', error)
+      throw error
+    }
   },
 
   // Criar novo aluguel
   criar: async (aluguel: Omit<AluguelResidencia, 'id' | 'createdAt' | 'updatedAt' | 'pagamentos'>): Promise<AluguelResidencia> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const novo: AluguelResidencia = {
-          ...aluguel,
-          id: String(Date.now()),
-          pagamentos: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        alugueis.unshift(novo);
-        
-        // Atualizar disponibilidade da residência
-        const residencia = residencias.find(r => r.id === novo.residencia.id);
-        if (residencia) {
-          residencia.disponivel = false;
-        }
-        
-        resolve(novo);
-      }, 300);
-    });
+    try {
+      const payload = {
+        residencia_id: aluguel.residencia.id,
+        funcionario_id: typeof aluguel.funcionario.id === 'string' ? parseInt(aluguel.funcionario.id) : aluguel.funcionario.id,
+        data_inicio: aluguel.contrato.dataInicio,
+        data_fim: aluguel.contrato.dataFim || null,
+        valor_mensal: aluguel.contrato.valorMensal,
+        dia_vencimento: aluguel.contrato.diaVencimento,
+        desconto_folha: aluguel.contrato.descontoFolha,
+        porcentagem_desconto: aluguel.contrato.porcentagemDesconto || null,
+        observacoes: aluguel.observacoes || null
+      }
+
+      const data = await apiRequest('/api/alugueis-residencias', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      return transformarAluguelBackendParaFrontend(data)
+    } catch (error) {
+      console.error('Erro ao criar aluguel:', error)
+      throw error
+    }
   },
 
   // Atualizar aluguel
   atualizar: async (id: string, dados: Partial<AluguelResidencia>): Promise<AluguelResidencia | null> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const index = alugueis.findIndex(a => a.id === id);
-        if (index !== -1) {
-          alugueis[index] = {
-            ...alugueis[index],
-            ...dados,
-            updatedAt: new Date().toISOString(),
-          };
-          resolve(alugueis[index]);
-        } else {
-          resolve(null);
-        }
-      }, 300);
-    });
+    try {
+      const payload: any = {}
+
+      if (dados.residencia?.id) payload.residencia_id = dados.residencia.id
+      if (dados.funcionario?.id) {
+        payload.funcionario_id = typeof dados.funcionario.id === 'string' 
+          ? parseInt(dados.funcionario.id) 
+          : dados.funcionario.id
+      }
+      if (dados.contrato?.dataInicio) payload.data_inicio = dados.contrato.dataInicio
+      if (dados.contrato?.dataFim !== undefined) payload.data_fim = dados.contrato.dataFim || null
+      if (dados.contrato?.valorMensal !== undefined) payload.valor_mensal = dados.contrato.valorMensal
+      if (dados.contrato?.diaVencimento !== undefined) payload.dia_vencimento = dados.contrato.diaVencimento
+      if (dados.contrato?.descontoFolha !== undefined) payload.desconto_folha = dados.contrato.descontoFolha
+      if (dados.contrato?.porcentagemDesconto !== undefined) {
+        payload.porcentagem_desconto = dados.contrato.porcentagemDesconto || null
+      }
+      if (dados.status) payload.status = dados.status
+      if (dados.observacoes !== undefined) payload.observacoes = dados.observacoes || null
+
+      const data = await apiRequest(`/api/alugueis-residencias/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      })
+
+      return transformarAluguelBackendParaFrontend(data)
+    } catch (error: any) {
+      if (error.message?.includes('não encontrado')) {
+        return null
+      }
+      console.error('Erro ao atualizar aluguel:', error)
+      throw error
+    }
   },
 
   // Encerrar aluguel
   encerrar: async (id: string, dataFim: string): Promise<AluguelResidencia | null> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const aluguel = alugueis.find(a => a.id === id);
-        if (aluguel) {
-          aluguel.status = 'encerrado';
-          aluguel.contrato.dataFim = dataFim;
-          aluguel.updatedAt = new Date().toISOString();
-          
-          // Liberar residência
-          const residencia = residencias.find(r => r.id === aluguel.residencia.id);
-          if (residencia) {
-            residencia.disponivel = true;
-          }
-          
-          resolve(aluguel);
-        } else {
-          resolve(null);
-        }
-      }, 300);
-    });
+    try {
+      const data = await apiRequest(`/api/alugueis-residencias/${id}/encerrar`, {
+        method: 'PUT',
+        body: JSON.stringify({ data_fim: dataFim })
+      })
+
+      return transformarAluguelBackendParaFrontend(data)
+    } catch (error: any) {
+      if (error.message?.includes('não encontrado')) {
+        return null
+      }
+      console.error('Erro ao encerrar aluguel:', error)
+      throw error
+    }
   },
 
   // Adicionar pagamento
   adicionarPagamento: async (
     aluguelId: string, 
-    pagamento: { mes: string; valorPago: number; dataPagamento?: string; status: 'pago' | 'pendente' | 'atrasado' }
+    pagamento: { mes: string; valorPago: number; dataPagamento?: string; status?: 'pago' | 'pendente' | 'atrasado' }
   ): Promise<AluguelResidencia | null> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const aluguel = alugueis.find(a => a.id === aluguelId);
-        if (aluguel) {
-          aluguel.pagamentos.push(pagamento);
-          aluguel.updatedAt = new Date().toISOString();
-          resolve(aluguel);
-        } else {
-          resolve(null);
-        }
-      }, 300);
-    });
+    try {
+      const payload = {
+        mes: pagamento.mes,
+        valor_pago: pagamento.valorPago,
+        data_pagamento: pagamento.dataPagamento || null,
+        observacoes: null
+      }
+
+      await apiRequest(`/api/alugueis-residencias/${aluguelId}/pagamentos`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      // Buscar aluguel atualizado
+      return await AlugueisAPI.buscarPorId(aluguelId)
+    } catch (error) {
+      console.error('Erro ao adicionar pagamento:', error)
+      throw error
+    }
   },
 
-  // Deletar aluguel
+  // Deletar aluguel (não implementado no backend, mas mantido para compatibilidade)
   deletar: async (id: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const index = alugueis.findIndex(a => a.id === id);
-        if (index !== -1) {
-          // Liberar residência
-          const residencia = residencias.find(r => r.id === alugueis[index].residencia.id);
-          if (residencia) {
-            residencia.disponivel = true;
-          }
-          
-          alugueis.splice(index, 1);
-          resolve(true);
-        } else {
-          resolve(false);
-        }
-      }, 300);
-    });
-  },
-};
+    console.warn('Deletar aluguel não está implementado no backend. Use encerrar() ao invés.')
+    return false
+  }
+}
 
 // API de Residências
 export const ResidenciasAPI = {
   // Listar todas as residências
-  listar: async (): Promise<Residencia[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([...residencias]);
-      }, 200);
-    });
+  listar: async (filtros?: { cidade?: string; disponivel?: boolean }): Promise<Residencia[]> => {
+    try {
+      const params = new URLSearchParams()
+      if (filtros?.cidade) params.append('cidade', filtros.cidade)
+      if (filtros?.disponivel !== undefined) params.append('disponivel', filtros.disponivel.toString())
+
+      const query = params.toString()
+      const data = await apiRequest(`/api/alugueis-residencias/residencias${query ? `?${query}` : ''}`)
+      return Array.isArray(data) ? data.map(transformarResidenciaBackendParaFrontend) : []
+    } catch (error) {
+      console.error('Erro ao listar residências:', error)
+      throw error
+    }
   },
 
   // Listar apenas disponíveis
   listarDisponiveis: async (): Promise<Residencia[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(residencias.filter(r => r.disponivel));
-      }, 200);
-    });
+    return ResidenciasAPI.listar({ disponivel: true })
+  },
+
+  // Buscar residência por ID
+  buscarPorId: async (id: string): Promise<Residencia | null> => {
+    try {
+      const data = await apiRequest(`/api/alugueis-residencias/residencias/${id}`)
+      return data ? transformarResidenciaBackendParaFrontend(data) : null
+    } catch (error: any) {
+      if (error.message?.includes('não encontrada')) {
+        return null
+      }
+      console.error('Erro ao buscar residência:', error)
+      throw error
+    }
   },
 
   // Criar residência
   criar: async (residencia: Omit<Residencia, 'id' | 'disponivel'>): Promise<Residencia> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const nova: Residencia = {
-          ...residencia,
-          id: String(Date.now()),
-          disponivel: true,
-        };
-        residencias.push(nova);
-        resolve(nova);
-      }, 300);
-    });
+    try {
+      const payload = {
+        nome: residencia.nome,
+        endereco: residencia.endereco,
+        cidade: residencia.cidade,
+        estado: residencia.estado,
+        cep: residencia.cep,
+        quartos: residencia.quartos,
+        banheiros: residencia.banheiros,
+        area: residencia.area,
+        mobiliada: residencia.mobiliada,
+        valor_base: residencia.valorBase,
+        disponivel: true,
+        fotos: residencia.fotos || [],
+        observacoes: null
+      }
+
+      const data = await apiRequest('/api/alugueis-residencias/residencias', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      return transformarResidenciaBackendParaFrontend(data)
+    } catch (error) {
+      console.error('Erro ao criar residência:', error)
+      throw error
+    }
   },
 
   // Atualizar residência
   atualizar: async (id: string, dados: Partial<Residencia>): Promise<Residencia | null> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const index = residencias.findIndex(r => r.id === id);
-        if (index !== -1) {
-          residencias[index] = { ...residencias[index], ...dados };
-          resolve(residencias[index]);
-        } else {
-          resolve(null);
-        }
-      }, 300);
-    });
+    try {
+      const payload: any = {}
+
+      if (dados.nome !== undefined) payload.nome = dados.nome
+      if (dados.endereco !== undefined) payload.endereco = dados.endereco
+      if (dados.cidade !== undefined) payload.cidade = dados.cidade
+      if (dados.estado !== undefined) payload.estado = dados.estado
+      if (dados.cep !== undefined) payload.cep = dados.cep
+      if (dados.quartos !== undefined) payload.quartos = dados.quartos
+      if (dados.banheiros !== undefined) payload.banheiros = dados.banheiros
+      if (dados.area !== undefined) payload.area = dados.area
+      if (dados.mobiliada !== undefined) payload.mobiliada = dados.mobiliada
+      if (dados.valorBase !== undefined) payload.valor_base = dados.valorBase
+      if (dados.disponivel !== undefined) payload.disponivel = dados.disponivel
+      if (dados.fotos !== undefined) payload.fotos = dados.fotos
+
+      const data = await apiRequest(`/api/alugueis-residencias/residencias/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      })
+
+      return transformarResidenciaBackendParaFrontend(data)
+    } catch (error: any) {
+      if (error.message?.includes('não encontrada')) {
+        return null
+      }
+      console.error('Erro ao atualizar residência:', error)
+      throw error
+    }
   },
 
   // Deletar residência
   deletar: async (id: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const index = residencias.findIndex(r => r.id === id);
-        if (index !== -1) {
-          residencias.splice(index, 1);
-          resolve(true);
-        } else {
-          resolve(false);
-        }
-      }, 300);
-    });
-  },
-};
+    try {
+      await apiRequest(`/api/alugueis-residencias/residencias/${id}`, {
+        method: 'DELETE'
+      })
+      return true
+    } catch (error: any) {
+      if (error.message?.includes('não encontrada')) {
+        return false
+      }
+      console.error('Erro ao deletar residência:', error)
+      throw error
+    }
+  }
+}
 
 // Funções auxiliares
 export function calcularValorFuncionario(valorMensal: number, porcentagemDesconto?: number): number {
-  if (!porcentagemDesconto) return valorMensal;
-  return valorMensal * (1 - porcentagemDesconto / 100);
+  if (!porcentagemDesconto) return valorMensal
+  return valorMensal * (1 - porcentagemDesconto / 100)
 }
 
 export function calcularSubsidioEmpresa(valorMensal: number, porcentagemDesconto?: number): number {
-  if (!porcentagemDesconto) return 0;
-  return valorMensal * (porcentagemDesconto / 100);
+  if (!porcentagemDesconto) return 0
+  return valorMensal * (porcentagemDesconto / 100)
 }
 
 export function formatarMoeda(valor: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-  }).format(valor);
+  }).format(valor)
 }
 
 export function obterStatusPagamento(mes: string, diaVencimento: number): 'pago' | 'pendente' | 'atrasado' {
-  const hoje = new Date();
-  const [ano, mesNum] = mes.split('-').map(Number);
-  const dataVencimento = new Date(ano, mesNum - 1, diaVencimento);
+  const hoje = new Date()
+  const [ano, mesNum] = mes.split('-').map(Number)
+  const dataVencimento = new Date(ano, mesNum - 1, diaVencimento)
   
   if (hoje > dataVencimento) {
-    return 'atrasado';
+    return 'atrasado'
   }
-  return 'pendente';
+  return 'pendente'
 }
-

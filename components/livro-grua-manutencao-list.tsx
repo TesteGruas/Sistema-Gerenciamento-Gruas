@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -97,8 +97,8 @@ export function LivroGruaManutencaoList({
     carregarManutencoes()
   }, [gruaId])
 
-  // Filtrar manutenções
-  const manutencoesFiltradas = manutencoes.filter(manutencao => {
+  // Filtrar manutenções - memoizado para evitar recálculo desnecessário
+  const manutencoesFiltradas = useMemo(() => manutencoes.filter(manutencao => {
     const matchSearch = !searchTerm || 
       manutencao.realizado_por_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       manutencao.cargo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -108,7 +108,7 @@ export function LivroGruaManutencaoList({
     const matchDataFim = !filtroDataFim || manutencao.data <= filtroDataFim
 
     return matchSearch && matchDataInicio && matchDataFim
-  })
+  }), [manutencoes, searchTerm, filtroDataInicio, filtroDataFim])
 
   return (
     <Card>

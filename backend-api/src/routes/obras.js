@@ -2203,7 +2203,7 @@ router.get('/:id/sinaleiros', authenticateToken, async (req, res) => {
 // ==================== DOCUMENTOS SINALEIRO ====================
 
 /**
- * POST /api/sinaleiros/:id/documentos
+ * POST /api/obras/sinaleiros/:id/documentos
  * Upload de documento do sinaleiro
  */
 router.post('/sinaleiros/:id/documentos', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
@@ -2269,7 +2269,7 @@ router.post('/sinaleiros/:id/documentos', authenticateToken, requirePermission('
 })
 
 /**
- * GET /api/sinaleiros/:id/documentos
+ * GET /api/obras/sinaleiros/:id/documentos
  * Listar documentos do sinaleiro
  */
 router.get('/sinaleiros/:id/documentos', authenticateToken, async (req, res) => {
@@ -2292,7 +2292,7 @@ router.get('/sinaleiros/:id/documentos', authenticateToken, async (req, res) => 
 })
 
 /**
- * PUT /api/documentos-sinaleiro/:id/aprovar
+ * PUT /api/obras/documentos-sinaleiro/:id/aprovar
  * Aprovar documento do sinaleiro
  */
 router.put('/documentos-sinaleiro/:id/aprovar', authenticateToken, requirePermission('obras:editar'), async (req, res) => {

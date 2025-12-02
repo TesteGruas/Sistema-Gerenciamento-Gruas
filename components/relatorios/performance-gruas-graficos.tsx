@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo, memo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
   BarChart as RechartsBarChart,
@@ -16,7 +17,7 @@ import {
   LineChart,
   Line
 } from 'recharts'
-import type { GruaPerformance } from "@/lib/mocks/performance-gruas-mocks"
+import type { GruaPerformance } from "@/lib/types/performance-gruas"
 
 interface PerformanceGruasGraficosProps {
   dados?: GruaPerformance[] | null
@@ -24,7 +25,7 @@ interface PerformanceGruasGraficosProps {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
-export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProps) {
+export const PerformanceGruasGraficos = memo(function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProps) {
   // Se não houver dados, mostrar estado vazio
   if (!dados || !Array.isArray(dados) || dados.length === 0) {
     return (
@@ -34,18 +35,17 @@ export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProp
     )
   }
 
-  // Preparar dados para gráfico de taxa de utilização
-  const dadosUtilizacao = dados
+  // Memoizar todos os dados processados para evitar recálculo desnecessário
+  const dadosUtilizacao = useMemo(() => dados
     .filter(item => item?.metricas?.taxa_utilizacao !== undefined)
     .sort((a, b) => (b.metricas?.taxa_utilizacao || 0) - (a.metricas?.taxa_utilizacao || 0))
     .slice(0, 10)
     .map(item => ({
       grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
       utilizacao: Number((item.metricas?.taxa_utilizacao || 0).toFixed(1))
-    }))
+    })), [dados])
 
-  // Preparar dados para gráfico de receita vs custo
-  const dadosFinanceiro = dados
+  const dadosFinanceiro = useMemo(() => dados
     .filter(item => item?.financeiro?.receita_total !== undefined)
     .sort((a, b) => (b.financeiro?.receita_total || 0) - (a.financeiro?.receita_total || 0))
     .slice(0, 10)
@@ -54,35 +54,43 @@ export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProp
       receita: Number(((item.financeiro?.receita_total || 0) / 1000).toFixed(1)),
       custo: Number(((item.financeiro?.custo_total || 0) / 1000).toFixed(1)),
       lucro: Number(((item.financeiro?.lucro_bruto || 0) / 1000).toFixed(1))
-    }))
+    })), [dados])
 
-  // Preparar dados para gráfico de ROI
-  const dadosROI = dados
+  const dadosROI = useMemo(() => dados
     .filter(item => item?.roi?.roi_percentual !== undefined && (item.roi?.roi_percentual || 0) > 0)
     .sort((a, b) => (b.roi?.roi_percentual || 0) - (a.roi?.roi_percentual || 0))
     .slice(0, 10)
     .map(item => ({
       grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
       roi: Number((item.roi?.roi_percentual || 0).toFixed(1))
-    }))
+    })), [dados])
 
-  // Preparar dados para gráfico de distribuição de horas
-  const totalHorasTrabalhadas = dados.reduce((sum, item) => sum + (item?.metricas?.horas_trabalhadas || 0), 0)
-  const totalHorasOciosas = dados.reduce((sum, item) => sum + (item?.metricas?.horas_ociosas || 0), 0)
-  const dadosDistribuicaoHoras = [
-    { name: 'Trabalhadas', value: totalHorasTrabalhadas },
-    { name: 'Ociosas', value: totalHorasOciosas }
-  ]
+  const dadosDistribuicaoHoras = useMemo(() => {
+    const totalHorasTrabalhadas = dados.reduce((sum, item) => sum + (item?.metricas?.horas_trabalhadas || 0), 0)
+    const totalHorasOciosas = dados.reduce((sum, item) => sum + (item?.metricas?.horas_ociosas || 0), 0)
+    return [
+      { name: 'Trabalhadas', value: totalHorasTrabalhadas },
+      { name: 'Ociosas', value: totalHorasOciosas }
+    ]
+  }, [dados])
 
-  // Preparar dados para top 10 por lucro
-  const dadosTopLucro = dados
+  const dadosTopLucro = useMemo(() => dados
     .filter(item => item?.financeiro?.lucro_bruto !== undefined)
     .sort((a, b) => (b.financeiro?.lucro_bruto || 0) - (a.financeiro?.lucro_bruto || 0))
     .slice(0, 10)
     .map(item => ({
       grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
       lucro: Number(((item.financeiro?.lucro_bruto || 0) / 1000).toFixed(1))
-    }))
+    })), [dados])
+
+  const dadosMargemLucro = useMemo(() => dados
+    .filter(item => item?.financeiro?.margem_lucro !== undefined)
+    .sort((a, b) => (b.financeiro?.margem_lucro || 0) - (a.financeiro?.margem_lucro || 0))
+    .slice(0, 10)
+    .map(item => ({
+      grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
+      margem: Number((item.financeiro?.margem_lucro || 0).toFixed(1))
+    })), [dados])
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -205,16 +213,7 @@ export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProp
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <RechartsBarChart
-              data={dados
-                .filter(item => item?.financeiro?.margem_lucro !== undefined)
-                .sort((a, b) => (b.financeiro?.margem_lucro || 0) - (a.financeiro?.margem_lucro || 0))
-                .slice(0, 10)
-                .map(item => ({
-                  grua: item?.grua?.nome?.substring(0, 15) || 'N/A',
-                  margem: Number((item.financeiro?.margem_lucro || 0).toFixed(1))
-                }))}
-            >
+            <RechartsBarChart data={dadosMargemLucro}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="grua" angle={-45} textAnchor="end" height={100} />
               <YAxis />
@@ -227,5 +226,5 @@ export function PerformanceGruasGraficos({ dados }: PerformanceGruasGraficosProp
       </Card>
     </div>
   )
-}
+})
 
