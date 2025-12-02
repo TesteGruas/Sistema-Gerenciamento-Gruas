@@ -56,7 +56,7 @@ export default function LivrosGruasPage() {
   const { toast } = useToast()
   const { user, loading: userLoading, isAdmin } = useCurrentUser()
   
-  // Estados
+  // Estados principais
   const [relacoes, setRelacoes] = useState<GruaObraRelacao[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -69,6 +69,14 @@ export default function LivrosGruasPage() {
   const [itemsPerPage, setItemsPerPage] = useState(9)
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+
+  // Estados para obras e status únicos (carregados separadamente)
+  const [obrasUnicas, setObrasUnicas] = useState<any[]>([])
+  const [statusUnicos, setStatusUnicos] = useState<string[]>([])
+
+  // Flags para controlar carregamento e evitar chamadas duplicadas
+  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const loadingRelacoesRef = useRef(false)
 
   // Carregar relações grua-obra
   const carregarRelacoes = async (page: number = currentPage, limit: number = itemsPerPage) => {
@@ -152,10 +160,6 @@ export default function LivrosGruasPage() {
   // Usar dados diretamente da API (filtros já aplicados no backend)
   const relacoesFiltradas = relacoes
 
-  // Estados para obras e status únicos (carregados separadamente)
-  const [obrasUnicas, setObrasUnicas] = useState<any[]>([])
-  const [statusUnicos, setStatusUnicos] = useState<string[]>([])
-
   // Carregar obras únicas e status únicos (uma vez)
   useEffect(() => {
     if (!dadosIniciaisCarregados || !user) return
@@ -186,10 +190,6 @@ export default function LivrosGruasPage() {
     carregarObrasEStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosIniciaisCarregados, user])
-
-  // Flags para controlar carregamento e evitar chamadas duplicadas
-  const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
-  const loadingRelacoesRef = useRef(false)
 
   // Carregar dados na inicialização - apenas uma vez
   useEffect(() => {

@@ -124,6 +124,15 @@ const nextConfig = {
     // Otimizar renderização
     // optimizeCss: true, // Desabilitado temporariamente para evitar erro com critters
   },
+
+  // ==================================
+  // 🔧 OUTPUT CONFIGURATION
+  // ==================================
+  // Garantir que o output está correto para evitar problemas de MIME type
+  output: 'standalone',
+  
+  // Desabilitar strict mode temporariamente para evitar problemas de hidratação
+  reactStrictMode: false,
   
   // ==================================
   // ⚡ OTIMIZAÇÕES ADICIONAIS
@@ -170,40 +179,22 @@ const nextConfig = {
         ],
       },
       {
-        // Headers específicos para CSS - usar padrão mais específico
+        // Headers específicos para CSS - NÃO definir Content-Type (Next.js faz isso automaticamente)
         source: '/_next/static/:path*.css',
         headers: [
           {
-            key: 'Content-Type',
-            value: 'text/css; charset=utf-8',
-          },
-          {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
           },
         ],
       },
       {
-        // Headers específicos para JavaScript do Next.js
+        // Headers específicos para JavaScript do Next.js - NÃO definir Content-Type
         source: '/_next/static/:path*.js',
         headers: [
           {
-            key: 'Content-Type',
-            value: 'application/javascript; charset=utf-8',
-          },
-          {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        // Headers para outros arquivos JS (não do Next.js)
-        source: '/:path*.js',
-        headers: [
-          {
-            key: 'Content-Type',
-            value: 'application/javascript; charset=utf-8',
           },
         ],
       },
