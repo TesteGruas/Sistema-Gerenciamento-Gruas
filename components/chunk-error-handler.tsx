@@ -19,6 +19,13 @@ export function ChunkErrorHandler() {
         error?.message?.includes('Loading chunk') ||
         error?.message?.includes('Failed to fetch dynamically imported module')
       ) {
+        // Ignorar erros de chunks de rotas que não existem ou não são mais necessárias
+        const errorMessage = error?.message || ''
+        if (errorMessage.includes('validar-obra')) {
+          console.warn('ChunkLoadError para rota validar-obra ignorado (rota pode não ser mais necessária)')
+          return
+        }
+        
         console.warn('ChunkLoadError detectado, recarregando página...', error)
         
         // Recarregar a página após um pequeno delay
@@ -67,6 +74,14 @@ export function ChunkErrorHandler() {
         reason?.message?.includes('Loading chunk') ||
         reason?.message?.includes('Failed to fetch dynamically imported module')
       ) {
+        // Ignorar erros de chunks de rotas que não existem ou não são mais necessárias
+        const errorMessage = reason?.message || ''
+        if (errorMessage.includes('validar-obra')) {
+          console.warn('ChunkLoadError para rota validar-obra ignorado (rota pode não ser mais necessária)')
+          event.preventDefault()
+          return
+        }
+        
         console.warn('ChunkLoadError em Promise rejection, recarregando página...', reason)
         event.preventDefault()
         

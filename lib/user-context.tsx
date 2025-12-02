@@ -45,37 +45,72 @@ export function UserProvider({ children }: { children: ReactNode }) {
           ? (localStorage.getItem('access_token') || localStorage.getItem('token'))
           : null
         
-        if (token) {
-          const user = await AuthService.getCurrentUser()
-          
-          const userObject = {
-            id: user.id.toString(),
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            status: 'ativo' as const,
-            createdAt: new Date().toISOString()
-          }
-          
-          // Salvar dados no localStorage para sincronizar com useAuth()
-          if (user.perfil) {
-            localStorage.setItem('user_perfil', JSON.stringify(user.perfil))
-          }
-          if (user.permissoes && user.permissoes.length > 0) {
-            localStorage.setItem('user_permissoes', JSON.stringify(user.permissoes))
-          }
-          if (user.profile) {
-            localStorage.setItem('user_profile', JSON.stringify(user.profile))
-          }
-          
-          setCurrentUser(userObject)
+        // Verificar se há token antes de tentar carregar usuário
+        if (!token) {
+          setLoading(false)
+          setDadosIniciaisCarregados(true)
+          loadingRef.current = false
+          return
         }
+
+        // Verificar se o token não está expirado antes de fazer requisição
+        try {
+          const tokenParts = token.split('.')
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(atob(tokenParts[1]))
+            if (payload.exp) {
+              const isExpired = payload.exp * 1000 < Date.now()
+              if (isExpired) {
+                // Token expirado, limpar e não fazer requisição
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('token')
+                  localStorage.removeItem('access_token')
+                  localStorage.removeItem('refresh_token')
+                }
+                setLoading(false)
+                setDadosIniciaisCarregados(true)
+                loadingRef.current = false
+                return
+              }
+            }
+          }
+        } catch (tokenError) {
+          // Se não conseguir decodificar, tentar mesmo assim
+        }
+        
+        const user = await AuthService.getCurrentUser()
+        
+        const userObject = {
+          id: user.id.toString(),
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          status: 'ativo' as const,
+          createdAt: new Date().toISOString()
+        }
+        
+        // Salvar dados no localStorage para sincronizar com useAuth()
+        if (user.perfil) {
+          localStorage.setItem('user_perfil', JSON.stringify(user.perfil))
+        }
+        if (user.permissoes && user.permissoes.length > 0) {
+          localStorage.setItem('user_permissoes', JSON.stringify(user.permissoes))
+        }
+        if (user.profile) {
+          localStorage.setItem('user_profile', JSON.stringify(user.profile))
+        }
+        
+        setCurrentUser(userObject)
       } catch (error) {
-        console.error('Erro ao carregar usuário:', error instanceof Error ? error.message : 'Erro desconhecido')
+        // Não logar erro se for token inválido (já foi tratado no AuthService)
+        if (error instanceof Error && !error.message.includes('Token inválido')) {
+          console.error('Erro ao carregar usuário:', error.message)
+        }
         // Se falhar, limpar token inválido
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token')
           localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
         }
       } finally {
         setLoading(false)

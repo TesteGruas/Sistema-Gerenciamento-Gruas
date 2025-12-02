@@ -168,6 +168,23 @@ function PWALayoutContent({ children }: PWALayoutProps) {
         return
       }
 
+      // Verificar se o token não está expirado
+      try {
+        const tokenParts = token.split('.')
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]))
+          if (payload.exp) {
+            const isExpired = payload.exp * 1000 < Date.now()
+            if (isExpired) {
+              setNotificacoesNaoLidas(0)
+              return
+            }
+          }
+        }
+      } catch (tokenError) {
+        // Se não conseguir decodificar, continuar
+      }
+
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
       const response = await fetch(
         `${apiUrl}/api/notificacoes/count/nao-lidas`,
@@ -179,6 +196,12 @@ function PWALayoutContent({ children }: PWALayoutProps) {
         }
       )
 
+      // Se receber 403 ou 401, token é inválido - não tentar novamente
+      if (response.status === 403 || response.status === 401) {
+        setNotificacoesNaoLidas(0)
+        return
+      }
+
       if (response.ok) {
         const data = await response.json()
         setNotificacoesNaoLidas(data.count || 0)
@@ -186,7 +209,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
         setNotificacoesNaoLidas(0)
       }
     } catch (error) {
-      console.error('Erro ao carregar notificações não lidas:', error)
+      // Não logar erros de rede silenciosamente
       setNotificacoesNaoLidas(0)
     }
   }

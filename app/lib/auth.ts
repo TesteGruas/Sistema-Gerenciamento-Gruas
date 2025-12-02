@@ -127,17 +127,46 @@ export class AuthService {
   // Obter dados do usuário atual
   static async getCurrentUser(): Promise<any> {
     try {
-      const response = await this.authenticatedRequest(`${this.API_BASE_URL}/api/auth/me`, {
-        method: 'GET'
+      const token = this.getToken()
+      
+      // Verificar se há token antes de fazer requisição
+      if (!token) {
+        throw new Error('Token não encontrado')
+      }
+
+      const response = await fetch(`${this.API_BASE_URL}/api/auth/me`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
       })
+
+      // Se receber 403 ou 401, token é inválido ou expirado
+      if (response.status === 403 || response.status === 401) {
+        // Limpar token inválido
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          localStorage.removeItem('token')
+        }
+        throw new Error('Token inválido ou expirado')
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Erro ao buscar dados do usuário')
+      }
+
+      const data = await response.json()
       
       // Retornar dados do usuário
       // Normalizar o nome do perfil para lowercase e mapear alguns perfis específicos
       let roleNormalizado = 'usuario'
       
       // Primeiro, tentar pegar do perfil
-      if (response.data.perfil?.nome) {
-        const perfilNome = response.data.perfil.nome.toLowerCase()
+      if (data.data?.perfil?.nome) {
+        const perfilNome = data.data.perfil.nome.toLowerCase()
         
         // Mapeamento de perfis para nomes mais amigáveis
         const roleMapping: Record<string, string> = {
@@ -152,8 +181,8 @@ export class AuthService {
         roleNormalizado = roleMapping[perfilNome] || perfilNome
       }
       // Fallback: verificar pelo nivel_acesso
-      else if (response.data.perfil?.nivel_acesso) {
-        const nivelAcesso = response.data.perfil.nivel_acesso
+      else if (data.data?.perfil?.nivel_acesso) {
+        const nivelAcesso = data.data.perfil.nivel_acesso
         
         if (nivelAcesso >= 10) {
           roleNormalizado = 'admin'
@@ -168,8 +197,8 @@ export class AuthService {
         }
       }
       // Último fallback: verificar o user.role da resposta
-      else if (response.data.user?.role) {
-        const userRole = response.data.user.role.toLowerCase()
+      else if (data.data?.user?.role) {
+        const userRole = data.data.user.role.toLowerCase()
         
         if (userRole.includes('admin')) {
           roleNormalizado = 'admin'
@@ -179,18 +208,22 @@ export class AuthService {
       }
       
       const userObject = {
-        id: response.data.user.id,
-        name: response.data.profile?.nome || response.data.user.email,
-        email: response.data.user.email,
+        id: data.data.user.id,
+        name: data.data.profile?.nome || data.data.user.email,
+        email: data.data.user.email,
         role: roleNormalizado,
-        perfil: response.data.perfil,
-        permissoes: response.data.permissoes || [],
-        profile: response.data.profile,
+        perfil: data.data.perfil,
+        permissoes: data.data.permissoes || [],
+        profile: data.data.profile,
         avatar: '/placeholder-user.jpg'
       }
       
       return userObject
     } catch (error) {
+      // Não logar erro se for token inválido (já foi tratado)
+      if (error instanceof Error && error.message.includes('Token inválido')) {
+        throw error
+      }
       console.error('❌ [Preload] Erro ao buscar usuário:', error instanceof Error ? error.message : 'Erro desconhecido')
       throw new Error('Não foi possível carregar dados do usuário')
     }

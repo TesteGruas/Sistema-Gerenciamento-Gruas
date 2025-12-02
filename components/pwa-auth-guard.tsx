@@ -12,6 +12,7 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
+  const [hasRedirected, setHasRedirected] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   
@@ -34,6 +35,7 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       if (isPublicPath) {
         setIsLoading(false)
         setIsAuthenticated(true)
+        setHasRedirected(false) // Resetar flag quando em rota pública
         return
       }
 
@@ -44,7 +46,11 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       if (!token || !userData) {
         setIsLoading(false)
         setIsAuthenticated(false)
-        router.push('/pwa/login')
+        // Evitar loop de redirecionamento
+        if (!hasRedirected && pathname !== '/pwa/login') {
+          setHasRedirected(true)
+          router.replace('/pwa/login') // Usar replace em vez de push
+        }
         return
       }
 
@@ -64,7 +70,11 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
                 localStorage.removeItem('refresh_token')
                 setIsLoading(false)
                 setIsAuthenticated(false)
-                router.push('/pwa/login')
+                // Evitar loop de redirecionamento
+                if (!hasRedirected && pathname !== '/pwa/login') {
+                  setHasRedirected(true)
+                  router.replace('/pwa/login') // Usar replace em vez de push
+                }
                 return
               }
             }
@@ -93,7 +103,7 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       clearTimeout(timer)
       clearInterval(interval)
     }
-  }, [pathname, router])
+  }, [pathname, router, hasRedirected])
 
   // Não renderizar nada no servidor para evitar erro de hidratação
   if (!isClient) {

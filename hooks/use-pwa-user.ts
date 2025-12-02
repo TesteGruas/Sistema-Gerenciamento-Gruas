@@ -111,6 +111,26 @@ export function usePWAUser(): PWAUserData {
           return
         }
 
+        // Verificar se o token não está expirado antes de fazer requisições
+        try {
+          const tokenParts = token.split('.')
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(atob(tokenParts[1]))
+            if (payload.exp) {
+              const isExpired = payload.exp * 1000 < Date.now()
+              if (isExpired) {
+                // Token expirado, não fazer requisições
+                if (isMounted) {
+                  setLoading(false)
+                }
+                return
+              }
+            }
+          }
+        } catch (tokenError) {
+          // Se não conseguir decodificar, continuar
+        }
+
         // Carregar ponto de hoje (silenciosamente, sem quebrar a página)
         try {
           const hoje = new Date().toISOString().split('T')[0]
@@ -131,7 +151,13 @@ export function usePWAUser(): PWAUserData {
               }
             )
 
-            if (pontoResponse.ok && isMounted) {
+            // Se receber 403 ou 401, token é inválido - não tentar novamente
+            if (pontoResponse.status === 403 || pontoResponse.status === 401) {
+              if (isMounted) {
+                setPontoHoje(null)
+                setHorasTrabalhadas('0h 0min')
+              }
+            } else if (pontoResponse.ok && isMounted) {
               const pontoData = await pontoResponse.json()
               let horasCalculadas = '0h 0min'
               
@@ -207,7 +233,12 @@ export function usePWAUser(): PWAUserData {
             }
           )
 
-          if (notifResponse.ok && isMounted) {
+          // Se receber 403 ou 401, token é inválido - não tentar novamente
+          if (notifResponse.status === 403 || notifResponse.status === 401) {
+            if (isMounted) {
+              setDocumentosPendentes(0)
+            }
+          } else if (notifResponse.ok && isMounted) {
             const notifData = await notifResponse.json()
             const notifCount = notifData.count || 0
             setDocumentosPendentes(notifCount) // Reutilizando o estado para notificações
