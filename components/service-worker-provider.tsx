@@ -9,6 +9,11 @@ export function ServiceWorkerProvider({ children }: { children: React.ReactNode 
   const [swReady, setSwReady] = useState(false)
 
   useEffect(() => {
+    // Verificar suporte antes de tentar registrar
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+      return;
+    }
+
     // Inicializar service worker
     initServiceWorker()
       .then((registration) => {
@@ -17,7 +22,10 @@ export function ServiceWorkerProvider({ children }: { children: React.ReactNode 
         }
       })
       .catch((error) => {
-        console.error('❌ Erro ao inicializar Service Worker:', error)
+        // Apenas logar erros reais, não avisos de não suporte
+        if (error?.message && !error.message.includes('não é suportado')) {
+          console.error('❌ Erro ao inicializar Service Worker:', error)
+        }
       })
 
     // Configurar listeners de sincronização

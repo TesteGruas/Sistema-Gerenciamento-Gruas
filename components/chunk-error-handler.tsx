@@ -5,6 +5,7 @@ import { useEffect } from "react"
 /**
  * Componente para tratar erros de carregamento de chunks do Next.js
  * Recarrega automaticamente a página quando um chunk não é encontrado
+ * Também trata erros de dependências circulares e inicialização
  */
 export function ChunkErrorHandler() {
   useEffect(() => {
@@ -24,6 +25,36 @@ export function ChunkErrorHandler() {
         setTimeout(() => {
           window.location.reload()
         }, 100)
+        return
+      }
+      
+      // Verificar se é um erro de inicialização (dependência circular)
+      if (
+        error?.name === 'ReferenceError' &&
+        (
+          error?.message?.includes('Cannot access') ||
+          error?.message?.includes('before initialization') ||
+          error?.message?.includes('is not defined')
+        )
+      ) {
+        console.warn('Erro de inicialização detectado, tentando recarregar página...', error)
+        
+        // Tentar recarregar após um delay maior para dar tempo de resolver
+        setTimeout(() => {
+          // Limpar cache do service worker se disponível
+          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            caches.keys().then(cacheNames => {
+              return Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)))
+            }).catch(() => {
+              // Ignorar erros ao limpar cache
+            }).finally(() => {
+              window.location.reload()
+            })
+          } else {
+            window.location.reload()
+          }
+        }, 500)
+        return
       }
     }
 
@@ -42,6 +73,24 @@ export function ChunkErrorHandler() {
         setTimeout(() => {
           window.location.reload()
         }, 100)
+        return
+      }
+      
+      // Tratar erros de inicialização em promises
+      if (
+        reason?.name === 'ReferenceError' &&
+        (
+          reason?.message?.includes('Cannot access') ||
+          reason?.message?.includes('before initialization')
+        )
+      ) {
+        console.warn('Erro de inicialização em Promise, recarregando página...', reason)
+        event.preventDefault()
+        
+        setTimeout(() => {
+          window.location.reload()
+        }, 500)
+        return
       }
     }
 

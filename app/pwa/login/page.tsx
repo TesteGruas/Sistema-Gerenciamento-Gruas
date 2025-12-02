@@ -222,15 +222,10 @@ function PWALoginPageContent(): JSX.Element {
           // Continuar mesmo se não conseguir carregar permissões
         }
 
-        showSuccess(
-          "Login realizado com sucesso!",
-          `Bem-vindo${data.data.user?.nome ? ', ' + data.data.user.nome : ''}!`
-        )
-        
         // Pequeno delay para garantir que o localStorage foi salvo
         setTimeout(() => {
-          // Redirecionar para validação de obra primeiro
-          router.push("/pwa/validar-obra")
+          // Redirecionar para página principal do PWA
+          router.push("/pwa")
         }, 100)
       } else {
         // Login falhou
@@ -284,7 +279,7 @@ function PWALoginPageContent(): JSX.Element {
     try {
       const success = await authenticateWithBiometric()
       if (success) {
-        showSuccess("Login realizado com sucesso!", "Autenticação biométrica bem-sucedida!")
+        // Login biométrico bem-sucedido - redirecionamento já é feito no hook
       }
     } catch (error) {
       console.error('Erro na autenticação biométrica:', error)

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { ProtectedRoute } from "@/components/protected-route"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,7 +18,8 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  Check
+  Check,
+  Loader2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
@@ -42,7 +42,7 @@ interface Holerite {
 export default function PWAHoleritesPage() {
   const { toast } = useToast()
   const [holerites, setHolerites] = useState<Holerite[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // Iniciar como false para não bloquear
   const [isOnline, setIsOnline] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [isAssinaturaDialogOpen, setIsAssinaturaDialogOpen] = useState(false)
@@ -50,19 +50,26 @@ export default function PWAHoleritesPage() {
   const [holeriteSelecionado, setHoleriteSelecionado] = useState<Holerite | null>(null)
   const [assinaturaDataUrl, setAssinaturaDataUrl] = useState<string>('')
   const [isLoadingHolerites, setIsLoadingHolerites] = useState(false) // Flag para evitar múltiplas chamadas
+  const [urlArquivoAssinada, setUrlArquivoAssinada] = useState<string>('')
+  const [carregandoUrlArquivo, setCarregandoUrlArquivo] = useState(false)
 
   // Carregar dados do usuário
   useEffect(() => {
     if (typeof window === 'undefined') return
     
+    console.log('[HOLERITES] Carregando dados do usuário...')
     const userData = localStorage.getItem('user_data')
     if (userData) {
       try {
         const parsedUser = JSON.parse(userData)
+        console.log('[HOLERITES] Usuário carregado do localStorage:', parsedUser)
+        console.log('[HOLERITES] ID do usuário:', parsedUser.id)
         setUser(parsedUser)
       } catch (error) {
-        console.error('Erro ao carregar dados do usuário:', error)
+        console.error('[HOLERITES] Erro ao carregar dados do usuário:', error)
       }
+    } else {
+      console.warn('[HOLERITES] user_data não encontrado no localStorage')
     }
   }, [])
 
@@ -82,10 +89,12 @@ export default function PWAHoleritesPage() {
   }, [])
 
   const carregarHolerites = useCallback(async () => {
+    console.log('[HOLERITES] Iniciando carregamento de holerites...')
     setLoading(true)
     try {
       // Carregar do cache primeiro se offline
       if (!isOnline) {
+        console.log('[HOLERITES] Modo offline detectado')
         const cachedHolerites = localStorage.getItem('cached_holerites')
         
         if (cachedHolerites) {
@@ -108,65 +117,152 @@ export default function PWAHoleritesPage() {
       }
 
       if (!user?.id) {
+        console.error('[HOLERITES] Usuário não identificado:', user)
         throw new Error('Usuário não identificado. Faça login novamente.')
       }
 
-      const token = localStorage.getItem('access_token')
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       if (!token) {
+        console.error('[HOLERITES] Token não encontrado no localStorage')
+        console.error('[HOLERITES] Chaves disponíveis:', Object.keys(localStorage))
         throw new Error('Token de autenticação não encontrado. Faça login novamente.')
       }
 
+      console.log('[HOLERITES] Usuário encontrado:', user.id)
+      console.log('[HOLERITES] Token encontrado:', token.substring(0, 20) + '...')
+
       // Obter ID do funcionário
-        let funcionarioId: number | null = null
-        
+      let funcionarioId: number | null = null
+      
+      // Primeiro, tentar obter diretamente do user
+      console.log('[HOLERITES] Dados do usuário:', {
+        id: user.id,
+        funcionario_id: user.funcionario_id,
+        profile: user.profile,
+        email: user.email
+      })
+      
+      // Tentar múltiplas formas de obter o funcionario_id
+      if (user.funcionario_id && !isNaN(Number(user.funcionario_id))) {
+        funcionarioId = Number(user.funcionario_id)
+        console.log('[HOLERITES] ID do funcionário encontrado no user.funcionario_id:', funcionarioId)
+      } else if (user.profile?.funcionario_id && !isNaN(Number(user.profile.funcionario_id))) {
+        funcionarioId = Number(user.profile.funcionario_id)
+        console.log('[HOLERITES] ID do funcionário encontrado no user.profile.funcionario_id:', funcionarioId)
+      } else if (user.user_metadata?.funcionario_id && !isNaN(Number(user.user_metadata.funcionario_id))) {
+        funcionarioId = Number(user.user_metadata.funcionario_id)
+        console.log('[HOLERITES] ID do funcionário encontrado no user.user_metadata.funcionario_id:', funcionarioId)
+      } else if (user.id && !isNaN(Number(user.id)) && Number(user.id) > 100) {
+        // Se user.id for numérico e parecer ser um ID de funcionário (maior que 100)
+        funcionarioId = Number(user.id)
+        console.log('[HOLERITES] Usando user.id como funcionario_id:', funcionarioId)
+      }
+      
+      // Se ainda não encontrou, tentar buscar na API
+      if (!funcionarioId) {
         try {
+          console.log('[HOLERITES] Buscando ID do funcionário na API...')
           funcionarioId = await getFuncionarioIdWithFallback(
             user, 
             token, 
             'ID do funcionário não encontrado'
           )
+          console.log('[HOLERITES] ID do funcionário encontrado na API:', funcionarioId)
         } catch (funcionarioError: any) {
-        if (funcionarioError?.response?.status === 403 || funcionarioError?.status === 403) {
-          throw new Error('Você não tem permissão para acessar holerites')
+          console.error('[HOLERITES] Erro ao buscar ID do funcionário na API:', funcionarioError)
+          
+          // Tentar buscar diretamente usando o endpoint de funcionários
+          try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+            console.log('[HOLERITES] Tentando buscar funcionário diretamente na API...')
+            
+            // Tentar buscar por email ou nome
+            const searchParam = user.email || user.nome || ''
+            if (searchParam) {
+              const response = await fetch(
+                `${apiUrl}/api/funcionarios?search=${encodeURIComponent(searchParam)}&limit=50`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  }
+                }
+              )
+              
+              if (response.ok) {
+                const data = await response.json()
+                const funcionarios = data.data || []
+                console.log('[HOLERITES] Funcionários encontrados:', funcionarios.length)
+                
+                // Procurar funcionário que corresponde ao usuário
+                const funcionario = funcionarios.find((f: any) => 
+                  f.usuario?.id === user.id || 
+                  f.usuario?.email === user.email ||
+                  f.email === user.email ||
+                  (f.usuario && Array.isArray(f.usuario) && f.usuario.some((u: any) => u.id === user.id))
+                )
+                
+                if (funcionario && funcionario.id && !isNaN(Number(funcionario.id))) {
+                  funcionarioId = Number(funcionario.id)
+                  console.log('[HOLERITES] ID do funcionário encontrado na busca direta:', funcionarioId)
+                }
+              }
+            }
+          } catch (directSearchError) {
+            console.error('[HOLERITES] Erro na busca direta:', directSearchError)
+          }
+          
+          if (!funcionarioId) {
+            if (funcionarioError?.response?.status === 403 || funcionarioError?.status === 403) {
+              throw new Error('Você não tem permissão para acessar holerites')
+            }
+            throw new Error(funcionarioError.message || 'ID do funcionário não encontrado')
+          }
         }
-        throw new Error(funcionarioError.message || 'Erro ao buscar ID do funcionário')
       }
 
-        if (!funcionarioId) {
-        throw new Error('ID do funcionário não encontrado')
-        }
+      if (!funcionarioId) {
+        console.error('[HOLERITES] ID do funcionário não encontrado após todas as tentativas')
+        throw new Error('ID do funcionário não encontrado. Verifique se você está vinculado a um funcionário no sistema.')
+      }
 
-        // Buscar holerites
-        const response = await colaboradoresDocumentosApi.holerites.listar(funcionarioId)
+      // Buscar holerites
+      console.log('[HOLERITES] Chamando API para listar holerites do funcionário:', funcionarioId)
+      const response = await colaboradoresDocumentosApi.holerites.listar(funcionarioId)
+      console.log('[HOLERITES] Resposta da API:', response)
         
       if (response.success && response.data) {
-          // Converter formato do backend para frontend
-          const holeritesFormatados = response.data.map((h: any) => ({
-            id: h.id,
-            funcionario_id: h.funcionario_id,
-            mes_referencia: h.mes_referencia,
-            arquivo: h.arquivo,
-            assinatura_digital: h.assinatura_digital,
-            assinado_por: h.assinado_por,
-            assinado_em: h.assinado_em,
-            recebido_em: h.recebido_em,
-            created_at: h.created_at,
-            updated_at: h.updated_at
-          }))
-          
-          setHolerites(holeritesFormatados)
-          
-          // Salvar no cache
-          localStorage.setItem('cached_holerites', JSON.stringify(holeritesFormatados))
+        // Converter formato do backend para frontend
+        const holeritesFormatados = response.data.map((h: any) => ({
+          id: h.id,
+          funcionario_id: h.funcionario_id,
+          mes_referencia: h.mes_referencia,
+          arquivo: h.arquivo,
+          assinatura_digital: h.assinatura_digital,
+          assinado_por: h.assinado_por,
+          assinado_em: h.assinado_em,
+          recebido_em: h.recebido_em,
+          created_at: h.created_at,
+          updated_at: h.updated_at
+        }))
         
+        console.log('[HOLERITES] Holerites formatados:', holeritesFormatados)
+        setHolerites(holeritesFormatados)
+        
+        // Salvar no cache
+        localStorage.setItem('cached_holerites', JSON.stringify(holeritesFormatados))
+      
         if (holeritesFormatados.length === 0) {
           toast({
             title: "Nenhum holerite encontrado",
             description: "Você ainda não possui holerites disponíveis.",
             variant: "default"
           })
-        }
         } else {
+          console.log('[HOLERITES] Holerites carregados com sucesso:', holeritesFormatados.length)
+        }
+      } else {
+        console.warn('[HOLERITES] Resposta da API sem sucesso ou sem dados:', response)
         setHolerites([])
         toast({
           title: "Nenhum holerite encontrado",
@@ -176,12 +272,19 @@ export default function PWAHoleritesPage() {
       }
 
     } catch (error: any) {
-      console.error('Erro ao carregar holerites:', error)
+      console.error('[HOLERITES] Erro ao carregar holerites:', error)
+      console.error('[HOLERITES] Detalhes do erro:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response,
+        status: error.status
+      })
       
       // Tentar carregar do cache em caso de erro
       const cachedHolerites = localStorage.getItem('cached_holerites')
       
       if (cachedHolerites) {
+        console.log('[HOLERITES] Carregando holerites do cache devido ao erro')
         setHolerites(JSON.parse(cachedHolerites))
         toast({
           title: "Erro ao carregar holerites",
@@ -198,20 +301,33 @@ export default function PWAHoleritesPage() {
       }
     } finally {
       setLoading(false)
+      console.log('[HOLERITES] Carregamento finalizado')
     }
-  }, [user?.id, isOnline]) // Dependências do useCallback
+  }, [user?.id, isOnline, toast]) // Dependências do useCallback - usar user?.id para estabilidade
 
-  // Carregar holerites
+  // Carregar holerites quando o usuário estiver disponível
   useEffect(() => {
-    // Evitar chamadas múltiplas
-    if (isLoadingHolerites || loading) return
+    const userId = user?.id
     
+    // Não carregar se ainda não temos o usuário ou ID
+    if (!user || !userId) {
+      console.log('[HOLERITES] useEffect: aguardando usuário...', { hasUser: !!user, userId })
+      return
+    }
+    
+    // Não carregar se já está carregando (evitar múltiplas chamadas simultâneas)
+    if (isLoadingHolerites) {
+      console.log('[HOLERITES] Já está carregando, ignorando...')
+      return
+    }
+    
+    console.log('[HOLERITES] ✅ Condições atendidas, iniciando carregamento...', { userId })
     setIsLoadingHolerites(true)
-    // Sempre carregar (com dados mockados se necessário)
     carregarHolerites().finally(() => {
       setIsLoadingHolerites(false)
     })
-  }, [carregarHolerites]) // Usar a função memoizada
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]) // Usar apenas user?.id para estabilidade
 
   const formatarMesReferencia = (mesReferencia: string) => {
     try {
@@ -277,19 +393,64 @@ export default function PWAHoleritesPage() {
         throw new Error('Arquivo do holerite não disponível')
       }
       
-      // Construir URL do arquivo
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
-      const arquivoUrl = holerite.arquivo.startsWith('http') 
-        ? holerite.arquivo 
-        : `${apiUrl}/uploads/${holerite.arquivo}`
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      let arquivoUrl = ''
+      
+      // Se já for uma URL completa, usar diretamente
+      if (holerite.arquivo.startsWith('http')) {
+        arquivoUrl = holerite.arquivo
+      } else {
+        // Tentar obter URL assinada do Supabase
+        try {
+          const urlResponse = await fetch(
+            `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo)}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          )
+          
+          if (urlResponse.ok) {
+            const urlData = await urlResponse.json()
+            arquivoUrl = urlData.url || urlData.data?.url || holerite.arquivo
+          } else {
+            // Fallback: tentar construir URL pública
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+            if (supabaseUrl) {
+              arquivoUrl = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${holerite.arquivo}`
+            } else {
+              arquivoUrl = `${apiUrl}/uploads/${holerite.arquivo}`
+            }
+          }
+        } catch (error) {
+          console.error('[HOLERITES] Erro ao obter URL assinada para download:', error)
+          // Fallback: tentar construir URL pública
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+          if (supabaseUrl) {
+            arquivoUrl = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${holerite.arquivo}`
+          } else {
+            arquivoUrl = `${apiUrl}/uploads/${holerite.arquivo}`
+          }
+        }
+      }
       
       // Abrir em nova aba para download
       window.open(arquivoUrl, '_blank')
       
       // Confirmar recebimento automaticamente ao baixar
       await confirmarRecebimento(holerite)
+      
+      toast({
+        title: "Download iniciado",
+        description: "O holerite está sendo baixado.",
+        variant: "default"
+      })
     } catch (error: any) {
-      console.error('Erro ao baixar holerite:', error)
+      console.error('[HOLERITES] Erro ao baixar holerite:', error)
       toast({
         title: "Erro ao baixar holerite",
         description: error.message || "Não foi possível baixar o holerite",
@@ -301,6 +462,89 @@ export default function PWAHoleritesPage() {
   const handleVisualizar = async (holerite: Holerite) => {
     setHoleriteSelecionado(holerite)
     setIsVisualizacaoDialogOpen(true)
+    setUrlArquivoAssinada('')
+    setCarregandoUrlArquivo(true)
+    
+    // Obter URL assinada do arquivo
+    if (holerite.arquivo) {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+        
+        // Se já for uma URL completa (http/https), usar diretamente
+        if (holerite.arquivo.startsWith('http')) {
+          setUrlArquivoAssinada(holerite.arquivo)
+          setCarregandoUrlArquivo(false)
+        } else {
+          // Tentar obter URL assinada do Supabase
+          try {
+            const urlResponse = await fetch(
+              `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo)}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            )
+            
+            if (urlResponse.ok) {
+              const urlData = await urlResponse.json()
+              const urlAssinada = urlData.url || urlData.data?.url
+              if (urlAssinada && urlAssinada.startsWith('http')) {
+                console.log('[HOLERITES] URL assinada obtida com sucesso')
+                setUrlArquivoAssinada(urlAssinada)
+              } else {
+                console.warn('[HOLERITES] URL assinada inválida, usando fallback')
+                // Fallback: tentar construir URL pública
+                const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+                if (supabaseUrl) {
+                  const urlPublica = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${holerite.arquivo}`
+                  console.log('[HOLERITES] Usando URL pública do Supabase:', urlPublica)
+                  setUrlArquivoAssinada(urlPublica)
+                } else {
+                  const urlUploads = `${apiUrl}/uploads/${holerite.arquivo}`
+                  console.log('[HOLERITES] Usando URL de uploads:', urlUploads)
+                  setUrlArquivoAssinada(urlUploads)
+                }
+              }
+            } else {
+              console.warn('[HOLERITES] Erro ao obter URL assinada, status:', urlResponse.status)
+              // Fallback: tentar construir URL pública
+              const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+              if (supabaseUrl) {
+                const urlPublica = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${holerite.arquivo}`
+                console.log('[HOLERITES] Usando URL pública do Supabase (fallback):', urlPublica)
+                setUrlArquivoAssinada(urlPublica)
+              } else {
+                const urlUploads = `${apiUrl}/uploads/${holerite.arquivo}`
+                console.log('[HOLERITES] Usando URL de uploads (fallback):', urlUploads)
+                setUrlArquivoAssinada(urlUploads)
+              }
+            }
+          } catch (error) {
+            console.error('[HOLERITES] Erro ao obter URL assinada:', error)
+            // Fallback: tentar construir URL pública
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+            if (supabaseUrl) {
+              const urlPublica = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${holerite.arquivo}`
+              console.log('[HOLERITES] Usando URL pública do Supabase (erro):', urlPublica)
+              setUrlArquivoAssinada(urlPublica)
+            } else {
+              const urlUploads = `${apiUrl}/uploads/${holerite.arquivo}`
+              console.log('[HOLERITES] Usando URL de uploads (erro):', urlUploads)
+              setUrlArquivoAssinada(urlUploads)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[HOLERITES] Erro ao processar URL do arquivo:', error)
+      } finally {
+        setCarregandoUrlArquivo(false)
+      }
+    } else {
+      setCarregandoUrlArquivo(false)
+    }
     
     // Confirmar recebimento ao visualizar
     await confirmarRecebimento(holerite)
@@ -391,207 +635,122 @@ export default function PWAHoleritesPage() {
         )}
 
         {/* Lista de Holerites */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Holerites Mensais</CardTitle>
-                <CardDescription>
-                  {holerites.length} holerite(s) disponível(is)
-                </CardDescription>
-              </div>
+        <div className="w-full">
+          {loading ? (
+            <CardLoader />
+          ) : holerites.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+              <p className="text-lg font-medium mb-2">Nenhum holerite disponível</p>
+              <p className="text-sm">Seus holerites aparecerão aqui quando estiverem disponíveis.</p>
             </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <CardLoader />
-            ) : holerites.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-lg font-medium mb-2">Nenhum holerite disponível</p>
-                <p className="text-sm">Seus holerites aparecerão aqui quando estiverem disponíveis.</p>
-              </div>
-            ) : (
-              <>
-                {/* Layout Mobile - Cards */}
-                <div className="block md:hidden space-y-3">
-                  {holerites.map((holerite) => (
-                    <Card key={holerite.id} className="border-2 hover:border-blue-200 transition-colors">
-                      <CardContent className="p-4">
-                        <div className="space-y-3">
-                          {/* Header do Card */}
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-lg text-gray-900">
+          ) : (
+            <div className="w-full">
+              <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[140px]">Mês/Ano</TableHead>
+                      <TableHead className="w-[70px]">Status</TableHead>
+                      <TableHead className="min-w-[110px] hidden sm:table-cell">Assinatura</TableHead>
+                      <TableHead className="min-w-[120px] hidden md:table-cell">Recebimento</TableHead>
+                      <TableHead className="min-w-[100px] hidden lg:table-cell">Data Criação</TableHead>
+                      <TableHead className="text-right min-w-[200px] sm:min-w-[280px]">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {holerites
+                      .sort((a, b) => {
+                        // Ordenar por mês/ano (mais recente primeiro)
+                        const [anoA, mesA] = a.mes_referencia.split('-').map(Number)
+                        const [anoB, mesB] = b.mes_referencia.split('-').map(Number)
+                        if (anoA !== anoB) return anoB - anoA
+                        return mesB - mesA
+                      })
+                      .map((holerite) => (
+                        <TableRow key={holerite.id} className="hover:bg-gray-50">
+                          <TableCell className="font-medium">
+                            <div className="flex flex-col">
+                              <span className="text-lg font-semibold text-gray-900">
                                 {formatarMesReferencia(holerite.mes_referencia)}
-                              </h3>
-                              <p className="text-xs text-gray-500 mt-1">
-                                Criado em {new Date(holerite.created_at).toLocaleDateString('pt-BR')}
-                              </p>
+                              </span>
+                              <span className="text-xs text-gray-500 mt-0.5 hidden sm:inline">
+                                {holerite.mes_referencia}
+                              </span>
                             </div>
-                            {estaAssinado(holerite) ? (
-                              <Badge className="bg-green-500">
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                Assinado
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                                <Clock className="w-3 h-3 mr-1" />
-                                Pendente
-                              </Badge>
-                            )}
-                          </div>
-
-                          {/* Status Info */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Assinatura</p>
+                          </TableCell>
+                          <TableCell className="px-1 py-2">
+                            <div className="flex justify-center">
                               {estaAssinado(holerite) ? (
-                                <p className="text-xs text-gray-700 font-medium">
+                                <Badge className="bg-green-500 text-white text-[10px] px-1.5 py-0.5">
+                                  <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
+                                  <span className="hidden sm:inline">Assinado</span>
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300 text-[10px] px-1.5 py-0.5">
+                                  <Clock className="w-2.5 h-2.5 mr-0.5" />
+                                  <span className="hidden sm:inline">Pendente</span>
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            {estaAssinado(holerite) ? (
+                              <div className="flex flex-col">
+                                <span className="text-xs text-gray-700 font-medium">
                                   {holerite.assinado_em 
                                     ? new Date(holerite.assinado_em).toLocaleDateString('pt-BR')
                                     : 'Assinado'
                                   }
-                                </p>
-                              ) : (
-                                <p className="text-xs text-gray-400">Não assinado</p>
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Recebimento</p>
-                              {estaRecebido(holerite) ? (
-                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-xs">
-                                  <Check className="w-3 h-3 mr-1" />
-                                  Recebido
-                                </Badge>
-                              ) : (
-                                <p className="text-xs text-gray-400">Não confirmado</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Ações */}
-                          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 min-w-[80px]"
-                              onClick={() => handleVisualizar(holerite)}
-                            >
-                              <Eye className="w-4 h-4 mr-1" />
-                              Ver
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 min-w-[80px]"
-                              onClick={() => handleDownload(holerite)}
-                            >
-                              <Download className="w-4 h-4 mr-1" />
-                              Baixar
-                            </Button>
-                            {!estaAssinado(holerite) && (
-                              <Button
-                                variant="default"
-                                size="sm"
-                                className="flex-1 min-w-[100px] bg-blue-600 hover:bg-blue-700"
-                                onClick={() => {
-                                  setHoleriteSelecionado(holerite)
-                                  setIsAssinaturaDialogOpen(true)
-                                }}
-                              >
-                                <FileText className="w-4 h-4 mr-1" />
-                                Assinar
-                              </Button>
-                            )}
-                            {!estaRecebido(holerite) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 min-w-[120px]"
-                                onClick={() => confirmarRecebimento(holerite)}
-                              >
-                                <Check className="w-4 h-4 mr-1" />
-                                Confirmar
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-
-                {/* Layout Desktop - Tabela */}
-                <div className="hidden md:block overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Mês/Ano</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Assinatura</TableHead>
-                        <TableHead>Recebimento</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {holerites.map((holerite) => (
-                        <TableRow key={holerite.id}>
-                          <TableCell className="font-medium">
-                            {formatarMesReferencia(holerite.mes_referencia)}
-                          </TableCell>
-                          <TableCell>
-                            {estaAssinado(holerite) ? (
-                              <Badge className="bg-green-500">
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                Assinado
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                                <Clock className="w-3 h-3 mr-1" />
-                                Pendente
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {estaAssinado(holerite) ? (
-                              <div className="text-xs text-gray-600">
-                                {holerite.assinado_em 
-                                  ? new Date(holerite.assinado_em).toLocaleDateString('pt-BR')
-                                  : 'Assinado'
-                                }
+                                </span>
+                                {holerite.assinado_em && (
+                                  <span className="text-xs text-gray-500">
+                                    {new Date(holerite.assinado_em).toLocaleTimeString('pt-BR', { 
+                                      hour: '2-digit', 
+                                      minute: '2-digit' 
+                                    })}
+                                  </span>
+                                )}
                               </div>
                             ) : (
-                              <span className="text-gray-400 text-xs">Não assinado</span>
+                              <span className="text-gray-400 text-sm">Não assinado</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             {estaRecebido(holerite) ? (
                               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
                                 <Check className="w-3 h-3 mr-1" />
                                 Recebido
                               </Badge>
                             ) : (
-                              <span className="text-gray-400 text-xs">Não confirmado</span>
+                              <span className="text-gray-400 text-sm">Não confirmado</span>
                             )}
                           </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <div className="text-xs text-gray-600">
+                              {new Date(holerite.created_at).toLocaleDateString('pt-BR')}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1 sm:gap-2 flex-wrap">
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleVisualizar(holerite)}
+                                className="h-8 px-2 sm:px-3"
+                                title="Visualizar holerite"
                               >
-                                <Eye className="w-4 h-4 mr-1" />
-                                Ver
+                                <Eye className="w-4 h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Ver</span>
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleDownload(holerite)}
+                                className="h-8 px-2 sm:px-3"
+                                title="Baixar holerite"
                               >
-                                <Download className="w-4 h-4 mr-1" />
-                                Baixar
+                                <Download className="w-4 h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Baixar</span>
                               </Button>
                               {!estaAssinado(holerite) && (
                                 <Button
@@ -601,9 +760,11 @@ export default function PWAHoleritesPage() {
                                     setHoleriteSelecionado(holerite)
                                     setIsAssinaturaDialogOpen(true)
                                   }}
+                                  className="h-8 px-2 sm:px-3 bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+                                  title="Assinar holerite"
                                 >
-                                  <FileText className="w-4 h-4 mr-1" />
-                                  Assinar
+                                  <FileText className="w-4 h-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">Assinar</span>
                                 </Button>
                               )}
                               {!estaRecebido(holerite) && (
@@ -611,22 +772,22 @@ export default function PWAHoleritesPage() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => confirmarRecebimento(holerite)}
+                                  className="h-8 px-2 sm:px-3"
+                                  title="Confirmar recebimento"
                                 >
-                                  <Check className="w-4 h-4 mr-1" />
-                                  Confirmar Recebimento
+                                  <Check className="w-4 h-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">Confirmar</span>
                                 </Button>
                               )}
                             </div>
                           </TableCell>
                         </TableRow>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                  </TableBody>
+                </Table>
+            </div>
+          )}
+        </div>
 
         {/* Dialog de Assinatura */}
         <Dialog open={isAssinaturaDialogOpen} onOpenChange={setIsAssinaturaDialogOpen}>
@@ -659,7 +820,14 @@ export default function PWAHoleritesPage() {
         </Dialog>
 
         {/* Dialog de Visualização */}
-        <Dialog open={isVisualizacaoDialogOpen} onOpenChange={setIsVisualizacaoDialogOpen}>
+        <Dialog open={isVisualizacaoDialogOpen} onOpenChange={(open) => {
+          setIsVisualizacaoDialogOpen(open)
+          if (!open) {
+            setHoleriteSelecionado(null)
+            setUrlArquivoAssinada('')
+            setCarregandoUrlArquivo(false)
+          }
+        }}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Visualizar Holerite</DialogTitle>
@@ -697,14 +865,44 @@ export default function PWAHoleritesPage() {
 
                 {holeriteSelecionado.arquivo ? (
                   <div className="border rounded-lg p-4">
-                    <iframe
-                      src={holeriteSelecionado.arquivo.startsWith('http') 
-                        ? holeriteSelecionado.arquivo 
-                        : `${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}/uploads/${holeriteSelecionado.arquivo}`
-                      }
-                      className="w-full h-[600px] border-0"
-                      title="Visualização do Holerite"
-                    />
+                    {carregandoUrlArquivo ? (
+                      <div className="flex items-center justify-center h-[600px]">
+                        <div className="text-center">
+                          <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600">Carregando arquivo...</p>
+                        </div>
+                      </div>
+                    ) : urlArquivoAssinada && urlArquivoAssinada.startsWith('http') ? (
+                      <iframe
+                        src={urlArquivoAssinada}
+                        className="w-full h-[600px] border-0"
+                        title="Visualização do Holerite"
+                        onError={() => {
+                          console.error('[HOLERITES] Erro ao carregar iframe com URL:', urlArquivoAssinada)
+                          toast({
+                            title: "Erro",
+                            description: "Não foi possível carregar o PDF. Tente baixar o arquivo.",
+                            variant: "destructive"
+                          })
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-[600px]">
+                        <div className="text-center">
+                          <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600">Não foi possível carregar o arquivo</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={() => handleDownload(holeriteSelecionado)}
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Baixar PDF
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="border rounded-lg p-8 bg-gray-50">

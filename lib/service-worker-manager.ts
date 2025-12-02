@@ -12,8 +12,12 @@ export class ServiceWorkerManager {
    * Registrar o service worker
    */
   async register() {
-    if (!('serviceWorker' in navigator)) {
-      console.warn('Service Worker não é suportado neste navegador');
+    // Verificar suporte de forma mais robusta
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+      // Silenciar aviso em ambientes onde não é suportado (SSR, navegadores antigos)
+      if (typeof window !== 'undefined') {
+        console.debug('Service Worker não é suportado neste navegador');
+      }
       return null;
     }
 

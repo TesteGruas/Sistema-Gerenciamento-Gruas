@@ -184,8 +184,8 @@ const nextConfig = {
         ],
       },
       {
-        // Headers específicos para JavaScript
-        source: '/:all*.js',
+        // Headers específicos para JavaScript do Next.js
+        source: '/_next/static/:path*.js',
         headers: [
           {
             key: 'Content-Type',
@@ -194,6 +194,16 @@ const nextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        // Headers para outros arquivos JS (não do Next.js)
+        source: '/:path*.js',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/javascript; charset=utf-8',
           },
         ],
       },

@@ -1,5 +1,5 @@
 // API client para remuneração (folha de pagamento, descontos, benefícios)
-import { buildApiUrl, API_ENDPOINTS } from './api'
+import { buildApiUrl, API_ENDPOINTS, fetchWithAuth } from './api'
 
 // ============== Interfaces ==============
 
@@ -152,23 +152,6 @@ export interface FuncionarioBeneficioResponse {
   data: FuncionarioBeneficio[]
 }
 
-// Função para obter token de autenticação
-const getAuthToken = (): string | null => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('token')
-  }
-  return null
-}
-
-// Headers padrão com autenticação
-const getHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` })
-  }
-}
-
 const BASE_URL = 'remuneracao'
 
 // ============== APIs de Folha de Pagamento ==============
@@ -193,9 +176,11 @@ export async function getFolhasPagamento(params?: {
 
   const url = buildApiUrl(`${BASE_URL}/folha-pagamento?${queryParams.toString()}`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'GET',
-    headers: getHeaders()
+    headers: {
+      'Content-Type': 'application/json'
+    }
   })
 
   if (!response.ok) {
@@ -212,9 +197,11 @@ export async function getFolhasPagamento(params?: {
 export async function getFolhaPagamento(id: number): Promise<FolhaPagamentoSingleResponse> {
   const url = buildApiUrl(`${BASE_URL}/folha-pagamento/${id}`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'GET',
-    headers: getHeaders()
+    headers: {
+      'Content-Type': 'application/json'
+    }
   })
 
   if (!response.ok) {
@@ -231,9 +218,11 @@ export async function getFolhaPagamento(id: number): Promise<FolhaPagamentoSingl
 export async function createFolhaPagamento(data: FolhaPagamentoCreateData): Promise<FolhaPagamentoSingleResponse> {
   const url = buildApiUrl(`${BASE_URL}/folha-pagamento`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(data)
   })
 
@@ -251,9 +240,11 @@ export async function createFolhaPagamento(data: FolhaPagamentoCreateData): Prom
 export async function updateFolhaPagamento(id: number, data: Partial<FolhaPagamentoCreateData>): Promise<FolhaPagamentoSingleResponse> {
   const url = buildApiUrl(`${BASE_URL}/folha-pagamento/${id}`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'PUT',
-    headers: getHeaders(),
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(data)
   })
 
@@ -273,9 +264,11 @@ export async function updateFolhaPagamento(id: number, data: Partial<FolhaPagame
 export async function getDescontosTipo(ativo = true): Promise<DescontoTipoResponse> {
   const url = buildApiUrl(`${BASE_URL}/descontos-tipo?ativo=${ativo}`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'GET',
-    headers: getHeaders()
+    headers: {
+      'Content-Type': 'application/json'
+    }
   })
 
   if (!response.ok) {
@@ -292,9 +285,11 @@ export async function getDescontosTipo(ativo = true): Promise<DescontoTipoRespon
 export async function createDescontoTipo(data: DescontoTipoCreateData): Promise<{ success: boolean; data: DescontoTipo; message: string }> {
   const url = buildApiUrl(`${BASE_URL}/descontos-tipo`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(data)
   })
 
@@ -314,9 +309,11 @@ export async function createDescontoTipo(data: DescontoTipoCreateData): Promise<
 export async function getBeneficiosTipo(ativo = true): Promise<BeneficioTipoResponse> {
   const url = buildApiUrl(`${BASE_URL}/beneficios-tipo?ativo=${ativo}`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'GET',
-    headers: getHeaders()
+    headers: {
+      'Content-Type': 'application/json'
+    }
   })
 
   if (!response.ok) {
@@ -333,9 +330,11 @@ export async function getBeneficiosTipo(ativo = true): Promise<BeneficioTipoResp
 export async function createBeneficioTipo(data: BeneficioTipoCreateData): Promise<{ success: boolean; data: BeneficioTipo; message: string }> {
   const url = buildApiUrl(`${BASE_URL}/beneficios-tipo`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(data)
   })
 
@@ -355,9 +354,11 @@ export async function createBeneficioTipo(data: BeneficioTipoCreateData): Promis
 export async function addDescontoFolha(data: FuncionarioDescontoCreateData): Promise<{ success: boolean; data: FuncionarioDesconto; message: string }> {
   const url = buildApiUrl(`${BASE_URL}/funcionario-descontos`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(data)
   })
 
@@ -385,9 +386,11 @@ export async function getFuncionarioBeneficios(params?: {
 
   const url = buildApiUrl(`${BASE_URL}/funcionario-beneficios?${queryParams.toString()}`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'GET',
-    headers: getHeaders()
+    headers: {
+      'Content-Type': 'application/json'
+    }
   })
 
   if (!response.ok) {
@@ -404,9 +407,11 @@ export async function getFuncionarioBeneficios(params?: {
 export async function addBeneficioFuncionario(data: FuncionarioBeneficioCreateData): Promise<{ success: boolean; data: FuncionarioBeneficio; message: string }> {
   const url = buildApiUrl(`${BASE_URL}/funcionario-beneficios`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(data)
   })
 
@@ -424,9 +429,11 @@ export async function addBeneficioFuncionario(data: FuncionarioBeneficioCreateDa
 export async function updateBeneficioFuncionario(id: number, data: Partial<FuncionarioBeneficioCreateData>): Promise<{ success: boolean; data: FuncionarioBeneficio; message: string }> {
   const url = buildApiUrl(`${BASE_URL}/funcionario-beneficios/${id}`)
   
-  const response = await fetch(url, {
+  const response = await fetchWithAuth(url, {
     method: 'PUT',
-    headers: getHeaders(),
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(data)
   })
 

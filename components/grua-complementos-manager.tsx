@@ -147,61 +147,64 @@ export default function GruaComplementosManager({
     condicoes_locacao: ''
   })
 
-  useEffect(() => {
-    const mockComplementos: ComplementoItem[] = [
-      {
-        id: '1',
-        nome: 'Garfo Paleteiro',
-        sku: 'ACESS-001',
-        tipo_precificacao: 'mensal',
-        unidade: 'unidade',
-        preco_unitario_centavos: 50000,
-        quantidade: 1,
-        descricao: 'Garfo para movimentação de paletes',
-        inicio_cobranca: dataInicioLocacao,
-        meses_cobranca: mesesLocacao,
-        taxavel: true,
-        aliquota: 18,
-        desconto_percentual: 0,
-        status: 'rascunho',
-        incluido: true
-      },
-      {
-        id: '2',
-        nome: 'Estaiamentos',
-        sku: 'ACESS-005',
-        tipo_precificacao: 'por_metro',
-        unidade: 'm',
-        preco_unitario_centavos: 65000,
-        quantidade: 30,
-        fator: 650,
-        descricao: 'Estaiamentos para fixação lateral',
-        inicio_cobranca: dataInicioLocacao,
-        taxavel: true,
-        aliquota: 18,
-        desconto_percentual: 0,
-        status: 'rascunho',
-        rule_key: 'estaiamento_por_altura',
-        incluido: true
-      },
-      {
-        id: '3',
-        nome: 'Chumbadores/Base de Fundação',
-        sku: 'ACESS-006',
-        tipo_precificacao: 'unico',
-        unidade: 'unidade',
-        preco_unitario_centavos: 150000,
-        quantidade: 1,
-        descricao: 'Peças de ancoragem concretadas',
-        inicio_cobranca: dataInicioLocacao,
-        taxavel: true,
-        aliquota: 18,
-        desconto_percentual: 0,
-        status: 'aprovado',
-        incluido: true
+  // Função para carregar complementos do catálogo via API
+  const loadComplementos = async () => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      if (!token) {
+        console.warn('Token de autenticação não encontrado para carregar complementos')
+        // Não exibir erro, apenas não carregar dados
+        return
       }
-    ]
-    setComplementos(mockComplementos)
+
+      const response = await fetch(`${API_URL}/api/complementos?limit=1000&ativo=true`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        console.warn('Erro ao carregar complementos do catálogo:', response.statusText)
+        // Não exibir erro, apenas não carregar dados
+        return
+      }
+
+      const result = await response.json()
+      
+      if (result.success && result.data && Array.isArray(result.data)) {
+        // Converter dados do catálogo para o formato esperado pelo componente
+        // Nota: O catálogo retorna complementos disponíveis, mas não os complementos
+        // já adicionados a esta obra/grua. Por enquanto, mantemos a lista vazia
+        // e o usuário pode adicionar complementos do catálogo manualmente.
+        // Se no futuro houver endpoint para buscar complementos por obra/grua,
+        // essa função deve ser atualizada.
+        
+        // Por enquanto, não preenchemos automaticamente para não sobrescrever
+        // complementos já adicionados pelo usuário
+        // setComplementos([])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar complementos:', error)
+      // Não exibir erro ao usuário, apenas logar
+    }
+  }
+
+  // Carregar complementos do catálogo quando o componente montar
+  useEffect(() => {
+    loadComplementos()
+  }, [])
+
+  // Atualizar datas quando mudarem
+  useEffect(() => {
+    // Atualizar datas dos complementos existentes quando dataInicioLocacao ou mesesLocacao mudarem
+    setComplementos(prev => prev.map(comp => ({
+      ...comp,
+      inicio_cobranca: dataInicioLocacao || comp.inicio_cobranca,
+      meses_cobranca: mesesLocacao || comp.meses_cobranca
+    })))
   }, [dataInicioLocacao, mesesLocacao])
 
   const totais = useMemo((): TotaisComplementos => {

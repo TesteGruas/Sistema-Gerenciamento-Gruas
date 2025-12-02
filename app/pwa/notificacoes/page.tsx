@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
   Bell, 
   BellRing,
@@ -14,15 +15,17 @@ import {
   AlertCircle,
   Info,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Briefcase,
+  Eye
 } from "lucide-react"
-import { PWANotificationsManager } from "@/components/pwa-notifications-manager"
 import { useToast } from "@/hooks/use-toast"
 import { NotificacoesAPI, Notificacao as NotificacaoAPI } from "@/lib/api-notificacoes"
 
 interface Notificacao {
   id: string
   tipo: 'info' | 'alerta' | 'sucesso' | 'erro'
+  tipoOriginal?: string // Tipo original da API (grua, obra, etc)
   titulo: string
   mensagem: string
   lida: boolean
@@ -34,6 +37,8 @@ export default function PWANotificacoesPage() {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [filtro, setFiltro] = useState<'todas' | 'nao-lidas'>('todas')
   const [loading, setLoading] = useState(false)
+  const [notificacaoSelecionada, setNotificacaoSelecionada] = useState<Notificacao | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -66,6 +71,7 @@ export default function PWANotificacoesPage() {
           return {
             id: String(notif.id),
             tipo,
+            tipoOriginal: notif.tipo, // Manter tipo original
             titulo: notif.titulo,
             mensagem: notif.mensagem,
             lida: notif.lida,
@@ -148,13 +154,32 @@ export default function PWANotificacoesPage() {
     }
   }
 
-  const getIconeNotificacao = (tipo: string) => {
+  const getIconeNotificacao = (tipo: string, tipoOriginal?: string) => {
+    // Se for tipo grua, usar ícone de grua
+    if (tipoOriginal === 'grua') {
+      return <Briefcase className="w-5 h-5 text-purple-600" />
+    }
+    
     switch (tipo) {
       case 'sucesso': return <CheckCircle className="w-5 h-5 text-green-600" />
       case 'alerta': return <AlertCircle className="w-5 h-5 text-orange-600" />
       case 'erro': return <AlertCircle className="w-5 h-5 text-red-600" />
       default: return <Info className="w-5 h-5 text-blue-600" />
     }
+  }
+  
+  const getBadgeTipo = (tipoOriginal?: string) => {
+    if (!tipoOriginal) return null
+    
+    const badges: Record<string, { label: string; className: string }> = {
+      'grua': { label: 'Grua', className: 'bg-purple-100 text-purple-700 border-purple-300' },
+      'obra': { label: 'Obra', className: 'bg-blue-100 text-blue-700 border-blue-300' },
+      'financeiro': { label: 'Financeiro', className: 'bg-green-100 text-green-700 border-green-300' },
+      'rh': { label: 'RH', className: 'bg-pink-100 text-pink-700 border-pink-300' },
+      'estoque': { label: 'Estoque', className: 'bg-yellow-100 text-yellow-700 border-yellow-300' }
+    }
+    
+    return badges[tipoOriginal]
   }
 
   const notificacoesFiltradas = notificacoes.filter(n => 
@@ -164,45 +189,11 @@ export default function PWANotificacoesPage() {
   const naoLidas = notificacoes.filter(n => !n.lida).length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Notificações</h1>
         <p className="text-gray-600">Gerencie suas notificações e alertas</p>
-      </div>
-
-      {/* Gerenciador de Notificações PWA */}
-      <PWANotificationsManager />
-
-      {/* Estatísticas */}
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Bell className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl font-bold text-gray-900">{notificacoes.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <BellRing className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Não Lidas</p>
-                <p className="text-2xl font-bold text-orange-600">{naoLidas}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Lista de Notificações */}
@@ -257,14 +248,19 @@ export default function PWANotificacoesPage() {
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        {getIconeNotificacao(notif.tipo)}
+                        {getIconeNotificacao(notif.tipo, notif.tipoOriginal)}
                         
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <h4 className="font-medium text-gray-900">{notif.titulo}</h4>
                             {!notif.lida && (
                               <Badge className="bg-blue-100 text-blue-800 text-xs">
                                 Nova
+                              </Badge>
+                            )}
+                            {getBadgeTipo(notif.tipoOriginal) && (
+                              <Badge className={`text-xs ${getBadgeTipo(notif.tipoOriginal)?.className}`}>
+                                {getBadgeTipo(notif.tipoOriginal)?.label}
                               </Badge>
                             )}
                           </div>
@@ -283,6 +279,17 @@ export default function PWANotificacoesPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setNotificacaoSelecionada(notif)
+                              setIsModalOpen(true)
+                            }}
+                            title="Ver detalhes"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
                           {!notif.lida && (
                             <Button
                               variant="ghost"
@@ -324,6 +331,123 @@ export default function PWANotificacoesPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Modal de Detalhes da Notificação */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {notificacaoSelecionada && getIconeNotificacao(notificacaoSelecionada.tipo, notificacaoSelecionada.tipoOriginal)}
+              Detalhes da Notificação
+            </DialogTitle>
+            <DialogDescription>
+              Informações completas sobre esta notificação
+            </DialogDescription>
+          </DialogHeader>
+          
+          {notificacaoSelecionada && (
+            <div className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-lg text-gray-900">
+                    {notificacaoSelecionada.titulo}
+                  </h3>
+                  {!notificacaoSelecionada.lida && (
+                    <Badge className="bg-blue-100 text-blue-800 text-xs">
+                      Nova
+                    </Badge>
+                  )}
+                  {getBadgeTipo(notificacaoSelecionada.tipoOriginal) && (
+                    <Badge className={`text-xs ${getBadgeTipo(notificacaoSelecionada.tipoOriginal)?.className}`}>
+                      {getBadgeTipo(notificacaoSelecionada.tipoOriginal)?.label}
+                    </Badge>
+                  )}
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {notificacaoSelecionada.mensagem}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Clock className="w-4 h-4" />
+                  <span className="font-medium">Data e Hora:</span>
+                  <span>
+                    {new Date(notificacaoSelecionada.data).toLocaleString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="font-medium">Status:</span>
+                  {notificacaoSelecionada.lida ? (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Lida
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                      <BellRing className="w-3 h-3 mr-1" />
+                      Não lida
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {notificacaoSelecionada.acao && (
+                <div className="pt-4 border-t border-gray-200">
+                  <Button
+                    variant="default"
+                    className="w-full"
+                    onClick={() => {
+                      window.location.href = notificacaoSelecionada.acao!
+                      setIsModalOpen(false)
+                    }}
+                  >
+                    Ir para Ação
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-4 border-t border-gray-200">
+                {!notificacaoSelecionada.lida && (
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      marcarComoLida(notificacaoSelecionada.id)
+                      setNotificacaoSelecionada(prev => prev ? { ...prev, lida: true } : null)
+                    }}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Marcar como lida
+                  </Button>
+                )}
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => {
+                    excluirNotificacao(notificacaoSelecionada.id)
+                    setIsModalOpen(false)
+                    setNotificacaoSelecionada(null)
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Excluir
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
