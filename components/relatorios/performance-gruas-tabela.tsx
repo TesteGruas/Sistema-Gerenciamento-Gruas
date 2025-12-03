@@ -41,7 +41,7 @@ export const PerformanceGruasTabela = memo(function PerformanceGruasTabela({
     }
     const statusInfo = statusMap[status] || { color: 'bg-gray-100 text-gray-800', label: status }
     return <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
-  }
+  }, [])
 
   const getUtilizacaoBadge = useCallback((taxa: number) => {
     if (taxa >= 80) {
