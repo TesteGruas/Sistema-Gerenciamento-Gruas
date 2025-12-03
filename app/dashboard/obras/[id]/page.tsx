@@ -57,7 +57,6 @@ import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
 import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
 import { LivroGruaObra } from "@/components/livro-grua-obra"
-import { EditarSinaleiroDialog } from "@/components/editar-sinaleiro-dialog"
 import { CheckCircle2 } from "lucide-react"
 import { exportTabToPDF } from "@/lib/utils/export-pdf"
 import { Progress } from "@/components/ui/progress"
@@ -71,7 +70,6 @@ import GruaSearch from "@/components/grua-search"
 import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 import { obraGruasApi } from "@/lib/api-obra-gruas"
 import { useObraStore } from "@/lib/obra-store"
-import { sinaleirosApi } from "@/lib/api-sinaleiros"
 import { DocumentoUpload } from "@/components/documento-upload"
 import api, { fetchWithAuth } from "@/lib/api"
 import { funcionariosApi } from "@/lib/api-funcionarios"
@@ -557,39 +555,6 @@ function ObraDetailsPageContent() {
     }
   }
 
-  // Função para carregar sinaleiros reais da API
-  const carregarSinaleiros = async () => {
-    if (!obraId) return
-    
-    setLoadingSinaleiros(true)
-    try {
-      const response = await sinaleirosApi.listarPorObra(parseInt(obraId))
-      if (response.success && response.data) {
-        // Converter para formato esperado pelo componente
-        const sinaleirosConvertidos = response.data.map((s: any) => ({
-          id: s.id, // UUID real do banco
-          obra_id: s.obra_id,
-          nome: s.nome,
-          rg_cpf: s.rg_cpf,
-          cpf: s.rg_cpf, // Assumir que rg_cpf pode ser CPF
-          rg: s.rg_cpf, // Assumir que rg_cpf pode ser RG
-          telefone: s.telefone || '',
-          email: s.email || '',
-          tipo: s.tipo, // 'principal' ou 'reserva'
-          tipo_vinculo: s.tipo === 'principal' ? 'interno' : 'cliente', // Mapear para compatibilidade
-          cliente_informou: s.tipo === 'reserva',
-          documentos: [],
-          certificados: []
-        }))
-        setSinaleirosReais(sinaleirosConvertidos)
-      }
-    } catch (error: any) {
-      console.error('Erro ao carregar sinaleiros:', error)
-      toast.error('Erro ao carregar sinaleiros: ' + (error.message || 'Erro desconhecido'))
-    } finally {
-      setLoadingSinaleiros(false)
-    }
-  }
 
   // Funções para carregar documentos e arquivos
   const carregarDocumentos = async () => {
@@ -670,12 +635,6 @@ function ObraDetailsPageContent() {
   })
   
   // Estados para documentos e arquivos - agora no store
-  
-  // Estados para edição de sinaleiro
-  const [isEditarSinaleiroOpen, setIsEditarSinaleiroOpen] = useState(false)
-  const [sinaleiroSelecionado, setSinaleiroSelecionado] = useState<any>(null)
-  const [sinaleirosReais, setSinaleirosReais] = useState<any[]>([])
-  const [loadingSinaleiros, setLoadingSinaleiros] = useState(false)
 
   // Estado para tab ativa (para exportação PDF)
   const [activeTab, setActiveTab] = useState<string>('geral')
@@ -2466,11 +2425,10 @@ function ObraDetailsPageContent() {
       if (isAuth) {
         await carregarObra(obraId)
         
-        // Carregar documentos, arquivos e sinaleiros em paralelo
+        // Carregar documentos e arquivos em paralelo
         await Promise.all([
           carregarDocumentos(),
-          carregarArquivos(),
-          carregarSinaleiros()
+          carregarArquivos()
         ])
       }
     }
@@ -3368,149 +3326,6 @@ function ObraDetailsPageContent() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Card de Sinaleiros */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Sinaleiros
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  // Prioridade: 1) sinaleiros_obra da API /obras/:id, 2) sinaleirosReais carregados separadamente, 3) obra.sinaleiros (fallback)
-                  const sinaleirosDaObra = obra?.sinaleiros_obra ? obra.sinaleiros_obra.map((s: any) => ({
-                    id: s.id,
-                    obra_id: s.obra_id,
-                    nome: s.nome,
-                    rg_cpf: s.rg_cpf,
-                    cpf: s.rg_cpf,
-                    rg: s.rg_cpf,
-                    telefone: s.telefone || '',
-                    email: s.email || '',
-                    tipo: s.tipo,
-                    tipo_vinculo: s.tipo === 'principal' ? 'interno' : 'cliente',
-                    cliente_informou: s.tipo === 'reserva',
-                    documentos: [],
-                    certificados: []
-                  })) : []
-                  
-                  const sinaleirosDisponiveis = sinaleirosDaObra.length > 0 
-                    ? sinaleirosDaObra 
-                    : (sinaleirosReais.length > 0 ? sinaleirosReais : (obra?.sinaleiros || []))
-                  
-                  // Garantir que sempre existam 2 sinaleiros (principal e reserva)
-                  const sinaleiroPrincipal = sinaleirosDisponiveis.find((s: any) => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
-                  const sinaleiroReserva = sinaleirosDisponiveis.find((s: any) => s.tipo === 'reserva' || s.tipo_vinculo === 'cliente')
-                  
-                  const sinaleirosParaExibir = [
-                    sinaleiroPrincipal || {
-                      id: null,
-                      nome: 'Não cadastrado',
-                      tipo_vinculo: 'interno',
-                      tipo: 'principal',
-                      cpf: '',
-                      rg: '',
-                      rg_cpf: '',
-                      telefone: '',
-                      email: '',
-                      documentos: [],
-                      certificados: []
-                    },
-                    sinaleiroReserva || {
-                      id: null,
-                      nome: 'Não cadastrado',
-                      tipo_vinculo: 'cliente',
-                      tipo: 'reserva',
-                      cpf: '',
-                      rg: '',
-                      rg_cpf: '',
-                      telefone: '',
-                      email: '',
-                      documentos: [],
-                      certificados: []
-                    }
-                  ]
-                  
-                  return (
-                    <div className="space-y-3">
-                      {sinaleirosParaExibir.map((s: any, idx: number) => (
-                        <div key={idx} className="p-3 bg-gray-50 rounded-md border border-gray-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'} className="text-xs">
-                              {s.tipo_vinculo === 'interno' ? 'Interno' : 'Indicado pelo Cliente'}
-                            </Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                try {
-                                  const sinaleiroFormatado: any = {
-                                    id: s.id || null,
-                                    obra_id: s.obra_id || parseInt(obraId) || 0,
-                                    nome: s.nome || '',
-                                    cpf: s.cpf || s.rg_cpf || '',
-                                    rg: s.rg || s.rg_cpf || '',
-                                    rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
-                                    telefone: s.telefone || '',
-                                    email: s.email || '',
-                                    tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
-                                    tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
-                                    cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
-                                    documentos: s.documentos || [],
-                                    certificados: s.certificados || []
-                                  }
-                                  
-                                  setSinaleiroSelecionado(sinaleiroFormatado)
-                                  setIsEditarSinaleiroOpen(true)
-                                } catch (error) {
-                                  console.error('Erro ao abrir modal de edição:', error)
-                                  toast({
-                                    title: "Erro",
-                                    description: "Erro ao abrir modal de edição",
-                                    variant: "destructive"
-                                  })
-                                }
-                              }}
-                            >
-                              <Edit className="w-3 h-3 mr-1" />
-                              {s.id ? 'Editar' : 'Cadastrar'}
-                            </Button>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Nome</p>
-                              <p className="font-medium text-sm">{s.nome || 'Não informado'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">CPF</p>
-                              <p className="font-medium text-sm">{s.cpf || 'Não informado'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">RG</p>
-                              <p className="font-medium text-sm">{s.rg || s.rg_cpf || 'Não informado'}</p>
-                            </div>
-                            {s.telefone && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Telefone</p>
-                                <p className="font-medium text-sm">{s.telefone}</p>
-                              </div>
-                            )}
-                            {s.email && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Email</p>
-                                <p className="font-medium text-sm">{s.email}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })()}
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
@@ -3586,167 +3401,6 @@ function ObraDetailsPageContent() {
                               </Badge>
                             )}
                           </div>
-                        </div>
-                        
-                        {/* Sinaleiros da Grua */}
-                        <div className="mt-4 pt-4 border-t">
-                          <h4 className="font-medium text-sm mb-3">Sinaleiros</h4>
-                          {(() => {
-                            // Prioridade: 1) sinaleiros_obra da API /obras/:id, 2) sinaleirosReais carregados separadamente, 3) obra.sinaleiros (fallback)
-                            const sinaleirosDaObra = obra?.sinaleiros_obra ? obra.sinaleiros_obra.map((s: any) => ({
-                              id: s.id,
-                              obra_id: s.obra_id,
-                              nome: s.nome,
-                              rg_cpf: s.rg_cpf,
-                              cpf: s.rg_cpf,
-                              rg: s.rg_cpf,
-                              telefone: s.telefone || '',
-                              email: s.email || '',
-                              tipo: s.tipo,
-                              tipo_vinculo: s.tipo === 'principal' ? 'interno' : 'cliente',
-                              cliente_informou: s.tipo === 'reserva',
-                              documentos: [],
-                              certificados: []
-                            })) : []
-                            
-                            const sinaleirosDisponiveis = sinaleirosDaObra.length > 0 
-                              ? sinaleirosDaObra 
-                              : (sinaleirosReais.length > 0 ? sinaleirosReais : (obra?.sinaleiros || []))
-                            
-                            // Garantir que sempre existam 2 sinaleiros (principal e reserva)
-                            const sinaleiroPrincipal = sinaleirosDisponiveis.find((s: any) => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
-                            const sinaleiroReserva = sinaleirosDisponiveis.find((s: any) => s.tipo === 'reserva' || s.tipo_vinculo === 'cliente')
-                            
-                            const sinaleirosParaExibir = [
-                              sinaleiroPrincipal || {
-                                id: null, // Sem ID = não salvo no banco
-                                nome: 'Não cadastrado',
-                                tipo_vinculo: 'interno',
-                                tipo: 'principal',
-                                cpf: '',
-                                rg: '',
-                                rg_cpf: '',
-                                telefone: '',
-                                email: '',
-                                documentos: [],
-                                certificados: []
-                              },
-                              sinaleiroReserva || {
-                                id: null, // Sem ID = não salvo no banco
-                                nome: 'Não cadastrado',
-                                tipo_vinculo: 'cliente',
-                                tipo: 'reserva',
-                                cpf: '',
-                                rg: '',
-                                rg_cpf: '',
-                                telefone: '',
-                                email: '',
-                                documentos: [],
-                                certificados: []
-                              }
-                            ]
-                            
-                            return (
-                              <div className="space-y-3">
-                                {sinaleirosParaExibir.map((s: any, idx: number) => (
-                                  <div key={idx} className="p-3 bg-gray-50 rounded-md border border-gray-200">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'} className="text-xs">
-                                        {s.tipo_vinculo === 'interno' ? 'Interno' : 'Indicado pelo Cliente'}
-                                      </Badge>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                          try {
-                                            // Converter para o formato Sinaleiro esperado pelo componente
-                                            const sinaleiroFormatado: any = {
-                                              id: s.id || null,
-                                              obra_id: s.obra_id || parseInt(obraId) || 0,
-                                              nome: s.nome || '',
-                                              cpf: s.cpf || s.rg_cpf || '',
-                                              rg: s.rg || s.rg_cpf || '',
-                                              rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
-                                              telefone: s.telefone || '',
-                                              email: s.email || '',
-                                              tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
-                                              tipo_vinculo: s.tipo_vinculo || (s.tipo === 'principal' ? 'interno' : 'cliente'),
-                                              cliente_informou: s.tipo === 'reserva' || s.tipo_vinculo === 'cliente',
-                                              documentos: s.documentos || [],
-                                              certificados: s.certificados || []
-                                            }
-                                            
-                                            setSinaleiroSelecionado(sinaleiroFormatado)
-                                            setIsEditarSinaleiroOpen(true)
-                                          } catch (error) {
-                                            console.error('Erro ao abrir modal de edição:', error)
-                                            toast({
-                                              title: "Erro",
-                                              description: "Erro ao abrir modal de edição",
-                                              variant: "destructive"
-                                            })
-                                          }
-                                        }}
-                                      >
-                                        <Edit className="w-3 h-3 mr-1" />
-                                        {s.id ? 'Editar' : 'Cadastrar'}
-                                      </Button>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                      <div>
-                                        <p className="text-xs text-gray-500 mb-1">Nome</p>
-                                        <p className="font-medium text-sm">{s.nome || 'Não informado'}</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-gray-500 mb-1">CPF</p>
-                                        <p className="font-medium text-sm">{s.cpf || 'Não informado'}</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-xs text-gray-500 mb-1">RG</p>
-                                        <p className="font-medium text-sm">{s.rg || s.rg_cpf || 'Não informado'}</p>
-                                      </div>
-                                      {(s.documentos && s.documentos.length > 0) || (s.certificados && s.certificados.length > 0) ? (
-                                        <>
-                                          {s.documentos && s.documentos.length > 0 && (
-                                            <div className="md:col-span-2">
-                                              <p className="text-xs text-gray-500 mb-1">Documentos</p>
-                                              <div className="flex flex-wrap gap-1">
-                                                {s.documentos.map((doc: any, docIdx: number) => (
-                                                  <Badge key={docIdx} variant="outline" className="flex items-center gap-1 text-xs">
-                                                    <FileText className="w-3 h-3" />
-                                                    {doc.nome || doc.tipo || 'Documento'}
-                                                  </Badge>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-                                          {s.certificados && s.certificados.length > 0 && (
-                                            <div className="md:col-span-2">
-                                              <p className="text-xs text-gray-500 mb-1">Certificados</p>
-                                              <div className="flex flex-wrap gap-1">
-                                                {s.certificados.map((cert: any, certIdx: number) => (
-                                                  <Badge key={certIdx} variant="outline" className="flex items-center gap-1 text-xs">
-                                                    <Shield className="w-3 h-3" />
-                                                    {cert.nome || cert.tipo || 'Certificado'}
-                                                    {cert.numero && ` - ${cert.numero}`}
-                                                    {cert.validade && ` (${new Date(cert.validade).toLocaleDateString('pt-BR')})`}
-                                                  </Badge>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </>
-                                      ) : (
-                                        <div className="md:col-span-2">
-                                          <p className="text-xs text-gray-500">Documentos e Certificados: Não informado</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )
-                          })()}
                         </div>
                       </div>
                     )
@@ -7177,38 +6831,6 @@ function ObraDetailsPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar Sinaleiro */}
-      <EditarSinaleiroDialog
-        open={isEditarSinaleiroOpen}
-        onOpenChange={setIsEditarSinaleiroOpen}
-        sinaleiro={sinaleiroSelecionado}
-        obraId={parseInt(obraId)}
-        onSave={async (sinaleiroAtualizado) => {
-          // Atualizar o sinaleiro na obra
-          if (obra) {
-            const sinaleirosAtualizados = obra?.sinaleiros?.map((s: any) => 
-              s.id === sinaleiroAtualizado.id ? sinaleiroAtualizado : s
-            ) || [sinaleiroAtualizado]
-            
-            // Atualizar obra localmente (em produção, isso seria feito via API)
-            // obra.sinaleiros = sinaleirosAtualizados
-          }
-          
-          toast({
-            title: "Sucesso",
-            description: "Sinaleiro atualizado com sucesso"
-          })
-          
-          // Recarregar a obra e sinaleiros para atualizar os dados
-          if (obraId) {
-            await Promise.all([
-              carregarObra(obraId),
-              carregarSinaleiros()
-            ])
-          }
-        }}
-        readOnly={false}
-      />
 
       {/* Modal de Novo Documento */}
       <Dialog open={isNovoDocumentoOpen} onOpenChange={setIsNovoDocumentoOpen}>

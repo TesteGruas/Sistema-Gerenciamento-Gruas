@@ -201,7 +201,13 @@ export function ExportButton({
       const { jsPDF } = await import('jspdf')
       const autoTable = (await import('jspdf-autotable')).default
 
-      const doc = new jsPDF()
+      // Dados da tabela - verificar número de colunas antes de criar o PDF
+      const headers = colunas || Object.keys(dados[0])
+      const numCols = headers.length
+      
+      // Usar landscape se houver muitas colunas (mais de 8)
+      const useLandscape = numCols > 8
+      let doc = new jsPDF(useLandscape ? 'landscape' : 'portrait')
       
       // Adicionar logos no cabeçalho
       const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
@@ -213,23 +219,116 @@ export function ExportButton({
         doc.text(titulo, 14, yPos)
         yPos += 8
         doc.setFontSize(10)
-        doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, yPos)
-        yPos += 8
+        const dataHora = new Date().toLocaleString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+        doc.text(`Gerado em: ${dataHora}`, 14, yPos)
+        yPos += 10
       }
 
-      // Dados da tabela
-      const headers = colunas || Object.keys(dados[0])
+      
       const tableData = dados.map(row => 
-        headers.map(header => row[header] || '')
+        headers.map(header => {
+          const value = row[header] || ''
+          // Converter valores para string e limitar tamanho
+          return String(value).substring(0, 100)
+        })
       )
+
+      // Calcular larguras de colunas baseado no número de colunas e orientação
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const margin = 28 // 14 de cada lado
+      const availableWidth = pageWidth - margin
+
+      // Configurar larguras específicas para colunas comuns
+      const columnStyles: any = {}
+      let totalWidth = 0
+      
+      headers.forEach((header, index) => {
+        const headerLower = String(header).toLowerCase()
+        let cellWidth: number
+        let halign: 'left' | 'center' | 'right' | undefined = undefined
+        
+        if (headerLower.includes('data')) {
+          cellWidth = useLandscape ? 30 : 25
+          halign = 'center'
+        } else if (headerLower.includes('funcionário') || headerLower.includes('realizado por')) {
+          cellWidth = useLandscape ? 50 : 40
+        } else if (headerLower.includes('observações') || headerLower.includes('descrição')) {
+          cellWidth = useLandscape ? 80 : 60
+        } else if (headerLower.includes('status') || headerLower.includes('itens verificados')) {
+          cellWidth = useLandscape ? 35 : 30
+          halign = 'center'
+        } else if (headerLower === 'cabos' || headerLower === 'polias' || 
+                   headerLower === 'estrutura' || headerLower === 'movimentos' ||
+                   headerLower === 'freios' || headerLower === 'limitadores' ||
+                   headerLower === 'indicadores' || headerLower === 'aterramento' ||
+                   headerLower === 'aterramentos verificados') {
+          cellWidth = useLandscape ? 25 : 20
+          halign = 'center'
+        } else if (headerLower.includes('cargo')) {
+          cellWidth = useLandscape ? 40 : 30
+        } else {
+          // Largura padrão baseada no espaço disponível
+          cellWidth = useLandscape ? 35 : 28
+        }
+        
+        columnStyles[index] = halign ? { cellWidth, halign } : { cellWidth }
+        totalWidth += cellWidth
+      })
+      
+      // Ajustar larguras se excederem o espaço disponível
+      if (totalWidth > availableWidth) {
+        const ratio = availableWidth / totalWidth
+        Object.keys(columnStyles).forEach(key => {
+          const index = parseInt(key)
+          columnStyles[index].cellWidth = Math.floor(columnStyles[index].cellWidth * ratio)
+        })
+      }
 
       autoTable(doc, {
         head: [headers],
         body: tableData,
         startY: yPos,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [66, 139, 202] },
-        alternateRowStyles: { fillColor: [245, 245, 245] }
+        styles: { 
+          fontSize: 7,
+          cellPadding: 2,
+          overflow: 'linebreak',
+          cellWidth: 'wrap',
+          textColor: [0, 0, 0]
+        },
+        headStyles: { 
+          fillColor: [66, 139, 202],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 8,
+          cellPadding: 3
+        },
+        alternateRowStyles: { 
+          fillColor: [245, 245, 245]
+        },
+        columnStyles: columnStyles,
+        margin: { top: yPos, left: 14, right: 14 },
+        tableWidth: 'auto',
+        didDrawPage: (data: any) => {
+          // Adicionar número da página
+          const pageCount = doc.getNumberOfPages()
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(128, 128, 128)
+          doc.text(
+            `Página ${data.pageNumber} de ${pageCount}`,
+            doc.internal.pageSize.getWidth() / 2,
+            doc.internal.pageSize.getHeight() - 10,
+            { align: 'center' }
+          )
+          doc.setTextColor(0, 0, 0)
+        }
       })
 
       // Adicionar rodapé com informações da empresa

@@ -19,10 +19,13 @@ import {
   User,
   Wrench,
   Filter,
-  RefreshCw
+  RefreshCw,
+  Download
 } from "lucide-react"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { CardLoader } from "@/components/ui/loader"
+import { ExportButton } from "@/components/export-button"
+import { useToast } from "@/hooks/use-toast"
 
 interface Manutencao {
   id?: number
@@ -51,6 +54,7 @@ export function LivroGruaManutencaoList({
   onVisualizarManutencao,
   onExcluirManutencao
 }: LivroGruaManutencaoListProps) {
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([])
@@ -110,6 +114,17 @@ export function LivroGruaManutencaoList({
     return matchSearch && matchDataInicio && matchDataFim
   }), [manutencoes, searchTerm, filtroDataInicio, filtroDataFim])
 
+  // Função para formatar dados para exportação
+  const formatarDadosParaExportacao = useCallback(() => {
+    return manutencoesFiltradas.map((manutencao) => ({
+      'Data': new Date(manutencao.data).toLocaleDateString('pt-BR'),
+      'Realizado Por': manutencao.realizado_por_nome || 'N/A',
+      'Cargo': manutencao.cargo || 'N/A',
+      'Descrição': manutencao.descricao || 'Sem descrição',
+      'Observações': manutencao.observacoes || ''
+    }))
+  }, [manutencoesFiltradas])
+
   return (
     <Card>
       <CardHeader>
@@ -123,12 +138,24 @@ export function LivroGruaManutencaoList({
               Histórico de manutenções realizadas nesta grua
             </CardDescription>
           </div>
-          {onNovaManutencao && (
-            <Button onClick={onNovaManutencao}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Manutenção
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {manutencoesFiltradas.length > 0 && (
+              <ExportButton
+                dados={formatarDadosParaExportacao()}
+                tipo="relatorios"
+                nomeArquivo={`manutencoes-grua-${gruaId}`}
+                titulo="Manutenções"
+                variant="outline"
+                size="sm"
+              />
+            )}
+            {onNovaManutencao && (
+              <Button onClick={onNovaManutencao}>
+                <Plus className="w-4 h-4 mr-2" />
+                Nova Manutenção
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>

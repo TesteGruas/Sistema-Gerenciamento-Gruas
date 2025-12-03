@@ -19,10 +19,13 @@ import {
   User,
   CheckCircle2,
   Filter,
-  RefreshCw
+  RefreshCw,
+  Download
 } from "lucide-react"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { CardLoader } from "@/components/ui/loader"
+import { ExportButton } from "@/components/export-button"
+import { useToast } from "@/hooks/use-toast"
 
 interface ChecklistDiario {
   id?: number
@@ -57,6 +60,7 @@ export function LivroGruaChecklistList({
   onVisualizarChecklist,
   onExcluirChecklist
 }: LivroGruaChecklistListProps) {
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checklists, setChecklists] = useState<ChecklistDiario[]>([])
@@ -147,6 +151,31 @@ export function LivroGruaChecklistList({
     ].filter(Boolean).length
   }, [])
 
+  // Função para formatar dados para exportação
+  const formatarDadosParaExportacao = useCallback(() => {
+    return checklistsFiltrados.map((checklist) => {
+      const itensMarcados = contarItensMarcados(checklist)
+      const totalItens = 8
+      const status = itensMarcados === totalItens ? 'Completo' : 'Incompleto'
+      
+      return {
+        'Data': new Date(checklist.data).toLocaleDateString('pt-BR'),
+        'Funcionário': checklist.funcionario_nome || 'N/A',
+        'Cabos': checklist.cabos ? 'Sim' : 'Não',
+        'Polias': checklist.polias ? 'Sim' : 'Não',
+        'Estrutura': checklist.estrutura ? 'Sim' : 'Não',
+        'Movimentos': checklist.movimentos ? 'Sim' : 'Não',
+        'Freios': checklist.freios ? 'Sim' : 'Não',
+        'Limitadores': checklist.limitadores ? 'Sim' : 'Não',
+        'Indicadores': checklist.indicadores ? 'Sim' : 'Não',
+        'Aterramento': checklist.aterramento ? 'Sim' : 'Não',
+        'Itens Verificados': `${itensMarcados}/${totalItens}`,
+        'Status': status,
+        'Observações': checklist.observacoes || ''
+      }
+    })
+  }, [checklistsFiltrados, contarItensMarcados])
+
   return (
     <Card>
       <CardHeader>
@@ -160,12 +189,24 @@ export function LivroGruaChecklistList({
               Lista de checklists diários realizados nesta grua
             </CardDescription>
           </div>
-          {onNovoChecklist && (
-            <Button onClick={onNovoChecklist}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Checklist
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {checklistsFiltrados.length > 0 && (
+              <ExportButton
+                dados={formatarDadosParaExportacao()}
+                tipo="relatorios"
+                nomeArquivo={`checklists-grua-${gruaId}`}
+                titulo="Checklists Diários"
+                variant="outline"
+                size="sm"
+              />
+            )}
+            {onNovoChecklist && (
+              <Button onClick={onNovoChecklist}>
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Checklist
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
