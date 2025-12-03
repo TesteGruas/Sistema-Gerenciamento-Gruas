@@ -140,8 +140,52 @@ function PWALoginPageContent(): JSX.Element {
       })
 
       console.log('[PWA Login] Status da resposta:', response.status)
+      console.log('[PWA Login] Content-Type:', response.headers.get('content-type'))
 
       let data
+      if (!response.ok) {
+        // Verificar se a resposta é JSON antes de tentar fazer parse
+        const contentType = response.headers.get('content-type')
+        let errorData: any = {}
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            errorData = await response.json()
+            console.error('[PWA Login] Erro na resposta (JSON):', errorData)
+          } catch (jsonError) {
+            console.error('[PWA Login] Erro ao parsear JSON de erro:', jsonError)
+            errorData = { error: 'Erro ao processar resposta do servidor' }
+          }
+        } else {
+          // Se não for JSON, tentar ler como texto
+          try {
+            const errorText = await response.text()
+            console.error('[PWA Login] Erro na resposta (texto):', errorText.substring(0, 200))
+            errorData = { 
+              error: response.status === 500 
+                ? 'Erro interno do servidor. Verifique se o backend está rodando corretamente.' 
+                : `Erro ${response.status}: ${response.statusText}`
+            }
+          } catch (textError) {
+            console.error('[PWA Login] Erro ao ler resposta como texto:', textError)
+            errorData = { 
+              error: `Erro ${response.status}: ${response.statusText}` 
+            }
+          }
+        }
+        
+        const errorMessage = errorData.message || errorData.error || `Erro no login (${response.status})`
+        throw new Error(errorMessage)
+      }
+
+      // Verificar se a resposta é JSON antes de fazer parse
+      const contentType = response.headers.get('content-type')
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await response.text()
+        console.error('[PWA Login] Resposta não é JSON:', responseText.substring(0, 200))
+        throw new Error('Resposta inválida do servidor. Esperado JSON, recebido: ' + contentType)
+      }
+
       try {
         data = await response.json()
         console.log('[PWA Login] Resposta da API:', data)
