@@ -7,7 +7,40 @@ import { supabaseAdmin } from '../config/supabase.js';
  */
 async function buscarSupervisorPorObra(obra_id) {
   try {
-    // Buscar supervisor da obra (baseado no campo responsavel_id)
+    // Primeiro, tentar buscar supervisores na tabela funcionarios_obras
+    const { data: supervisoresObra, error: supervisoresError } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select(`
+        funcionario_id,
+        funcionarios!inner(
+          id,
+          usuarios!inner(
+            id,
+            nome,
+            email,
+            cargo
+          )
+        )
+      `)
+      .eq('obra_id', obra_id)
+      .eq('is_supervisor', true)
+      .eq('status', 'ativo')
+      .limit(1);
+
+    if (!supervisoresError && supervisoresObra && supervisoresObra.length > 0) {
+      const supervisorData = supervisoresObra[0];
+      if (supervisorData.funcionarios && supervisorData.funcionarios.usuarios) {
+        const usuario = supervisorData.funcionarios.usuarios;
+        return {
+          id: usuario.id,
+          nome: usuario.nome,
+          email: usuario.email,
+          cargo: usuario.cargo
+        };
+      }
+    }
+
+    // Fallback: Buscar supervisor da obra (baseado no campo responsavel_id)
     const { data: obra, error } = await supabaseAdmin
       .from('obras')
       .select('responsavel_id, id, nome')

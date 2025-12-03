@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { 
@@ -29,7 +30,8 @@ import {
   Battery,
   Truck,
   CreditCard,
-  Loader2
+  Loader2,
+  Shield
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
@@ -401,6 +403,7 @@ export default function NovaObraPage() {
       userId: funcionario.id,
       role: funcionario.role,
       name: funcionario.name,
+      isSupervisor: false,
       gruaId: '' // Removido - usando array de gruas
     }
     
@@ -411,6 +414,20 @@ export default function NovaObraPage() {
     setObraFormData({
       ...obraFormData,
       funcionarios: [...obraFormData.funcionarios, novoFuncionario]
+    })
+  }
+
+  // Função para alternar status de supervisor
+  const handleToggleSupervisor = (funcionarioId: string) => {
+    const funcionariosAtualizados = funcionariosSelecionados.map(f => 
+      f.id === funcionarioId ? { ...f, isSupervisor: !f.isSupervisor } : f
+    )
+    setFuncionariosSelecionados(funcionariosAtualizados)
+    setObraFormData({
+      ...obraFormData,
+      funcionarios: obraFormData.funcionarios.map(f => 
+        f.id === funcionarioId ? { ...f, isSupervisor: !f.isSupervisor } : f
+      )
     })
   }
 
@@ -2127,25 +2144,52 @@ export default function NovaObraPage() {
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Funcionários Selecionados ({funcionariosSelecionados.length})</h4>
                     {funcionariosSelecionados.map((funcionario) => (
-                      <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg bg-green-50">
+                      <div key={funcionario.id} className={`flex gap-2 p-3 border rounded-lg ${funcionario.isSupervisor ? 'bg-blue-50 border-blue-200' : 'bg-green-50'}`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-green-600" />
+                            {funcionario.isSupervisor ? (
+                              <Shield className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <User className="w-4 h-4 text-green-600" />
+                            )}
                             <div>
-                              <p className="font-medium text-green-900">{funcionario.name}</p>
-                              <p className="text-sm text-green-700">{funcionario.role}</p>
+                              <div className="flex items-center gap-2">
+                                <p className={`font-medium ${funcionario.isSupervisor ? 'text-blue-900' : 'text-green-900'}`}>{funcionario.name}</p>
+                                {funcionario.isSupervisor && (
+                                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-xs">
+                                    Supervisor
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className={`text-sm ${funcionario.isSupervisor ? 'text-blue-700' : 'text-green-700'}`}>{funcionario.role}</p>
                             </div>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeFuncionarioSelecionado(funcionario.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`supervisor-${funcionario.id}`}
+                              checked={funcionario.isSupervisor === true}
+                              onCheckedChange={() => handleToggleSupervisor(funcionario.id)}
+                            />
+                            <Label 
+                              htmlFor={`supervisor-${funcionario.id}`}
+                              className="text-sm cursor-pointer flex items-center gap-1"
+                            >
+                              <Shield className="w-3 h-3" />
+                              Supervisor
+                            </Label>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFuncionarioSelecionado(funcionario.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>

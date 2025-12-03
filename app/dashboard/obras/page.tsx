@@ -6,6 +6,7 @@ import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -37,7 +38,8 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  FileText
+  FileText,
+  Shield
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
 import ClienteSearch from "@/components/cliente-search"
@@ -419,6 +421,7 @@ export default function ObrasPage() {
         userId: funcionario.id,
         role: funcionario.role,
         name: funcionario.name,
+        isSupervisor: false,
         gruaId: obraFormData.gruaId // Associar funcionário à grua selecionada
       }
       console.log('👥 DEBUG - Novo funcionário criado:', novoFuncionario)
@@ -430,6 +433,20 @@ export default function ObrasPage() {
         funcionarios: [...obraFormData.funcionarios, novoFuncionario]
       })
     }
+  }
+
+  // Função para alternar status de supervisor
+  const handleToggleSupervisor = (funcionarioId: string) => {
+    const funcionariosAtualizados = funcionariosSelecionados.map(f => 
+      f.id === funcionarioId ? { ...f, isSupervisor: !f.isSupervisor } : f
+    )
+    setFuncionariosSelecionados(funcionariosAtualizados)
+    setObraFormData({
+      ...obraFormData,
+      funcionarios: obraFormData.funcionarios.map(f => 
+        f.id === funcionarioId ? { ...f, isSupervisor: !f.isSupervisor } : f
+      )
+    })
   }
 
   // Função para remover funcionário selecionado
@@ -998,6 +1015,7 @@ export default function ObrasPage() {
         userId: func.userId || func.funcionarioId.toString(),
         role: func.role || 'Cargo não informado',
         name: func.name || 'Funcionário',
+        isSupervisor: func.isSupervisor === true,
         gruaId: func.gruaId
       })) || []
       
@@ -1853,25 +1871,52 @@ export default function ObrasPage() {
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Funcionários Selecionados ({funcionariosSelecionados.length})</h4>
                     {funcionariosSelecionados.map((funcionario) => (
-                      <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg bg-green-50">
+                      <div key={funcionario.id} className={`flex gap-2 p-3 border rounded-lg ${funcionario.isSupervisor ? 'bg-blue-50 border-blue-200' : 'bg-green-50'}`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-green-600" />
+                            {funcionario.isSupervisor ? (
+                              <Shield className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <User className="w-4 h-4 text-green-600" />
+                            )}
                             <div>
-                              <p className="font-medium text-green-900">{funcionario.name}</p>
-                              <p className="text-sm text-green-700">{funcionario.role}</p>
+                              <div className="flex items-center gap-2">
+                                <p className={`font-medium ${funcionario.isSupervisor ? 'text-blue-900' : 'text-green-900'}`}>{funcionario.name}</p>
+                                {funcionario.isSupervisor && (
+                                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-xs">
+                                    Supervisor
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className={`text-sm ${funcionario.isSupervisor ? 'text-blue-700' : 'text-green-700'}`}>{funcionario.role}</p>
                             </div>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeFuncionarioSelecionado(funcionario.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`supervisor-${funcionario.id}`}
+                              checked={funcionario.isSupervisor === true}
+                              onCheckedChange={() => handleToggleSupervisor(funcionario.id)}
+                            />
+                            <Label 
+                              htmlFor={`supervisor-${funcionario.id}`}
+                              className="text-sm cursor-pointer flex items-center gap-1"
+                            >
+                              <Shield className="w-3 h-3" />
+                              Supervisor
+                            </Label>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFuncionarioSelecionado(funcionario.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2431,25 +2476,52 @@ export default function ObrasPage() {
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Funcionários Selecionados ({funcionariosSelecionados.length})</h4>
                     {funcionariosSelecionados.map((funcionario) => (
-                      <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg bg-green-50">
+                      <div key={funcionario.id} className={`flex gap-2 p-3 border rounded-lg ${funcionario.isSupervisor ? 'bg-blue-50 border-blue-200' : 'bg-green-50'}`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-green-600" />
+                            {funcionario.isSupervisor ? (
+                              <Shield className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <User className="w-4 h-4 text-green-600" />
+                            )}
                             <div>
-                              <p className="font-medium text-green-900">{funcionario.name}</p>
-                              <p className="text-sm text-green-700">{funcionario.role}</p>
+                              <div className="flex items-center gap-2">
+                                <p className={`font-medium ${funcionario.isSupervisor ? 'text-blue-900' : 'text-green-900'}`}>{funcionario.name}</p>
+                                {funcionario.isSupervisor && (
+                                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-xs">
+                                    Supervisor
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className={`text-sm ${funcionario.isSupervisor ? 'text-blue-700' : 'text-green-700'}`}>{funcionario.role}</p>
                             </div>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeFuncionarioSelecionado(funcionario.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`supervisor-${funcionario.id}`}
+                              checked={funcionario.isSupervisor === true}
+                              onCheckedChange={() => handleToggleSupervisor(funcionario.id)}
+                            />
+                            <Label 
+                              htmlFor={`supervisor-${funcionario.id}`}
+                              className="text-sm cursor-pointer flex items-center gap-1"
+                            >
+                              <Shield className="w-3 h-3" />
+                              Supervisor
+                            </Label>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeFuncionarioSelecionado(funcionario.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>

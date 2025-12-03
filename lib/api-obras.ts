@@ -445,23 +445,42 @@ export const obrasApi = {
       
       if (response.success) {
         // Converter dados para o formato esperado pelo frontend
-        const funcionariosConvertidos = response.data.map((item: any) => ({
-          id: item.id.toString(),
-          userId: item.funcionario_id.toString(),
-          funcionarioId: item.funcionario_id,
-          obraId: item.obra_id,
-          name: item.funcionarios?.nome || 'Funcionário',
-          role: item.funcionarios?.cargo || 'Cargo não informado',
-          dataInicio: item.data_inicio,
-          dataFim: item.data_fim,
-          status: item.status,
-          horasTrabalhadas: item.horas_trabalhadas,
-          valorHora: item.valor_hora,
-          totalReceber: item.total_receber,
-          observacoes: item.observacoes,
-          createdAt: item.created_at,
-          updatedAt: item.updated_at
-        }))
+        const funcionariosConvertidos = response.data.map((item: any) => {
+          // Debug: verificar se is_supervisor está presente
+          console.log('🔍 DEBUG - Item funcionário:', {
+            id: item.id,
+            nome: item.funcionarios?.nome,
+            is_supervisor: item.is_supervisor,
+            is_supervisor_type: typeof item.is_supervisor,
+            is_supervisor_value: item.is_supervisor === true
+          })
+          
+          // Converter is_supervisor para boolean de forma robusta
+          const isSupervisorValue = item.is_supervisor === true || 
+                                   item.is_supervisor === 'true' || 
+                                   item.is_supervisor === 1 ||
+                                   item.is_supervisor === '1' ||
+                                   (typeof item.is_supervisor === 'string' && item.is_supervisor.toLowerCase() === 'true')
+          
+          return {
+            id: item.id.toString(),
+            userId: item.funcionario_id.toString(),
+            funcionarioId: item.funcionario_id,
+            obraId: item.obra_id,
+            name: item.funcionarios?.nome || 'Funcionário',
+            role: item.funcionarios?.cargo_info?.nome || item.funcionarios?.cargo || 'Cargo não informado',
+            dataInicio: item.data_inicio,
+            dataFim: item.data_fim,
+            status: item.status,
+            isSupervisor: Boolean(isSupervisorValue),
+            horasTrabalhadas: item.horas_trabalhadas,
+            valorHora: item.valor_hora,
+            totalReceber: item.total_receber,
+            observacoes: item.observacoes,
+            createdAt: item.created_at,
+            updatedAt: item.updated_at
+          }
+        })
         
         return {
           success: true,

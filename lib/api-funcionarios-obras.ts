@@ -12,6 +12,7 @@ export interface FuncionarioObra {
   valor_hora?: number
   total_receber?: number
   status: 'ativo' | 'finalizado' | 'transferido'
+  is_supervisor?: boolean
   observacoes?: string
   created_at: string
   updated_at: string
@@ -41,6 +42,7 @@ export interface FuncionarioObraCreateData {
   horas_trabalhadas?: number
   valor_hora?: number
   status?: 'ativo' | 'finalizado' | 'transferido'
+  is_supervisor?: boolean
   observacoes?: string
 }
 

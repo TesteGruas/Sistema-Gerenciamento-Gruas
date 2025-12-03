@@ -43,6 +43,8 @@ const funcionarioSchema = Joi.object({
   data_admissao: Joi.date().allow(null).optional(),
   salario: Joi.number().min(0).allow(null).optional(),
   observacoes: Joi.string().allow(null, '').optional(),
+  // Campo para indicar se é supervisor (usado como informação auxiliar)
+  eh_supervisor: Joi.boolean().default(false).optional(),
   // Campos para criação do usuário
   criar_usuario: Joi.boolean().default(true).optional(),
   usuario_senha: Joi.string().min(6).optional().allow('', null)
@@ -430,6 +432,11 @@ router.get('/', authenticateToken, async (req, res) => {
       const alocacoesAtivas = funcionario.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
       const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
       
+      // Popular campo cargo com o nome do cargo do cargo_info
+      if (funcionario.cargo_info && !funcionario.cargo) {
+        funcionario.cargo = funcionario.cargo_info.nome
+      }
+      
       return {
         ...funcionario,
         usuario_existe: funcionario.usuario_existe ?? !!funcionario.usuario,
@@ -695,6 +702,11 @@ router.get('/:id', async (req, res) => {
     // Adicionar todas as obras (incluindo finalizadas) para histórico completo
     const todasObras = data.funcionarios_obras || []
 
+    // Popular campo cargo com o nome do cargo do cargo_info
+    if (data.cargo_info) {
+      data.cargo = data.cargo_info.nome
+    }
+
     // Adicionar informações sobre o usuário vinculado e obra atual
     const responseData = {
       ...data,
@@ -817,6 +829,7 @@ router.post('/', async (req, res) => {
 
       // Adicionar cargo_id ao funcionarioData e remover o campo cargo (string)
       // para evitar violação da constraint CHECK no banco de dados
+      // O campo cargo_id é suficiente e o campo cargo pode ser NULL ou ter valor padrão
       funcionarioData.cargo_id = cargoExiste.id
       delete funcionarioData.cargo
     }
@@ -1015,6 +1028,15 @@ router.post('/', async (req, res) => {
           .eq('id', novoFuncionario.id)
           .single()
 
+        // Popular campo cargo com o nome do cargo do cargo_info
+        if (funcionarioCompleto) {
+          if (funcionarioCompleto.cargo_info) {
+            funcionarioCompleto.cargo = funcionarioCompleto.cargo_info.nome
+          } else if (cargoInfo) {
+            funcionarioCompleto.cargo = cargoInfo.nome
+          }
+        }
+
         // Enviar mensagem WhatsApp com instruções de acesso (não bloquear criação se falhar)
         try {
           const { enviarMensagemNovoUsuarioFuncionario } = await import('../services/whatsapp-service.js');
@@ -1076,6 +1098,15 @@ router.post('/', async (req, res) => {
         `)
         .eq('id', data.id)
         .single()
+
+      // Popular campo cargo com o nome do cargo do cargo_info
+      if (funcionarioCompleto) {
+        if (funcionarioCompleto.cargo_info) {
+          funcionarioCompleto.cargo = funcionarioCompleto.cargo_info.nome
+        } else if (cargoInfo) {
+          funcionarioCompleto.cargo = cargoInfo.nome
+        }
+      }
 
       res.status(201).json({
         success: true,
@@ -1217,6 +1248,7 @@ router.put('/:id', async (req, res) => {
 
       // Adicionar cargo_id ao funcionarioData e remover o campo cargo (string)
       // para evitar violação da constraint CHECK no banco de dados
+      // O campo cargo_id é suficiente e o campo cargo pode ser NULL ou ter valor padrão
       funcionarioData.cargo_id = cargoExiste.id
       delete funcionarioData.cargo
     }
@@ -1330,6 +1362,15 @@ router.put('/:id', async (req, res) => {
       `)
       .eq('id', id)
       .single()
+
+    // Popular campo cargo com o nome do cargo do cargo_info
+    if (funcionarioCompleto) {
+      if (funcionarioCompleto.cargo_info) {
+        funcionarioCompleto.cargo = funcionarioCompleto.cargo_info.nome
+      } else if (cargoInfo) {
+        funcionarioCompleto.cargo = cargoInfo.nome
+      }
+    }
 
     res.json({
       success: true,

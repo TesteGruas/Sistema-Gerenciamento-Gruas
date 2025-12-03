@@ -31,6 +31,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   const { cargosAtivos, loading: loadingCargos } = useCargos()
   const [mostrarInputNovoCargo, setMostrarInputNovoCargo] = useState(false)
   const [novoCargo, setNovoCargo] = useState("")
+  const [ehSupervisor, setEhSupervisor] = useState(false)
   
   const [form, setForm] = useState({
     name: "",
@@ -49,6 +50,33 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   const handleChange = useCallback((field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }))
   }, [])
+
+  // Filtrar cargos baseado em se é supervisor
+  const cargosFiltrados = ehSupervisor
+    ? cargosAtivos.filter(cargo => 
+        cargo.nivel === 'Supervisor' || 
+        cargo.nome.toLowerCase().includes('supervisor')
+      )
+    : cargosAtivos
+
+  // Auto-selecionar "Supervisor de Operações" quando marcar como supervisor
+  const handleSupervisorChange = useCallback((checked: boolean) => {
+    setEhSupervisor(checked)
+    if (checked) {
+      // Procurar cargo "Supervisor de Operações" primeiro, depois qualquer cargo de supervisor
+      const supervisorOperacoes = cargosAtivos.find(
+        cargo => cargo.nome === 'Supervisor de Operações'
+      ) || cargosAtivos.find(
+        cargo => cargo.nivel === 'Supervisor'
+      )
+      if (supervisorOperacoes) {
+        handleChange('role', supervisorOperacoes.nome)
+      }
+    } else {
+      // Limpar cargo quando desmarcar
+      handleChange('role', '')
+    }
+  }, [cargosAtivos, handleChange])
 
   // Função para formatar valor monetário
   const formatCurrency = useCallback((value: string) => {
@@ -131,7 +159,8 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       data_admissao: form.hireDate,
       salario: salarioNumerico,
       observacoes: form.observations,
-      criar_usuario: form.criar_usuario
+      criar_usuario: form.criar_usuario,
+      eh_supervisor: ehSupervisor
     })
   }, [form, onSubmit])
 
@@ -151,6 +180,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     })
     setMostrarInputNovoCargo(false)
     setNovoCargo("")
+    setEhSupervisor(false)
   }, [])
 
   // Reset form when dialog opens
@@ -213,6 +243,18 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
             </div>
 
             <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="checkbox"
+                  id="eh_supervisor"
+                  checked={ehSupervisor}
+                  onChange={(e) => handleSupervisorChange(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="eh_supervisor" className="cursor-pointer text-sm font-medium">
+                  Este funcionário será um supervisor?
+                </Label>
+              </div>
               <Label htmlFor="role">Cargo *</Label>
               {!mostrarInputNovoCargo ? (
                 <>
@@ -235,17 +277,19 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                         <SelectItem value="" disabled>
                           Carregando cargos...
                         </SelectItem>
-                      ) : cargosAtivos.length > 0 ? (
+                      ) : cargosFiltrados.length > 0 ? (
                         <>
-                          {cargosAtivos.map((cargo) => (
+                          {cargosFiltrados.map((cargo) => (
                             <SelectItem key={cargo.id} value={cargo.nome}>
                               {cargo.nome}
                             </SelectItem>
                           ))}
-                          <SelectItem value="__novo_cargo__" className="text-blue-600 font-medium">
-                            <Plus className="w-4 h-4 inline mr-2" />
-                            Adicionar novo cargo
-                          </SelectItem>
+                          {!ehSupervisor && (
+                            <SelectItem value="__novo_cargo__" className="text-blue-600 font-medium">
+                              <Plus className="w-4 h-4 inline mr-2" />
+                              Adicionar novo cargo
+                            </SelectItem>
+                          )}
                         </>
                       ) : (
                         <SelectItem value="__novo_cargo__" className="text-blue-600 font-medium">
@@ -255,6 +299,11 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                       )}
                     </SelectContent>
                   </Select>
+                  {ehSupervisor && cargosFiltrados.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Nenhum cargo de supervisor encontrado. Selecione um cargo manualmente.
+                    </p>
+                  )}
                 </>
               ) : (
                 <div className="space-y-2">

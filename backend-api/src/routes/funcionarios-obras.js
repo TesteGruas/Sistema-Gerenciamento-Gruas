@@ -22,7 +22,8 @@ const funcionarioObraSchema = Joi.object({
   horas_trabalhadas: Joi.number().min(0).default(0),
   valor_hora: Joi.number().min(0).optional(),
   status: Joi.string().valid('ativo', 'finalizado', 'transferido').default('ativo'),
-  observacoes: Joi.string().allow(null, '').optional()
+  observacoes: Joi.string().allow(null, '').optional(),
+  is_supervisor: Joi.boolean().default(false)
 })
 
 /**
@@ -60,8 +61,31 @@ router.get('/', async (req, res) => {
     let query = supabaseAdmin
       .from('funcionarios_obras')
       .select(`
-        *,
-        funcionarios(id, nome, cargo, salario),
+        id,
+        funcionario_id,
+        obra_id,
+        data_inicio,
+        data_fim,
+        horas_trabalhadas,
+        valor_hora,
+        total_receber,
+        status,
+        is_supervisor,
+        observacoes,
+        created_at,
+        updated_at,
+        funcionarios(
+          id, 
+          nome, 
+          cargo, 
+          salario,
+          cargo_info:cargos!cargo_id(
+            id,
+            nome,
+            nivel,
+            descricao
+          )
+        ),
         obras(id, nome, cidade, estado, status)
       `, { count: 'exact' })
 
@@ -228,13 +252,33 @@ router.post('/', async (req, res) => {
       })
     }
 
+    // Debug: verificar valor antes de inserir
+    console.log('[FUNCIONARIOS-OBRAS] Valor antes de inserir:', {
+      funcionario_id: value.funcionario_id,
+      obra_id: value.obra_id,
+      is_supervisor: value.is_supervisor,
+      is_supervisor_type: typeof value.is_supervisor
+    })
+
     const { data, error } = await supabaseAdmin
       .from('funcionarios_obras')
       .insert(value)
-      .select()
+      .select('*, is_supervisor')
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('[FUNCIONARIOS-OBRAS] Erro ao inserir:', error)
+      throw error
+    }
+
+    // Debug: verificar o que foi salvo
+    console.log('[FUNCIONARIOS-OBRAS] Dados salvos:', {
+      id: data.id,
+      funcionario_id: data.funcionario_id,
+      obra_id: data.obra_id,
+      is_supervisor: data.is_supervisor,
+      is_supervisor_type: typeof data.is_supervisor
+    })
 
     res.status(201).json({
       success: true,

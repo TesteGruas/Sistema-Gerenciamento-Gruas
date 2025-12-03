@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
 import { 
   Building2, 
   ArrowLeft,
@@ -639,11 +640,21 @@ function ObraDetailsPageContent() {
   const [funcionariosVinculados, setFuncionariosVinculados] = useState<any[]>([])
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
   const [isAdicionarFuncionarioOpen, setIsAdicionarFuncionarioOpen] = useState(false)
+  const [isAdicionarSupervisorOpen, setIsAdicionarSupervisorOpen] = useState(false)
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
+  const [supervisoresSelecionados, setSupervisoresSelecionados] = useState<any[]>([])
   const [funcionariosDisponiveis, setFuncionariosDisponiveis] = useState<any[]>([])
+  const [supervisoresDisponiveis, setSupervisoresDisponiveis] = useState<any[]>([])
   const [funcionarioSearchValue, setFuncionarioSearchValue] = useState('')
+  const [supervisorSearchValue, setSupervisorSearchValue] = useState('')
   const [loadingFuncionariosSearch, setLoadingFuncionariosSearch] = useState(false)
+  const [loadingSupervisoresSearch, setLoadingSupervisoresSearch] = useState(false)
   const [novoFuncionarioData, setNovoFuncionarioData] = useState({
+    dataInicio: '',
+    dataFim: '',
+    observacoes: ''
+  })
+  const [novoSupervisorData, setNovoSupervisorData] = useState({
     dataInicio: '',
     dataFim: '',
     observacoes: ''
@@ -1603,6 +1614,14 @@ function ObraDetailsPageContent() {
     setGruasSelecionadas(gruasSelecionadas.filter(g => g.id !== gruaId))
   }
 
+  // Função auxiliar para verificar se é supervisor
+  const isSupervisor = (funcionario: any): boolean => {
+    return funcionario.isSupervisor === true || 
+           funcionario.isSupervisor === 'true' || 
+           funcionario.isSupervisor === 1 ||
+           funcionario.isSupervisor === '1'
+  }
+
   // Funções para gerenciar funcionários
   const carregarFuncionariosVinculados = async () => {
     if (!obra) return
@@ -1613,6 +1632,15 @@ function ObraDetailsPageContent() {
       const response = await obrasApi.buscarFuncionariosVinculados(parseInt(obra.id))
       
       if (response.success && response.data) {
+        // Debug: verificar dados recebidos
+        console.log('🔍 DEBUG - Funcionários carregados:', response.data.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          isSupervisor: f.isSupervisor,
+          isSupervisorType: typeof f.isSupervisor,
+          isSupervisorCheck: isSupervisor(f),
+          role: f.role
+        })))
         setFuncionariosVinculados(response.data)
       } else {
         setFuncionariosVinculados([])
@@ -1642,13 +1670,25 @@ function ObraDetailsPageContent() {
       
       // Adicionar cada funcionário selecionado à obra
       const promises = funcionariosSelecionados.map(async (funcionario) => {
+        const isSupervisor = funcionario.isSupervisor === true
         const payload = {
           funcionario_id: funcionario.id,
           obra_id: parseInt(obraId),
           data_inicio: novoFuncionarioData.dataInicio || new Date().toISOString().split('T')[0],
           data_fim: novoFuncionarioData.dataFim || undefined,
-          observacoes: novoFuncionarioData.observacoes || `Funcionário adicionado à obra ${obra?.name || 'obra'}`
+          is_supervisor: isSupervisor,
+          observacoes: novoFuncionarioData.observacoes || (isSupervisor 
+            ? `Supervisor ${funcionario.name} adicionado à obra ${obra?.name || 'obra'}`
+            : `Funcionário ${funcionario.name} adicionado à obra ${obra?.name || 'obra'}`)
         }
+        
+        // Debug: verificar payload
+        console.log('🔍 DEBUG - Payload ao adicionar funcionário:', {
+          funcionario: funcionario.name,
+          isSupervisor: funcionario.isSupervisor,
+          is_supervisor: payload.is_supervisor,
+          payload_completo: payload
+        })
         
         return createFuncionarioObra(payload)
       })
@@ -1709,12 +1749,190 @@ function ObraDetailsPageContent() {
 
   const handleFuncionarioSelect = (funcionario: any) => {
     if (!funcionariosSelecionados.find(f => f.id === funcionario.id)) {
-      setFuncionariosSelecionados([...funcionariosSelecionados, funcionario])
+      // Usar eh_supervisor do funcionário se existir, senão false
+      const isSupervisor = funcionario.eh_supervisor === true || 
+                          funcionario.eh_supervisor === 'true' || 
+                          funcionario.eh_supervisor === 1 ||
+                          funcionario.isSupervisor === true
+      
+      // Debug: verificar valores
+      console.log('🔍 DEBUG - Selecionando funcionário:', {
+        id: funcionario.id,
+        name: funcionario.name,
+        eh_supervisor: funcionario.eh_supervisor,
+        eh_supervisor_type: typeof funcionario.eh_supervisor,
+        isSupervisor_calculado: isSupervisor
+      })
+      
+      setFuncionariosSelecionados([...funcionariosSelecionados, { ...funcionario, isSupervisor }])
     }
+  }
+
+  const handleToggleSupervisor = (funcionarioId: string) => {
+    setFuncionariosSelecionados(funcionariosSelecionados.map(f => 
+      f.id === funcionarioId ? { ...f, isSupervisor: !f.isSupervisor } : f
+    ))
   }
 
   const handleRemoverFuncionario = (funcionarioId: string) => {
     setFuncionariosSelecionados(funcionariosSelecionados.filter(f => f.id !== funcionarioId))
+  }
+
+  // Funções para supervisores
+  const handleSupervisorSelect = (supervisor: any) => {
+    if (!supervisoresSelecionados.find(f => f.id === supervisor.id)) {
+      // Supervisores sempre são marcados como supervisor
+      setSupervisoresSelecionados([...supervisoresSelecionados, { ...supervisor, isSupervisor: true }])
+    }
+  }
+
+  const handleRemoverSupervisor = (supervisorId: string) => {
+    setSupervisoresSelecionados(supervisoresSelecionados.filter(f => f.id !== supervisorId))
+  }
+
+  // Buscar supervisores para o modal (filtra apenas supervisores)
+  const buscarSupervisores = async (searchTerm: string = '') => {
+    if (!searchTerm || searchTerm.length < 2) {
+      setSupervisoresDisponiveis([])
+      return
+    }
+
+    setLoadingSupervisoresSearch(true)
+    try {
+      const response = await funcionariosApi.buscarFuncionarios(searchTerm, {
+        status: 'Ativo'
+      })
+
+      if (response.success && response.data) {
+        // Filtrar apenas supervisores (eh_supervisor = true ou cargo de supervisor)
+        const supervisoresFiltrados = response.data.filter((f: any) => {
+          const ehSupervisor = f.eh_supervisor === true || 
+                              f.eh_supervisor === 'true' || 
+                              f.eh_supervisor === 1 ||
+                              f.cargo_info?.nivel === 'Supervisor' ||
+                              f.cargo_info?.nome?.toLowerCase().includes('supervisor') ||
+                              f.cargo?.toLowerCase().includes('supervisor')
+          
+          if (!ehSupervisor) return false
+          
+          // Filtrar supervisores já vinculados à obra
+          const supervisoresVinculadosIds = funcionariosVinculados
+            .filter((func: any) => isSupervisor(func))
+            .map((func: any) => {
+              // Tentar diferentes campos possíveis
+              return func.funcionarioId || 
+                     func.funcionario_id || 
+                     func.userId || 
+                     parseInt(func.id)
+            })
+          
+          return !supervisoresVinculadosIds.includes(f.id) &&
+                 !supervisoresSelecionados.find((sel: any) => sel.id === f.id)
+        })
+        
+        // Converter para formato esperado
+        const supervisoresFormatados = supervisoresFiltrados.map((f: any) => ({
+          id: f.id,
+          name: f.nome,
+          role: f.cargo_info?.nome || f.cargo || 'Cargo não informado',
+          email: f.email,
+          telefone: f.telefone,
+          eh_supervisor: true
+        }))
+        
+        setSupervisoresDisponiveis(supervisoresFormatados)
+      } else {
+        setSupervisoresDisponiveis([])
+      }
+    } catch (error) {
+      console.error('Erro ao buscar supervisores:', error)
+      setSupervisoresDisponiveis([])
+    } finally {
+      setLoadingSupervisoresSearch(false)
+    }
+  }
+
+  const handleAdicionarSupervisor = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (supervisoresSelecionados.length === 0) {
+      toast({
+        title: "Erro",
+        description: "Selecione pelo menos um supervisor para adicionar",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setLoadingFuncionarios(true)
+      
+      // Adicionar cada supervisor selecionado à obra (sempre como supervisor)
+      const promises = supervisoresSelecionados.map(async (supervisor) => {
+        const payload = {
+          funcionario_id: supervisor.id,
+          obra_id: parseInt(obraId),
+          data_inicio: novoSupervisorData.dataInicio || new Date().toISOString().split('T')[0],
+          data_fim: novoSupervisorData.dataFim || undefined,
+          is_supervisor: true, // Sempre true para supervisores
+          observacoes: novoSupervisorData.observacoes || `Supervisor ${supervisor.name} adicionado à obra ${obra?.name || 'obra'}`
+        }
+        
+        return createFuncionarioObra(payload)
+      })
+      
+      const results = await Promise.all(promises)
+      
+      // Verificar se todas as operações foram bem-sucedidas
+      const sucessos = results.filter(result => result.success).length
+      const falhas = results.length - sucessos
+      
+      if (sucessos > 0) {
+        toast({
+          title: "Sucesso",
+          description: `${sucessos} supervisor(es) adicionado(s) à obra com sucesso!${falhas > 0 ? ` (${falhas} falharam)` : ''}`,
+        })
+      }
+      
+      if (falhas > 0) {
+        toast({
+          title: "Atenção",
+          description: `${falhas} supervisor(es) não puderam ser adicionados. Verifique se já estão vinculados à obra.`,
+          variant: "destructive"
+        })
+      }
+      
+      // Fechar modal e limpar dados
+      setIsAdicionarSupervisorOpen(false)
+      setSupervisoresSelecionados([])
+      setNovoSupervisorData({
+        dataInicio: '',
+        dataFim: '',
+        observacoes: ''
+      })
+      
+      // Recarregar funcionários vinculados
+      await carregarFuncionariosVinculados()
+      
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar supervisores à obra",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingFuncionarios(false)
+    }
+  }
+
+  const handleCancelarAdicionarSupervisor = () => {
+    setIsAdicionarSupervisorOpen(false)
+    setSupervisoresSelecionados([])
+    setNovoSupervisorData({
+      dataInicio: '',
+      dataFim: '',
+      observacoes: ''
+    })
   }
 
   // Buscar funcionários para o modal
@@ -1742,9 +1960,10 @@ function ObraDetailsPageContent() {
         const funcionariosFormatados = funcionariosFiltrados.map((f: any) => ({
           id: f.id,
           name: f.nome,
-          role: f.cargo,
+          role: f.cargo_info?.nome || f.cargo || 'Cargo não informado',
           email: f.email,
-          telefone: f.telefone
+          telefone: f.telefone,
+          eh_supervisor: f.eh_supervisor === true || f.eh_supervisor === 'true' || f.eh_supervisor === 1
         }))
         
         setFuncionariosDisponiveis(funcionariosFormatados)
@@ -1773,6 +1992,22 @@ function ObraDetailsPageContent() {
 
     return () => clearTimeout(timeoutId)
   }, [funcionarioSearchValue, isAdicionarFuncionarioOpen, funcionariosVinculados, funcionariosSelecionados])
+
+  // Debounce para busca de supervisores
+  useEffect(() => {
+    if (!isAdicionarSupervisorOpen) {
+      setSupervisorSearchValue('')
+      setSupervisoresDisponiveis([])
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      buscarSupervisores(supervisorSearchValue)
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supervisorSearchValue, isAdicionarSupervisorOpen, funcionariosVinculados, supervisoresSelecionados])
 
   const handleRemoverFuncionarioVinculado = async (funcionarioId: string) => {
     try {
@@ -3539,75 +3774,172 @@ function ObraDetailsPageContent() {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">
-                  Funcionários Vinculados ({funcionariosVinculados.length})
+                  Funcionários e Supervisores
                   {loadingFuncionarios && <InlineLoader size="sm" />}
                 </CardTitle>
-                <Button 
-                  size="sm"
-                  onClick={() => setIsAdicionarFuncionarioOpen(true)}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Vincular Funcionário
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsAdicionarSupervisorOpen(true)}
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Vincular Supervisor
+                  </Button>
+                  <Button 
+                    size="sm"
+                    onClick={() => setIsAdicionarFuncionarioOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Vincular Funcionário
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               {loadingFuncionarios ? (
                 <CardLoader text="Carregando funcionários vinculados..." />
-              ) : funcionariosVinculados.length > 0 ? (
-                <div className="space-y-4">
-                  {funcionariosVinculados.map((funcionario) => (
-                    <div key={funcionario.id} className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="font-semibold text-lg">{funcionario.name}</h3>
-                          <p className="text-sm text-gray-600">{funcionario.role}</p>
-                          <div className="mt-2 space-y-1">
-                            <p className="text-xs text-gray-500">
-                              <strong>Data de Início:</strong> {funcionario.dataInicio ? new Date(funcionario.dataInicio).toLocaleDateString('pt-BR') : 'Não informado'}
-                            </p>
-                            {funcionario.dataFim && (
-                              <p className="text-xs text-gray-500">
-                                <strong>Data de Fim:</strong> {new Date(funcionario.dataFim).toLocaleDateString('pt-BR')}
-                              </p>
-                            )}
-                            {funcionario.observacoes && (
-                              <p className="text-xs text-gray-500">
-                                <strong>Observações:</strong> {funcionario.observacoes}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <Badge 
-                            variant={funcionario.status === 'ativo' ? 'default' : 'secondary'}
-                            className={funcionario.status === 'ativo' ? 'bg-green-100 text-green-800' : ''}
-                          >
-                            {funcionario.status}
-                          </Badge>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRemoverFuncionarioVinculado(funcionario.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               ) : (
-                <div className="text-center py-8">
-                  <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum funcionário vinculado</h3>
-                  <p className="text-gray-600 mb-4">Esta obra ainda não possui funcionários vinculados.</p>
-                  <Button 
-                    onClick={() => setIsAdicionarFuncionarioOpen(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Vincular Primeiro Funcionário
-                  </Button>
+                <div className="space-y-6">
+                  {/* Seção de Supervisores */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Shield className="w-5 h-5 text-blue-600" />
+                      <h3 className="font-semibold text-base">Supervisores</h3>
+                      <Badge variant="outline" className="ml-2">
+                        {funcionariosVinculados.filter(isSupervisor).length}
+                      </Badge>
+                    </div>
+                    {funcionariosVinculados.filter(isSupervisor).length > 0 ? (
+                      <div className="space-y-4">
+                        {funcionariosVinculados.filter(isSupervisor).map((funcionario) => (
+                          <div key={funcionario.id} className="border rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="font-semibold text-lg">{funcionario.name}</h3>
+                                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                                    Supervisor
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-gray-600">{funcionario.role}</p>
+                                <div className="mt-2 space-y-1">
+                                  <p className="text-xs text-gray-500">
+                                    <strong>Data de Início:</strong> {funcionario.dataInicio ? new Date(funcionario.dataInicio).toLocaleDateString('pt-BR') : 'Não informado'}
+                                  </p>
+                                  {funcionario.dataFim && (
+                                    <p className="text-xs text-gray-500">
+                                      <strong>Data de Fim:</strong> {new Date(funcionario.dataFim).toLocaleDateString('pt-BR')}
+                                    </p>
+                                  )}
+                                  {funcionario.observacoes && (
+                                    <p className="text-xs text-gray-500">
+                                      <strong>Observações:</strong> {funcionario.observacoes}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                <Badge 
+                                  variant={funcionario.status === 'ativo' ? 'default' : 'secondary'}
+                                  className={funcionario.status === 'ativo' ? 'bg-green-100 text-green-800' : ''}
+                                >
+                                  {funcionario.status}
+                                </Badge>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRemoverFuncionarioVinculado(funcionario.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 border border-dashed rounded-lg bg-gray-50">
+                        <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Nenhum supervisor vinculado</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Seção de Funcionários */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Users className="w-5 h-5 text-gray-600" />
+                      <h3 className="font-semibold text-base">Funcionários</h3>
+                      <Badge variant="outline" className="ml-2">
+                        {funcionariosVinculados.filter(f => !isSupervisor(f)).length}
+                      </Badge>
+                    </div>
+                    {funcionariosVinculados.filter(f => !isSupervisor(f)).length > 0 ? (
+                      <div className="space-y-4">
+                        {funcionariosVinculados.filter(f => !isSupervisor(f)).map((funcionario) => (
+                          <div key={funcionario.id} className="border rounded-lg p-4">
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <h3 className="font-semibold text-lg">{funcionario.name}</h3>
+                                <p className="text-sm text-gray-600">{funcionario.role}</p>
+                                <div className="mt-2 space-y-1">
+                                  <p className="text-xs text-gray-500">
+                                    <strong>Data de Início:</strong> {funcionario.dataInicio ? new Date(funcionario.dataInicio).toLocaleDateString('pt-BR') : 'Não informado'}
+                                  </p>
+                                  {funcionario.dataFim && (
+                                    <p className="text-xs text-gray-500">
+                                      <strong>Data de Fim:</strong> {new Date(funcionario.dataFim).toLocaleDateString('pt-BR')}
+                                    </p>
+                                  )}
+                                  {funcionario.observacoes && (
+                                    <p className="text-xs text-gray-500">
+                                      <strong>Observações:</strong> {funcionario.observacoes}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                <Badge 
+                                  variant={funcionario.status === 'ativo' ? 'default' : 'secondary'}
+                                  className={funcionario.status === 'ativo' ? 'bg-green-100 text-green-800' : ''}
+                                >
+                                  {funcionario.status}
+                                </Badge>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRemoverFuncionarioVinculado(funcionario.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 border border-dashed rounded-lg bg-gray-50">
+                        <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Nenhum funcionário vinculado</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mensagem quando não há nenhum funcionário ou supervisor */}
+                  {funcionariosVinculados.length === 0 && (
+                    <div className="text-center py-8">
+                      <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum funcionário vinculado</h3>
+                      <p className="text-gray-600 mb-4">Esta obra ainda não possui funcionários ou supervisores vinculados.</p>
+                      <Button 
+                        onClick={() => setIsAdicionarFuncionarioOpen(true)}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Vincular Primeiro Funcionário
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -5455,15 +5787,32 @@ function ObraDetailsPageContent() {
                   <div className="space-y-2">
                     {funcionariosSelecionados.map(funcionario => (
                       <div key={funcionario.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div>
-                          <p className="font-medium">{funcionario.name}</p>
-                          <p className="text-sm text-gray-600">{funcionario.role}</p>
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="flex-1">
+                            <p className="font-medium">{funcionario.name}</p>
+                            <p className="text-sm text-gray-600">{funcionario.role}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`supervisor-${funcionario.id}`}
+                              checked={funcionario.isSupervisor === true}
+                              onCheckedChange={() => handleToggleSupervisor(funcionario.id)}
+                            />
+                            <Label 
+                              htmlFor={`supervisor-${funcionario.id}`}
+                              className="text-sm cursor-pointer flex items-center gap-1"
+                            >
+                              <Shield className="w-4 h-4" />
+                              Supervisor
+                            </Label>
+                          </div>
                         </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           onClick={() => handleRemoverFuncionario(funcionario.id)}
+                          className="ml-2"
                         >
                           <X className="w-4 h-4" />
                         </Button>
@@ -5521,6 +5870,171 @@ function ObraDetailsPageContent() {
                   <>
                     <Plus className="w-4 h-4 mr-2" />
                     Adicionar Funcionários ({funcionariosSelecionados.length})
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para adicionar supervisor */}
+      <Dialog open={isAdicionarSupervisorOpen} onOpenChange={setIsAdicionarSupervisorOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Vincular Supervisores à Obra
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAdicionarSupervisor} className="space-y-6">
+            <div className="space-y-4">
+              {/* Busca de Supervisor */}
+              <div>
+                <Label htmlFor="supervisorSearch">Buscar Supervisor</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    id="supervisorSearch"
+                    placeholder="Digite o nome do supervisor..."
+                    className="pl-10"
+                    value={supervisorSearchValue}
+                    onChange={(e) => setSupervisorSearchValue(e.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Apenas funcionários marcados como supervisores serão exibidos
+                </p>
+              </div>
+
+              {/* Lista de supervisores disponíveis */}
+              <div className="space-y-2">
+                <Label>Supervisores Disponíveis</Label>
+                <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-2">
+                  {loadingSupervisoresSearch ? (
+                    <div className="flex items-center justify-center p-4">
+                      <InlineLoader size="sm" />
+                      <span className="ml-2 text-sm text-gray-600">Buscando supervisores...</span>
+                    </div>
+                  ) : supervisoresDisponiveis.length === 0 && supervisorSearchValue.length >= 2 ? (
+                    <div className="text-center p-4 text-sm text-gray-500">
+                      Nenhum supervisor encontrado
+                    </div>
+                  ) : supervisorSearchValue.length < 2 ? (
+                    <div className="text-center p-4 text-sm text-gray-500">
+                      Digite pelo menos 2 caracteres para buscar
+                    </div>
+                  ) : (
+                    supervisoresDisponiveis.map((supervisor: any) => (
+                    <div 
+                      key={supervisor.id} 
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleSupervisorSelect(supervisor)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-blue-600" />
+                        <div>
+                          <p className="font-medium">{supervisor.name}</p>
+                          <p className="text-sm text-gray-600">{supervisor.role}</p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSupervisorSelect(supervisor)
+                        }}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Supervisores selecionados */}
+              {supervisoresSelecionados.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Supervisores Selecionados</Label>
+                  <div className="space-y-2">
+                    {supervisoresSelecionados.map(supervisor => (
+                      <div key={supervisor.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center gap-3 flex-1">
+                          <Shield className="w-4 h-4 text-blue-600" />
+                          <div className="flex-1">
+                            <p className="font-medium">{supervisor.name}</p>
+                            <p className="text-sm text-gray-600">{supervisor.role}</p>
+                          </div>
+                          <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                            Supervisor
+                          </Badge>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoverSupervisor(supervisor.id)}
+                          className="ml-2"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Dados da vinculação */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="supervisorDataInicio">Data de Início *</Label>
+                  <Input
+                    id="supervisorDataInicio"
+                    type="date"
+                    value={novoSupervisorData.dataInicio}
+                    onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, dataInicio: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="supervisorDataFim">Data de Fim (opcional)</Label>
+                  <Input
+                    id="supervisorDataFim"
+                    type="date"
+                    value={novoSupervisorData.dataFim}
+                    onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, dataFim: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="supervisorObservacoes">Observações</Label>
+                <Textarea
+                  id="supervisorObservacoes"
+                  placeholder="Observações sobre a vinculação do supervisor..."
+                  value={novoSupervisorData.observacoes}
+                  onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, observacoes: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={handleCancelarAdicionarSupervisor}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={supervisoresSelecionados.length === 0 || loadingFuncionarios}>
+                {loadingFuncionarios ? (
+                  <>
+                    <InlineLoader size="sm" />
+                    Adicionando...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4 mr-2" />
+                    Adicionar Supervisores ({supervisoresSelecionados.length})
                   </>
                 )}
               </Button>

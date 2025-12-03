@@ -46,6 +46,8 @@ export interface FuncionarioCreateData {
   data_admissao?: string
   salario?: number
   observacoes?: string
+  // Campo para indicar se é supervisor (informação auxiliar)
+  eh_supervisor?: boolean
   // Campos para criação do usuário
   criar_usuario?: boolean
   usuario_senha?: string

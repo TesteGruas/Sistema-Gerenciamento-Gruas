@@ -1397,7 +1397,10 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
             status: 'ativo',
             horas_trabalhadas: 0,
-            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
+            is_supervisor: funcionario.isSupervisor === true || funcionario.is_supervisor === true,
+            observacoes: funcionario.isSupervisor || funcionario.is_supervisor 
+              ? `Supervisor ${funcionario.name} (${funcionario.role}) alocado na obra`
+              : `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
           }
           
           console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
@@ -1667,7 +1670,10 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
             data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
             status: 'ativo',
             horas_trabalhadas: 0,
-            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
+            is_supervisor: funcionario.isSupervisor === true || funcionario.is_supervisor === true,
+            observacoes: funcionario.isSupervisor || funcionario.is_supervisor 
+              ? `Supervisor ${funcionario.name} (${funcionario.role}) alocado na obra`
+              : `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
           }
           
           console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
