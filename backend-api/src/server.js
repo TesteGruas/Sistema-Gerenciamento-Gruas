@@ -143,8 +143,13 @@ const allowedOrigins = [
   FRONTEND_URL,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+  // Origens de produção
+  'http://72.60.60.118:3000',
+  'http://72.60.60.118:3001',
   // Adicionar outras origens permitidas se necessário (produção, staging, etc.)
-  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : [])
 ].filter(Boolean)
 
 // CORS restrito com validação de origem
@@ -165,8 +170,21 @@ app.use((req, res, next) => {
   } else {
     // Bloquear origem não permitida
     console.warn(`🚫 CORS bloqueado: Origin ${origin} não está na lista de origens permitidas`)
-    if (method === 'OPTIONS') {
-      return res.status(403).json({ error: 'Origin not allowed' })
+    console.warn(`📋 Origens permitidas: ${allowedOrigins.join(', ')}`)
+    
+    // Em desenvolvimento, permitir qualquer origem para facilitar testes
+    if (process.env.NODE_ENV === 'development') {
+      res.header('Access-Control-Allow-Origin', origin)
+      res.header('Access-Control-Allow-Credentials', 'true')
+      console.warn(`⚠️  Modo desenvolvimento: Permitindo origem ${origin} mesmo não estando na lista`)
+    } else {
+      // Em produção, bloquear origem não permitida
+      if (method === 'OPTIONS') {
+        return res.status(403).json({ 
+          error: 'Origin not allowed',
+          allowedOrigins: allowedOrigins 
+        })
+      }
     }
   }
   
