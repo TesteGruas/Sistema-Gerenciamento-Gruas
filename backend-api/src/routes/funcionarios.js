@@ -1671,6 +1671,7 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
     // Buscar usuário no Supabase Auth pelo email
     // O ID da tabela usuarios pode não ser o mesmo UUID do Auth
     let authUserId = null
+    let usuarioCriadoNoAuth = false
     try {
       const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
       
@@ -1683,17 +1684,51 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
         })
       }
 
-      const authUser = users.find(u => u.email === emailParaEnvio)
+      // Buscar usuário no Auth (comparação case-insensitive)
+      const authUser = users.find(u => u.email?.toLowerCase() === emailParaEnvio?.toLowerCase())
       
       if (!authUser) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuário não encontrado no sistema de autenticação. O email pode não estar cadastrado no Auth.'
-        })
-      }
+        // Usuário não existe no Auth, mas existe na tabela usuarios
+        // Criar usuário no Auth automaticamente
+        console.log(`⚠️ Usuário não encontrado no Auth. Criando usuário no Auth para ${emailParaEnvio}...`)
+        
+        try {
+          const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+            email: emailParaEnvio,
+            password: senhaTemporaria,
+            email_confirm: true, // Confirmar email automaticamente
+            user_metadata: {
+              nome: funcionario.nome,
+              funcionario_id: funcionario.id,
+              usuario_id: usuario.id,
+              created_via: 'reset_password'
+            }
+          })
 
-      authUserId = authUser.id
-      console.log('✅ Usuário encontrado no Auth:', { email: emailParaEnvio, authUserId })
+          if (createError) {
+            console.error('Erro ao criar usuário no Auth:', createError)
+            return res.status(500).json({
+              success: false,
+              message: 'Erro ao criar usuário no sistema de autenticação',
+              error: createError.message
+            })
+          }
+
+          authUserId = authData.user.id
+          usuarioCriadoNoAuth = true
+          console.log('✅ Usuário criado no Auth com sucesso:', { email: emailParaEnvio, authUserId })
+        } catch (createError) {
+          console.error('Erro ao criar usuário no Auth:', createError)
+          return res.status(500).json({
+            success: false,
+            message: 'Erro ao criar usuário no sistema de autenticação',
+            error: createError.message
+          })
+        }
+      } else {
+        authUserId = authUser.id
+        console.log('✅ Usuário encontrado no Auth:', { email: emailParaEnvio, authUserId })
+      }
     } catch (listError) {
       console.error('Erro ao buscar usuário no Auth:', listError)
       return res.status(500).json({
@@ -1704,29 +1739,32 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
     }
 
     // Atualizar senha no Supabase Auth usando o UUID correto
-    try {
-      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-        authUserId,
-        { password: senhaTemporaria }
-      )
+    // Se o usuário foi criado agora, a senha já foi definida, mas vamos atualizar para garantir
+    if (!usuarioCriadoNoAuth) {
+      try {
+        const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+          authUserId,
+          { password: senhaTemporaria }
+        )
 
-      if (authError) {
-        console.error('Erro ao atualizar senha no Supabase Auth:', authError)
+        if (authError) {
+          console.error('Erro ao atualizar senha no Supabase Auth:', authError)
+          return res.status(500).json({
+            success: false,
+            message: 'Erro ao atualizar senha no sistema de autenticação',
+            error: authError.message
+          })
+        }
+        
+        console.log('✅ Senha atualizada com sucesso no Auth')
+      } catch (authError) {
+        console.error('Erro ao atualizar senha:', authError)
         return res.status(500).json({
           success: false,
-          message: 'Erro ao atualizar senha no sistema de autenticação',
+          message: 'Erro ao atualizar senha',
           error: authError.message
         })
       }
-      
-      console.log('✅ Senha atualizada com sucesso no Auth')
-    } catch (authError) {
-      console.error('Erro ao atualizar senha:', authError)
-      return res.status(500).json({
-        success: false,
-        message: 'Erro ao atualizar senha',
-        error: authError.message
-      })
     }
 
     // Enviar email com senha temporária
@@ -1774,12 +1812,17 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
     }
 
     // Retornar sucesso mesmo se algum envio falhar (senha foi resetada)
+    const mensagemSucesso = usuarioCriadoNoAuth
+      ? 'Usuário criado no sistema de autenticação e senha resetada com sucesso. Senha temporária enviada por email e WhatsApp.'
+      : 'Senha resetada com sucesso. Senha temporária enviada por email e WhatsApp.'
+    
     res.json({
       success: true,
-      message: 'Senha resetada com sucesso. Senha temporária enviada por email e WhatsApp.',
+      message: mensagemSucesso,
       data: {
         email_enviado: emailEnviado,
         whatsapp_enviado: whatsappEnviado,
+        usuario_criado_no_auth: usuarioCriadoNoAuth,
         // Por segurança, NÃO retornar a senha temporária
       }
     })
