@@ -119,6 +119,17 @@ export default function GruaComplementosManager({
   const { toast } = useToast()
   
   const [complementos, setComplementos] = useState<ComplementoItem[]>([])
+  const [catalogoComplementos, setCatalogoComplementos] = useState<Array<{
+    sku?: string
+    nome: string
+    tipo?: 'acessorio' | 'servico'
+    tipo_precificacao: TipoPrecificacao
+    unidade: Unidade
+    preco_unitario_centavos: number
+    fator?: number
+    descricao?: string
+    rule_key?: string
+  }>>(CATALOGO_COMPLEMENTOS) // Inicializa com catálogo estático como fallback
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -175,16 +186,26 @@ export default function GruaComplementosManager({
       const result = await response.json()
       
       if (result.success && result.data && Array.isArray(result.data)) {
-        // Converter dados do catálogo para o formato esperado pelo componente
-        // Nota: O catálogo retorna complementos disponíveis, mas não os complementos
-        // já adicionados a esta obra/grua. Por enquanto, mantemos a lista vazia
-        // e o usuário pode adicionar complementos do catálogo manualmente.
-        // Se no futuro houver endpoint para buscar complementos por obra/grua,
-        // essa função deve ser atualizada.
+        // Converter dados do catálogo da API para o formato esperado pelo componente
+        const catalogoConvertido = result.data.map((item: any) => ({
+          sku: item.sku || undefined,
+          nome: item.nome,
+          tipo: item.tipo as 'acessorio' | 'servico' | undefined,
+          tipo_precificacao: item.tipo_precificacao as TipoPrecificacao,
+          unidade: item.unidade as Unidade,
+          preco_unitario_centavos: item.preco_unitario_centavos || 0,
+          fator: item.fator || undefined,
+          descricao: item.descricao || undefined,
+          rule_key: item.rule_key || undefined
+        }))
         
-        // Por enquanto, não preenchemos automaticamente para não sobrescrever
-        // complementos já adicionados pelo usuário
-        // setComplementos([])
+        // Atualizar o catálogo com os dados da API
+        // Isso permite que o usuário adicione complementos do catálogo dinâmico
+        setCatalogoComplementos(catalogoConvertido.length > 0 ? catalogoConvertido : CATALOGO_COMPLEMENTOS)
+        
+        // Nota: Não preenchemos automaticamente a lista de complementos para não sobrescrever
+        // complementos já adicionados pelo usuário. O catálogo serve apenas como referência
+        // para o usuário adicionar novos complementos.
       }
     } catch (error) {
       console.error('Erro ao carregar complementos:', error)
@@ -267,7 +288,7 @@ export default function GruaComplementosManager({
     }
   }, [isAddDialogOpen])
 
-  const handleAddFromCatalogo = (itemCatalogo: typeof CATALOGO_COMPLEMENTOS[0]) => {
+  const handleAddFromCatalogo = (itemCatalogo: typeof catalogoComplementos[0]) => {
     const novoItem: ComplementoItem = {
       id: `comp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       nome: itemCatalogo.nome,
@@ -1061,7 +1082,7 @@ export default function GruaComplementosManager({
                 />
               </div>
               <div className="border rounded-lg max-h-[400px] overflow-y-auto">
-                {CATALOGO_COMPLEMENTOS
+                {catalogoComplementos
                   .filter(item => {
                     const search = searchTerm.toLowerCase()
                     return !search || 
@@ -1069,16 +1090,16 @@ export default function GruaComplementosManager({
                       item.sku?.toLowerCase().includes(search) ||
                       item.descricao?.toLowerCase().includes(search)
                   })
-                  .map((item) => (
+                  .map((item, index) => (
                     <div
-                      key={item.sku}
+                      key={item.sku || `catalogo-${index}`}
                       className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors"
                       onClick={() => handleAddFromCatalogo(item)}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-medium">{item.nome}</h4>
-                          {item.sku?.startsWith('SERV-') && (
+                          {(item.tipo === 'servico' || item.sku?.startsWith('SERV-')) && (
                             <Badge variant="secondary" className="text-xs">
                               Serviço
                             </Badge>
@@ -1104,7 +1125,7 @@ export default function GruaComplementosManager({
                       </div>
                     </div>
                   ))}
-                {CATALOGO_COMPLEMENTOS.filter(item => {
+                {catalogoComplementos.filter(item => {
                   const search = searchTerm.toLowerCase()
                   return !search || 
                     item.nome.toLowerCase().includes(search) ||
@@ -1129,8 +1150,8 @@ export default function GruaComplementosManager({
                 />
               </div>
               <div className="border rounded-lg max-h-[400px] overflow-y-auto">
-                {CATALOGO_COMPLEMENTOS
-                  .filter(item => item.sku?.startsWith('ACESS-'))
+                {catalogoComplementos
+                  .filter(item => item.tipo === 'acessorio' || item.sku?.startsWith('ACESS-'))
                   .filter(item => {
                     const search = searchTerm.toLowerCase()
                     return !search || 
@@ -1138,9 +1159,9 @@ export default function GruaComplementosManager({
                       item.sku?.toLowerCase().includes(search) ||
                       item.descricao?.toLowerCase().includes(search)
                   })
-                  .map((item) => (
+                  .map((item, index) => (
                     <div
-                      key={item.sku}
+                      key={item.sku || `catalogo-${index}`}
                       className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors"
                       onClick={() => handleAddFromCatalogo(item)}
                     >
@@ -1166,8 +1187,8 @@ export default function GruaComplementosManager({
                       </div>
                     </div>
                   ))}
-                {CATALOGO_COMPLEMENTOS
-                  .filter(item => item.sku?.startsWith('ACESS-'))
+                {catalogoComplementos
+                  .filter(item => item.tipo === 'acessorio' || item.sku?.startsWith('ACESS-'))
                   .filter(item => {
                     const search = searchTerm.toLowerCase()
                     return !search || 
@@ -1193,8 +1214,8 @@ export default function GruaComplementosManager({
                 />
               </div>
               <div className="border rounded-lg max-h-[400px] overflow-y-auto">
-                {CATALOGO_COMPLEMENTOS
-                  .filter(item => item.sku?.startsWith('SERV-'))
+                {catalogoComplementos
+                  .filter(item => item.tipo === 'servico' || item.sku?.startsWith('SERV-'))
                   .filter(item => {
                     const search = searchTerm.toLowerCase()
                     return !search || 
@@ -1202,9 +1223,9 @@ export default function GruaComplementosManager({
                       item.sku?.toLowerCase().includes(search) ||
                       item.descricao?.toLowerCase().includes(search)
                   })
-                  .map((item) => (
+                  .map((item, index) => (
                     <div
-                      key={item.sku}
+                      key={item.sku || `servico-${index}`}
                       className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-green-50 cursor-pointer transition-colors"
                       onClick={() => handleAddFromCatalogo(item)}
                     >
@@ -1235,8 +1256,8 @@ export default function GruaComplementosManager({
                       </div>
                     </div>
                   ))}
-                {CATALOGO_COMPLEMENTOS
-                  .filter(item => item.sku?.startsWith('SERV-'))
+                {catalogoComplementos
+                  .filter(item => item.tipo === 'servico' || item.sku?.startsWith('SERV-'))
                   .filter(item => {
                     const search = searchTerm.toLowerCase()
                     return !search || 
