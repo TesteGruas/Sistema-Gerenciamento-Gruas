@@ -97,18 +97,23 @@ async function getEmailConfig() {
  */
 async function createTransporter() {
   try {
+    console.log('[createTransporter] Buscando configurações de email...');
     const config = await getEmailConfig();
     
     if (!config.email_enabled) {
-      throw new Error('Envio de emails está desativado');
+      const erro = 'Envio de emails está desativado nas configurações';
+      console.error('[createTransporter]', erro);
+      throw new Error(erro);
     }
     
     // Debug: Log das configurações (sem expor senha)
-    console.log('📧 Configurações SMTP:', {
+    console.log('[createTransporter] Configurações SMTP:', {
       host: config.smtp_host,
       port: config.smtp_port,
       secure: config.smtp_secure,
-      user: config.smtp_user ? '***' : 'não definido'
+      user: config.smtp_user ? '***' : 'não definido',
+      email_enabled: config.email_enabled,
+      email_from: config.email_from
     });
     
     const transporter = nodemailer.createTransport({
@@ -124,9 +129,11 @@ async function createTransporter() {
       debug: false
     });
     
+    console.log('[createTransporter] Transporter criado com sucesso');
     return { transporter, config };
   } catch (error) {
-    console.error('Erro ao criar transporter:', error);
+    console.error('[createTransporter] Erro ao criar transporter:', error);
+    console.error('[createTransporter] Stack trace:', error.stack);
     throw error;
   }
 }
@@ -206,6 +213,7 @@ async function logEmail(logData) {
  */
 async function sendEmail(options) {
   try {
+    console.log('[sendEmail] Iniciando envio de email para:', options.to);
     const { transporter, config } = await createTransporter();
     
     const mailOptions = {
@@ -215,7 +223,18 @@ async function sendEmail(options) {
       html: options.html
     };
     
+    console.log('[sendEmail] Opções do email:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      html_length: mailOptions.html?.length
+    });
+    
     const info = await transporter.sendMail(mailOptions);
+    console.log('[sendEmail] Email enviado com sucesso:', {
+      messageId: info.messageId,
+      response: info.response
+    });
     
     // Registrar log de sucesso
     await logEmail({
@@ -232,17 +251,29 @@ async function sendEmail(options) {
       response: info.response
     };
   } catch (error) {
-    console.error('Erro ao enviar email:', error);
+    console.error('[sendEmail] Erro ao enviar email:', error);
+    console.error('[sendEmail] Stack trace:', error.stack);
+    console.error('[sendEmail] Detalhes do erro:', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode
+    });
     
     // Registrar log de falha
-    await logEmail({
-      tipo: options.tipo || 'custom',
-      destinatario: options.to,
-      assunto: options.subject,
-      status: 'falha',
-      erro: error.message,
-      tentativas: 1
-    });
+    try {
+      await logEmail({
+        tipo: options.tipo || 'custom',
+        destinatario: options.to,
+        assunto: options.subject,
+        status: 'falha',
+        erro: error.message,
+        tentativas: 1
+      });
+    } catch (logError) {
+      console.error('[sendEmail] Erro ao registrar log de email:', logError);
+    }
     
     throw error;
   }
@@ -294,11 +325,26 @@ async function sendWelcomeEmail(userData) {
  */
 async function sendPasswordResetEmail(userData) {
   try {
+    // Validação de entrada
+    if (!userData) {
+      throw new Error('Dados do usuário não fornecidos');
+    }
+    
+    if (!userData.email) {
+      throw new Error('Email do usuário não fornecido');
+    }
+    
+    if (!userData.senha_temporaria) {
+      throw new Error('Senha temporária não fornecida');
+    }
+    
     const nome = userData.nome || 'Usuário';
     const email = userData.email;
     const senhaTemporaria = userData.senha_temporaria;
     const linkLogin = `${FRONTEND_URL}/login`;
     const ano = new Date().getFullYear();
+    
+    console.log(`[sendPasswordResetEmail] Preparando envio de email para ${email}`);
     
     // Template HTML específico para reset de senha
     const html = `
@@ -438,14 +484,24 @@ async function sendPasswordResetEmail(userData) {
     
     const assunto = `🔐 Redefinição de Senha - Sistema de Gerenciamento de Gruas`;
     
-    return await sendEmail({
+    console.log(`[sendPasswordResetEmail] Chamando sendEmail para ${email}`);
+    const resultado = await sendEmail({
       to: email,
       subject: assunto,
       html: html,
       tipo: 'reset_password'
     });
+    
+    console.log(`[sendPasswordResetEmail] Email enviado com sucesso para ${email}`, resultado);
+    return resultado;
   } catch (error) {
-    console.error('Erro ao enviar email de reset de senha:', error);
+    console.error('[sendPasswordResetEmail] Erro ao enviar email de reset de senha:', error);
+    console.error('[sendPasswordResetEmail] Stack trace:', error.stack);
+    console.error('[sendPasswordResetEmail] Dados recebidos:', {
+      nome: userData?.nome,
+      email: userData?.email,
+      tem_senha: !!userData?.senha_temporaria
+    });
     throw error;
   }
 }

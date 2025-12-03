@@ -1733,17 +1733,26 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
     let emailEnviado = false
     if (emailParaEnvio) {
       try {
-        await sendPasswordResetEmail({
+        console.log(`📧 Tentando enviar email de reset de senha para ${emailParaEnvio}...`)
+        const resultadoEmail = await sendPasswordResetEmail({
           nome: funcionario.nome,
           email: emailParaEnvio,
           senha_temporaria: senhaTemporaria
         })
         emailEnviado = true
-        console.log(`✅ Email de reset de senha enviado com sucesso para ${emailParaEnvio}`)
+        console.log(`✅ Email de reset de senha enviado com sucesso para ${emailParaEnvio}`, resultadoEmail)
       } catch (emailError) {
         console.error('❌ Erro ao enviar email de reset de senha:', emailError)
+        console.error('❌ Detalhes do erro:', {
+          message: emailError.message,
+          stack: emailError.stack,
+          email: emailParaEnvio,
+          nome: funcionario.nome
+        })
         // Não falha a operação se o email falhar
       }
+    } else {
+      console.warn('⚠️ Email não enviado: emailParaEnvio está vazio ou undefined')
     }
 
     // Enviar WhatsApp com senha temporária
