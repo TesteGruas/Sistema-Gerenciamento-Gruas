@@ -122,6 +122,9 @@ import alugueisResidenciasRoutes from './routes/alugueis-residencias.js'
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
 import { inicializarScheduler } from './jobs/scheduler.js'
 
+// Importar Redis
+import { initRedis } from './config/redis.js'
+
 const app = express()
 const PORT = process.env.PORT || 3001
 
