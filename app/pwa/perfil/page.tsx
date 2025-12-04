@@ -125,6 +125,13 @@ function PWAPerfilPageContent() {
   const [isModalSalarioOpen, setIsModalSalarioOpen] = useState(false)
   const [salarioDetalhado, setSalarioDetalhado] = useState<any>(null)
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false)
+  
+  // Estados para modal de upload de documento
+  const [isModalUploadOpen, setIsModalUploadOpen] = useState(false)
+  const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null)
+  const [tipoDocumento, setTipoDocumento] = useState('')
+  const [dataValidade, setDataValidade] = useState('')
+  const [enviandoDocumento, setEnviandoDocumento] = useState(false)
 
   // Carregar dados completos do funcionário da API
   useEffect(() => {
@@ -342,6 +349,86 @@ function PWAPerfilPageContent() {
       })
     } finally {
       setLoadingDocumentosAdmissionais(false)
+    }
+  }
+
+  // Função para fazer upload do arquivo e criar documento admissional
+  const handleUploadDocumento = async () => {
+    if (!funcionarioId || !arquivoSelecionado || !tipoDocumento) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setEnviandoDocumento(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+
+      // Primeiro, fazer upload do arquivo
+      const formData = new FormData()
+      formData.append('arquivo', arquivoSelecionado)
+      
+      const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json()
+        throw new Error(errorData.message || 'Erro ao fazer upload do arquivo')
+      }
+
+      const uploadData = await uploadResponse.json()
+      // O endpoint retorna data.caminho (caminho no storage) e data.arquivo (URL pública)
+      // Para documentos admissionais, precisamos do caminho no storage (data.caminho)
+      const arquivoCaminho = uploadData.data?.caminho || uploadData.caminho
+
+      if (!arquivoCaminho) {
+        throw new Error('Caminho do arquivo não retornado pelo servidor')
+      }
+
+      // Depois, criar o documento admissional com o caminho do arquivo
+      const documentoData = {
+        tipo: tipoDocumento,
+        data_validade: dataValidade || undefined,
+        arquivo: arquivoCaminho
+      }
+
+      const response = await colaboradoresDocumentosApi.documentosAdmissionais.criar(funcionarioId, documentoData)
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Documento enviado com sucesso"
+        })
+        
+        // Limpar formulário
+        setArquivoSelecionado(null)
+        setTipoDocumento('')
+        setDataValidade('')
+        setIsModalUploadOpen(false)
+        
+        // Recarregar lista de documentos
+        await carregarDocumentosAdmissionais()
+      } else {
+        throw new Error('Erro ao criar documento admissional')
+      }
+    } catch (error) {
+      console.error('Erro ao enviar documento:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Não foi possível enviar o documento",
+        variant: "destructive"
+      })
+    } finally {
+      setEnviandoDocumento(false)
     }
   }
 
@@ -581,14 +668,83 @@ function PWAPerfilPageContent() {
               )}
             </div>
           </div>
+
+          {/* Dados do Usuário */}
+          <div className="mt-6 pt-6 border-t">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="email">
+                  <Mail className="w-4 h-4 inline mr-2" />
+                  E-mail
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="email"
+                    type="email"
+                    value={userData.email}
+                    onChange={(e) => setUserData({...userData, email: e.target.value})}
+                    className="mt-1"
+                  />
+                ) : (
+                  <p className="mt-1 text-gray-900">
+                    {funcionarioCompleto?.email || userData.email || user.email || 'Não informado'}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="telefone">
+                  <Phone className="w-4 h-4 inline mr-2" />
+                  Telefone
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="telefone"
+                    type="tel"
+                    value={userData.telefone}
+                    onChange={(e) => setUserData({...userData, telefone: e.target.value})}
+                    className="mt-1"
+                  />
+                ) : (
+                  <p className="mt-1 text-gray-900">
+                    {funcionarioCompleto?.telefone || userData.telefone || 'Não informado'}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label>
+                  <Briefcase className="w-4 h-4 inline mr-2" />
+                  Cargo
+                </Label>
+                <p className="mt-1 text-gray-900">
+                  {funcionarioCompleto?.cargo || user.cargo || 'Não informado'}
+                </p>
+              </div>
+
+              <div>
+                <Label>
+                  <Calendar className="w-4 h-4 inline mr-2" />
+                  Data de Admissão
+                </Label>
+                <p className="mt-1 text-gray-900">
+                  {funcionarioCompleto?.data_admissao 
+                    ? new Date(funcionarioCompleto.data_admissao).toLocaleDateString('pt-BR')
+                    : (user as any).dataAdmissao 
+                      ? new Date((user as any).dataAdmissao).toLocaleDateString('pt-BR')
+                      : 'Não informado'}
+                </p>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       {/* Estatísticas Rápidas */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center text-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
                 <Clock className="w-5 h-5 text-blue-600" />
               </div>
@@ -602,7 +758,7 @@ function PWAPerfilPageContent() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center text-center gap-3">
               <div className="p-2 bg-green-100 rounded-lg">
                 <CheckCircle className="w-5 h-5 text-green-600" />
               </div>
@@ -618,7 +774,7 @@ function PWAPerfilPageContent() {
 
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center text-center gap-3">
               <div className="p-2 bg-orange-100 rounded-lg">
                 <FileText className="w-5 h-5 text-orange-600" />
               </div>
@@ -979,72 +1135,6 @@ function PWAPerfilPageContent() {
             {/* Seção Informações */}
             {activeTab === 'informacoes' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="email">
-                    <Mail className="w-4 h-4 inline mr-2" />
-                    E-mail
-                  </Label>
-                  {isEditing ? (
-                    <Input
-                      id="email"
-                      type="email"
-                      value={userData.email}
-                      onChange={(e) => setUserData({...userData, email: e.target.value})}
-                      className="mt-1"
-                    />
-                  ) : (
-                    <p className="mt-1 text-gray-900">
-                      {funcionarioCompleto?.email || userData.email || user.email || 'Não informado'}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="telefone">
-                    <Phone className="w-4 h-4 inline mr-2" />
-                    Telefone
-                  </Label>
-                  {isEditing ? (
-                    <Input
-                      id="telefone"
-                      type="tel"
-                      value={userData.telefone}
-                      onChange={(e) => setUserData({...userData, telefone: e.target.value})}
-                      className="mt-1"
-                    />
-                  ) : (
-                    <p className="mt-1 text-gray-900">
-                      {funcionarioCompleto?.telefone || userData.telefone || 'Não informado'}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <Label>
-                    <Briefcase className="w-4 h-4 inline mr-2" />
-                    Cargo
-                  </Label>
-                  <p className="mt-1 text-gray-900">
-                    {funcionarioCompleto?.cargo || user.cargo || 'Não informado'}
-                  </p>
-                </div>
-
-                <div>
-                  <Label>
-                    <Calendar className="w-4 h-4 inline mr-2" />
-                    Data de Admissão
-                  </Label>
-                  <p className="mt-1 text-gray-900">
-                    {funcionarioCompleto?.data_admissao 
-                      ? new Date(funcionarioCompleto.data_admissao).toLocaleDateString('pt-BR')
-                      : (user as any).dataAdmissao 
-                        ? new Date((user as any).dataAdmissao).toLocaleDateString('pt-BR')
-                        : 'Não informado'}
-                  </p>
-                </div>
-              </div>
-
               {/* Ponto Hoje */}
               {pontoHoje && (
                 <div className="mt-6 pt-6 border-t">
@@ -1086,29 +1176,6 @@ function PWAPerfilPageContent() {
                 </div>
               )}
 
-              {/* Informações da Empresa */}
-              <div className="mt-6 pt-6 border-t">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <Building2 className="w-5 h-5" />
-                  Informações da Empresa
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-xs text-gray-500">Endereço</Label>
-                    <p className="text-sm text-gray-900 mt-1">{getEnderecoCompleto()}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-gray-500">Contato</Label>
-                    <p className="text-sm text-gray-900 mt-1">{getContatoCompleto()}</p>
-                  </div>
-                  {empresa.horario_funcionamento && (
-                    <div>
-                      <Label className="text-xs text-gray-500">Horário de Funcionamento</Label>
-                      <p className="text-sm text-gray-900 mt-1">{getHorarioFuncionamento()}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
             )}
 
@@ -1296,7 +1363,11 @@ function PWAPerfilPageContent() {
             {activeTab === 'documentos-admissionais' && (
             <div className="mt-0">
               <div className="flex justify-end mb-4">
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setIsModalUploadOpen(true)}
+                >
                   <Upload className="w-4 h-4 mr-2" />
                   Enviar Documento
                 </Button>
@@ -1565,6 +1636,112 @@ function PWAPerfilPageContent() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Upload de Documento Admissional */}
+      <Dialog open={isModalUploadOpen} onOpenChange={setIsModalUploadOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Enviar Documento Admissional
+            </DialogTitle>
+            <DialogDescription>
+              Faça upload de um documento admissional para seu perfil
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="tipo-documento">
+                Tipo de Documento <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="tipo-documento"
+                placeholder="Ex: RG, CPF, CTPS, etc."
+                value={tipoDocumento}
+                onChange={(e) => setTipoDocumento(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="arquivo">
+                Arquivo <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="arquivo"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    // Validar tamanho (máximo 10MB)
+                    if (file.size > 10 * 1024 * 1024) {
+                      toast({
+                        title: "Erro",
+                        description: "Arquivo muito grande. Máximo permitido: 10MB",
+                        variant: "destructive"
+                      })
+                      return
+                    }
+                    setArquivoSelecionado(file)
+                  }
+                }}
+                className="mt-1"
+              />
+              {arquivoSelecionado && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Arquivo selecionado: {arquivoSelecionado.name} ({(arquivoSelecionado.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="data-validade">
+                Data de Validade (opcional)
+              </Label>
+              <Input
+                id="data-validade"
+                type="date"
+                value={dataValidade}
+                onChange={(e) => setDataValidade(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsModalUploadOpen(false)
+                  setArquivoSelecionado(null)
+                  setTipoDocumento('')
+                  setDataValidade('')
+                }}
+                disabled={enviandoDocumento}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleUploadDocumento}
+                disabled={enviandoDocumento || !arquivoSelecionado || !tipoDocumento}
+              >
+                {enviandoDocumento ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Enviar
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

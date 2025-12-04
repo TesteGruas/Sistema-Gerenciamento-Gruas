@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { getRedirectPath, getUserLevel } from '@/lib/redirect-handler'
 
 export default function RedirectPage() {
   const router = useRouter()
@@ -11,44 +12,73 @@ export default function RedirectPage() {
       // Verificar se estamos no cliente
       if (typeof window === 'undefined') return
 
-      const userData = localStorage.getItem('user_data')
-      
-      if (!userData) {
+      // Verificar se tem token de acesso
+      const token = localStorage.getItem('access_token')
+      if (!token) {
         router.push('/pwa/login')
         return
       }
 
       try {
-        const user = JSON.parse(userData)
-        const cargo = user.user_metadata?.cargo || user.cargo || ''
-        const role = user.role || user.user_metadata?.role || ''
+        // Tentar obter dados do usuário de várias fontes
+        const userDataStr = localStorage.getItem('user_data')
+        const userPerfilStr = localStorage.getItem('user_perfil')
+        const userLevelStr = localStorage.getItem('user_level')
+        const userRole = localStorage.getItem('user_role')
 
-        // Função auxiliar para verificar se é gestor
-        const isGestor = () => {
-          const cargoStr = cargo?.toLowerCase() || ''
-          const roleStr = role?.toLowerCase() || ''
-          
-          return (
-            cargoStr.includes('gestor') ||
-            cargoStr.includes('gerente') ||
-            cargoStr.includes('diretor') ||
-            cargoStr.includes('admin') ||
-            cargoStr.includes('supervisor') ||
-            cargoStr.includes('encarregado') ||
-            roleStr.includes('gestor') ||
-            roleStr.includes('gerente') ||
-            roleStr.includes('admin') ||
-            roleStr.includes('supervisor')
-          )
+        let userData: any = null
+
+        // Construir objeto userData
+        if (userDataStr) {
+          try {
+            userData = JSON.parse(userDataStr)
+          } catch (e) {
+            console.warn('Erro ao parsear user_data:', e)
+          }
         }
 
-        // Redirecionar baseado no perfil
-        if (isGestor()) {
-          router.push('/dashboard')
+        // Se não tem userData, construir a partir dos dados disponíveis
+        if (!userData) {
+          userData = {
+            role: userRole || '',
+            level: userLevelStr ? parseInt(userLevelStr, 10) : undefined,
+            perfil: userPerfilStr ? JSON.parse(userPerfilStr) : null
+          }
         } else {
-          router.push('/pwa')
+          // Adicionar level e perfil se disponíveis
+          if (userLevelStr) {
+            userData.level = parseInt(userLevelStr, 10)
+          }
+          if (userRole) {
+            userData.role = userRole
+          }
+          if (userPerfilStr) {
+            try {
+              userData.perfil = JSON.parse(userPerfilStr)
+            } catch (e) {
+              console.warn('Erro ao parsear user_perfil:', e)
+            }
+          }
         }
+
+        // Obter nível do usuário
+        const level = getUserLevel(userData)
+        const role = (userData.role || userRole || '').toLowerCase()
+
+        // Determinar redirecionamento baseado no nível
+        // Níveis 8+ ou Cliente (nível 1) → Dashboard (web)
+        // Demais níveis → PWA
+        let redirectPath = '/pwa'
+        if (level >= 8) {
+          redirectPath = '/dashboard'
+        } else if (level === 1 && role.includes('cliente')) {
+          redirectPath = '/dashboard'
+        }
+
+        console.log(`🔄 [Redirect] Redirecionando para: ${redirectPath} (nível: ${level}, role: ${role})`)
+        router.push(redirectPath)
       } catch (error) {
+        console.error('Erro ao redirecionar:', error)
         router.push('/pwa/login')
       }
     }

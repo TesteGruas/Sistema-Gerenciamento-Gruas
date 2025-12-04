@@ -147,3 +147,4 @@ journalctl -u nextjs -f
 - O erro de `removeChild` geralmente é resolvido ao corrigir problemas de hidratação
 - Se o problema persistir, pode ser necessário verificar se há um proxy reverso ou CDN interferindo
 
+

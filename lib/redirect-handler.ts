@@ -1,5 +1,9 @@
 /**
- * Utilitário para gerenciar redirecionamento inteligente baseado no perfil do usuário
+ * Utilitário para gerenciar redirecionamento inteligente baseado no nível de acesso
+ * 
+ * Regras de redirecionamento:
+ * - Sistema Web (dashboard): Níveis 8+ e Cliente (nível 1)
+ * - App PWA: Níveis 7 ou menos (exceto Cliente)
  */
 
 export interface UserData {
@@ -7,6 +11,11 @@ export interface UserData {
   email?: string
   role?: string
   cargo?: string
+  level?: number
+  perfil?: {
+    nome?: string
+    nivel_acesso?: number
+  }
   user_metadata?: {
     cargo?: string
     nome?: string
@@ -20,50 +29,87 @@ export interface UserData {
 }
 
 /**
- * Determina se um usuário tem perfil de gestor (acesso ao dashboard)
+ * Obtém o nível de acesso do usuário
+ * Prioridade: level direto > perfil.nivel_acesso > role mapeado
  */
-export function isGestorUser(userData: UserData | null): boolean {
-  if (!userData) return false
+export function getUserLevel(userData: UserData | null): number {
+  if (!userData) return 0
 
-  const cargo = userData.user_metadata?.cargo || userData.cargo || ''
-  const role = userData.role || ''
-  
-  const cargoStr = cargo?.toLowerCase() || ''
-  const roleStr = role?.toLowerCase() || ''
-  
-  // Lista de cargos de gestão
-  const gestorKeywords = [
-    'gestor', 'gerente', 'diretor', 'admin', 'administrador',
-    'supervisor', 'encarregado', 'coordenador', 'chefe'
-  ]
-  
-  // Lista de roles de gestão
-  const gestorRoles = [
-    'gestores', 'admin', 'supervisor', 'gerente', 'diretor',
-    'encarregador', 'coordenador'
-  ]
-  
-  const hasGestorCargo = gestorKeywords.some(keyword => 
-    cargoStr.includes(keyword)
-  )
-  
-  const hasGestorRole = gestorRoles.some(role => 
-    roleStr.includes(role)
-  )
-  
-  return hasGestorCargo || hasGestorRole
+  // 1. Tentar pegar level direto (vem do backend)
+  if (userData.level !== undefined && userData.level !== null) {
+    return userData.level
+  }
+
+  // 2. Tentar pegar do perfil
+  if (userData.perfil?.nivel_acesso !== undefined && userData.perfil.nivel_acesso !== null) {
+    return userData.perfil.nivel_acesso
+  }
+
+  // 3. Mapear role para nível (fallback)
+  const role = (userData.role || '').toLowerCase()
+  const roleLevelMap: Record<string, number> = {
+    'admin': 10,
+    'administrador': 10,
+    'gestores': 9,
+    'gerente': 8,
+    'financeiro': 8,
+    'supervisores': 6,
+    'supervisor': 6,
+    'operários': 4,
+    'operarios': 4,
+    'operador': 4,
+    'clientes': 1,
+    'cliente': 1
+  }
+
+  return roleLevelMap[role] || 0
 }
 
 /**
- * Redireciona usuário para a página correta baseado no perfil
+ * Verifica se o usuário deve acessar o sistema web (dashboard)
+ * Regra: Níveis 8+ ou Cliente (nível 1)
+ */
+export function shouldAccessWeb(userData: UserData | null): boolean {
+  if (!userData) return false
+
+  const level = getUserLevel(userData)
+  
+  // Níveis 8 ou superior → Web
+  if (level >= 8) {
+    return true
+  }
+
+  // Cliente (nível 1) → Web (com limitação)
+  if (level === 1) {
+    const role = (userData.role || '').toLowerCase()
+    return role.includes('cliente')
+  }
+
+  // Demais níveis → PWA
+  return false
+}
+
+/**
+ * Determina se um usuário tem perfil de gestor (acesso ao dashboard)
+ * @deprecated Use shouldAccessWeb() que verifica por nível
+ */
+export function isGestorUser(userData: UserData | null): boolean {
+  return shouldAccessWeb(userData)
+}
+
+/**
+ * Redireciona usuário para a página correta baseado no nível de acesso
+ * 
+ * - Níveis 8+ e Cliente (nível 1) → Dashboard (web)
+ * - Níveis 7 ou menos (exceto Cliente) → PWA
  */
 export function getRedirectPath(userData: UserData | null): string {
   if (!userData) {
     return '/pwa/login'
   }
 
-  // Se for gestor, redirecionar para dashboard
-  if (isGestorUser(userData)) {
+  // Verificar se deve acessar web
+  if (shouldAccessWeb(userData)) {
     return '/dashboard'
   }
 
@@ -86,15 +132,13 @@ export function redirectAfterLogin(userData: UserData | null, router: any) {
 export function shouldShowWelcomeScreen(userData: UserData | null): boolean {
   if (!userData) return false
   
-  // Mostrar welcome screen se for operário/cliente sem acesso específico
-  const cargo = userData.user_metadata?.cargo || userData.cargo || ''
-  const cargoStr = cargo?.toLowerCase() || ''
+  const level = getUserLevel(userData)
+  const role = (userData.role || '').toLowerCase()
   
-  const isOperario = cargoStr.includes('operario') || 
-                     cargoStr.includes('operário') || 
-                     cargoStr.includes('mecanico') ||
-                     cargoStr.includes('mecânico') ||
-                     cargoStr.includes('funcionario')
+  // Mostrar welcome screen para operários (nível 4)
+  if (level === 4 || role.includes('operario') || role.includes('operador')) {
+    return true
+  }
   
-  return isOperario
+  return false
 }

@@ -23,6 +23,7 @@ import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes
 import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
+import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
 
 const router = express.Router();
 
@@ -1408,7 +1409,7 @@ router.post('/registros', async (req, res) => {
     // Verificar se o funcionário existe na tabela funcionarios
     const { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
-      .select('id, nome, status')
+      .select('id, nome, status, obra_atual_id')
       .eq('id', funcionario_id)
       .eq('status', 'Ativo')
       .single();
@@ -1418,6 +1419,159 @@ router.post('/registros', async (req, res) => {
         success: false,
         message: 'Funcionário não encontrado ou inativo'
       });
+    }
+
+    // VALIDAÇÃO DE GEOLOCALIZAÇÃO - Verificar se está próximo da GRUA (prioridade) ou da obra
+    if (localizacao) {
+      try {
+        // Extrair coordenadas da localização
+        const coordenadasUsuario = extrairCoordenadas(localizacao);
+        
+        if (!coordenadasUsuario) {
+          console.warn(`[ponto-eletronico] Não foi possível extrair coordenadas da localização: ${localizacao}`);
+        } else {
+          let coordenadasAlvo = null;
+          let nomeAlvo = null;
+          let raioPermitido = 4000; // Padrão: 4000m (4km)
+          let tipoAlvo = null;
+
+          // PRIORIDADE 1: Buscar grua ativa do funcionário
+          const { data: gruaFuncionario, error: gruaError } = await supabaseAdmin
+            .from('grua_funcionario')
+            .select(`
+              id,
+              grua_id,
+              obra_id,
+              status,
+              grua:gruas(
+                id,
+                name,
+                localizacao,
+                status
+              ),
+              obra:obras(
+                id,
+                nome,
+                latitude,
+                longitude,
+                raio_permitido,
+                endereco,
+                cidade,
+                estado
+              )
+            `)
+            .eq('funcionario_id', funcionario_id)
+            .eq('status', 'Ativo')
+            .order('data_inicio', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (!gruaError && gruaFuncionario && gruaFuncionario.grua) {
+            const grua = gruaFuncionario.grua;
+            tipoAlvo = 'grua';
+            nomeAlvo = grua.name || grua.id;
+
+            // Se a grua tem obra associada com coordenadas, usar a obra
+            if (gruaFuncionario.obra && gruaFuncionario.obra.latitude && gruaFuncionario.obra.longitude) {
+              coordenadasAlvo = {
+                lat: parseFloat(gruaFuncionario.obra.latitude),
+                lng: parseFloat(gruaFuncionario.obra.longitude)
+              };
+              nomeAlvo = `${grua.name || grua.id} - ${gruaFuncionario.obra.nome}`;
+              raioPermitido = gruaFuncionario.obra.raio_permitido || 4000;
+            } 
+            // Se não tem obra com coordenadas, tentar geocodificar a localização da grua
+            else if (grua.localizacao) {
+              try {
+                // Fazer geocodificação da localização da grua
+                const geocodeResponse = await fetch(
+                  `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(`${grua.localizacao}, Brasil`)}&limit=1&addressdetails=1`,
+                  {
+                    headers: {
+                      'User-Agent': 'Sistema-Gerenciamento-Gruas/1.0',
+                      'Accept-Language': 'pt-BR,pt,en'
+                    }
+                  }
+                );
+
+                if (geocodeResponse.ok) {
+                  const geocodeData = await geocodeResponse.json();
+                  if (geocodeData && geocodeData.length > 0) {
+                    coordenadasAlvo = {
+                      lat: parseFloat(geocodeData[0].lat),
+                      lng: parseFloat(geocodeData[0].lon)
+                    };
+                  }
+                }
+              } catch (geoError) {
+                console.warn(`[ponto-eletronico] Erro ao geocodificar localização da grua:`, geoError);
+              }
+            }
+          }
+
+          // PRIORIDADE 2: Se não encontrou grua, usar obra_atual_id do funcionário
+          if (!coordenadasAlvo && funcionario.obra_atual_id) {
+            const { data: obra, error: obraError } = await supabaseAdmin
+              .from('obras')
+              .select('id, nome, latitude, longitude, raio_permitido')
+              .eq('id', funcionario.obra_atual_id)
+              .single();
+
+            if (!obraError && obra && obra.latitude && obra.longitude) {
+              coordenadasAlvo = {
+                lat: parseFloat(obra.latitude),
+                lng: parseFloat(obra.longitude)
+              };
+              nomeAlvo = obra.nome;
+              raioPermitido = obra.raio_permitido || 4000;
+              tipoAlvo = 'obra';
+            }
+          }
+
+          // Validar proximidade se encontrou coordenadas
+          if (coordenadasAlvo) {
+            console.log("=== DEBUG VALIDAÇÃO PONTO ===");
+            console.log("Tipo:", tipoAlvo || 'obra');
+            console.log("Alvo:", nomeAlvo);
+            console.log("Coords Alvo:", coordenadasAlvo.lat, coordenadasAlvo.lng);
+            console.log("Coords Usuario:", coordenadasUsuario.lat, coordenadasUsuario.lng);
+            console.log("Raio Permitido:", raioPermitido, "metros");
+            
+            const validacao = validarProximidadeObra(
+              coordenadasUsuario.lat,
+              coordenadasUsuario.lng,
+              coordenadasAlvo.lat,
+              coordenadasAlvo.lng,
+              raioPermitido
+            );
+
+            console.log("Distância Final:", validacao.distancia, "metros");
+            console.log("Validação:", validacao.valido ? "DENTRO" : "FORA");
+            console.log("======================");
+
+            if (!validacao.valido) {
+              return res.status(403).json({
+                success: false,
+                error: 'FORA_DO_PERIMETRO',
+                message: validacao.mensagem,
+                distancia: validacao.distancia,
+                raio_permitido: raioPermitido,
+                alvo: nomeAlvo,
+                tipo: tipoAlvo || 'obra'
+              });
+            }
+
+            // Log de sucesso
+            console.log(`[ponto-eletronico] Localização validada: ${validacao.mensagem}`);
+          } else {
+            // Se não encontrou coordenadas nem da grua nem da obra, apenas avisar mas não bloquear
+            console.warn(`[ponto-eletronico] Funcionário ${funcionario_id} não possui grua ou obra com coordenadas configuradas. Validação de localização ignorada.`);
+          }
+        }
+      } catch (geoError) {
+        // Em caso de erro na validação, apenas logar mas não bloquear o registro
+        console.error('[ponto-eletronico] Erro ao validar geolocalização:', geoError);
+      }
     }
 
     if (!validarData(data)) {

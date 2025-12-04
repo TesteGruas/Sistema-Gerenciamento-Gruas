@@ -108,6 +108,7 @@ import aprovacoesHorasExtrasRoutes from './routes/aprovacoes-horas-extras.js'
 import aprovacaoPublicaRoutes from './routes/aprovacao-publica.js'
 import buscaGlobalRoutes from './routes/busca-global.js'
 import colaboradoresDocumentosRoutes from './routes/colaboradores-documentos.js'
+import geocodingRoutes from './routes/geocoding.js'
 import checklistDiarioRoutes from './routes/checklist-diario.js'
 import manutencoesRoutes from './routes/manutencoes.js'
 import ordemComprasRoutes from './routes/ordem-compras.js'
@@ -443,6 +444,7 @@ app.use('/api/whatsapp-logs', whatsappLogsRoutes)
 app.use('/api/whatsapp-evolution', whatsappEvolutionRoutes)
 app.use('/api/complementos', complementosRoutes)
 app.use('/api/alugueis-residencias', alugueisResidenciasRoutes)
+app.use('/api/geocoding', geocodingRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

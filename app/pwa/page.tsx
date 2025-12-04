@@ -18,17 +18,17 @@ import {
   Smartphone,
   Wifi,
   WifiOff,
-  Bell,
   UserCircle,
   Briefcase,
   ChevronRight,
   Zap,
   Receipt,
   Play,
-  DollarSign,
   Gift,
   Award,
-  FileCheck
+  FileCheck,
+  MapPin,
+  Loader2
 } from "lucide-react"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { useToast } from "@/hooks/use-toast"
@@ -36,12 +36,19 @@ import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
+import { obterLocalizacaoAtual, calcularDistancia } from "@/lib/geolocation-validator"
 
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
   const [isClient, setIsClient] = useState(false)
   const [isRegistrandoPonto, setIsRegistrandoPonto] = useState(false)
+  const [location, setLocation] = useState<{lat: number, lng: number, address?: string} | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [cepCoordenadas, setCepCoordenadas] = useState<{lat: number, lng: number} | null>(null)
+  const [distanciaCep, setDistanciaCep] = useState<number | null>(null)
+  const [isValidandoCep, setIsValidandoCep] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -49,8 +56,8 @@ export default function PWAMainPage() {
   // Hook de usuário sempre chamado (mas com fallback interno)
   const pwaUserData = usePWAUser()
   
-  // Hook de permissões para obter role do usuário
-  const { userRole } = usePWAPermissions()
+  // Hook de permissões para obter role do usuário e verificar permissões
+  const { userRole, isSupervisor, canApproveHoras } = usePWAPermissions()
   
   // Obter role também do perfil (fallback)
   const [roleFromPerfil, setRoleFromPerfil] = useState<string | null>(null)
@@ -72,18 +79,24 @@ export default function PWAMainPage() {
       const userDataStr = localStorage.getItem('user_data')
       if (userDataStr) {
         const userData = JSON.parse(userDataStr)
-        setRoleFromUserData(userData?.role || userData?.cargo || null)
+        // Priorizar cargo se contiver "supervisor", mesmo que o perfil seja "Operador"
+        const cargo = userData?.user_metadata?.cargo || userData?.cargo || null
+        const role = userData?.role || null
+        setRoleFromUserData(cargo || role || null)
       }
     } catch (error) {
       console.warn('Erro ao ler perfil/user_data:', error)
     }
   }, [])
   
-  // Usar role do perfil primeiro (mais confiável), depois do hook, ignorando 'authenticated'
-  // Priorizar roleFromPerfil porque userRole pode ser 'authenticated' (não é um role válido)
-  const currentUserRole = roleFromPerfil || 
+  // Priorizar cargo do user_metadata se contiver "supervisor", depois perfil, depois outros
+  // IMPORTANTE: Se o cargo contém "supervisor", usar ele mesmo que o perfil seja "Operador"
+  const cargoFromUserData = roleFromUserData?.toLowerCase().includes('supervisor') ? roleFromUserData : null
+  const currentUserRole = cargoFromUserData ||
+                         (pwaUserData.user?.cargo?.toLowerCase().includes('supervisor') ? pwaUserData.user?.cargo : null) ||
+                         roleFromPerfil || 
                          roleFromUserData ||
-                         (userRole && userRole !== 'authenticated' ? userRole : null) || 
+                         (userRole && String(userRole) !== 'authenticated' ? String(userRole) : null) || 
                          pwaUserData.user?.role || 
                          pwaUserData.user?.cargo
 
@@ -126,6 +139,254 @@ export default function PWAMainPage() {
       }
     }
   }, [])
+
+  // Obter localização atual ao carregar a página
+  useEffect(() => {
+    if (!isClient) return
+
+    let isMounted = true
+    let abortController: AbortController | null = null
+
+    const obterLocalizacao = async () => {
+      if (!isMounted) return
+      
+      setIsGettingLocation(true)
+      setLocationError(null)
+      
+      try {
+        const coordenadas = await obterLocalizacaoAtual({
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000 // Cache de 1 minuto
+        })
+        
+        if (!isMounted) return
+        
+        setLocation({
+          lat: coordenadas.lat,
+          lng: coordenadas.lng
+        })
+
+        // Tentar obter endereço via reverse geocoding (opcional)
+        try {
+          abortController = new AbortController()
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coordenadas.lat}&lon=${coordenadas.lng}&zoom=18&addressdetails=1`,
+            {
+              headers: {
+                'User-Agent': 'Sistema-Gerenciamento-Gruas'
+              },
+              signal: abortController.signal
+            }
+          )
+          
+          if (!isMounted) return
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.display_name && isMounted) {
+              setLocation(prev => prev ? {
+                ...prev,
+                address: data.display_name
+              } : null)
+            }
+          }
+        } catch (geocodeError: any) {
+          // Ignorar erro de geocoding, não é crítico
+          if (geocodeError.name !== 'AbortError' && isMounted) {
+            console.warn('Erro ao obter endereço:', geocodeError)
+          }
+        }
+      } catch (error: any) {
+        if (isMounted) {
+          console.error('Erro ao obter localização:', error)
+          setLocationError(error.message || 'Não foi possível obter sua localização')
+        }
+      } finally {
+        if (isMounted) {
+          setIsGettingLocation(false)
+        }
+      }
+    }
+
+    obterLocalizacao()
+
+    return () => {
+      isMounted = false
+      if (abortController) {
+        abortController.abort()
+      }
+    }
+  }, [isClient])
+
+  // Função para converter CEP em coordenadas usando o backend
+  const obterCoordenadasPorCep = async (cep: string): Promise<{lat: number, lng: number} | null> => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      const response = await fetch(`${apiUrl}/api/geocoding/cep/${cep}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao buscar coordenadas do CEP')
+      }
+      
+      const data = await response.json()
+      
+      if (!data.success || !data.data?.coordenadas) {
+        throw new Error('Coordenadas não encontradas para este CEP')
+      }
+      
+      return data.data.coordenadas
+    } catch (error: any) {
+      console.error('Erro ao obter coordenadas do CEP:', error)
+      throw error
+    }
+  }
+
+  // Validar distância com CEP quando a localização for obtida
+  useEffect(() => {
+    if (!location || !isClient) return
+
+    let isMounted = true
+    let abortController: AbortController | null = null
+
+    const validarDistanciaCep = async () => {
+      if (!isMounted) return
+      
+      const cepAlvo = '54430350' // CEP fixo conforme solicitado
+      setIsValidandoCep(true)
+      setDistanciaCep(null) // Resetar distância anterior
+      
+      try {
+        abortController = new AbortController()
+        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+        
+        // Primeiro, obter endereço do CEP via ViaCEP
+        const cepLimpo = cepAlvo.replace(/\D/g, '')
+        const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`, {
+          signal: abortController.signal
+        })
+        
+        if (!isMounted) return
+        
+        if (!viaCepResponse.ok) {
+          throw new Error('CEP não encontrado')
+        }
+        
+        const viaCepData = await viaCepResponse.json()
+        
+        if (!isMounted) return
+        
+        if (viaCepData.erro) {
+          throw new Error('CEP inválido')
+        }
+        
+        // Usar o endereço completo com o número 430 (conforme informado pelo usuário)
+        // Av. Aníbal Ribeiro Varejão, 430 - Candeias, Jaboatão dos Guararapes - PE, 54430-350
+        const enderecoCompleto = `Av. Aníbal Ribeiro Varejão, 430, ${viaCepData.bairro || 'Candeias'}, ${viaCepData.localidade || 'Jaboatão dos Guararapes'}, ${viaCepData.uf || 'PE'}, Brasil`
+        
+        // Obter coordenadas do endereço completo via backend
+        let coordenadasCep = null
+        
+        try {
+          const geocodeResponse = await fetch(
+            `${apiUrl}/api/geocoding/endereco?q=${encodeURIComponent(enderecoCompleto)}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              signal: abortController.signal
+            }
+          )
+          
+          if (!isMounted) return
+          
+          if (geocodeResponse.ok) {
+            const geocodeData = await geocodeResponse.json()
+            if (geocodeData.success && geocodeData.data?.coordenadas) {
+              coordenadasCep = geocodeData.data.coordenadas
+            }
+          }
+        } catch (error: any) {
+          if (error.name !== 'AbortError' && isMounted) {
+            console.warn('Erro ao buscar coordenadas do endereço completo:', error)
+          }
+        }
+        
+        // Se não conseguiu pelo endereço completo, tentar pelo CEP
+        if (!coordenadasCep && isMounted) {
+          try {
+            const cepResponse = await fetch(`${apiUrl}/api/geocoding/cep/${cepAlvo}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              signal: abortController.signal
+            })
+            
+            if (!isMounted) return
+            
+            if (cepResponse.ok) {
+              const cepData = await cepResponse.json()
+              if (cepData.success && cepData.data?.coordenadas) {
+                coordenadasCep = cepData.data.coordenadas
+              }
+            }
+          } catch (error: any) {
+            if (error.name !== 'AbortError' && isMounted) {
+              console.warn('Erro ao buscar coordenadas do CEP:', error)
+            }
+          }
+        }
+        
+        if (!isMounted) return
+        
+        if (!coordenadasCep) {
+          throw new Error('Não foi possível obter coordenadas do endereço')
+        }
+        
+        setCepCoordenadas(coordenadasCep)
+        
+        // Calcular distância entre a localização atual e as coordenadas do endereço
+        const distancia = calcularDistancia(
+          { lat: location.lat, lng: location.lng },
+          coordenadasCep
+        )
+        
+        if (isMounted) {
+          setDistanciaCep(distancia)
+        }
+      } catch (error: any) {
+        if (isMounted && error.name !== 'AbortError') {
+          console.error('Erro ao validar CEP:', error)
+          // Não definir erro aqui, apenas logar - o card mostrará que não foi possível validar
+          setDistanciaCep(null)
+        }
+      } finally {
+        if (isMounted) {
+          setIsValidandoCep(false)
+        }
+      }
+    }
+
+    validarDistanciaCep()
+
+    return () => {
+      isMounted = false
+      if (abortController) {
+        abortController.abort()
+      }
+    }
+  }, [location, isClient])
 
   // Sistema de notificações de ponto
   useEffect(() => {
@@ -251,13 +512,15 @@ export default function PWAMainPage() {
       requiresObra: true // Requer obra ativa
     },
     {
-      title: "Notificações",
-      description: "Ver notificações",
-      icon: Bell,
-      href: "/pwa/notificacoes",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      borderColor: "border-blue-100"
+      title: "Aprovações de horas",
+      description: "Aprovar horas extras",
+      icon: CheckCircle,
+      href: "/pwa/aprovacoes",
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      borderColor: "border-orange-100",
+      priority: true,
+      requiresSupervisor: true // Apenas Supervisor para cima
     },
     {
       title: "Perfil",
@@ -269,26 +532,6 @@ export default function PWAMainPage() {
       borderColor: "border-indigo-100"
     },
     {
-      title: "Config",
-      description: "Configurações",
-      icon: Settings,
-      href: "/pwa/configuracoes",
-      color: "text-gray-600",
-      bgColor: "bg-gray-50",
-      borderColor: "border-gray-100"
-    },
-    {
-      title: "Aprovações",
-      description: "Minhas horas extras",
-      icon: CheckCircle,
-      href: "/pwa/aprovacoes",
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
-      borderColor: "border-orange-100",
-      priority: true,
-      requiresSupervisor: true // Apenas Supervisor para cima
-    },
-    {
       title: "Holerites",
       description: "Visualizar e assinar holerites",
       icon: Receipt,
@@ -296,15 +539,6 @@ export default function PWAMainPage() {
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "border-green-100"
-    },
-    {
-      title: "Salários",
-      description: "Ver folhas de pagamento",
-      icon: DollarSign,
-      href: "/pwa/perfil?tab=salarios",
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-50",
-      borderColor: "border-emerald-100"
     },
     {
       title: "Benefícios",
@@ -332,6 +566,15 @@ export default function PWAMainPage() {
       color: "text-cyan-600",
       bgColor: "bg-cyan-50",
       borderColor: "border-cyan-100"
+    },
+    {
+      title: "Config",
+      description: "Configurações",
+      icon: Settings,
+      href: "/pwa/configuracoes",
+      color: "text-gray-600",
+      bgColor: "bg-gray-50",
+      borderColor: "border-gray-100"
     }
   ]
 
@@ -698,7 +941,11 @@ export default function PWAMainPage() {
             </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
-              <p className="text-sm font-bold">{pwaUserData.horasTrabalhadas.split(' ')[0]}</p>
+              <p className="text-sm font-bold">
+                {pwaUserData.horasTrabalhadas && typeof pwaUserData.horasTrabalhadas === 'string' 
+                  ? pwaUserData.horasTrabalhadas.split(' ')[0] || '0h'
+                  : '0h'}
+              </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
               <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
@@ -754,7 +1001,7 @@ export default function PWAMainPage() {
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
               pwaUserData.documentosPendentes > 0 ? 'bg-blue-100 animate-pulse' : 'bg-gray-100'
             }`}>
-              <Bell className={`w-6 h-6 ${
+              <AlertCircle className={`w-6 h-6 ${
                 pwaUserData.documentosPendentes > 0 ? 'text-blue-600' : 'text-gray-400'
               }`} />
             </div>
@@ -772,31 +1019,97 @@ export default function PWAMainPage() {
               // Filtrar itens que requerem obra ativa (Ponto e Gruas)
               // Validação de obra removida - todos os itens estão disponíveis
               
-              // Filtrar Aprovações para Operários - apenas Supervisor para cima
+              // Filtrar Aprovações - apenas Supervisor para cima (NÃO para Operador)
               if (action.requiresSupervisor) {
-                const roleLower = (currentUserRole || '').toLowerCase()
-                
-                // Verificar se é Operário (todas as variações) - se for, não mostrar
-                const isOperario = roleLower.includes('operário') || 
-                                  roleLower.includes('operario') || 
-                                  roleLower.includes('operador') ||
-                                  roleLower === 'operários' ||
-                                  roleLower === 'operarios' ||
-                                  roleLower === 'operador' ||
-                                  roleLower === 'operador teste' || // Caso específico
-                                  roleLower === '4' // Nível 4 = Operários
-                
-                if (isOperario) {
-                  return false // Não mostrar para Operários
+                // Obter cargo do user_metadata (mais confiável que perfil)
+                let cargoFromMetadata: string | null = null
+                try {
+                  const userDataStr = localStorage.getItem('user_data')
+                  if (userDataStr) {
+                    const userData = JSON.parse(userDataStr)
+                    cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
+                  }
+                } catch (e) {
+                  // Ignorar erro
                 }
                 
-                // Mostrar apenas para Supervisor, Gestor e Admin
-                const canSee = roleLower === 'supervisores' || 
-                              roleLower === 'supervisor' || 
-                              roleLower === 'gestores' || 
-                              roleLower === 'gestor' || 
-                              roleLower === 'admin' || 
-                              roleLower === 'administrador'
+                // Obter todos os roles possíveis de todas as fontes
+                const hookRole = userRole?.toLowerCase() || ''
+                const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
+                const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
+                const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
+                const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
+                const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
+                const currentRoleLower = currentUserRole?.toLowerCase() || ''
+                
+                // Criar array de todos os roles (sem duplicatas)
+                // PRIORIDADE: cargo do metadata primeiro
+                const allRolesArray = [
+                  cargoFromMetadataLower, // PRIORIDADE: cargo do user_metadata
+                  pwaCargoLower,
+                  roleFromUserDataLower,
+                  currentRoleLower,
+                  hookRole,
+                  roleFromPerfilLower,
+                  pwaRoleLower
+                ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
+                
+                const roleLower = allRolesArray.join(' ')
+                
+                // PRIORIDADE 1: Verificar se o cargo contém "supervisor" (mesmo que perfil seja "Operador")
+                if (cargoFromMetadataLower.includes('supervisor') || pwaCargoLower.includes('supervisor')) {
+                  return true
+                }
+                
+                // Verificar se tem permissão de aprovar horas (mais confiável)
+                if (canApproveHoras()) {
+                  return true
+                }
+                
+                // Verificar via hook isSupervisor
+                if (isSupervisor()) {
+                  return true
+                }
+                
+                // Verificar role manualmente - PRIORIDADE: verificar se algum role contém "supervisor"
+                const isSupervisorRole = allRolesArray.some(role => 
+                  role.includes('supervisor') || 
+                  role === 'supervisores' || 
+                  role === 'supervisor'
+                )
+                
+                if (isSupervisorRole) {
+                  return true
+                }
+                
+                // Verificar se é Operário (todas as variações) - se for, NÃO mostrar
+                // MAS: só bloquear se NÃO tiver cargo com supervisor
+                const isOperario = allRolesArray.some(role => 
+                  (role.includes('operário') || 
+                  role.includes('operario') || 
+                  (role.includes('operador') && !role.includes('supervisor')) ||
+                  role === 'operários' ||
+                  role === 'operarios' ||
+                  role === 'operador' ||
+                  role === 'operador teste' ||
+                  role === '4') && !role.includes('supervisor')
+                )
+                
+                if (isOperario && !cargoFromMetadataLower.includes('supervisor') && !pwaCargoLower.includes('supervisor')) {
+                  return false
+                }
+                
+                // Verificar outros roles com permissão (Gestor, Admin)
+                const canSee = allRolesArray.some(role =>
+                  role.includes('gestor') ||
+                  role.includes('admin') ||
+                  role === 'gestores' || 
+                  role === 'gestor' || 
+                  role === 'admin' || 
+                  role === 'administrador'
+                )
+                
+                return canSee
                 
                 return canSee
               }
@@ -832,11 +1145,48 @@ export default function PWAMainPage() {
         </div>
       </div>
 
+      {/* Mapa com Localização Atual */}
+      {location && (
+        <Card className="overflow-hidden py-0">
+          <CardContent className="p-0">
+            <div className="relative w-full h-64 md:h-80">
+              <iframe
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                allowFullScreen
+                referrerPolicy="no-referrer-when-downgrade"
+                src={`https://www.google.com/maps?q=${location.lat},${location.lng}&z=15&output=embed`}
+                className="w-full h-full"
+              />
+              {/* Overlay com informações */}
+              <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-gray-200 max-w-xs">
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-900 mb-1">Sua Localização</p>
+                    <p className="text-xs text-gray-600 line-clamp-2">{location.address || `${location.lat}, ${location.lng}`}</p>
+                    {distanciaCep !== null && (
+                      <p className={`text-xs font-medium mt-1 ${
+                        distanciaCep <= 4000 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {distanciaCep <= 4000 ? '✓' : '✗'} {Math.round(distanciaCep)}m do endereço
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Dica ou Alerta */}
       {pwaUserData.documentosPendentes > 0 && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-500">
           <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Bell className="w-5 h-5 text-blue-600" />
+            <AlertCircle className="w-5 h-5 text-blue-600" />
           </div>
           <div className="flex-1">
             <h3 className="font-semibold text-sm text-blue-900 mb-1">

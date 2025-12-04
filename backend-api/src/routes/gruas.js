@@ -69,7 +69,7 @@ router.get('/clientes/buscar', async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from('clientes')
       .select('id, nome, cnpj, email, telefone, contato')
-      .or(`nome.ilike.%${sanitizedQuery}%,cnpj.ilike.%${sanitizedQuery}%`)
+      .or(`nome.ilike.%${q}%,cnpj.ilike.%${q}%`)
       .limit(10)
 
     if (error) {
@@ -550,6 +550,147 @@ router.get('/', async (req, res) => {
 
 /**
  * @swagger
+ * /api/gruas/funcionario/{funcionario_id}:
+ *   get:
+ *     summary: Listar gruas de um funcionário
+ *     tags: [Gruas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: funcionario_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Ativo, Inativo]
+ *         description: Filtrar por status do relacionamento
+ *     responses:
+ *       200:
+ *         description: Lista de gruas do funcionário
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       grua_id:
+ *                         type: string
+ *                       funcionario_id:
+ *                         type: integer
+ *                       obra_id:
+ *                         type: integer
+ *                       data_inicio:
+ *                         type: string
+ *                         format: date
+ *                       data_fim:
+ *                         type: string
+ *                         format: date
+ *                       status:
+ *                         type: string
+ *                       grua:
+ *                         type: object
+ *                       obra:
+ *                         type: object
+ *       404:
+ *         description: Funcionário não encontrado
+ */
+router.get('/funcionario/:funcionario_id', async (req, res) => {
+  try {
+    const { funcionario_id } = req.params
+    const { status } = req.query
+
+    if (!funcionario_id) {
+      return res.status(400).json({
+        error: 'ID do funcionário inválido',
+        message: 'O ID do funcionário deve ser fornecido'
+      })
+    }
+
+    // Buscar relacionamentos grua-funcionário
+    let query = supabaseAdmin
+      .from('grua_funcionario')
+      .select(`
+        *,
+        grua:gruas(
+          id,
+          name,
+          modelo,
+          fabricante,
+          tipo,
+          capacidade,
+          status,
+          ano,
+          created_at
+        ),
+        obra:obras(
+          id,
+          nome,
+          status,
+          endereco,
+          cidade,
+          estado
+        )
+      `)
+      .eq('funcionario_id', funcionario_id)
+
+    // Aplicar filtro de status se fornecido
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    query = query.order('data_inicio', { ascending: false })
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Erro ao buscar gruas do funcionário:', error)
+      return res.status(500).json({
+        error: 'Erro ao buscar gruas',
+        message: error.message
+      })
+    }
+
+    // Enriquecer dados das gruas
+    const gruasEnriquecidas = (data || []).map((relacao) => ({
+      ...relacao,
+      grua: relacao.grua ? {
+        ...relacao.grua,
+        model: relacao.grua.modelo,
+        capacity: relacao.grua.capacidade,
+        currentObraId: relacao.obra_id?.toString() || null,
+        currentObraName: relacao.obra?.nome || null
+      } : null
+    }))
+
+    res.json({
+      success: true,
+      data: gruasEnriquecidas,
+      total: gruasEnriquecidas.length
+    })
+  } catch (error) {
+    console.error('Erro ao buscar gruas do funcionário:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
  * /api/gruas/export:
  *   get:
  *     summary: Exportar todas as gruas (sem paginação)
@@ -688,19 +829,151 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
     
-    // Validar ID
-    if (!id || (isNaN(Number(id)) && !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))) {
+    if (!id) {
       return res.status(400).json({
         error: 'ID inválido',
-        message: 'O ID deve ser um número ou UUID válido'
+        message: 'O ID ou código da grua deve ser fornecido'
       })
     }
 
-    // Buscar grua com dados relacionados
-    const { data: grua, error: gruaError } = await supabaseAdmin
+    // IMPORTANTE: O campo 'id' pode ser alfanumérico (ex: "G0063")
+    // Sempre tentar buscar por 'id' primeiro, independente de ser numérico ou não
+    console.log(`[DEBUG] Buscando grua por ID: "${id}"`)
+    
+    // Buscar a grua primeiro (sem relacionamentos para ser mais rápido)
+    let grua = null
+    
+    // Estratégia 1: Tentar buscar diretamente por ID (pode ser numérico ou alfanumérico)
+    let { data: gruaPorId, error: errorPorId } = await supabaseAdmin
+      .from('gruas')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+    
+    if (gruaPorId && !errorPorId) {
+      console.log(`[DEBUG] Grua encontrada por ID: ${gruaPorId.name || gruaPorId.id} (ID: ${gruaPorId.id})`)
+      grua = gruaPorId
+    } else {
+      // Se não encontrou por ID, tentar buscar por 'name' (fallback)
+      console.log(`[DEBUG] Grua não encontrada por ID, tentando buscar por 'name': "${id}"`)
+      // Buscar por código/nome alfanumérico - tentar múltiplas estratégias
+      console.log(`[DEBUG] Buscando grua por código: "${id}"`)
+      
+      // Limpar o ID de espaços em branco
+      const idLimpo = id.trim()
+      const idLimpoUpper = idLimpo.toUpperCase()
+      
+      // Estratégia 1: Buscar todas as gruas e filtrar manualmente (mais confiável)
+      // Isso garante que vamos encontrar mesmo se houver problemas com a query do Supabase
+      console.log(`[DEBUG] Estratégia 1: Buscando todas as gruas para filtro manual...`)
+      const { data: todasGruas, error: errorTodas } = await supabaseAdmin
+        .from('gruas')
+        .select('id, name')
+      
+      if (!errorTodas && todasGruas && todasGruas.length > 0) {
+        console.log(`[DEBUG] Total de gruas encontradas: ${todasGruas.length}`)
+        console.log(`[DEBUG] Primeiras 5 gruas:`, todasGruas.slice(0, 5).map(g => ({ id: g.id, name: g.name })))
+        
+        // Buscar a grua que corresponde ao código
+        const gruaEncontrada = todasGruas.find(g => {
+          const name = (g.name || '').trim()
+          const nameUpper = name.toUpperCase()
+          
+          // Verificar correspondência exata ou parcial
+          return nameUpper === idLimpoUpper || 
+                 nameUpper.includes(idLimpoUpper) ||
+                 name === idLimpo ||
+                 name.includes(idLimpo)
+        })
+        
+        if (gruaEncontrada) {
+          console.log(`[DEBUG] Grua encontrada com busca manual: "${gruaEncontrada.name}" (ID: ${gruaEncontrada.id})`)
+          
+          // Buscar a grua completa
+          const { data: gruaCompleta, error: errorCompleta } = await supabaseAdmin
+            .from('gruas')
+            .select('*')
+            .eq('id', gruaEncontrada.id)
+            .single()
+          
+          if (gruaCompleta && !errorCompleta) {
+            grua = gruaCompleta
+          } else {
+            console.error(`[DEBUG] Erro ao buscar grua completa:`, errorCompleta)
+          }
+        } else {
+          console.log(`[DEBUG] Nenhuma grua encontrada com busca manual. Tentando outras estratégias...`)
+          
+          // Estratégia 2: Busca exata case-insensitive
+          let { data: gruaExata, error: errorExata } = await supabaseAdmin
+            .from('gruas')
+            .select('*')
+            .ilike('name', idLimpo)
+            .limit(1)
+            .maybeSingle()
+          
+          if (gruaExata && !errorExata) {
+            console.log(`[DEBUG] Grua encontrada com busca exata ilike: ${gruaExata.name} (ID: ${gruaExata.id})`)
+            grua = gruaExata
+          } else {
+            // Estratégia 3: Busca parcial case-insensitive
+            let { data: gruaParcial, error: errorParcial } = await supabaseAdmin
+              .from('gruas')
+              .select('*')
+              .ilike('name', `%${idLimpo}%`)
+              .limit(1)
+              .maybeSingle()
+            
+            if (gruaParcial && !errorParcial) {
+              console.log(`[DEBUG] Grua encontrada com busca parcial: ${gruaParcial.name} (ID: ${gruaParcial.id})`)
+              grua = gruaParcial
+            } else {
+              // Estratégia 4: Busca exata case-sensitive
+              let { data: gruaCaseSensitive, error: errorCaseSensitive } = await supabaseAdmin
+                .from('gruas')
+                .select('*')
+                .eq('name', idLimpo)
+                .limit(1)
+                .maybeSingle()
+              
+              if (gruaCaseSensitive && !errorCaseSensitive) {
+                console.log(`[DEBUG] Grua encontrada com busca case-sensitive: ${gruaCaseSensitive.name} (ID: ${gruaCaseSensitive.id})`)
+                grua = gruaCaseSensitive
+              }
+            }
+          }
+        }
+      } else {
+        console.error(`[DEBUG] Erro ao buscar todas as gruas:`, errorTodas)
+      }
+      
+      if (!grua) {
+        console.log(`[DEBUG] Grua não encontrada por ID nem por name para: "${id}"`)
+        console.log(`[DEBUG] Erro ao buscar por ID:`, errorPorId?.message)
+        console.log(`[DEBUG] Verifique se a grua existe no banco de dados com ID="${id}" ou name="${id}"`)
+        return res.status(404).json({
+          error: 'Grua não encontrada',
+          message: `A grua com o ID ou código "${id}" não foi encontrada. Verifique se o código está correto.`
+        })
+      }
+    }
+
+    if (!grua) {
+      return res.status(404).json({
+        error: 'Grua não encontrada',
+        message: `A grua com o ID ou código "${id}" não foi encontrada`
+      })
+    }
+    
+    // Garantir que o campo name existe e não é null
+    if (!grua.name) {
+      grua.name = `Grua ${grua.id}`
+    }
+    
+    // Agora buscar relacionamentos usando o ID da grua encontrada
+    const { data: relacionamentos, error: relacionamentosError } = await supabaseAdmin
       .from('gruas')
       .select(`
-        *,
         grua_funcionarios:grua_funcionario(
           id,
           funcionario_id,
@@ -772,92 +1045,62 @@ router.get('/:id', async (req, res) => {
           )
         )
       `)
-      .eq('id', id)
+      .eq('id', grua.id)
       .single()
-
-    if (gruaError) {
-      if (gruaError.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Grua não encontrada',
-          message: 'A grua com o ID especificado não existe'
-        })
+    
+    // Mesclar dados da grua com relacionamentos
+    if (relacionamentos && !relacionamentosError) {
+      grua = {
+        ...grua,
+        ...relacionamentos
       }
-      return res.status(500).json({
-        error: 'Erro ao buscar grua',
-        message: gruaError.message
-      })
     }
 
+    // Enriquecer dados da grua
+    const gruaEnriquecida = await enriquecerDadosGrua(grua)
+
     // Buscar histórico de manutenções
-    const { data: manutencoes, error: manutencaoError } = await supabaseAdmin
+    const { data: manutencoes } = await supabaseAdmin
       .from('historico_manutencoes')
       .select('*')
-      .eq('grua_id', id)
+      .eq('grua_id', grua.id)
       .order('data_manutencao', { ascending: false })
       .limit(10)
 
-    // Buscar funcionários alocados (se existir tabela de alocações)
-    const { data: funcionarios, error: funcionarioError } = await supabaseAdmin
-      .from('alocacoes_funcionarios')
+    // Buscar obra ativa da grua
+    const { data: obraAtiva } = await supabaseAdmin
+      .from('grua_obra')
       .select(`
         *,
-        funcionarios (
+        obra:obras(
           id,
           nome,
-          cargo,
-          telefone,
-          turno
+          cliente_id,
+          status,
+          endereco,
+          cidade,
+          estado,
+          cliente:clientes(
+            id,
+            nome,
+            cnpj,
+            email,
+            telefone
+          )
         )
       `)
-      .eq('contrato_id', grua.contratos?.[0]?.id || null)
+      .eq('grua_id', grua.id)
       .eq('status', 'Ativa')
-
-    // Buscar equipamentos auxiliares (se existir tabela de alocações de equipamentos)
-    const { data: equipamentos, error: equipamentoError } = await supabaseAdmin
-      .from('alocacoes_equipamentos')
-      .select(`
-        *,
-        equipamentos_auxiliares (
-          id,
-          nome,
-          tipo,
-          status
-        )
-      `)
-      .eq('contrato_id', grua.contratos?.[0]?.id || null)
-      .eq('status', 'Ativa')
-
-    // Preparar dados de resposta
-    const contratoAtivo = grua.contratos?.find(c => c.status === 'Ativo')
-    const obraAtiva = contratoAtivo?.obras
-    const clienteAtivo = obraAtiva?.clientes
+      .single()
 
     const responseData = {
-      ...grua,
-      // Dados do cliente atual
-      cliente: clienteAtivo?.nome || null,
-      cliente_cnpj: clienteAtivo?.cnpj || null,
-      cliente_email: clienteAtivo?.email || null,
-      cliente_telefone: clienteAtivo?.telefone || null,
-      
-      // Dados da obra atual
-      nome_obra: obraAtiva?.nome || null,
-      endereco_obra: obraAtiva?.endereco || null,
-      cidade_obra: obraAtiva?.cidade || null,
-      estado_obra: obraAtiva?.estado || null,
-      
-      // Dados do contrato atual
-      contrato_ativo: !!contratoAtivo,
-      numero_contrato: contratoAtivo?.numero_contrato || null,
-      inicio_contrato: contratoAtivo?.data_inicio || null,
-      fim_contrato: contratoAtivo?.data_fim || null,
-      prazo_meses: contratoAtivo?.prazo_meses || null,
-      valor_total_contrato: contratoAtivo?.valor_total || null,
-      
-      // Histórico e alocações
+      ...gruaEnriquecida,
+      // Histórico de manutenções
       historico_manutencoes: manutencoes || [],
-      equipe: funcionarios?.map(f => f.funcionarios) || [],
-      equipamentos_auxiliares: equipamentos?.map(e => e.equipamentos_auxiliares) || [],
+      
+      // Dados da obra ativa
+      obra_ativa: obraAtiva?.obra || null,
+      cliente_ativo: obraAtiva?.obra?.cliente || null,
       
       // Campos para compatibilidade com frontend
       alturaTrabalho: grua.altura_trabalho,
@@ -1028,12 +1271,69 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
     
-    // Validar ID
-    if (!id || (isNaN(Number(id)) && !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))) {
+    if (!id) {
       return res.status(400).json({
         error: 'ID inválido',
-        message: 'O ID deve ser um número ou UUID válido'
+        message: 'O ID ou código da grua deve ser fornecido'
       })
+    }
+
+    // Determinar se é um ID numérico/UUID ou um código/nome alfanumérico
+    const isNumericOrUUID = !isNaN(Number(id)) || id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    
+    // Primeiro, buscar a grua para obter o ID real se necessário
+    let gruaId = id
+    if (!isNumericOrUUID) {
+      // Limpar o ID de espaços em branco
+      const idLimpo = id.trim()
+      
+      // Buscar por código/nome alfanumérico no campo 'name'
+      // Tentar múltiplas estratégias de busca
+      let gruaExistente = null
+      
+      // Estratégia 1: Busca exata case-insensitive
+      let { data: gruaExata, error: errorExata } = await supabaseAdmin
+        .from('gruas')
+        .select('id')
+        .ilike('name', idLimpo)
+        .limit(1)
+        .maybeSingle()
+      
+      if (gruaExata && !errorExata) {
+        gruaExistente = gruaExata
+      } else {
+        // Estratégia 2: Busca parcial case-insensitive
+        let { data: gruaParcial, error: errorParcial } = await supabaseAdmin
+          .from('gruas')
+          .select('id')
+          .ilike('name', `%${idLimpo}%`)
+          .limit(1)
+          .maybeSingle()
+        
+        if (gruaParcial && !errorParcial) {
+          gruaExistente = gruaParcial
+        } else {
+          // Estratégia 3: Busca exata case-sensitive
+          let { data: gruaCaseSensitive, error: errorCaseSensitive } = await supabaseAdmin
+            .from('gruas')
+            .select('id')
+            .eq('name', idLimpo)
+            .limit(1)
+            .maybeSingle()
+          
+          if (gruaCaseSensitive && !errorCaseSensitive) {
+            gruaExistente = gruaCaseSensitive
+          }
+        }
+      }
+      
+      if (!gruaExistente) {
+        return res.status(404).json({
+          error: 'Grua não encontrada',
+          message: `A grua com o código "${id}" não foi encontrada. Verifique se o código está correto.`
+        })
+      }
+      gruaId = gruaExistente.id
     }
 
     // Validar dados
@@ -1093,7 +1393,7 @@ router.put('/:id', async (req, res) => {
     const { data, error: updateError } = await supabaseAdmin
       .from('gruas')
       .update(updateData)
-      .eq('id', id)
+      .eq('id', gruaId)
       .select()
       .single()
 
@@ -1156,18 +1456,75 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
     
-    // Validar ID
-    if (!id || (isNaN(Number(id)) && !id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))) {
+    if (!id) {
       return res.status(400).json({
         error: 'ID inválido',
-        message: 'O ID deve ser um número ou UUID válido'
+        message: 'O ID ou código da grua deve ser fornecido'
       })
+    }
+
+    // Determinar se é um ID numérico/UUID ou um código/nome alfanumérico
+    const isNumericOrUUID = !isNaN(Number(id)) || id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    
+    // Primeiro, buscar a grua para obter o ID real se necessário
+    let gruaId = id
+    if (!isNumericOrUUID) {
+      // Limpar o ID de espaços em branco
+      const idLimpo = id.trim()
+      
+      // Buscar por código/nome alfanumérico no campo 'name'
+      // Tentar múltiplas estratégias de busca
+      let gruaExistente = null
+      
+      // Estratégia 1: Busca exata case-insensitive
+      let { data: gruaExata, error: errorExata } = await supabaseAdmin
+        .from('gruas')
+        .select('id')
+        .ilike('name', idLimpo)
+        .limit(1)
+        .maybeSingle()
+      
+      if (gruaExata && !errorExata) {
+        gruaExistente = gruaExata
+      } else {
+        // Estratégia 2: Busca parcial case-insensitive
+        let { data: gruaParcial, error: errorParcial } = await supabaseAdmin
+          .from('gruas')
+          .select('id')
+          .ilike('name', `%${idLimpo}%`)
+          .limit(1)
+          .maybeSingle()
+        
+        if (gruaParcial && !errorParcial) {
+          gruaExistente = gruaParcial
+        } else {
+          // Estratégia 3: Busca exata case-sensitive
+          let { data: gruaCaseSensitive, error: errorCaseSensitive } = await supabaseAdmin
+            .from('gruas')
+            .select('id')
+            .eq('name', idLimpo)
+            .limit(1)
+            .maybeSingle()
+          
+          if (gruaCaseSensitive && !errorCaseSensitive) {
+            gruaExistente = gruaCaseSensitive
+          }
+        }
+      }
+      
+      if (!gruaExistente) {
+        return res.status(404).json({
+          error: 'Grua não encontrada',
+          message: `A grua com o código "${id}" não foi encontrada. Verifique se o código está correto.`
+        })
+      }
+      gruaId = gruaExistente.id
     }
 
     const { error } = await supabaseAdmin
       .from('gruas')
       .delete()
-      .eq('id', id)
+      .eq('id', gruaId)
 
     if (error) {
       return res.status(500).json({

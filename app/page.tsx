@@ -151,11 +151,24 @@ function LoginPageContent() {
       localStorage.setItem('user_profile', JSON.stringify(data.data.profile))
       localStorage.setItem('user_perfil', JSON.stringify(data.data.perfil))
       localStorage.setItem('user_permissoes', JSON.stringify(data.data.permissoes))
+      
+      // Salvar level de acesso (importante para redirecionamento)
+      if (data.data.level !== undefined && data.data.level !== null) {
+        localStorage.setItem('user_level', String(data.data.level))
+      }
+      
+      // Salvar role
+      if (data.data.role) {
+        localStorage.setItem('user_role', data.data.role)
+      }
+      
       console.log('Dados salvos no localStorage:', {
         token: !!token,
         profile: !!data.data.profile,
         perfil: !!data.data.perfil,
-        permissoes: data.data.permissoes?.length || 0
+        permissoes: data.data.permissoes?.length || 0,
+        level: data.data.level,
+        role: data.data.role
       })
       
       // Carregar permissões do backend antes do redirect
@@ -168,8 +181,21 @@ function LoginPageContent() {
         // Continuar mesmo se não conseguir carregar permissões
       }
       
-      // Redirecionar para dashboard
-      window.location.href = '/dashboard'
+      // Determinar redirecionamento baseado no nível de acesso
+      const userLevel = data.data.level || 0
+      const userRole = (data.data.role || '').toLowerCase()
+      
+      // Níveis 8+ ou Cliente (nível 1) → Dashboard (web)
+      // Demais níveis → PWA
+      let redirectPath = '/pwa'
+      if (userLevel >= 8) {
+        redirectPath = '/dashboard'
+      } else if (userLevel === 1 && userRole.includes('cliente')) {
+        redirectPath = '/dashboard'
+      }
+      
+      console.log(`🔄 [Login Web] Redirecionando para: ${redirectPath} (nível: ${userLevel}, role: ${data.data.role})`)
+      window.location.href = redirectPath
     } catch (error) {
       console.error('Erro no login:', error)
       showAuthError(error)

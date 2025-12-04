@@ -107,10 +107,10 @@ export function obterLocalizacaoAtual(
         }
         reject(new Error(mensagem))
       },
-      options || {
-        enableHighAccuracy: true,
+      {
+        enableHighAccuracy: true, // Tenta usar GPS em vez de apenas Wi-Fi/Antena
         timeout: 10000,
-        maximumAge: 300000, // 5 minutos
+        maximumAge: 0 // Não usar cache, sempre obter localização atual
       }
     )
   })
@@ -163,7 +163,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
           lat: parseFloat(obra.latitude),
           lng: parseFloat(obra.longitude)
         },
-        raio_permitido: obra.raio_permitido || 500 // Usar raio do banco ou padrão de 500m
+        raio_permitido: obra.raio_permitido || 4000 // Usar raio do banco ou padrão de 4000m (4km)
       }))
   } catch (error) {
     console.error('Erro ao buscar obras:', error)

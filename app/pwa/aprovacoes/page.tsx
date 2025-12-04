@@ -262,7 +262,13 @@ export default function PWAAprovacoesPage() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4">
         <div className="flex items-center gap-3 mb-2">
-          <Button variant="ghost" size="sm" className="p-0">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="p-0"
+            onClick={() => router.push('/pwa')}
+            type="button"
+          >
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-bold text-gray-900">Minhas Aprovações</h1>

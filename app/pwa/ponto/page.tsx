@@ -112,7 +112,23 @@ export default function PWAPontoPage() {
           // Carregar obras do funcionário
           const obras = await buscarObrasFuncionario(parsedUser.id)
           if (obras.length > 0) {
-            setObra(obras[0]) // Usar primeira obra por padrão
+            const obraSelecionada = obras[0]
+            setObra(obraSelecionada) // Usar primeira obra por padrão
+            // Obter localização automaticamente quando a obra for carregada
+            try {
+              const coordenadas = await obterLocalizacaoAtual({
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+              })
+              setLocation(coordenadas)
+              
+              // Validar proximidade com a obra
+              const validacao = validarProximidadeObra(coordenadas, obraSelecionada)
+              setValidacaoLocalizacao(validacao)
+            } catch (error) {
+              console.warn('Não foi possível obter localização automaticamente:', error)
+            }
           }
         } catch (error) {
           console.error('Erro ao carregar dados do usuário:', error)
@@ -309,17 +325,38 @@ export default function PWAPontoPage() {
   }
 
   const registrarPonto = async (tipo: string) => {
-
-    // Geolocalização agora é opcional - não bloqueia o registro
-    if (validacaoLocalizacao && !validacaoLocalizacao.valido) {
-      toast({
-        title: "⚠️ Localização fora da área",
-        description: "Você está fora da área da obra, mas pode registrar o ponto mesmo assim",
-        variant: "default"
-      })
-    }
-
     setIsLoading(true)
+    
+    // Obter localização atual antes de registrar (se ainda não tiver)
+    if (!location) {
+      try {
+        const coordenadas = await obterLocalizacaoAtual({
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        })
+        setLocation(coordenadas)
+        
+        // Validar proximidade com a obra se disponível
+        if (obra) {
+          const validacao = validarProximidadeObra(coordenadas, obra)
+          setValidacaoLocalizacao(validacao)
+          
+          // Se estiver fora do range, mostrar aviso mas não bloquear ainda (o backend vai bloquear)
+          if (!validacao.valido) {
+            toast({
+              title: "⚠️ Atenção",
+              description: `Você está a ${Math.round(validacao.distancia)}m da obra. O limite é ${obra.raio_permitido || 4000}m. O registro será bloqueado se você estiver fora do range.`,
+              variant: "default",
+              duration: 5000
+            })
+          }
+        }
+      } catch (error: any) {
+        console.warn('Não foi possível obter localização:', error)
+        // Continuar mesmo sem localização (não bloqueia)
+      }
+    }
     
     try {
       // Obter funcionarioId
@@ -362,6 +399,18 @@ export default function PWAPontoPage() {
         }
       }
       
+      // Validar localização ANTES de enviar (se tiver validação disponível)
+      if (validacaoLocalizacao && !validacaoLocalizacao.valido) {
+        toast({
+          title: "⚠️ Fora da área permitida",
+          description: `${validacaoLocalizacao.mensagem}. Você precisa estar dentro de ${obra?.raio_permitido || 4000}m (${(obra?.raio_permitido || 4000) / 1000}km) para registrar o ponto.`,
+          variant: "destructive",
+          duration: 8000
+        })
+        setIsLoading(false)
+        return
+      }
+
       // Preparar dados para envio
       const campoTipo = tipo.toLowerCase().replace(' ', '_')
       const dadosRegistro: any = {
@@ -430,16 +479,34 @@ export default function PWAPontoPage() {
         data_fim: hoje
       })
 
-      if (registrosExistentes && registrosExistentes.length > 0) {
-        // Atualizar registro existente
-        const registroId = registrosExistentes[0].id!
-        await pontoApi.atualizarRegistro(registroId, {
-          ...dadosRegistro,
-          justificativa_alteracao: `Registro ${tipo} via PWA`
-        })
-      } else {
-        // Criar novo registro
-        await pontoApi.criarRegistro(dadosRegistro)
+      try {
+        if (registrosExistentes && registrosExistentes.length > 0) {
+          // Atualizar registro existente
+          const registroId = registrosExistentes[0].id!
+          await pontoApi.atualizarRegistro(registroId, {
+            ...dadosRegistro,
+            justificativa_alteracao: `Registro ${tipo} via PWA`
+          })
+        } else {
+          // Criar novo registro
+          await pontoApi.criarRegistro(dadosRegistro)
+        }
+      } catch (apiError: any) {
+        // Tratar erro específico de geolocalização
+        if (apiError.response?.status === 403 && apiError.response?.data?.error === 'FORA_DO_PERIMETRO') {
+          const errorData = apiError.response.data
+          const tipoAlvo = errorData.tipo === 'grua' ? 'da grua' : 'da obra'
+          const nomeAlvo = errorData.alvo || errorData.obra || 'localização'
+          
+          toast({
+            title: "⚠️ Fora da área permitida",
+            description: errorData.message || `Você está a ${errorData.distancia}m ${tipoAlvo} (${nomeAlvo}). O limite é ${errorData.raio_permitido}m (${errorData.raio_permitido / 1000}km). Aproxime-se para registrar o ponto.`,
+            variant: "destructive",
+            duration: 8000
+          })
+          throw new Error(errorData.message || `Você está fora da área permitida (${errorData.raio_permitido}m) para registrar ponto`)
+        }
+        throw apiError
       }
 
       // Atualizar registros localmente
@@ -646,7 +713,7 @@ export default function PWAPontoPage() {
 
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar">
-      <div className="space-y-6">
+      <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

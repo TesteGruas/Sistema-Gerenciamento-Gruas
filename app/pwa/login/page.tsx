@@ -232,6 +232,16 @@ function PWALoginPageContent(): JSX.Element {
           localStorage.setItem('user_permissoes', JSON.stringify(data.data.permissoes))
         }
         
+        // Salvar level de acesso (importante para redirecionamento)
+        if (data.data.level !== undefined && data.data.level !== null) {
+          localStorage.setItem('user_level', String(data.data.level))
+        }
+        
+        // Salvar role
+        if (data.data.role) {
+          localStorage.setItem('user_role', data.data.role)
+        }
+        
         // Salvar refresh token se existir
         if (data.data.refresh_token) {
           localStorage.setItem('refresh_token', data.data.refresh_token)
@@ -266,10 +276,36 @@ function PWALoginPageContent(): JSX.Element {
           // Continuar mesmo se não conseguir carregar permissões
         }
 
+        // Determinar redirecionamento baseado no nível de acesso
+        const userLevel = data.data.level || 0
+        const userRole = (data.data.role || '').toLowerCase()
+        
+        // Níveis 8+ ou Cliente (nível 1) → Dashboard (web)
+        // Demais níveis → PWA
+        let redirectPath = '/pwa'
+        if (userLevel >= 8) {
+          redirectPath = '/dashboard'
+        } else if (userLevel === 1 && userRole.includes('cliente')) {
+          redirectPath = '/dashboard'
+        }
+
+        console.log(`🔄 [PWA Login] Redirecionando para: ${redirectPath} (nível: ${userLevel}, role: ${data.data.role})`)
+
+        // Resetar contador de redirecionamentos após login bem-sucedido
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('redirect_count')
+          localStorage.removeItem('last_redirect_path')
+        }
+
         // Pequeno delay para garantir que o localStorage foi salvo
         setTimeout(() => {
-          // Redirecionar para página principal do PWA
-          router.push("/pwa")
+          // Redirecionar para o caminho correto
+          if (redirectPath === '/dashboard') {
+            // Se for web, usar window.location para garantir que sai do PWA
+            window.location.href = '/dashboard'
+          } else {
+            router.push(redirectPath)
+          }
         }, 100)
       } else {
         // Login falhou

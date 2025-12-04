@@ -165,41 +165,90 @@ export function usePWAUser(): PWAUserData {
                 const ponto = pontoData.data[0]
                 setPontoHoje(ponto)
 
+                // Função auxiliar para converter hora (HH:MM:SS ou HH:MM) em minutos
+                const horaParaMinutos = (horaStr: string): number => {
+                  if (!horaStr || typeof horaStr !== 'string') return 0
+                  const partes = horaStr.split(':')
+                  if (partes.length < 2) return 0
+                  const horas = parseInt(partes[0], 10)
+                  const minutos = parseInt(partes[1], 10)
+                  if (isNaN(horas) || isNaN(minutos)) return 0
+                  return horas * 60 + minutos
+                }
+
                 // Calcular horas trabalhadas
                 if (ponto.entrada && ponto.saida_almoco && ponto.volta_almoco && ponto.saida) {
-                  const entrada = new Date(ponto.entrada)
-                  const saida = new Date(ponto.saida)
-                  const saidaAlmoco = new Date(ponto.saida_almoco)
-                  const voltaAlmoco = new Date(ponto.volta_almoco)
-                  
-                  // Fórmula correta: (Saída Almoço - Entrada) + (Saída - Volta do Almoço)
-                  const periodoManha = saidaAlmoco.getTime() - entrada.getTime()
-                  const periodoTarde = saida.getTime() - voltaAlmoco.getTime()
-                  const totalDiff = periodoManha + periodoTarde
-                  
-                  const horas = Math.floor(totalDiff / (1000 * 60 * 60))
-                  const minutos = Math.floor((totalDiff % (1000 * 60 * 60)) / (1000 * 60))
-                  
-                  horasCalculadas = `${horas}h ${minutos}min`
-                  setHorasTrabalhadas(horasCalculadas)
+                  try {
+                    // Fórmula correta: (Saída Almoço - Entrada) + (Saída - Volta do Almoço)
+                    const entradaMin = horaParaMinutos(ponto.entrada)
+                    const saidaAlmocoMin = horaParaMinutos(ponto.saida_almoco)
+                    const voltaAlmocoMin = horaParaMinutos(ponto.volta_almoco)
+                    const saidaMin = horaParaMinutos(ponto.saida)
+                    
+                    if (entradaMin > 0 && saidaAlmocoMin > entradaMin && voltaAlmocoMin > 0 && saidaMin > voltaAlmocoMin) {
+                      const periodoManha = saidaAlmocoMin - entradaMin
+                      const periodoTarde = saidaMin - voltaAlmocoMin
+                      const totalMinutos = periodoManha + periodoTarde
+                      
+                      if (totalMinutos > 0) {
+                        const horas = Math.floor(totalMinutos / 60)
+                        const minutos = totalMinutos % 60
+                        horasCalculadas = `${horas}h ${minutos}min`
+                      } else {
+                        horasCalculadas = '0h 0min'
+                      }
+                    } else {
+                      horasCalculadas = '0h 0min'
+                    }
+                  } catch (error) {
+                    console.error('Erro ao calcular horas com almoço:', error)
+                    horasCalculadas = '0h 0min'
+                  }
                 } else if (ponto.entrada && ponto.saida) {
                   // Se não tem horários de almoço, calcula como (Saída - Entrada)
-                  const entrada = new Date(ponto.entrada)
-                  const saida = new Date(ponto.saida)
-                  const totalDiff = saida.getTime() - entrada.getTime()
-                  
-                  const horas = Math.floor(totalDiff / (1000 * 60 * 60))
-                  const minutos = Math.floor((totalDiff % (1000 * 60 * 60)) / (1000 * 60))
-                  
-                  // Se for menos de 8 horas, mostra como negativo
-                  if (horas < 8) {
-                    const horasNegativas = 8 - horas
-                    horasCalculadas = `${horas}h ${minutos}min (-${horasNegativas}h)`
-                  } else {
-                    horasCalculadas = `${horas}h ${minutos}min`
+                  try {
+                    const entradaMin = horaParaMinutos(ponto.entrada)
+                    const saidaMin = horaParaMinutos(ponto.saida)
+                    
+                    if (entradaMin > 0 && saidaMin > entradaMin) {
+                      const totalMinutos = saidaMin - entradaMin
+                      const horas = Math.floor(totalMinutos / 60)
+                      const minutos = totalMinutos % 60
+                      horasCalculadas = `${horas}h ${minutos}min`
+                    } else {
+                      horasCalculadas = '0h 0min'
+                    }
+                  } catch (error) {
+                    console.error('Erro ao calcular horas sem almoço:', error)
+                    horasCalculadas = '0h 0min'
                   }
-                  setHorasTrabalhadas(horasCalculadas)
+                } else if (ponto.entrada) {
+                  // Se só tem entrada, calcular até agora
+                  try {
+                    const entradaMin = horaParaMinutos(ponto.entrada)
+                    const agora = new Date()
+                    const agoraMin = agora.getHours() * 60 + agora.getMinutes()
+                    
+                    if (entradaMin > 0 && agoraMin > entradaMin) {
+                      const totalMinutos = agoraMin - entradaMin
+                      const horas = Math.floor(totalMinutos / 60)
+                      const minutos = totalMinutos % 60
+                      horasCalculadas = `${horas}h ${minutos}min`
+                    } else {
+                      horasCalculadas = '0h 0min'
+                    }
+                  } catch (error) {
+                    console.error('Erro ao calcular horas em andamento:', error)
+                    horasCalculadas = '0h 0min'
+                  }
                 }
+                
+                // Garantir que sempre temos um valor válido
+                if (!horasCalculadas || horasCalculadas === 'NaNh NaNmin' || horasCalculadas.includes('NaN') || horasCalculadas === 'undefinedh undefinedmin') {
+                  horasCalculadas = '0h 0min'
+                }
+                
+                setHorasTrabalhadas(horasCalculadas)
                 
                 // Atualizar cache global
                 globalDataCache = {

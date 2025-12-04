@@ -49,7 +49,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   } = usePermissions()
 
   // Mostrar loading enquanto carrega dados do usuário
-  if (isLoading) {
+  // OU enquanto o role não está disponível mas há verificação de permissão necessária
+  // Isso evita mostrar "Acesso Negado" antes dos dados estarem prontos
+  const needsPermissionCheck = permission || permissions.length > 0 || minLevel !== undefined
+  const isRoleLoading = user && !userRole && needsPermissionCheck
+  
+  if (isLoading || isRoleLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

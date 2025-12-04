@@ -17,14 +17,18 @@ import {
   AlertCircle,
   CheckCircle2,
   Wifi,
-  WifiOff
+  WifiOff,
+  Users,
+  MapPin
 } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi } from "@/lib/api-livro-grua"
+import { fetchWithAuth } from "@/lib/api"
 import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diario"
 import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
 import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
+import { LivroGruaFuncionariosList } from "@/components/livro-grua-funcionarios-list"
 
 export default function PWAGruaDetalhesPage() {
   const { toast } = useToast()
@@ -37,6 +41,9 @@ export default function PWAGruaDetalhesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isOnline, setIsOnline] = useState(true)
+  const [obraCoordenadas, setObraCoordenadas] = useState<{lat: number, lng: number} | null>(null)
+  const [obraEndereco, setObraEndereco] = useState<string | null>(null)
+  const [isCarregandoCoordenadas, setIsCarregandoCoordenadas] = useState(false)
   
   // Estados dos modais
   const [isNovoChecklistOpen, setIsNovoChecklistOpen] = useState(false)
@@ -121,6 +128,118 @@ export default function PWAGruaDetalhesPage() {
       setLoading(false)
     }
   }
+
+  // Carregar coordenadas da obra ou localização da grua
+  useEffect(() => {
+    const carregarCoordenadas = async () => {
+      console.log('[Grua] useEffect carregarCoordenadas - grua:', grua)
+      if (!grua) {
+        setObraCoordenadas(null)
+        setObraEndereco(null)
+        return
+      }
+
+      // Prioridade 1: Se tem obra ativa com coordenadas
+      if (grua.obra_ativa) {
+        const obra = grua.obra_ativa
+        
+        // Se a obra já tem coordenadas, usar diretamente
+        if (obra.latitude && obra.longitude) {
+          setObraCoordenadas({
+            lat: parseFloat(obra.latitude),
+            lng: parseFloat(obra.longitude)
+          })
+          setObraEndereco(obra.endereco || obra.nome || null)
+          return
+        }
+
+        // Se não tem coordenadas mas tem endereço, fazer geocodificação
+        if (obra.endereco) {
+          setIsCarregandoCoordenadas(true)
+          try {
+            const enderecoCompleto = `${obra.endereco}, ${obra.cidade || ''}, ${obra.estado || ''}, Brasil`
+            
+            const response = await fetchWithAuth(
+              `http://localhost:3001/api/geocoding/endereco?q=${encodeURIComponent(enderecoCompleto)}`
+            )
+            
+            if (response.ok) {
+              const data = await response.json()
+              // A API retorna { success: true, data: { coordenadas: { lat, lng } } }
+              const coordenadas = data.data?.coordenadas || (data.lat && data.lng ? { lat: data.lat, lng: data.lng } : null)
+              
+              if (coordenadas && coordenadas.lat && coordenadas.lng) {
+                setObraCoordenadas({
+                  lat: parseFloat(coordenadas.lat),
+                  lng: parseFloat(coordenadas.lng)
+                })
+                setObraEndereco(enderecoCompleto)
+              }
+            }
+          } catch (error) {
+            console.error('Erro ao obter coordenadas da obra:', error)
+          } finally {
+            setIsCarregandoCoordenadas(false)
+          }
+          return
+        }
+      }
+
+      // Prioridade 2: Se não tem obra ativa, usar o campo localizacao da grua
+      if (grua.localizacao) {
+        console.log('[Grua] Tentando geocodificar localização:', grua.localizacao)
+        setIsCarregandoCoordenadas(true)
+        try {
+          // Tentar geocodificar a localização da grua
+          const localizacaoCompleta = `${grua.localizacao}, Brasil`
+          console.log('[Grua] Endereço completo:', localizacaoCompleta)
+          
+          const response = await fetchWithAuth(
+            `http://localhost:3001/api/geocoding/endereco?q=${encodeURIComponent(localizacaoCompleta)}`
+          )
+          
+          console.log('[Grua] Resposta status:', response.status, response.ok)
+          
+          if (response.ok) {
+            const data = await response.json()
+            console.log('[Grua] Dados da API:', data)
+            
+            // A API retorna { success: true, data: { coordenadas: { lat, lng } } }
+            const coordenadas = data.data?.coordenadas || (data.lat && data.lng ? { lat: data.lat, lng: data.lng } : null)
+            console.log('[Grua] Coordenadas extraídas:', coordenadas)
+            
+            if (coordenadas && coordenadas.lat && coordenadas.lng) {
+              const coords = {
+                lat: parseFloat(coordenadas.lat),
+                lng: parseFloat(coordenadas.lng)
+              }
+              console.log('[Grua] Definindo coordenadas:', coords)
+              setObraCoordenadas(coords)
+              setObraEndereco(grua.localizacao)
+            } else {
+              console.warn('[Grua] Coordenadas não encontradas na resposta')
+            }
+          } else {
+            const errorText = await response.text()
+            console.error('[Grua] Erro na resposta:', response.status, errorText)
+          }
+        } catch (error) {
+          console.error('Erro ao obter coordenadas da localização:', error)
+        } finally {
+          setIsCarregandoCoordenadas(false)
+        }
+        return
+      }
+      
+      console.log('[Grua] Nenhuma localização disponível')
+
+      // Se não tem nenhuma localização disponível
+      setObraCoordenadas(null)
+      setObraEndereco(null)
+    }
+
+    carregarCoordenadas()
+  }, [grua])
 
   // Carregar dados na inicialização
   useEffect(() => {
@@ -311,6 +430,30 @@ export default function PWAGruaDetalhesPage() {
                     {grua.status}
                   </Badge>
                 </div>
+                {grua.obra_ativa && (
+                  <>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-600 mb-1">Obra Atual</p>
+                      <p className="font-medium">{grua.obra_ativa.nome || 'N/A'}</p>
+                    </div>
+                    {grua.obra_ativa.endereco && (
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-600 mb-1">Endereço da Obra</p>
+                        <p className="font-medium text-xs">
+                          {grua.obra_ativa.endereco}
+                          {grua.obra_ativa.cidade && `, ${grua.obra_ativa.cidade}`}
+                          {grua.obra_ativa.estado && ` - ${grua.obra_ativa.estado}`}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+                {!grua.obra_ativa && grua.localizacao && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-600 mb-1">Localização</p>
+                    <p className="font-medium">{grua.localizacao}</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -326,9 +469,9 @@ export default function PWAGruaDetalhesPage() {
           </Alert>
         )}
 
-        {/* Tabs para Checklist e Manutenções */}
+        {/* Tabs para Checklist, Manutenções e Funcionários */}
         <Tabs defaultValue="checklist" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="checklist" className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" />
               Checklist
@@ -336,6 +479,10 @@ export default function PWAGruaDetalhesPage() {
             <TabsTrigger value="manutencoes" className="flex items-center gap-2">
               <Wrench className="w-4 h-4" />
               Manutenções
+            </TabsTrigger>
+            <TabsTrigger value="funcionarios" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Funcionários
             </TabsTrigger>
           </TabsList>
 
@@ -364,7 +511,63 @@ export default function PWAGruaDetalhesPage() {
               />
             )}
           </TabsContent>
+
+          {/* Aba: Funcionários */}
+          <TabsContent value="funcionarios" className="space-y-4">
+            {grua && (
+              <LivroGruaFuncionariosList
+                gruaId={grua.id || gruaId}
+              />
+            )}
+          </TabsContent>
         </Tabs>
+
+        {/* Mapa com Localização da Grua/Obra - No final da página */}
+        {grua && obraCoordenadas && (
+          <Card className="overflow-hidden">
+            <CardContent className="p-0">
+              <div className="relative w-full h-64 md:h-80">
+                <iframe
+                  width="100%"
+                  height="100%"
+                  style={{ border: 0 }}
+                  loading="lazy"
+                  allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
+                  src={`https://www.google.com/maps?q=${obraCoordenadas.lat},${obraCoordenadas.lng}&z=15&output=embed`}
+                  className="w-full h-full"
+                  title="Mapa da localização da grua"
+                />
+                {/* Overlay com informações */}
+                <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-gray-200 max-w-xs">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-900 mb-1">
+                        {grua.obra_ativa?.nome || 'Localização da Grua'}
+                      </p>
+                      <p className="text-xs text-gray-600 line-clamp-2">
+                        {obraEndereco || grua.obra_ativa?.endereco || grua.localizacao || `${obraCoordenadas.lat}, ${obraCoordenadas.lng}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Mensagem se estiver carregando coordenadas */}
+        {grua && (grua.obra_ativa || grua.localizacao) && isCarregandoCoordenadas && !obraCoordenadas && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                <span>Carregando localização...</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Modal: Novo Checklist */}
         <Dialog open={isNovoChecklistOpen} onOpenChange={setIsNovoChecklistOpen}>

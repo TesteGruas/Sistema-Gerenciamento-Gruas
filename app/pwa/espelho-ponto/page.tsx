@@ -337,7 +337,7 @@ export default function PWAEspelhoPontoPage() {
 
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar">
-      <div className="space-y-6">
+      <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
@@ -353,21 +353,6 @@ export default function PWAEspelhoPontoPage() {
           <p className="text-gray-600">Visualize e exporte seus registros</p>
         </div>
       </div>
-
-      {/* Informações do usuário */}
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <User className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="font-semibold text-gray-900">{user?.nome || 'Carregando...'}</p>
-              <p className="text-sm text-gray-600">{user?.cargo || user?.role || 'Funcionário'}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Período */}
       <Card>
