@@ -15,6 +15,8 @@ export interface AuthError {
 class AuthInterceptor {
   private isRedirecting = false
   private redirectTimeout: NodeJS.Timeout | null = null
+  private static redirectCount = 0
+  private static lastRedirectTime = 0
 
   /**
    * Verificar se é um erro de autenticação
@@ -57,21 +59,37 @@ class AuthInterceptor {
 
   /**
    * Redirecionar para login com limpeza de sessão
+   * Em caso de dúvida, sempre deslogar e redirecionar para login (não home para evitar loops)
    */
   private async redirectToLogin(reason: string = 'Sessão expirada'): Promise<void> {
     if (this.isRedirecting) {
       return
     }
 
+    // Detectar loop - se houve muitos redirecionamentos recentes, parar
+    const now = Date.now()
+    if (AuthInterceptor.lastRedirectTime > 0 && (now - AuthInterceptor.lastRedirectTime) < 5000) {
+      AuthInterceptor.redirectCount++
+    } else {
+      AuthInterceptor.redirectCount = 1
+    }
+    AuthInterceptor.lastRedirectTime = now
+
+    if (AuthInterceptor.redirectCount > 3) {
+      console.error('[AuthInterceptor] Loop detectado! Parando redirecionamentos')
+      this.isRedirecting = false
+      return
+    }
+
     this.isRedirecting = true
 
     try {
-      console.warn(`[AuthInterceptor] Redirecionando para login: ${reason}`)
+      console.warn(`[AuthInterceptor] Deslogando e redirecionando: ${reason} (tentativa ${AuthInterceptor.redirectCount})`)
       
       // Limpar sessão persistente
       await sessionPersistence.clearSession()
       
-      // Limpar localStorage
+      // Limpar localStorage completamente
       if (typeof window !== 'undefined') {
         localStorage.removeItem('access_token')
         localStorage.removeItem('user_data')
@@ -79,29 +97,41 @@ class AuthInterceptor {
         localStorage.removeItem('user_profile')
         localStorage.removeItem('user_perfil')
         localStorage.removeItem('user_permissoes')
-      }
-
-      // Redirecionar para login
-      if (typeof window !== 'undefined') {
-        // Detectar se é PWA e redirecionar corretamente
+        localStorage.removeItem('token')
+        localStorage.removeItem('remembered_email')
+        localStorage.removeItem('biometric_key')
+        localStorage.removeItem('session_data')
+        localStorage.removeItem('pwa_session')
+        localStorage.removeItem('redirect_count')
+        localStorage.removeItem('last_redirect_path')
+        localStorage.removeItem('loop_detected')
+        
+        // Limpar sessionStorage também
+        sessionStorage.clear()
+        
+        // Detectar se é PWA
         const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
                       (window.navigator as any).standalone === true ||
                       window.location.pathname.startsWith('/pwa')
+        
+        // Se já está em login, não redirecionar
+        if (window.location.pathname === '/pwa/login' || window.location.pathname === '/') {
+          this.isRedirecting = false
+          return
+        }
+        
+        // Redirecionar para login do PWA ou home
         const loginUrl = isPWA ? '/pwa/login' : '/'
-        // Usar replace para não permitir voltar
         window.location.replace(loginUrl)
       }
     } catch (error) {
-      console.error('[AuthInterceptor] Erro ao redirecionar para login:', error)
-      // Forçar redirecionamento mesmo com erro
-      if (typeof window !== 'undefined') {
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
-                      (window.navigator as any).standalone === true ||
-                      window.location.pathname.startsWith('/pwa')
-        window.location.href = isPWA ? '/pwa/login' : '/'
-      }
+      console.error('[AuthInterceptor] Erro ao redirecionar:', error)
+      // Não tentar redirecionar novamente em caso de erro
     } finally {
-      this.isRedirecting = false
+      // Resetar flag após um delay para permitir redirecionamento
+      setTimeout(() => {
+        this.isRedirecting = false
+      }, 2000)
     }
   }
 

@@ -8,11 +8,14 @@ interface PWAAuthGuardProps {
   children: React.ReactNode
 }
 
+// Flag global para evitar múltiplos redirecionamentos simultâneos
+let isRedirecting = false
+let redirectTimeout: NodeJS.Timeout | null = null
+
 export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isClient, setIsClient] = useState(false)
-  const [hasRedirected, setHasRedirected] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   
@@ -33,11 +36,43 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
     localStorage.removeItem('pwa_session')
     localStorage.removeItem('redirect_count')
     localStorage.removeItem('last_redirect_path')
+    localStorage.removeItem('redirect_timestamp')
+    localStorage.removeItem('loop_detected')
     
     // Limpar também sessionStorage
     sessionStorage.clear()
     
-    console.log('[PWAAuthGuard] Todos os dados de autenticação foram removidos devido a loop de redirecionamento')
+    console.log('[PWAAuthGuard] Todos os dados de autenticação foram removidos')
+  }
+  
+  // Função para detectar e parar loop
+  const detectarLoop = (): boolean => {
+    if (typeof window === 'undefined') return false
+    
+    const loopDetected = localStorage.getItem('loop_detected') === 'true'
+    if (loopDetected) {
+      console.warn('[PWAAuthGuard] Loop já detectado anteriormente, parando verificações')
+      return true
+    }
+    
+    const redirectCount = parseInt(localStorage.getItem('redirect_count') || '0', 10)
+    const lastRedirectTime = parseInt(localStorage.getItem('redirect_timestamp') || '0', 10)
+    const now = Date.now()
+    
+    // Se houve mais de 2 redirecionamentos nos últimos 10 segundos, é um loop
+    if (redirectCount > 2 && (now - lastRedirectTime) < 10000) {
+      console.error('[PWAAuthGuard] LOOP DETECTADO! Parando redirecionamentos')
+      localStorage.setItem('loop_detected', 'true')
+      limparDadosAutenticacao()
+      
+      // Mostrar mensagem e parar completamente
+      if (pathname !== '/pwa/login' && pathname !== '/') {
+        window.location.replace('/pwa/login')
+      }
+      return true
+    }
+    
+    return false
   }
   
   // Garantir que só renderiza no cliente para evitar erro de hidratação
@@ -52,18 +87,31 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
         return
       }
 
+      // Se já está redirecionando, não fazer nada
+      if (isRedirecting) {
+        return
+      }
+
+      // Verificar se loop foi detectado
+      if (detectarLoop()) {
+        setIsLoading(false)
+        setIsAuthenticated(false)
+        return
+      }
+
       // Permitir acesso sem autenticação para rotas públicas
-      const publicPaths = ['/pwa/login', '/pwa/redirect', '/pwa/test-api']
+      const publicPaths = ['/pwa/login', '/pwa/redirect', '/pwa/test-api', '/']
       const isPublicPath = publicPaths.some(path => pathname === path || pathname?.startsWith(path))
       
       if (isPublicPath) {
         setIsLoading(false)
         setIsAuthenticated(true)
-        setHasRedirected(false) // Resetar flag quando em rota pública
         
         // Resetar contador de redirecionamentos quando em rota pública
         localStorage.removeItem('redirect_count')
         localStorage.removeItem('last_redirect_path')
+        localStorage.removeItem('redirect_timestamp')
+        localStorage.removeItem('loop_detected')
         return
       }
 
@@ -71,39 +119,35 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       const token = localStorage.getItem('access_token')
       const userData = localStorage.getItem('user_data')
 
+      // Se não tem token ou userData, sempre deslogar e ir para login
       if (!token || !userData) {
         setIsLoading(false)
         setIsAuthenticated(false)
         
-        // Detectar loop de redirecionamento
-        const lastRedirectPath = localStorage.getItem('last_redirect_path')
-        const redirectCount = parseInt(localStorage.getItem('redirect_count') || '0', 10)
-        
-        // Se estamos tentando acessar /pwa e já redirecionamos para /pwa/login antes
-        if (pathname === '/pwa' && lastRedirectPath === '/pwa/login') {
-          const newCount = redirectCount + 1
-          localStorage.setItem('redirect_count', newCount.toString())
-          localStorage.setItem('last_redirect_path', pathname)
-          
-          console.warn(`[PWAAuthGuard] Loop detectado. Contador: ${newCount}`)
-          
-          // Se excedeu 2 redirecionamentos, limpar tudo e deslogar
-          if (newCount > 2) {
-            limparDadosAutenticacao()
-            // Redirecionar para login com replace para evitar histórico
-            window.location.replace('/pwa/login')
-            return
-          }
-        } else if (pathname !== '/pwa/login') {
-          // Primeira vez redirecionando para login
-          localStorage.setItem('redirect_count', '1')
-          localStorage.setItem('last_redirect_path', pathname)
+        // Se já estamos em login, não fazer nada
+        if (pathname === '/pwa/login') {
+          return
         }
         
-        // Evitar loop de redirecionamento
-        if (!hasRedirected && pathname !== '/pwa/login') {
-          setHasRedirected(true)
-          router.replace('/pwa/login') // Usar replace em vez de push
+        // Incrementar contador e registrar timestamp
+        const redirectCount = parseInt(localStorage.getItem('redirect_count') || '0', 10) + 1
+        localStorage.setItem('redirect_count', redirectCount.toString())
+        localStorage.setItem('redirect_timestamp', Date.now().toString())
+        
+        // Limpar dados e redirecionar apenas uma vez
+        if (!isRedirecting) {
+          isRedirecting = true
+          limparDadosAutenticacao()
+          
+          // Usar timeout para evitar múltiplos redirecionamentos
+          if (redirectTimeout) {
+            clearTimeout(redirectTimeout)
+          }
+          
+          redirectTimeout = setTimeout(() => {
+            window.location.replace('/pwa/login')
+            isRedirecting = false
+          }, 500)
         }
         return
       }
@@ -111,65 +155,109 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       // Se tem token e userData, resetar contador (login válido)
       localStorage.removeItem('redirect_count')
       localStorage.removeItem('last_redirect_path')
+      localStorage.removeItem('redirect_timestamp')
+      localStorage.removeItem('loop_detected')
 
-      // Verificar se o token não está expirado (opcional, pode causar problemas)
+      // Verificar se o token está expirado
       try {
         const tokenParts = token.split('.')
         if (tokenParts.length === 3) {
-          // Tentar decodificar o payload
           try {
             const payload = JSON.parse(atob(tokenParts[1]))
             if (payload.exp) {
               const isExpired = payload.exp * 1000 < Date.now()
               
+              // Se token expirado, sempre deslogar e ir para login
               if (isExpired) {
-                localStorage.removeItem('access_token')
-                localStorage.removeItem('user_data')
-                localStorage.removeItem('refresh_token')
+                console.warn('[PWAAuthGuard] Token expirado, deslogando')
                 setIsLoading(false)
                 setIsAuthenticated(false)
                 
-                // Detectar loop de redirecionamento
-                const lastRedirectPath = localStorage.getItem('last_redirect_path')
-                const redirectCount = parseInt(localStorage.getItem('redirect_count') || '0', 10)
-                
-                if (pathname === '/pwa' && lastRedirectPath === '/pwa/login') {
-                  const newCount = redirectCount + 1
-                  localStorage.setItem('redirect_count', newCount.toString())
-                  localStorage.setItem('last_redirect_path', pathname)
-                  
-                  console.warn(`[PWAAuthGuard] Loop detectado (token expirado). Contador: ${newCount}`)
-                  
-                  if (newCount > 2) {
-                    limparDadosAutenticacao()
-                    window.location.replace('/pwa/login')
-                    return
-                  }
-                } else if (pathname !== '/pwa/login') {
-                  localStorage.setItem('redirect_count', '1')
-                  localStorage.setItem('last_redirect_path', pathname)
+                // Se já estamos em login, não fazer nada
+                if (pathname === '/pwa/login') {
+                  return
                 }
                 
-                // Evitar loop de redirecionamento
-                if (!hasRedirected && pathname !== '/pwa/login') {
-                  setHasRedirected(true)
-                  router.replace('/pwa/login') // Usar replace em vez de push
+                // Incrementar contador
+                const redirectCount = parseInt(localStorage.getItem('redirect_count') || '0', 10) + 1
+                localStorage.setItem('redirect_count', redirectCount.toString())
+                localStorage.setItem('redirect_timestamp', Date.now().toString())
+                
+                // Limpar e redirecionar apenas uma vez
+                if (!isRedirecting) {
+                  isRedirecting = true
+                  limparDadosAutenticacao()
+                  
+                  if (redirectTimeout) {
+                    clearTimeout(redirectTimeout)
+                  }
+                  
+                  redirectTimeout = setTimeout(() => {
+                    window.location.replace('/pwa/login')
+                    isRedirecting = false
+                  }, 500)
                 }
                 return
               }
             }
           } catch (decodeError) {
-            // Token existe, permitir acesso mesmo com erro de decodificação
+            // Se não conseguir decodificar o token, em caso de dúvida, deslogar
+            console.warn('[PWAAuthGuard] Erro ao decodificar token, deslogando por segurança')
+            setIsLoading(false)
+            setIsAuthenticated(false)
+            
+            if (pathname === '/pwa/login') {
+              return
+            }
+            
+            if (!isRedirecting) {
+              isRedirecting = true
+              limparDadosAutenticacao()
+              
+              if (redirectTimeout) {
+                clearTimeout(redirectTimeout)
+              }
+              
+              redirectTimeout = setTimeout(() => {
+                window.location.replace('/pwa/login')
+                isRedirecting = false
+              }, 500)
+            }
+            return
           }
         }
       } catch (error) {
-        // Token existe, permitir acesso mesmo com erro
+        // Em caso de erro, deslogar por segurança
+        console.warn('[PWAAuthGuard] Erro ao verificar token, deslogando por segurança')
+        setIsLoading(false)
+        setIsAuthenticated(false)
+        
+        if (pathname === '/pwa/login') {
+          return
+        }
+        
+        if (!isRedirecting) {
+          isRedirecting = true
+          limparDadosAutenticacao()
+          
+          if (redirectTimeout) {
+            clearTimeout(redirectTimeout)
+          }
+          
+          redirectTimeout = setTimeout(() => {
+            window.location.replace('/pwa/login')
+            isRedirecting = false
+          }, 500)
+        }
+        return
       }
 
       // Token existe e é válido, permitir acesso
       // Resetar contador de redirecionamentos quando autenticado com sucesso
       localStorage.removeItem('redirect_count')
       localStorage.removeItem('last_redirect_path')
+      localStorage.removeItem('redirect_timestamp')
+      localStorage.removeItem('loop_detected')
       setIsAuthenticated(true)
       setIsLoading(false)
     }
@@ -179,14 +267,21 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       checkAuth()
     }, 100)
 
-    // Verificar autenticação a cada 5 minutos
-    const interval = setInterval(checkAuth, 5 * 60 * 1000)
+    // Verificar autenticação a cada 5 minutos (mas não se loop foi detectado)
+    const interval = setInterval(() => {
+      if (!localStorage.getItem('loop_detected')) {
+        checkAuth()
+      }
+    }, 5 * 60 * 1000)
 
     return () => {
       clearTimeout(timer)
       clearInterval(interval)
+      if (redirectTimeout) {
+        clearTimeout(redirectTimeout)
+      }
     }
-  }, [pathname, router, hasRedirected])
+  }, [pathname, router])
 
   // Não renderizar nada no servidor para evitar erro de hidratação
   if (!isClient) {

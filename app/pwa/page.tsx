@@ -1062,56 +1062,26 @@ export default function PWAMainPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-orange-600" />
               Confirmar Registro de Ponto
             </DialogTitle>
-            <DialogDescription>
-              Você está prestes a registrar o ponto. Por favor, leia atentamente:
-            </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-orange-900">
-                    ⚠️ Atenção: Não clique mais de uma vez!
-                  </p>
-                  <p className="text-sm text-orange-800">
-                    Clicar múltiplas vezes em seguida pode completar uma entrada ou saída incorreta.
-                    Aguarde a confirmação antes de tentar novamente.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-blue-900 mb-1">
-                Tipo de registro:
-              </p>
-              <p className="text-sm text-blue-800">
-                {getProximoRegistro()?.label || 'Registro de ponto'}
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button
-                onClick={() => {
-                  setShowConfirmacaoDialog(false)
-                }}
-                variant="outline"
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={confirmarRegistroPonto}
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
-              >
-                Confirmar Registro
-              </Button>
-            </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              onClick={() => {
+                setShowConfirmacaoDialog(false)
+              }}
+              variant="outline"
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarRegistroPonto}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+            >
+              Confirmar Registro
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

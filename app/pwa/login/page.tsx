@@ -75,7 +75,13 @@ function PWALoginPageContent(): JSX.Element {
     if (!isClient) return // Não executar no servidor
     
     if (isAuthenticated) {
-      router.push('/pwa')
+      // Resetar contador de redirecionamentos ao detectar autenticação válida
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('redirect_count')
+        localStorage.removeItem('last_redirect_path')
+      }
+      // Usar replace para evitar histórico de navegação
+      router.replace('/pwa')
     } else if (!sessionLoading) {
       setIsCheckingAuth(false)
     }
