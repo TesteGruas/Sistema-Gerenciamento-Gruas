@@ -78,6 +78,7 @@ import { ValorMonetarioOculto, ValorFormatadoOculto } from "@/components/valor-o
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { getOrcamentos } from "@/lib/api-orcamentos"
 import FuncionarioSearch from "@/components/funcionario-search"
+import { sinaleirosApi, type SinaleiroBackend, type DocumentoSinaleiroBackend } from "@/lib/api-sinaleiros"
 
 function ObraDetailsPageContent() {
 
@@ -112,6 +113,12 @@ function ObraDetailsPageContent() {
   const [orcamentosObra, setOrcamentosObra] = useState<any[]>([])
   const [loadingMedicoes, setLoadingMedicoes] = useState(false)
   const [errorMedicoes, setErrorMedicoes] = useState<string | null>(null)
+  
+  // Estados para sinaleiros
+  const [sinaleiros, setSinaleiros] = useState<SinaleiroBackend[]>([])
+  const [loadingSinaleiros, setLoadingSinaleiros] = useState(false)
+  const [errorSinaleiros, setErrorSinaleiros] = useState<string | null>(null)
+  const [documentosSinaleiros, setDocumentosSinaleiros] = useState<Record<string, DocumentoSinaleiroBackend[]>>({})
   
   // Estados para edição inline
   const [isEditing, setIsEditing] = useState(false)
@@ -323,6 +330,40 @@ function ObraDetailsPageContent() {
     }
   }
   
+  // Função para carregar sinaleiros da obra
+  const carregarSinaleiros = async () => {
+    if (!obraId) return
+    
+    setLoadingSinaleiros(true)
+    setErrorSinaleiros(null)
+    try {
+      const response = await sinaleirosApi.listarPorObra(parseInt(obraId))
+      
+      if (response.success && response.data) {
+        setSinaleiros(response.data)
+        
+        // Carregar documentos de cada sinaleiro
+        const documentosMap: Record<string, DocumentoSinaleiroBackend[]> = {}
+        for (const sinaleiro of response.data) {
+          try {
+            const docsResponse = await sinaleirosApi.listarDocumentos(sinaleiro.id)
+            if (docsResponse.success && docsResponse.data) {
+              documentosMap[sinaleiro.id] = docsResponse.data
+            }
+          } catch (error) {
+            console.error(`Erro ao carregar documentos do sinaleiro ${sinaleiro.id}:`, error)
+          }
+        }
+        setDocumentosSinaleiros(documentosMap)
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar sinaleiros:', error)
+      setErrorSinaleiros(error.message || 'Erro ao carregar sinaleiros')
+    } finally {
+      setLoadingSinaleiros(false)
+    }
+  }
+
   // Função para carregar medições mensais da obra
   const carregarMedicoesMensais = async () => {
     if (!obraId) return
@@ -2468,6 +2509,13 @@ function ObraDetailsPageContent() {
     }
   }, [activeTab, obra])
 
+  // Carregar sinaleiros quando a aba for ativada
+  useEffect(() => {
+    if (activeTab === 'sinaleiros' && obra && !loadingSinaleiros && sinaleiros.length === 0) {
+      carregarSinaleiros()
+    }
+  }, [activeTab, obra])
+
   // Filtro de custos agora é feito via useMemo com custosFiltrados
 
   const getStatusColor = (status: string) => {
@@ -2820,10 +2868,11 @@ function ObraDetailsPageContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-9">
+      <TabsList className="grid w-full grid-cols-10">
         <TabsTrigger value="geral">Geral</TabsTrigger>
         <TabsTrigger value="gruas">Gruas</TabsTrigger>
         <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
+        <TabsTrigger value="sinaleiros">Sinaleiros</TabsTrigger>
         <TabsTrigger value="custos">Custos</TabsTrigger>
         <TabsTrigger value="medicoes-mensais">
           Medições Mensais
@@ -3594,6 +3643,100 @@ function ObraDetailsPageContent() {
                       </Button>
                     </div>
                   )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="sinaleiros" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-purple-600" />
+                Sinaleiros da Obra
+              </CardTitle>
+              <CardDescription>
+                Sinaleiros cadastrados para esta obra
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingSinaleiros ? (
+                <CardLoader text="Carregando sinaleiros..." />
+              ) : errorSinaleiros ? (
+                <div className="text-red-600 text-sm">{errorSinaleiros}</div>
+              ) : sinaleiros.length === 0 ? (
+                <div className="text-gray-500 text-sm text-center py-8">
+                  Nenhum sinaleiro cadastrado para esta obra
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sinaleiros.map((sinaleiro) => {
+                    const documentos = documentosSinaleiros[sinaleiro.id] || []
+                    return (
+                      <Card key={sinaleiro.id} className="border-l-4 border-l-purple-500">
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <CardTitle className="text-base">{sinaleiro.nome}</CardTitle>
+                              <CardDescription>
+                                {sinaleiro.tipo === 'principal' ? 'Sinaleiro Principal' : 'Sinaleiro Reserva'}
+                              </CardDescription>
+                            </div>
+                            <Badge variant={sinaleiro.tipo === 'principal' ? 'default' : 'secondary'}>
+                              {sinaleiro.tipo === 'principal' ? 'Principal' : 'Reserva'}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label className="text-xs text-gray-500">RG/CPF</Label>
+                              <p className="text-sm font-medium">{sinaleiro.rg_cpf}</p>
+                            </div>
+                            {sinaleiro.telefone && (
+                              <div>
+                                <Label className="text-xs text-gray-500">Telefone</Label>
+                                <p className="text-sm font-medium">{sinaleiro.telefone}</p>
+                              </div>
+                            )}
+                            {sinaleiro.email && (
+                              <div>
+                                <Label className="text-xs text-gray-500">Email</Label>
+                                <p className="text-sm font-medium">{sinaleiro.email}</p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {documentos.length > 0 && (
+                            <div className="mt-4 pt-4 border-t">
+                              <Label className="text-xs text-gray-500 mb-2 block">Documentos</Label>
+                              <div className="space-y-2">
+                                {documentos.map((doc) => (
+                                  <div key={doc.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <div className="flex items-center gap-2">
+                                      <FileText className="w-4 h-4 text-gray-500" />
+                                      <span className="text-sm">{doc.tipo}</span>
+                                    </div>
+                                    <Badge 
+                                      variant={
+                                        doc.status === 'aprovado' ? 'default' :
+                                        doc.status === 'rejeitado' ? 'destructive' :
+                                        doc.status === 'vencido' ? 'destructive' :
+                                        'secondary'
+                                      }
+                                    >
+                                      {doc.status}
+                                    </Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>

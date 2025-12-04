@@ -2122,23 +2122,53 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
     const { id } = req.params
     const { sinaleiros } = req.body
 
+    // Validar ID da obra
+    const obraId = parseInt(id)
+    if (isNaN(obraId) || obraId <= 0) {
+      return res.status(400).json({ 
+        error: 'ID de obra inválido',
+        message: 'O ID da obra deve ser um número inteiro positivo'
+      })
+    }
+
+    // Verificar se a obra existe
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id')
+      .eq('id', obraId)
+      .single()
+
+    if (obraError || !obra) {
+      return res.status(404).json({ 
+        error: 'Obra não encontrada',
+        message: 'A obra especificada não existe no banco de dados'
+      })
+    }
+
     const schema = Joi.object({
       sinaleiros: Joi.array().items(
         Joi.object({
           id: Joi.string().uuid().allow(null, '').optional(),
-          nome: Joi.string().min(2).required(),
-          rg_cpf: Joi.string().required(),
-          telefone: Joi.string().allow(null, '').optional(),
-          email: Joi.string().email().allow(null, '').optional(),
+          nome: Joi.string().min(2).max(255).trim().required(),
+          rg_cpf: Joi.string().min(11).max(20).trim().required(),
+          telefone: Joi.string().pattern(/^[\d\s\(\)\-\+]+$/).allow(null, '').optional(),
+          email: Joi.string().email().max(255).trim().allow(null, '').optional(),
           tipo: Joi.string().valid('principal', 'reserva').required()
         })
       ).min(1).max(2).required()
     })
 
-    const { error: validationError } = schema.validate({ sinaleiros })
+    const { error: validationError, value: validatedData } = schema.validate({ sinaleiros })
     if (validationError) {
-      return res.status(400).json({ error: validationError.details[0].message })
+      return res.status(400).json({ 
+        error: 'Dados inválidos',
+        message: validationError.details[0].message,
+        details: validationError.details
+      })
     }
+
+    // Usar dados validados e sanitizados
+    const sinaleirosValidados = validatedData.sinaleiros
 
     // Verificar se já existem sinaleiros para esta obra
     const { data: existing } = await supabaseAdmin
@@ -2149,7 +2179,7 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
     const existingMap = new Map(existing?.map(s => [s.tipo, s.id]) || [])
 
     const results = []
-    for (const sinaleiro of sinaleiros) {
+    for (const sinaleiro of sinaleirosValidados) {
       const { id: sinaleiroId, ...data } = sinaleiro
 
       if (sinaleiroId && existingMap.has(sinaleiro.tipo)) {
@@ -2249,19 +2279,26 @@ router.post('/sinaleiros/:id/documentos', authenticateToken, requirePermission('
     }
 
     const schema = Joi.object({
-      tipo: Joi.string().required(),
-      arquivo: Joi.string().required(),
+      tipo: Joi.string().min(1).max(100).trim().required(),
+      arquivo: Joi.string().uri().max(500).required(),
       data_validade: Joi.date().allow(null).optional()
     })
 
-    const { error: validationError } = schema.validate({ tipo, arquivo, data_validade })
+    const { error: validationError, value: validatedData } = schema.validate({ tipo, arquivo, data_validade })
     if (validationError) {
-      return res.status(400).json({ error: validationError.details[0].message })
+      return res.status(400).json({ 
+        error: 'Dados inválidos',
+        message: validationError.details[0].message,
+        details: validationError.details
+      })
     }
+
+    // Usar dados validados
+    const { tipo: tipoValidado, arquivo: arquivoValidado, data_validade: dataValidadeValidada } = validatedData
 
     const { data, error } = await supabaseAdmin
       .from('documentos_sinaleiro')
-      .insert({ sinaleiro_id: id, tipo, arquivo, data_validade })
+      .insert({ sinaleiro_id: id, tipo: tipoValidado, arquivo: arquivoValidado, data_validade: dataValidadeValidada })
       .select()
       .single()
 
@@ -2308,18 +2345,31 @@ router.put('/documentos-sinaleiro/:id/aprovar', authenticateToken, requirePermis
     const userId = req.user.id
 
     const schema = Joi.object({
-      status: Joi.string().valid('aprovado', 'rejeitado').required()
+      status: Joi.string().valid('aprovado', 'rejeitado').required(),
+      comentarios: Joi.string().max(1000).trim().allow(null, '').optional()
     })
 
-    const { error: validationError } = schema.validate({ status })
+    const { error: validationError, value: validatedData } = schema.validate({ status, comentarios })
     if (validationError) {
-      return res.status(400).json({ error: validationError.details[0].message })
+      return res.status(400).json({ 
+        error: 'Dados inválidos',
+        message: validationError.details[0].message,
+        details: validationError.details
+      })
     }
 
+    // Usar dados validados
+    const { status: statusValidado, comentarios: comentariosValidados } = validatedData
+
     const updateData = {
-      status,
+      status: statusValidado,
       aprovado_por: userId,
       aprovado_em: new Date().toISOString()
+    }
+
+    // Adicionar comentários se fornecidos
+    if (comentariosValidados) {
+      updateData.observacoes = comentariosValidados
     }
 
     const { data, error } = await supabaseAdmin

@@ -139,52 +139,77 @@ initRedis().catch(err => {
 
 // Configurar origens permitidas
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
-const allowedOrigins = [
+const isProduction = process.env.NODE_ENV === 'production'
+
+// Origens permitidas em desenvolvimento
+const devOrigins = [
   FRONTEND_URL,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3001',
-  // Origens de produção
-  'http://72.60.60.118:3000',
-  'http://72.60.60.118:3001',
-  // Adicionar outras origens permitidas se necessário (produção, staging, etc.)
-  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : [])
-].filter(Boolean)
+]
+
+// Origens permitidas em produção (apenas via variável de ambiente)
+const prodOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : []
+
+// Origens finais baseadas no ambiente
+const allowedOrigins = isProduction 
+  ? prodOrigins.length > 0 
+    ? prodOrigins 
+    : [FRONTEND_URL] // Fallback para FRONTEND_URL se ALLOWED_ORIGINS não estiver definido
+  : [...devOrigins, ...prodOrigins].filter(Boolean)
 
 // CORS restrito com validação de origem
 app.use((req, res, next) => {
   const origin = req.headers.origin
   const method = req.method
-  const url = req.url
   
-  // Verificar se a origem é permitida
-  if (origin && allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin)
-    res.header('Access-Control-Allow-Credentials', 'true')
-  } else if (!origin) {
-    // Permitir requisições sem origin (ex: Postman, curl, etc.) apenas em desenvolvimento
-    if (process.env.NODE_ENV === 'development') {
-      res.header('Access-Control-Allow-Origin', '*')
-    }
-  } else {
-    // Bloquear origem não permitida
-    console.warn(`🚫 CORS bloqueado: Origin ${origin} não está na lista de origens permitidas`)
-    console.warn(`📋 Origens permitidas: ${allowedOrigins.join(', ')}`)
-    
-    // Em desenvolvimento, permitir qualquer origem para facilitar testes
-    if (process.env.NODE_ENV === 'development') {
-      res.header('Access-Control-Allow-Origin', origin)
-      res.header('Access-Control-Allow-Credentials', 'true')
-      console.warn(`⚠️  Modo desenvolvimento: Permitindo origem ${origin} mesmo não estando na lista`)
+  // Em produção, SEMPRE validar origem
+  if (isProduction) {
+    if (origin) {
+      if (allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin)
+        res.header('Access-Control-Allow-Credentials', 'true')
+      } else {
+        // Bloquear origem não permitida em produção
+        console.warn(`🚫 CORS bloqueado em produção: Origin ${origin} não está na lista de origens permitidas`)
+        console.warn(`📋 Origens permitidas: ${allowedOrigins.join(', ')}`)
+        
+        if (method === 'OPTIONS') {
+          return res.status(403).json({ 
+            error: 'Origin not allowed',
+            message: 'A origem da requisição não está na lista de origens permitidas'
+          })
+        }
+        // Para requisições não-OPTIONS, continuar mas sem header CORS
+      }
     } else {
-      // Em produção, bloquear origem não permitida
+      // Requisições sem origin em produção são bloqueadas (exceto se for requisição direta do servidor)
       if (method === 'OPTIONS') {
         return res.status(403).json({ 
-          error: 'Origin not allowed',
-          allowedOrigins: allowedOrigins 
+          error: 'Origin required',
+          message: 'Requisições devem incluir header Origin em produção'
         })
       }
+    }
+  } else {
+    // Em desenvolvimento, ser mais permissivo mas ainda validar quando possível
+    if (origin) {
+      if (allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin)
+        res.header('Access-Control-Allow-Credentials', 'true')
+      } else {
+        // Em desenvolvimento, permitir mas avisar
+        console.warn(`⚠️  CORS: Origin ${origin} não está na lista, mas permitindo em desenvolvimento`)
+        res.header('Access-Control-Allow-Origin', origin)
+        res.header('Access-Control-Allow-Credentials', 'true')
+      }
+    } else {
+      // Requisições sem origin em desenvolvimento são permitidas (Postman, curl, etc.)
+      res.header('Access-Control-Allow-Origin', '*')
     }
   }
   

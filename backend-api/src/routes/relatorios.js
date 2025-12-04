@@ -1819,29 +1819,37 @@ router.get('/performance-gruas', async (req, res) => {
       })
     }
 
-    // Calcular performance para cada grua
+    // Otimização: Buscar dados de todas as gruas de uma vez quando possível
+    const gruaIds = (gruas || []).map(g => g.id)
+    
+    // Filtrar por obra se especificado (otimização: fazer uma query única)
+    let gruasFiltradas = gruas || []
+    if (obra_id && gruaIds.length > 0) {
+      const { data: locacoesObra } = await supabaseAdmin
+        .from('grua_obra')
+        .select('grua_id')
+        .in('grua_id', gruaIds)
+        .eq('obra_id', obra_id)
+        .in('status', ['Ativa', 'Concluída'])
+
+      const gruasComObra = new Set((locacoesObra || []).map(l => l.grua_id))
+      gruasFiltradas = gruas.filter(g => gruasComObra.has(g.id))
+    }
+
+    // Calcular performance para cada grua (paralelizado com Promise.all)
     const relatorio = await Promise.all(
-      (gruas || []).map(async (grua) => {
-        // Filtrar por obra se especificado
-        if (obra_id) {
-          const { data: locacoesObra } = await supabaseAdmin
-            .from('grua_obra')
-            .select('id')
-            .eq('grua_id', grua.id)
-            .eq('obra_id', obra_id)
-            .limit(1)
+      gruasFiltradas.map(async (grua) => {
+        // Executar cálculos em paralelo para cada grua
+        const [horasTrabalhadas, receitaTotal, custoTotal, obrasVisitadas] = await Promise.all([
+          calcularHorasTrabalhadas(grua.id, data_inicio, data_fim),
+          calcularReceitas(grua.id, data_inicio, data_fim),
+          calcularCustos(grua.id, data_inicio, data_fim),
+          buscarObrasVisitadas(grua.id, data_inicio, data_fim)
+        ])
 
-          if (!locacoesObra || locacoesObra.length === 0) {
-            return null
-          }
-        }
-
-        const horasTrabalhadas = await calcularHorasTrabalhadas(grua.id, data_inicio, data_fim)
-        const receitaTotal = await calcularReceitas(grua.id, data_inicio, data_fim)
-        const custoTotal = await calcularCustos(grua.id, data_inicio, data_fim)
+        // Calcular ROI e métricas com valores obtidos
+        const roiFinal = await calcularROI(grua.id, receitaTotal, custoTotal)
         const metricas = calcularMetricas(horasTrabalhadas, horasDisponiveis, receitaTotal, custoTotal)
-        const roi = await calcularROI(grua.id, receitaTotal, custoTotal)
-        const obrasVisitadas = await buscarObrasVisitadas(grua.id, data_inicio, data_fim)
 
         return {
           grua: {
@@ -1872,11 +1880,11 @@ router.get('/performance-gruas', async (req, res) => {
             lucro_por_hora: metricas.lucro_por_hora
           },
           roi: {
-            investimento_inicial: roi.investimento_inicial,
+            investimento_inicial: roiFinal.investimento_inicial,
             receita_acumulada: receitaTotal,
             custo_acumulado: custoTotal,
-            roi_percentual: roi.roi_percentual,
-            tempo_retorno_meses: roi.tempo_retorno_meses
+            roi_percentual: roiFinal.roi_percentual,
+            tempo_retorno_meses: roiFinal.tempo_retorno_meses
           },
           obras: {
             total_obras: obrasVisitadas.length,
