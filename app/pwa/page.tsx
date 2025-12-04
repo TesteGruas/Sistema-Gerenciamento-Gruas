@@ -36,7 +36,8 @@ import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
-import { obterLocalizacaoAtual, calcularDistancia } from "@/lib/geolocation-validator"
+import { obterLocalizacaoAtual } from "@/lib/geolocation-validator"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
@@ -46,9 +47,7 @@ export default function PWAMainPage() {
   const [location, setLocation] = useState<{lat: number, lng: number, address?: string} | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
-  const [cepCoordenadas, setCepCoordenadas] = useState<{lat: number, lng: number} | null>(null)
-  const [distanciaCep, setDistanciaCep] = useState<number | null>(null)
-  const [isValidandoCep, setIsValidandoCep] = useState(false)
+  const [showConfirmacaoDialog, setShowConfirmacaoDialog] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -220,174 +219,6 @@ export default function PWAMainPage() {
   }, [isClient])
 
   // Função para converter CEP em coordenadas usando o backend
-  const obterCoordenadasPorCep = async (cep: string): Promise<{lat: number, lng: number} | null> => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-      
-      const response = await fetch(`${apiUrl}/api/geocoding/cep/${cep}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao buscar coordenadas do CEP')
-      }
-      
-      const data = await response.json()
-      
-      if (!data.success || !data.data?.coordenadas) {
-        throw new Error('Coordenadas não encontradas para este CEP')
-      }
-      
-      return data.data.coordenadas
-    } catch (error: any) {
-      console.error('Erro ao obter coordenadas do CEP:', error)
-      throw error
-    }
-  }
-
-  // Validar distância com CEP quando a localização for obtida
-  useEffect(() => {
-    if (!location || !isClient) return
-
-    let isMounted = true
-    let abortController: AbortController | null = null
-
-    const validarDistanciaCep = async () => {
-      if (!isMounted) return
-      
-      const cepAlvo = '54430350' // CEP fixo conforme solicitado
-      setIsValidandoCep(true)
-      setDistanciaCep(null) // Resetar distância anterior
-      
-      try {
-        abortController = new AbortController()
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-        
-        // Primeiro, obter endereço do CEP via ViaCEP
-        const cepLimpo = cepAlvo.replace(/\D/g, '')
-        const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`, {
-          signal: abortController.signal
-        })
-        
-        if (!isMounted) return
-        
-        if (!viaCepResponse.ok) {
-          throw new Error('CEP não encontrado')
-        }
-        
-        const viaCepData = await viaCepResponse.json()
-        
-        if (!isMounted) return
-        
-        if (viaCepData.erro) {
-          throw new Error('CEP inválido')
-        }
-        
-        // Usar o endereço completo com o número 430 (conforme informado pelo usuário)
-        // Av. Aníbal Ribeiro Varejão, 430 - Candeias, Jaboatão dos Guararapes - PE, 54430-350
-        const enderecoCompleto = `Av. Aníbal Ribeiro Varejão, 430, ${viaCepData.bairro || 'Candeias'}, ${viaCepData.localidade || 'Jaboatão dos Guararapes'}, ${viaCepData.uf || 'PE'}, Brasil`
-        
-        // Obter coordenadas do endereço completo via backend
-        let coordenadasCep = null
-        
-        try {
-          const geocodeResponse = await fetch(
-            `${apiUrl}/api/geocoding/endereco?q=${encodeURIComponent(enderecoCompleto)}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              },
-              signal: abortController.signal
-            }
-          )
-          
-          if (!isMounted) return
-          
-          if (geocodeResponse.ok) {
-            const geocodeData = await geocodeResponse.json()
-            if (geocodeData.success && geocodeData.data?.coordenadas) {
-              coordenadasCep = geocodeData.data.coordenadas
-            }
-          }
-        } catch (error: any) {
-          if (error.name !== 'AbortError' && isMounted) {
-            console.warn('Erro ao buscar coordenadas do endereço completo:', error)
-          }
-        }
-        
-        // Se não conseguiu pelo endereço completo, tentar pelo CEP
-        if (!coordenadasCep && isMounted) {
-          try {
-            const cepResponse = await fetch(`${apiUrl}/api/geocoding/cep/${cepAlvo}`, {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              },
-              signal: abortController.signal
-            })
-            
-            if (!isMounted) return
-            
-            if (cepResponse.ok) {
-              const cepData = await cepResponse.json()
-              if (cepData.success && cepData.data?.coordenadas) {
-                coordenadasCep = cepData.data.coordenadas
-              }
-            }
-          } catch (error: any) {
-            if (error.name !== 'AbortError' && isMounted) {
-              console.warn('Erro ao buscar coordenadas do CEP:', error)
-            }
-          }
-        }
-        
-        if (!isMounted) return
-        
-        if (!coordenadasCep) {
-          throw new Error('Não foi possível obter coordenadas do endereço')
-        }
-        
-        setCepCoordenadas(coordenadasCep)
-        
-        // Calcular distância entre a localização atual e as coordenadas do endereço
-        const distancia = calcularDistancia(
-          { lat: location.lat, lng: location.lng },
-          coordenadasCep
-        )
-        
-        if (isMounted) {
-          setDistanciaCep(distancia)
-        }
-      } catch (error: any) {
-        if (isMounted && error.name !== 'AbortError') {
-          console.error('Erro ao validar CEP:', error)
-          // Não definir erro aqui, apenas logar - o card mostrará que não foi possível validar
-          setDistanciaCep(null)
-        }
-      } finally {
-        if (isMounted) {
-          setIsValidandoCep(false)
-        }
-      }
-    }
-
-    validarDistanciaCep()
-
-    return () => {
-      isMounted = false
-      if (abortController) {
-        abortController.abort()
-      }
-    }
-  }, [location, isClient])
-
   // Sistema de notificações de ponto
   useEffect(() => {
     if (!currentTime || !pwaUserData.user) return
@@ -662,6 +493,18 @@ export default function PWAMainPage() {
       return
     }
 
+    // Mostrar modal de confirmação primeiro
+    setShowConfirmacaoDialog(true)
+  }
+
+  const confirmarRegistroPonto = async () => {
+    setShowConfirmacaoDialog(false)
+    const proximoRegistro = getProximoRegistro()
+    
+    if (!proximoRegistro) {
+      return
+    }
+
     setIsRegistrandoPonto(true)
     
     try {
@@ -890,7 +733,21 @@ export default function PWAMainPage() {
           <div className="flex items-start justify-between mb-6">
             <div>
               <p className="text-sm font-medium text-red-100 mb-1">Bem-vindo(a),</p>
-              <h2 className="text-2xl font-bold">{pwaUserData.user?.nome?.split(' ')[0] || 'Usuário'}!</h2>
+              <h2 className="text-2xl font-bold">
+                {(() => {
+                  // Buscar nome em diferentes locais possíveis
+                  const user = pwaUserData.user
+                  const nome = user?.nome || 
+                              user?.name || 
+                              user?.user_metadata?.nome || 
+                              user?.user_metadata?.name ||
+                              user?.profile?.nome ||
+                              user?.profile?.name ||
+                              'Usuário'
+                  // Pegar apenas o primeiro nome
+                  return nome.split(' ')[0]
+                })()}!
+              </h2>
             </div>
             <div className="flex items-center gap-2">
               {getProximoRegistro() && (
@@ -1167,13 +1024,6 @@ export default function PWAMainPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-gray-900 mb-1">Sua Localização</p>
                     <p className="text-xs text-gray-600 line-clamp-2">{location.address || `${location.lat}, ${location.lng}`}</p>
-                    {distanciaCep !== null && (
-                      <p className={`text-xs font-medium mt-1 ${
-                        distanciaCep <= 4000 ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {distanciaCep <= 4000 ? '✓' : '✗'} {Math.round(distanciaCep)}m do endereço
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1206,6 +1056,65 @@ export default function PWAMainPage() {
           </div>
         </div>
       )}
+
+      {/* Diálogo de Confirmação de Registro */}
+      <Dialog open={showConfirmacaoDialog} onOpenChange={setShowConfirmacaoDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-orange-600" />
+              Confirmar Registro de Ponto
+            </DialogTitle>
+            <DialogDescription>
+              Você está prestes a registrar o ponto. Por favor, leia atentamente:
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-orange-900">
+                    ⚠️ Atenção: Não clique mais de uma vez!
+                  </p>
+                  <p className="text-sm text-orange-800">
+                    Clicar múltiplas vezes em seguida pode completar uma entrada ou saída incorreta.
+                    Aguarde a confirmação antes de tentar novamente.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-blue-900 mb-1">
+                Tipo de registro:
+              </p>
+              <p className="text-sm text-blue-800">
+                {getProximoRegistro()?.label || 'Registro de ponto'}
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={() => {
+                  setShowConfirmacaoDialog(false)
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmarRegistroPonto}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                Confirmar Registro
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

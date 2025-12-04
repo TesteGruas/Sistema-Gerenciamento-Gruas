@@ -7,6 +7,7 @@ import express from 'express'
 import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { checkPermission } from '../middleware/permissions.js'
 
 const router = express.Router()
 
@@ -18,11 +19,41 @@ router.use(authenticateToken)
 /**
  * POST /api/colaboradores/:id/certificados
  * Criar certificado para colaborador
+ * 
+ * Permite que:
+ * - Usuários com permissão rh:editar criem certificados para qualquer funcionário
+ * - Operadores criem certificados apenas para si mesmos
  */
-router.post('/:id/certificados', requirePermission('rh:editar'), async (req, res) => {
+router.post('/:id/certificados', async (req, res) => {
   try {
     const { id } = req.params
     const { tipo, nome, data_validade, arquivo } = req.body
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    // Verificar permissões: rh:editar OU criar para si mesmo
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const funcionarioId = parseInt(id, 10)
+    
+    // Garantir que ambos sejam números para comparação correta
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const isCreatingForSelf = userFuncionarioIdNum !== null && 
+                              !isNaN(funcionarioId) && 
+                              funcionarioId === userFuncionarioIdNum
+
+    if (!hasRHEditPermission && !isCreatingForSelf) {
+      return res.status(403).json({
+        error: 'Acesso negado',
+        message: 'Você não tem permissão para criar certificados para outros funcionários. Você só pode criar certificados para si mesmo.',
+        required: 'rh:editar ou criar para si mesmo',
+        userRole: userRole || 'Desconhecido',
+        debug: process.env.NODE_ENV === 'development' ? {
+          userFuncionarioId: userFuncionarioIdNum,
+          targetFuncionarioId: funcionarioId,
+          isCreatingForSelf
+        } : undefined
+      })
+    }
 
     const schema = Joi.object({
       tipo: Joi.string().required(),
@@ -39,7 +70,7 @@ router.post('/:id/certificados', requirePermission('rh:editar'), async (req, res
     const { data, error } = await supabaseAdmin
       .from('certificados_colaboradores')
       .insert({
-        funcionario_id: parseInt(id),
+        funcionario_id: funcionarioId,
         tipo,
         nome,
         data_validade,
@@ -199,11 +230,41 @@ router.get('/certificados/vencendo', async (req, res) => {
 /**
  * POST /api/colaboradores/:id/documentos-admissionais
  * Criar documento admissional para colaborador
+ * 
+ * Permite que:
+ * - Usuários com permissão rh:editar criem documentos admissionais para qualquer funcionário
+ * - Operadores criem documentos admissionais apenas para si mesmos
  */
-router.post('/:id/documentos-admissionais', requirePermission('rh:editar'), async (req, res) => {
+router.post('/:id/documentos-admissionais', async (req, res) => {
   try {
     const { id } = req.params
     const { tipo, data_validade, arquivo } = req.body
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    // Verificar permissões: rh:editar OU criar para si mesmo
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const funcionarioId = parseInt(id, 10)
+    
+    // Garantir que ambos sejam números para comparação correta
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const isCreatingForSelf = userFuncionarioIdNum !== null && 
+                              !isNaN(funcionarioId) && 
+                              funcionarioId === userFuncionarioIdNum
+
+    if (!hasRHEditPermission && !isCreatingForSelf) {
+      return res.status(403).json({
+        error: 'Acesso negado',
+        message: 'Você não tem permissão para criar documentos admissionais para outros funcionários. Você só pode criar documentos admissionais para si mesmo.',
+        required: 'rh:editar ou criar para si mesmo',
+        userRole: userRole || 'Desconhecido',
+        debug: process.env.NODE_ENV === 'development' ? {
+          userFuncionarioId: userFuncionarioIdNum,
+          targetFuncionarioId: funcionarioId,
+          isCreatingForSelf
+        } : undefined
+      })
+    }
 
     const schema = Joi.object({
       tipo: Joi.string().required(),
@@ -219,7 +280,7 @@ router.post('/:id/documentos-admissionais', requirePermission('rh:editar'), asyn
     const { data, error } = await supabaseAdmin
       .from('documentos_admissionais')
       .insert({
-        funcionario_id: parseInt(id),
+        funcionario_id: funcionarioId,
         tipo,
         data_validade,
         arquivo

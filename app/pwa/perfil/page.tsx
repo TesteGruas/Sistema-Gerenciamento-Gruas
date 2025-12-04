@@ -132,6 +132,14 @@ function PWAPerfilPageContent() {
   const [tipoDocumento, setTipoDocumento] = useState('')
   const [dataValidade, setDataValidade] = useState('')
   const [enviandoDocumento, setEnviandoDocumento] = useState(false)
+  
+  // Estados para modal de upload de certificado
+  const [isModalCertificadoOpen, setIsModalCertificadoOpen] = useState(false)
+  const [arquivoCertificadoSelecionado, setArquivoCertificadoSelecionado] = useState<File | null>(null)
+  const [nomeCertificado, setNomeCertificado] = useState('')
+  const [tipoCertificado, setTipoCertificado] = useState('')
+  const [dataValidadeCertificado, setDataValidadeCertificado] = useState('')
+  const [enviandoCertificado, setEnviandoCertificado] = useState(false)
 
   // Carregar dados completos do funcionário da API
   useEffect(() => {
@@ -429,6 +437,86 @@ function PWAPerfilPageContent() {
       })
     } finally {
       setEnviandoDocumento(false)
+    }
+  }
+
+  // Função para fazer upload do arquivo e criar certificado
+  const handleUploadCertificado = async () => {
+    if (!funcionarioId || !arquivoCertificadoSelecionado || !nomeCertificado || !tipoCertificado) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setEnviandoCertificado(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+
+      // Primeiro, fazer upload do arquivo
+      const formData = new FormData()
+      formData.append('arquivo', arquivoCertificadoSelecionado)
+      
+      const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json()
+        throw new Error(errorData.message || 'Erro ao fazer upload do arquivo')
+      }
+
+      const uploadData = await uploadResponse.json()
+      const arquivoCaminho = uploadData.data?.caminho || uploadData.caminho
+
+      if (!arquivoCaminho) {
+        throw new Error('Caminho do arquivo não retornado pelo servidor')
+      }
+
+      // Depois, criar o certificado com o caminho do arquivo
+      const certificadoData = {
+        tipo: tipoCertificado,
+        nome: nomeCertificado,
+        data_validade: dataValidadeCertificado || undefined,
+        arquivo: arquivoCaminho
+      }
+
+      const response = await colaboradoresDocumentosApi.certificados.criar(funcionarioId, certificadoData)
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Certificado enviado com sucesso"
+        })
+        
+        // Limpar formulário
+        setArquivoCertificadoSelecionado(null)
+        setNomeCertificado('')
+        setTipoCertificado('')
+        setDataValidadeCertificado('')
+        setIsModalCertificadoOpen(false)
+        
+        // Recarregar lista de certificados
+        await carregarCertificados()
+      } else {
+        throw new Error('Erro ao criar certificado')
+      }
+    } catch (error) {
+      console.error('Erro ao enviar certificado:', error)
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Não foi possível enviar o certificado",
+        variant: "destructive"
+      })
+    } finally {
+      setEnviandoCertificado(false)
     }
   }
 
@@ -1291,7 +1379,11 @@ function PWAPerfilPageContent() {
             {activeTab === 'certificados' && (
             <div className="mt-0">
               <div className="flex justify-end mb-4">
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setIsModalCertificadoOpen(true)}
+                >
                   <Upload className="w-4 h-4 mr-2" />
                   Enviar Certificado
                 </Button>
@@ -1729,6 +1821,126 @@ function PWAPerfilPageContent() {
                 disabled={enviandoDocumento || !arquivoSelecionado || !tipoDocumento}
               >
                 {enviandoDocumento ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Enviar
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Upload de Certificado */}
+      <Dialog open={isModalCertificadoOpen} onOpenChange={setIsModalCertificadoOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Enviar Certificado
+            </DialogTitle>
+            <DialogDescription>
+              Faça upload de um certificado para seu perfil
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="nome-certificado">
+                Nome do Certificado <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="nome-certificado"
+                placeholder="Ex: NR-10, NR-35, CIPA, etc."
+                value={nomeCertificado}
+                onChange={(e) => setNomeCertificado(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="tipo-certificado">
+                Tipo de Certificado <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="tipo-certificado"
+                placeholder="Ex: Segurança, Operação, Técnico, etc."
+                value={tipoCertificado}
+                onChange={(e) => setTipoCertificado(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="arquivo-certificado">
+                Arquivo <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="arquivo-certificado"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    // Validar tamanho (máximo 10MB)
+                    if (file.size > 10 * 1024 * 1024) {
+                      toast({
+                        title: "Erro",
+                        description: "Arquivo muito grande. Máximo permitido: 10MB",
+                        variant: "destructive"
+                      })
+                      return
+                    }
+                    setArquivoCertificadoSelecionado(file)
+                  }
+                }}
+                className="mt-1"
+              />
+              {arquivoCertificadoSelecionado && (
+                <p className="text-sm text-gray-600 mt-1">
+                  Arquivo selecionado: {arquivoCertificadoSelecionado.name} ({(arquivoCertificadoSelecionado.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="data-validade-certificado">
+                Data de Validade (opcional)
+              </Label>
+              <Input
+                id="data-validade-certificado"
+                type="date"
+                value={dataValidadeCertificado}
+                onChange={(e) => setDataValidadeCertificado(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsModalCertificadoOpen(false)
+                  setArquivoCertificadoSelecionado(null)
+                  setNomeCertificado('')
+                  setTipoCertificado('')
+                  setDataValidadeCertificado('')
+                }}
+                disabled={enviandoCertificado}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleUploadCertificado}
+                disabled={enviandoCertificado || !arquivoCertificadoSelecionado || !nomeCertificado || !tipoCertificado}
+              >
+                {enviandoCertificado ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Enviando...

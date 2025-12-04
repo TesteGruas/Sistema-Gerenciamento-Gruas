@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Output standalone apenas em produção
+  ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' } : {}),
   // ==================================
   // ⚡ OTIMIZAÇÕES DE PERFORMANCE
   // ==================================
@@ -128,8 +130,7 @@ const nextConfig = {
   // ==================================
   // 🔧 OUTPUT CONFIGURATION
   // ==================================
-  // Garantir que o output está correto para evitar problemas de MIME type
-  output: 'standalone',
+  // Output standalone apenas em produção (já definido no início do objeto)
   
   // Desabilitar strict mode temporariamente para evitar problemas de hidratação
   reactStrictMode: false,
@@ -168,9 +169,8 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Aplicar headers a todos os arquivos estáticos
-        source: '/:all*(svg|jpg|jpeg|png|gif|ico|webp|avif|woff|woff2|ttf|otf)',
-        locale: false,
+        // Headers específicos para arquivos estáticos do Next.js - DEVE VIR PRIMEIRO
+        source: '/_next/static/:path*',
         headers: [
           {
             key: 'Cache-Control',
@@ -199,7 +199,32 @@ const nextConfig = {
         ],
       },
       {
-        // Headers de segurança para todas as páginas
+        // Aplicar headers a todos os arquivos estáticos de mídia
+        source: '/:all*(svg|jpg|jpeg|png|gif|ico|webp|avif|woff|woff2|ttf|otf)',
+        locale: false,
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        // Service Worker
+        source: '/sw.js',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate',
+          },
+          {
+            key: 'Service-Worker-Allowed',
+            value: '/',
+          },
+        ],
+      },
+      {
+        // Headers de segurança para páginas (não arquivos estáticos) - DEVE VIR POR ÚLTIMO
         source: '/:path*',
         headers: [
           {
@@ -221,20 +246,6 @@ const nextConfig = {
           {
             key: 'Referrer-Policy',
             value: 'origin-when-cross-origin',
-          },
-        ],
-      },
-      {
-        // Service Worker
-        source: '/sw.js',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
-          },
-          {
-            key: 'Service-Worker-Allowed',
-            value: '/',
           },
         ],
       },

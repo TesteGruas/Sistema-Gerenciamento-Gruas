@@ -10,7 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   AlertCircle, 
-  Search, 
   Eye, 
   Edit, 
   Trash2, 
@@ -58,7 +57,6 @@ export function LivroGruaManutencaoList({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
   const [filtroDataInicio, setFiltroDataInicio] = useState("")
   const [filtroDataFim, setFiltroDataFim] = useState("")
 
@@ -103,16 +101,11 @@ export function LivroGruaManutencaoList({
 
   // Filtrar manutenções - memoizado para evitar recálculo desnecessário
   const manutencoesFiltradas = useMemo(() => manutencoes.filter(manutencao => {
-    const matchSearch = !searchTerm || 
-      manutencao.realizado_por_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      manutencao.cargo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      manutencao.descricao?.toLowerCase().includes(searchTerm.toLowerCase())
-    
     const matchDataInicio = !filtroDataInicio || manutencao.data >= filtroDataInicio
     const matchDataFim = !filtroDataFim || manutencao.data <= filtroDataFim
 
-    return matchSearch && matchDataInicio && matchDataFim
-  }), [manutencoes, searchTerm, filtroDataInicio, filtroDataFim])
+    return matchDataInicio && matchDataFim
+  }), [manutencoes, filtroDataInicio, filtroDataFim])
 
   // Função para formatar dados para exportação
   const formatarDadosParaExportacao = useCallback(() => {
@@ -128,7 +121,7 @@ export function LivroGruaManutencaoList({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Wrench className="w-5 h-5" />
@@ -138,7 +131,7 @@ export function LivroGruaManutencaoList({
               Histórico de manutenções realizadas nesta grua
             </CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             {manutencoesFiltradas.length > 0 && (
               <ExportButton
                 dados={formatarDadosParaExportacao()}
@@ -147,10 +140,11 @@ export function LivroGruaManutencaoList({
                 titulo="Manutenções"
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
               />
             )}
             {onNovaManutencao && (
-              <Button onClick={onNovaManutencao}>
+              <Button onClick={onNovaManutencao} className="w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Manutenção
               </Button>
@@ -160,49 +154,37 @@ export function LivroGruaManutencaoList({
       </CardHeader>
       <CardContent>
         {/* Filtros */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-          <div className="md:col-span-2">
-            <Label htmlFor="search">Buscar</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                id="search"
-                placeholder="Buscar por funcionário, cargo ou descrição..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </div>
-          <div>
+        <div className="flex gap-2 mb-4 items-end">
+          <div className="flex-1">
             <Label htmlFor="filtroDataInicio">Data Início</Label>
             <Input
               id="filtroDataInicio"
               type="date"
               value={filtroDataInicio}
               onChange={(e) => setFiltroDataInicio(e.target.value)}
+              className="w-full"
             />
           </div>
-          <div>
+          <div className="flex-1">
             <Label htmlFor="filtroDataFim">Data Fim</Label>
-            <div className="flex gap-2">
-              <Input
-                id="filtroDataFim"
-                type="date"
-                value={filtroDataFim}
-                onChange={(e) => setFiltroDataFim(e.target.value)}
-              />
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm("")
-                  setFiltroDataInicio("")
-                  setFiltroDataFim("")
-                }}
-              >
-                <RefreshCw className="w-4 h-4" />
-              </Button>
-            </div>
+            <Input
+              id="filtroDataFim"
+              type="date"
+              value={filtroDataFim}
+              onChange={(e) => setFiltroDataFim(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFiltroDataInicio("")
+                setFiltroDataFim("")
+              }}
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 
@@ -232,82 +214,172 @@ export function LivroGruaManutencaoList({
         )}
 
         {!loading && manutencoesFiltradas.length > 0 && (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Realizado Por</TableHead>
-                  <TableHead>Cargo</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {manutencoesFiltradas.map((manutencao) => (
-                  <TableRow key={manutencao.id}>
-                    <TableCell>
+          <>
+            {/* Desktop: Tabela */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Realizado Por</TableHead>
+                    <TableHead>Cargo</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {manutencoesFiltradas.map((manutencao) => (
+                    <TableRow key={manutencao.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          {new Date(manutencao.data).toLocaleDateString('pt-BR')}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-gray-400" />
+                          {manutencao.realizado_por_nome || 'N/A'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {manutencao.cargo || 'N/A'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-sm text-gray-600 line-clamp-2">
+                          {manutencao.descricao || 'Sem descrição'}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {onVisualizarManutencao && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onVisualizarManutencao(manutencao)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {onEditarManutencao && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onEditarManutencao(manutencao)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {onExcluirManutencao && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm('Tem certeza que deseja excluir esta manutenção?')) {
+                                  onExcluirManutencao(manutencao)
+                                }
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile: Cards */}
+            <div className="md:hidden space-y-3">
+              {manutencoesFiltradas.map((manutencao) => (
+                <Card key={manutencao.id} className="border-l-4 border-l-orange-500">
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      {/* Header com Data */}
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
-                        {new Date(manutencao.data).toLocaleDateString('pt-BR')}
+                        <span className="font-medium text-sm">
+                          {new Date(manutencao.data).toLocaleDateString('pt-BR')}
+                        </span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-400" />
-                        {manutencao.realizado_por_nome || 'N/A'}
+
+                      {/* Realizado Por e Cargo */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-900">
+                            {manutencao.realizado_por_nome || 'N/A'}
+                          </span>
+                        </div>
+                        {manutencao.cargo && (
+                          <div>
+                            <Badge variant="outline" className="text-xs">
+                              {manutencao.cargo}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {manutencao.cargo || 'N/A'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-sm text-gray-600 line-clamp-2">
-                        {manutencao.descricao || 'Sem descrição'}
-                      </p>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+
+                      {/* Descrição */}
+                      {manutencao.descricao && (
+                        <div className="bg-gray-50 p-2 rounded-md">
+                          <p className="text-xs text-gray-600 mb-1">Descrição</p>
+                          <p className="text-sm text-gray-700 line-clamp-3">
+                            {manutencao.descricao}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Ações */}
+                      <div className="flex gap-2 pt-2 border-t">
                         {onVisualizarManutencao && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={() => onVisualizarManutencao(manutencao)}
+                            className="flex-1"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-4 h-4 mr-2" />
+                            Ver
                           </Button>
                         )}
                         {onEditarManutencao && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={() => onEditarManutencao(manutencao)}
+                            className="flex-1"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar
                           </Button>
                         )}
                         {onExcluirManutencao && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={() => {
                               if (confirm('Tem certeza que deseja excluir esta manutenção?')) {
                                 onExcluirManutencao(manutencao)
                               }
                             }}
+                            className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
-                            <Trash2 className="w-4 h-4 text-red-500" />
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
                           </Button>
                         )}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

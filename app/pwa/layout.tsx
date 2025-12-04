@@ -135,9 +135,18 @@ function PWALayoutContent({ children }: PWALayoutProps) {
           parsedUser.profile = parsedProfile
         }
         
+        // Buscar nome em diferentes locais possíveis
+        const nome = parsedUser.nome || 
+                    parsedUser.name || 
+                    parsedUser.user_metadata?.nome || 
+                    parsedUser.user_metadata?.name ||
+                    parsedUser.profile?.nome ||
+                    parsedUser.profile?.name ||
+                    'Usuário'
+        
         setUser({
           id: parsedUser.id,
-          nome: parsedUser.nome,
+          nome: nome,
           cargo: parsedUser.cargo || parsedUser.role,
           ...(parsedUser.profile && { profile: parsedUser.profile })
         })
@@ -495,15 +504,6 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                                   <p className="text-sm font-semibold text-gray-900">
                                     {user?.nome || 'Usuário'}
                                   </p>
-                                  {(user?.cargo || persistentUser?.cargo) && (
-                                    <p className="text-xs text-gray-500 mt-0.5">
-                                      {user?.cargo || persistentUser?.cargo}
-                                    </p>
-                                  )}
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                                    <span className="text-xs text-gray-500">PWA Ativo</span>
-                                  </div>
                                 </div>
                                 
                                 {/* Opções do menu */}

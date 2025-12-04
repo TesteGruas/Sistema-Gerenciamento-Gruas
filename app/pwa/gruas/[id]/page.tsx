@@ -524,7 +524,7 @@ export default function PWAGruaDetalhesPage() {
 
         {/* Mapa com Localização da Grua/Obra - No final da página */}
         {grua && obraCoordenadas && (
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden py-0">
             <CardContent className="p-0">
               <div className="relative w-full h-64 md:h-80">
                 <iframe

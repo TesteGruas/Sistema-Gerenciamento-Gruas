@@ -57,6 +57,8 @@ export default function PWAPontoPage() {
   const [assinaturaDataUrl, setAssinaturaDataUrl] = useState<string | null>(null)
   const [tipoRegistroPendente, setTipoRegistroPendente] = useState<string | null>(null)
   const [horasExtras, setHorasExtras] = useState<number>(0)
+  const [showConfirmacaoDialog, setShowConfirmacaoDialog] = useState(false)
+  const [tipoRegistroConfirmacao, setTipoRegistroConfirmacao] = useState<string | null>(null)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -325,7 +327,17 @@ export default function PWAPontoPage() {
   }
 
   const registrarPonto = async (tipo: string) => {
+    // Mostrar modal de confirmação primeiro
+    setTipoRegistroConfirmacao(tipo)
+    setShowConfirmacaoDialog(true)
+  }
+
+  const confirmarRegistroPonto = async () => {
+    if (!tipoRegistroConfirmacao) return
+    
+    setShowConfirmacaoDialog(false)
     setIsLoading(true)
+    const tipo = tipoRegistroConfirmacao
     
     // Obter localização atual antes de registrar (se ainda não tiver)
     if (!location) {
@@ -875,110 +887,6 @@ export default function PWAPontoPage() {
         </CardContent>
       </Card>
 
-      {/* Localização e Validação */}
-      <Card className={
-        validacaoLocalizacao?.valido 
-          ? "border-2 border-green-500 bg-green-50" 
-          : validacaoLocalizacao && !validacaoLocalizacao.valido
-          ? "border-2 border-orange-500 bg-orange-50"
-          : ""
-      }>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Navigation className="w-5 h-5" />
-            Localização (Opcional)
-            {validacaoLocalizacao?.valido && (
-              <Badge className="bg-green-600 text-white ml-2">
-                <Shield className="w-3 h-3 mr-1" />
-                Validado
-              </Badge>
-            )}
-            {validacaoLocalizacao && !validacaoLocalizacao.valido && (
-              <Badge className="bg-orange-600 text-white ml-2">
-                <AlertCircle className="w-3 h-3 mr-1" />
-                Fora da Área
-              </Badge>
-            )}
-          </CardTitle>
-          {obra && (
-            <CardDescription>
-              Obra: {obra.nome} • Raio: {obra.raio_permitido}m • <strong>Localização é opcional</strong>
-            </CardDescription>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {validacaoLocalizacao ? (
-              <div className="space-y-3">
-                <div className={`flex items-center gap-2 text-sm font-medium ${
-                  validacaoLocalizacao.valido ? 'text-green-700' : 'text-red-700'
-                }`}>
-                  {validacaoLocalizacao.valido ? (
-                    <CheckCircle className="w-5 h-5" />
-                  ) : (
-                    <MapPinOff className="w-5 h-5" />
-                  )}
-                  <span>{validacaoLocalizacao.mensagem}</span>
-                </div>
-                <div className="text-xs text-gray-700 bg-white p-3 rounded-md border">
-                  <p className="font-medium mb-1">Detalhes:</p>
-                  <p>• Distância da obra: {formatarDistancia(validacaoLocalizacao.distancia)}</p>
-                  <p>• Lat: {location?.lat.toFixed(6)}</p>
-                  <p>• Lng: {location?.lng.toFixed(6)}</p>
-                  {obra && (
-                    <>
-                      <p className="mt-2 font-medium">Obra: {obra.nome}</p>
-                      <p>• {obra.endereco}</p>
-                    </>
-                  )}
-                </div>
-                <Button
-                  onClick={obterLocalizacao}
-                  disabled={isGettingLocation}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  {isGettingLocation ? (
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                  )}
-                  Atualizar Localização
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
-                  <Navigation className="w-4 h-4" />
-                  <span>Localização opcional - Você pode registrar ponto sem capturar localização</span>
-                </div>
-                <Button
-                  onClick={obterLocalizacao}
-                  disabled={isGettingLocation}
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                >
-                  {isGettingLocation ? (
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Navigation className="w-4 h-4 mr-2" />
-                  )}
-                  {isGettingLocation ? 'Obtendo Localização...' : 'Capturar Localização (Opcional)'}
-                </Button>
-              </div>
-            )}
-            {locationError && (
-              <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
-                <p><strong>Erro:</strong> {locationError}</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-
       {/* Status de conexão */}
       {!isOnline && (
         <Card className="bg-yellow-50 border-yellow-200">
@@ -993,6 +901,69 @@ export default function PWAPontoPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Diálogo de Confirmação de Registro */}
+      <Dialog open={showConfirmacaoDialog} onOpenChange={setShowConfirmacaoDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-orange-600" />
+              Confirmar Registro de Ponto
+            </DialogTitle>
+            <DialogDescription>
+              Você está prestes a registrar o ponto. Por favor, leia atentamente:
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-orange-900">
+                    ⚠️ Atenção: Não clique mais de uma vez!
+                  </p>
+                  <p className="text-sm text-orange-800">
+                    Clicar múltiplas vezes em seguida pode completar uma entrada ou saída incorreta.
+                    Aguarde a confirmação antes de tentar novamente.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-blue-900 mb-1">
+                Tipo de registro:
+              </p>
+              <p className="text-sm text-blue-800">
+                {tipoRegistroConfirmacao === 'entrada' && 'Entrada'}
+                {tipoRegistroConfirmacao === 'saida_almoco' && 'Saída Almoço'}
+                {tipoRegistroConfirmacao === 'volta_almoco' && 'Volta Almoço'}
+                {tipoRegistroConfirmacao === 'saida' && 'Saída'}
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={() => {
+                  setShowConfirmacaoDialog(false)
+                  setTipoRegistroConfirmacao(null)
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmarRegistroPonto}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                Confirmar Registro
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo de Assinatura para Hora Extra */}
       <Dialog open={showAssinaturaDialog} onOpenChange={setShowAssinaturaDialog}>

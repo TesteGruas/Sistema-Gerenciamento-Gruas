@@ -268,16 +268,6 @@ export function PWANotificationsManager() {
                 <Bell className="w-4 h-4 mr-2" />
                 Enviar Notificação de Teste
               </Button>
-              
-              <div className="text-xs text-gray-500 text-center">
-                <p>✅ Notificações ativadas</p>
-                <p>Você receberá alertas sobre:</p>
-                <ul className="mt-1 space-y-0.5">
-                  <li>• Registros de ponto</li>
-                  <li>• Documentos pendentes</li>
-                  <li>• Avisos importantes</li>
-                </ul>
-              </div>
             </div>
           )}
 

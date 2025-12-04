@@ -266,7 +266,10 @@ export default function PWAAprovacoesPage() {
             variant="ghost" 
             size="sm" 
             className="p-0"
-            onClick={() => router.push('/pwa')}
+            onClick={(e) => {
+              e.preventDefault()
+              router.back()
+            }}
             type="button"
           >
             <ArrowLeft className="w-5 h-5" />
