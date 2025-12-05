@@ -393,7 +393,7 @@ export default function PWAHoleritesPage() {
       if (!holerite.arquivo) {
         throw new Error('Arquivo do holerite não disponível')
       }
-
+      
       // Se tem assinatura e usuário quer baixar com assinatura, usar nova API
       if (comAssinatura && estaAssinado(holerite)) {
         try {

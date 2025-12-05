@@ -227,8 +227,8 @@ export default function PWADocumentosPage() {
         console.warn('Erro ao buscar documentos com funcionarioId, tentando API pendentes:', error)
         // Fallback: usar API de documentos pendentes
         try {
-          const data = await documentosApi.getDocumentosPendentes()
-          setDocumentos(data)
+        const data = await documentosApi.getDocumentosPendentes()
+        setDocumentos(data)
         } catch (fallbackError) {
           console.error('Erro ao buscar documentos pendentes:', fallbackError)
         }
@@ -439,12 +439,12 @@ export default function PWADocumentosPage() {
           arquivoAssinado!,
           'Documento assinado via PWA - Upload'
         )
-        
-        toast({
-          title: "Documento assinado!",
+      
+      toast({
+        title: "Documento assinado!",
           description: "O documento assinado foi enviado com sucesso",
-          variant: "default"
-        })
+        variant: "default"
+      })
       }
       
       // Recarregar documentos
@@ -733,16 +733,16 @@ export default function PWADocumentosPage() {
                   </label>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-2 sm:p-4 overflow-x-auto">
                     <div className="flex justify-center">
-                      <canvas
-                        ref={canvasRef}
-                        width={300}
-                        height={150}
+                    <canvas
+                      ref={canvasRef}
+                      width={300}
+                      height={150}
                         className="border border-gray-200 rounded cursor-crosshair w-full max-w-full"
                         style={{ maxWidth: '100%', height: 'auto' }}
-                        onMouseDown={iniciarDesenho}
-                        onMouseMove={desenhar}
-                        onMouseUp={pararDesenho}
-                        onMouseLeave={pararDesenho}
+                      onMouseDown={iniciarDesenho}
+                      onMouseMove={desenhar}
+                      onMouseUp={pararDesenho}
+                      onMouseLeave={pararDesenho}
                         onTouchStart={(e) => {
                           e.preventDefault()
                           const touch = e.touches[0]
@@ -779,7 +779,7 @@ export default function PWADocumentosPage() {
                         onTouchEnd={() => {
                           setIsDrawing(false)
                         }}
-                      />
+                    />
                     </div>
                   </div>
                   <div className="flex gap-2 mt-2">

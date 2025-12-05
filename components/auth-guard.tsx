@@ -45,7 +45,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
     // Pequeno delay para garantir que o estado inicial seja renderizado primeiro
     // Isso evita o flash da mensagem de erro
     const timer = setTimeout(() => {
-      checkAuth()
+    checkAuth()
     }, 100)
 
     return () => clearTimeout(timer)
@@ -64,14 +64,14 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 
   // Se não autenticado e verificação completa, mostrar fallback
   // Mas na prática, o redirecionamento já deve ter acontecido
-  return fallback || (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-gray-700 mb-2">Acesso Negado</h2>
-        <p className="text-gray-600">Você precisa fazer login para acessar esta página.</p>
+    return fallback || (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">Acesso Negado</h2>
+          <p className="text-gray-600">Você precisa fazer login para acessar esta página.</p>
+        </div>
       </div>
-    </div>
-  )
+    )
 }
 
 export default AuthGuard

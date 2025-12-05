@@ -26,12 +26,26 @@ const upload = multer({
 })
 
 // Função para gerar nome único do arquivo
+// Função para sanitizar nome de arquivo (remover caracteres inválidos)
+const sanitizeFileName = (fileName) => {
+  // Remover caracteres especiais e substituir por underscore
+  // Manter apenas letras, números, hífen, underscore e ponto
+  return fileName
+    .normalize('NFD') // Normalizar caracteres unicode
+    .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Substituir caracteres inválidos por underscore
+    .replace(/_{2,}/g, '_') // Remover underscores duplicados
+    .replace(/^_+|_+$/g, '') // Remover underscores no início e fim
+}
+
 const generateFileName = (originalName, obraId) => {
   const ext = path.extname(originalName)
   const name = path.basename(originalName, ext)
+  // Sanitizar o nome do arquivo
+  const sanitizedName = sanitizeFileName(name)
   const timestamp = Date.now()
   const uuid = uuidv4().substring(0, 8)
-  return `${name}_${timestamp}_${uuid}${ext}`
+  return `${sanitizedName}_${timestamp}_${uuid}${ext}`
 }
 
 // Schema de validação para documentos
@@ -644,9 +658,9 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('obras:vi
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:criar'), upload.single('arquivo'), async (req, res) => {
+// Função auxiliar para criar documento (com ou sem obra)
+async function criarDocumento(req, res, obraId = null) {
   try {
-    const { obraId } = req.params
     const { titulo, descricao, ordem_assinatura } = req.body
     const file = req.file
 
@@ -661,6 +675,7 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:c
     console.log('=== DEBUG PARSING ===')
     console.log('ordem_assinatura raw:', ordem_assinatura)
     console.log('typeof ordem_assinatura:', typeof ordem_assinatura)
+    console.log('obraId:', obraId || 'Nenhuma (documento geral)')
     
     let ordemAssinaturaArray
     try {
@@ -692,23 +707,27 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:c
       })
     }
 
-    // Verificar se a obra existe
-    const { data: obra, error: obraError } = await supabaseAdmin
-      .from('obras')
-      .select('id, nome')
-      .eq('id', obraId)
-      .single()
+    // Se obraId foi fornecido, verificar se a obra existe
+    if (obraId) {
+      const { data: obra, error: obraError } = await supabaseAdmin
+        .from('obras')
+        .select('id, nome')
+        .eq('id', obraId)
+        .single()
 
-    if (obraError || !obra) {
-      return res.status(404).json({
-        success: false,
-        message: 'Obra não encontrada'
-      })
+      if (obraError || !obra) {
+        return res.status(404).json({
+          success: false,
+          message: 'Obra não encontrada'
+        })
+      }
     }
 
     // Gerar nome único para o arquivo
-    const fileName = generateFileName(file.originalname, obraId)
-    const filePath = `obras/${obraId}/documentos/${fileName}`
+    const fileName = generateFileName(file.originalname, obraId || 'geral')
+    const filePath = obraId 
+      ? `obras/${obraId}/documentos/${fileName}`
+      : `documentos-gerais/${fileName}`
 
     // Upload para o Supabase Storage
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -803,7 +822,7 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:c
 
     // Salvar documento no banco
     const documentoData = {
-      obra_id: parseInt(obraId),
+      obra_id: obraId ? parseInt(obraId) : null, // Permite null se não houver obra
       titulo,
       descricao: descricao || null,
       arquivo_original: file.originalname,
@@ -891,6 +910,31 @@ router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:c
       }
     })
 
+  } catch (error) {
+    console.error('Erro ao criar documento:', error)
+    throw error // Re-throw para ser capturado pelo endpoint
+  }
+}
+
+// Endpoint para criar documento SEM obra (deve vir ANTES do endpoint com obraId)
+router.post('/documentos', authenticateToken, requirePermission('obras:criar'), upload.single('arquivo'), async (req, res) => {
+  try {
+    return await criarDocumento(req, res, null)
+  } catch (error) {
+    console.error('Erro ao criar documento sem obra:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+// Endpoint para criar documento COM obra
+router.post('/:obraId/documentos', authenticateToken, requirePermission('obras:criar'), upload.single('arquivo'), async (req, res) => {
+  try {
+    const { obraId } = req.params
+    return await criarDocumento(req, res, parseInt(obraId))
   } catch (error) {
     console.error('Erro ao criar documento:', error)
     res.status(500).json({

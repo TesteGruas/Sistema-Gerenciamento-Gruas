@@ -553,7 +553,7 @@ export default function AssinaturaPage() {
           </CardContent>
         </Card>
       ) : !loading && !error ? (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Controles de Paginação Superior */}
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
@@ -626,7 +626,10 @@ export default function AssinaturaPage() {
                             <div className="flex justify-between text-sm">
                               <span>{Math.round(progress)}%</span>
                             </div>
-                            <Progress value={progress} className="h-2 w-20" />
+                            <Progress 
+                              value={progress} 
+                              className={`h-2 w-20 ${Math.round(progress) === 100 ? '[&>div]:bg-green-500' : ''}`}
+                            />
                             <div className="text-xs text-gray-500">
                               {assinaturas.filter((a: any) => a.status === 'assinado').length} de {assinaturas.length}
                             </div>
@@ -876,7 +879,10 @@ function DocumentoDetails({ documento, onClose, obras }: { documento: any; onClo
                         <span>Progresso</span>
                         <span>{Math.round(progress)}%</span>
                       </div>
-                      <Progress value={progress} className="h-2" />
+                      <Progress 
+                        value={progress} 
+                        className={`h-2 ${Math.round(progress) === 100 ? '[&>div]:bg-green-500' : ''}`}
+                      />
                       <div className="text-sm text-gray-600">
                         {documento.ordemAssinatura.filter((a: any) => a.status === 'assinado').length} de {documento.ordemAssinatura.length} assinaturas concluídas
                       </div>
@@ -1509,7 +1515,14 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
         console.log(`${key}:`, value)
       }
       
-      const response = await api.post(`/obras-documentos/${formData.obraId}/documentos`, formDataUpload, {
+      // Se obraId estiver vazio, usar endpoint sem obra
+      const endpoint = formData.obraId && formData.obraId.trim() !== ''
+        ? `/obras-documentos/${formData.obraId}/documentos`
+        : `/obras-documentos/documentos`
+      
+      console.log('Endpoint escolhido:', endpoint)
+      
+      const response = await api.post(endpoint, formDataUpload, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -1632,7 +1645,7 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                 </div>
                 
                 <div>
-                  <Label htmlFor="obra">Obra *</Label>
+                  <Label htmlFor="obra">Obra (Opcional)</Label>
                   <div className="space-y-2">
                     <Input
                       placeholder="Buscar obra por nome, endereço ou cidade..."
@@ -1640,11 +1653,12 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                       onChange={(e) => setObraFilter(e.target.value)}
                       className="text-sm"
                     />
-                    <Select value={formData.obraId} onValueChange={(value) => setFormData({...formData, obraId: value})}>
+                    <Select value={formData.obraId || 'none'} onValueChange={(value) => setFormData({...formData, obraId: value === 'none' ? '' : value})}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione a obra" />
+                        <SelectValue placeholder="Selecione a obra (opcional)" />
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
+                        <SelectItem value="none">Nenhuma obra (documento geral)</SelectItem>
                         {!obras || obras.length === 0 ? (
                           <div className="p-2 text-sm text-gray-500 text-center">
                             Carregando obras...
@@ -1667,16 +1681,11 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                         )}
                       </SelectContent>
                     </Select>
-                    {obraFilter.trim() && (
-                      <div className="text-xs text-gray-500">
-                        {obrasFiltradas.length} obra(s) encontrada(s)
-                      </div>
-                    )}
-                    {!obraFilter.trim() && obras && obras.length > 0 && (
-                      <div className="text-xs text-gray-500">
-                        {obras.length} obra(s) disponível(is)
-                      </div>
-                    )}
+                    <div className="text-xs text-gray-500">
+                      {obraFilter.trim() 
+                        ? `${obrasFiltradas.length} obra(s) encontrada(s)` 
+                        : `${obras?.length || 0} obra(s) disponível(is)`} • Deixe em branco para documento sem obra
+                    </div>
                   </div>
                 </div>
               </div>

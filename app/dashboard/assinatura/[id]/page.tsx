@@ -157,6 +157,7 @@ export default function AssinaturaDocumentoPage() {
   const canSign = assinaturaAtual?.status === 'aguardando' && assinaturaAtual.user_id === parseInt(currentUser.id?.toString() || '0')
   const isAdmin = checkIsAdmin(currentUser)
   const progress = getProgressPercentage(documento)
+  const progressInfo = getProgressInfo(documento)
   const nextSigner = getNextSigner(documento)
   const currentSigner = getCurrentSigner(documento)
 
@@ -348,28 +349,45 @@ export default function AssinaturaDocumentoPage() {
   }
 
   const handleDownloadArquivoAssinado = async (arquivoUrl: string, nomeArquivo?: string) => {
-    if (!arquivoUrl) return
+    if (!arquivoUrl || !documento) return
 
     try {
       setIsLoading(true)
       
-      // Se for uma URL completa, abrir diretamente
-      if (arquivoUrl.startsWith('http')) {
-        window.open(arquivoUrl, '_blank')
+      // Usar o endpoint de download com assinaturas aplicadas
+      // Isso garante que as assinaturas sejam aplicadas em todas as páginas
+      try {
+        const { downloadDocumento } = await import('@/lib/api-assinaturas')
+        const blob = await downloadDocumento(documento.id, true) // comAssinaturas=true
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = nomeArquivo || documento.titulo || `documento_${documento.id}_assinado.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        
         toast({
-          title: "Download",
-          description: "Arquivo aberto em nova aba",
+          title: "Download iniciado",
+          description: "PDF com assinaturas aplicadas em todas as páginas",
           variant: "default"
         })
         return
+      } catch (apiError: any) {
+        console.error('Erro ao baixar via API:', apiError)
+        // Fallback: se for uma URL completa, abrir diretamente
+        if (arquivoUrl.startsWith('http')) {
+          window.open(arquivoUrl, '_blank')
+          toast({
+            title: "Download",
+            description: "Arquivo aberto em nova aba",
+            variant: "default"
+          })
+          return
+        }
+        throw apiError
       }
-
-      // Se for apenas nome do arquivo, tentar buscar da API
-      toast({
-        title: "Download",
-        description: "Baixando arquivo assinado...",
-        variant: "default"
-      })
       
     } catch (error) {
       console.error('Erro ao baixar arquivo:', error)
@@ -383,11 +401,39 @@ export default function AssinaturaDocumentoPage() {
     }
   }
 
-  const handleDownloadDocument = async () => {
+  const handleDownloadDocument = async (comAssinaturas: boolean = false) => {
     if (!documento) return
 
     try {
       setIsLoading(true)
+      
+      // Se comAssinaturas=true e documento está assinado, usar endpoint de assinaturas
+      if (comAssinaturas && documento.status === 'assinado') {
+        try {
+          const { downloadDocumento } = await import('@/lib/api-assinaturas')
+          const blob = await downloadDocumento(documento.id, true) // comAssinaturas=true
+          const url = window.URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${documento.titulo || `documento_${documento.id}`}_assinado.pdf`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          window.URL.revokeObjectURL(url)
+          
+          toast({
+            title: "Download iniciado",
+            description: "PDF com assinaturas aplicadas em todas as páginas",
+            variant: "default"
+          })
+          return
+        } catch (apiError: any) {
+          console.error('Erro ao baixar com assinaturas:', apiError)
+          // Continuar com método padrão se falhar
+        }
+      }
+      
+      // Método padrão: download original sem assinaturas
       const { download_url, nome_arquivo } = await obrasDocumentosApi.download(documento.obra_id, documento.id)
       
       // Abrir documento em nova aba
@@ -486,7 +532,10 @@ export default function AssinaturaDocumentoPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={getStatusVariant(documento.status)}>
+          <Badge 
+            variant={getStatusVariant(documento.status)}
+            className={documento.status === 'assinado' ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}
+          >
             {documento.status}
           </Badge>
           
@@ -494,12 +543,25 @@ export default function AssinaturaDocumentoPage() {
           <Button 
             variant="outline" 
             size="sm"
-            onClick={handleDownloadDocument}
+            onClick={() => handleDownloadDocument(false)}
             disabled={isLoading}
           >
             <Download className="w-4 h-4 mr-2" />
-            Ver Documento
+            Baixar PDF
           </Button>
+          
+          {documento.status === 'assinado' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDownloadDocument(true)}
+              disabled={isLoading}
+              className="bg-green-50 hover:bg-green-100 border-green-300"
+            >
+              <FileSignature className="w-4 h-4 mr-2" />
+              Baixar Assinado
+            </Button>
+          )}
           
           {/* Botões de Edição (apenas para admin) */}
           {isAdmin && (
@@ -541,7 +603,17 @@ export default function AssinaturaDocumentoPage() {
             </div>
             <div>
               <Label className="text-sm font-medium text-gray-600">Progresso</Label>
-              <p className="text-sm text-gray-900">{progress}% concluído</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-900 font-medium">
+                  {progressInfo.assinadas} de {progressInfo.total} assinaturas
+                </p>
+                <Badge 
+                  variant={progress === 100 ? "default" : "secondary"} 
+                  className={`text-xs ${progress === 100 ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}`}
+                >
+                  {progress}%
+                </Badge>
+              </div>
             </div>
             {/* Link de assinatura (apenas se preenchido) */}
             {documento.link_assinatura && (
@@ -580,13 +652,26 @@ export default function AssinaturaDocumentoPage() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={handleDownloadDocument}
+                onClick={() => handleDownloadDocument(false)}
                 disabled={isLoading}
                 className="flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
-                Baixar
+                Baixar PDF
               </Button>
+              
+              {documento.status === 'assinado' && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handleDownloadDocument(true)}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 bg-green-50 hover:bg-green-100 border-green-300"
+                >
+                  <FileSignature className="w-4 h-4" />
+                  Baixar Assinado
+                </Button>
+              )}
             </div>
             <p className="text-xs text-gray-500 mt-2">
               Este é o documento original que deve ser assinado pelos usuários listados abaixo.
@@ -594,10 +679,37 @@ export default function AssinaturaDocumentoPage() {
           </div>
           
           <div>
-            <Label className="text-sm font-medium text-gray-600">Progresso das Assinaturas</Label>
-            <div className="mt-2">
-              <Progress value={progress} className="h-2" />
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium text-gray-600">Progresso das Assinaturas</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 font-medium">
+                  {progressInfo.assinadas} de {progressInfo.total}
+                </span>
+                <Badge 
+                  variant={progress === 100 ? "default" : progress > 0 ? "secondary" : "outline"} 
+                  className={`text-xs ${progress === 100 ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}`}
+                >
+                  {progress}%
+                </Badge>
+              </div>
             </div>
+            <div className="mt-2">
+              <Progress 
+                value={progress} 
+                className={`h-3 ${progress === 100 ? '[&>div]:bg-green-500' : ''}`}
+              />
+            </div>
+            {progressInfo.pendentes > 0 && (
+              <p className="text-xs text-gray-500 mt-2">
+                {progressInfo.pendentes} assinatura{progressInfo.pendentes > 1 ? 's' : ''} pendente{progressInfo.pendentes > 1 ? 's' : ''}
+              </p>
+            )}
+            {progress === 100 && (
+              <p className="text-xs text-green-600 mt-2 font-medium flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                Todas as assinaturas foram concluídas
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -619,7 +731,10 @@ export default function AssinaturaDocumentoPage() {
               </div>
               <div>
                 <Label className="text-sm font-medium text-gray-600">Status</Label>
-                <Badge variant={getStatusVariant(assinaturaAtual.status)}>
+                <Badge 
+                  variant={getStatusVariant(assinaturaAtual.status)}
+                  className={assinaturaAtual.status === 'assinado' ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}
+                >
                   {assinaturaAtual.status}
                 </Badge>
               </div>
@@ -810,10 +925,25 @@ export default function AssinaturaDocumentoPage() {
               )}
 
               {assinaturaAtual.status === 'assinado' && (
-                <Button variant="outline">
-                  <Download className="w-4 h-4 mr-2" />
-                  Baixar Documento
-                </Button>
+                <>
+                  <Button 
+                    variant="outline"
+                    onClick={() => handleDownloadDocument(false)}
+                    disabled={isLoading}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Baixar PDF
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => handleDownloadDocument(true)}
+                    disabled={isLoading}
+                    className="bg-green-50 hover:bg-green-100 border-green-300"
+                  >
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    Baixar Assinado
+                  </Button>
+                </>
               )}
             </div>
           </CardContent>
@@ -862,7 +992,10 @@ export default function AssinaturaDocumentoPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={getStatusVariant(assinatura.status)}>
+                        <Badge 
+                          variant={getStatusVariant(assinatura.status)}
+                          className={assinatura.status === 'assinado' ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}
+                        >
                           {assinatura.status}
                         </Badge>
                         {isCurrentUser && (
@@ -910,7 +1043,10 @@ export default function AssinaturaDocumentoPage() {
                           <div>
                             <Label className="text-sm font-medium text-gray-700">Status da Assinatura</Label>
                             <div className="mt-1 flex items-center gap-2">
-                              <Badge variant={getStatusVariant(assinatura.status)}>
+                              <Badge 
+                                variant={getStatusVariant(assinatura.status)}
+                                className={assinatura.status === 'assinado' ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}
+                              >
                                 {assinatura.status}
                               </Badge>
                               {assinatura.data_envio && (
@@ -1385,6 +1521,13 @@ function getProgressPercentage(documento: DocumentoObra): number {
   const total = documento.assinaturas?.length || 0
   const assinados = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
   return total > 0 ? Math.round((assinados / total) * 100) : 0
+}
+
+function getProgressInfo(documento: DocumentoObra): { total: number; assinadas: number; pendentes: number } {
+  const total = documento.assinaturas?.length || 0
+  const assinadas = documento.assinaturas?.filter(a => a.status === 'assinado').length || 0
+  const pendentes = total - assinadas
+  return { total, assinadas, pendentes }
 }
 
 function getNextSigner(documento: DocumentoObra): AssinaturaDocumento | null {

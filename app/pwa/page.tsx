@@ -800,23 +800,23 @@ export default function PWAMainPage() {
                 }
                 
                 return (
-                  <button
-                    onClick={handleRegistrarPonto}
-                    disabled={isRegistrandoPonto}
-                    className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isRegistrandoPonto ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Registrando...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4" />
-                        Registrar Ponto
-                      </>
-                    )}
-                  </button>
+                <button
+                  onClick={handleRegistrarPonto}
+                  disabled={isRegistrandoPonto}
+                  className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isRegistrandoPonto ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Registrando...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Registrar Ponto
+                    </>
+                  )}
+                </button>
                 )
               })()}
             </div>

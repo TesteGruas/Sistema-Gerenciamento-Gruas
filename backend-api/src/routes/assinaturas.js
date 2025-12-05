@@ -1,5 +1,6 @@
 import express from 'express'
 import multer from 'multer'
+import path from 'path'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { normalizeRoleName, getRoleLevel } from '../config/roles.js'
@@ -24,12 +25,27 @@ const upload = multer({
   }
 })
 
+// Função para sanitizar nome de arquivo (remover caracteres inválidos)
+const sanitizeFileName = (fileName) => {
+  // Remover caracteres especiais e substituir por underscore
+  // Manter apenas letras, números, hífen, underscore e ponto
+  return fileName
+    .normalize('NFD') // Normalizar caracteres unicode
+    .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Substituir caracteres inválidos por underscore
+    .replace(/_{2,}/g, '_') // Remover underscores duplicados
+    .replace(/^_+|_+$/g, '') // Remover underscores no início e fim
+}
+
 // Função para gerar nome único do arquivo
 const generateFileName = (originalName) => {
   const timestamp = Date.now()
   const random = Math.random().toString(36).substring(2, 15)
-  const extension = originalName.split('.').pop()
-  return `assinado_${timestamp}_${random}.${extension}`
+  const ext = path.extname(originalName)
+  // Sanitizar o nome do arquivo original
+  const name = path.basename(originalName, ext)
+  const sanitizedName = sanitizeFileName(name)
+  return `${sanitizedName}_${timestamp}_${random}${ext}`
 }
 
 /**
@@ -417,7 +433,12 @@ router.post('/assinar-com-pdf/:id', authenticateToken, async (req, res) => {
     }
 
     // Upload do PDF assinado
-    const fileName = `assinado_${documento.arquivo_original || `documento_${id}.pdf`}`
+    // Sanitizar o nome do arquivo original antes de usar
+    const arquivoOriginal = documento.arquivo_original || `documento_${id}.pdf`
+    const ext = path.extname(arquivoOriginal)
+    const name = path.basename(arquivoOriginal, ext)
+    const sanitizedName = sanitizeFileName(name)
+    const fileName = `assinado_${sanitizedName}${ext}`
     const filePath = `assinados/${documento.id}/${assinaturaUser.id}/${fileName}`
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -941,7 +962,7 @@ router.get('/documento/:id/download', authenticateToken, async (req, res) => {
     // IMPORTANTE: Sempre usar o PDF original (caminho_arquivo) para adicionar assinaturas
     // Não usar arquivo_assinado, pois queremos aplicar as assinaturas no PDF original
     const caminhoArquivoParaDownload = documento.caminho_arquivo
-    
+
     // Gerar URL assinada para download
     const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
       .from('arquivos-obras')
