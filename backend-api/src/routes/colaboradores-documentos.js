@@ -8,6 +8,7 @@ import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { checkPermission } from '../middleware/permissions.js'
+import { baixarEAdicionarAssinatura } from '../utils/pdf-signature.js'
 
 const router = express.Router()
 
@@ -493,12 +494,18 @@ router.get('/:id/holerites', async (req, res) => {
 /**
  * PUT /api/holerites/:id/assinatura
  * Adicionar assinatura digital ao holerite
+ * 
+ * Permite que:
+ * - Usuários com permissão rh:editar assinem holerites de qualquer funcionário
+ * - Funcionários assinem seus próprios holerites
  */
-router.put('/holerites/:id/assinatura', requirePermission('rh:editar'), async (req, res) => {
+router.put('/holerites/:id/assinatura', async (req, res) => {
   try {
     const { id } = req.params
     const { assinatura_digital } = req.body
     const userId = req.user.id
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
 
     const schema = Joi.object({
       assinatura_digital: Joi.string().required()
@@ -509,6 +516,54 @@ router.put('/holerites/:id/assinatura', requirePermission('rh:editar'), async (r
       return res.status(400).json({ error: validationError.details[0].message })
     }
 
+    // Buscar holerite para verificar funcionário
+    const { data: holerite, error: holeriteError } = await supabaseAdmin
+      .from('holerites')
+      .select('funcionario_id, assinatura_digital, assinado_em')
+      .eq('id', id)
+      .single()
+
+    if (holeriteError || !holerite) {
+      return res.status(404).json({ 
+        error: 'Holerite não encontrado',
+        message: 'O holerite especificado não foi encontrado'
+      })
+    }
+
+    // Verificar se já está assinado
+    if (holerite.assinatura_digital && holerite.assinado_em) {
+      return res.status(400).json({
+        error: 'Holerite já assinado',
+        message: 'Este holerite já foi assinado. Não é possível re-assinar.',
+        data: {
+          assinado_em: holerite.assinado_em
+        }
+      })
+    }
+
+    // Verificar permissões: rh:editar OU assinar próprio holerite
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const holeriteFuncionarioId = Number(holerite.funcionario_id)
+    const isSigningOwnHolerite = userFuncionarioIdNum !== null && 
+                                 !isNaN(holeriteFuncionarioId) && 
+                                 userFuncionarioIdNum === holeriteFuncionarioId
+
+    if (!hasRHEditPermission && !isSigningOwnHolerite) {
+      return res.status(403).json({
+        error: 'Acesso negado',
+        message: 'Você não tem permissão para assinar este holerite. Você só pode assinar seus próprios holerites.',
+        required: 'rh:editar ou ser o funcionário dono do holerite',
+        userRole: userRole || 'Desconhecido',
+        debug: process.env.NODE_ENV === 'development' ? {
+          userFuncionarioId: userFuncionarioIdNum,
+          holeriteFuncionarioId: holeriteFuncionarioId,
+          isSigningOwnHolerite
+        } : undefined
+      })
+    }
+
+    // Atualizar holerite com assinatura
     const { data, error } = await supabaseAdmin
       .from('holerites')
       .update({
@@ -548,6 +603,113 @@ router.delete('/holerites/:id', requirePermission('rh:editar'), async (req, res)
   } catch (error) {
     console.error('Erro ao excluir holerite:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/holerites/:id/download
+ * Download do holerite
+ * Query params:
+ *   - comAssinatura=true: Adiciona a assinatura no PDF antes de baixar
+ */
+router.get('/holerites/:id/download', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comAssinatura } = req.query
+
+    // Buscar holerite
+    const { data: holerite, error: holeriteError } = await supabaseAdmin
+      .from('holerites')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (holeriteError || !holerite) {
+      return res.status(404).json({
+        success: false,
+        message: 'Holerite não encontrado'
+      })
+    }
+
+    if (!holerite.arquivo) {
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo do holerite não encontrado'
+      })
+    }
+
+    // Obter URL do arquivo
+    let arquivoUrl = holerite.arquivo
+
+    // Se não for URL completa, tentar obter do Supabase Storage
+    if (!arquivoUrl.startsWith('http')) {
+      try {
+        const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
+          .from('arquivos-obras')
+          .createSignedUrl(arquivoUrl, 3600)
+
+        if (!urlError && signedUrl) {
+          arquivoUrl = signedUrl.signedUrl
+        } else {
+          // Fallback: tentar URL pública
+          const supabaseUrl = process.env.SUPABASE_URL || ''
+          if (supabaseUrl) {
+            arquivoUrl = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${arquivoUrl}`
+          }
+        }
+      } catch (urlErr) {
+        console.error('Erro ao obter URL do arquivo:', urlErr)
+      }
+    }
+
+    // Baixar o PDF
+    const fileResponse = await fetch(arquivoUrl)
+    
+    if (!fileResponse.ok) {
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo não encontrado',
+        error: 'O arquivo do holerite não pôde ser baixado'
+      })
+    }
+
+    let pdfBuffer = Buffer.from(await fileResponse.arrayBuffer())
+
+    // Se comAssinatura=true e holerite tem assinatura, adicionar no PDF
+    if ((comAssinatura === 'true' || comAssinatura === '1') && holerite.assinatura_digital) {
+      try {
+        pdfBuffer = await baixarEAdicionarAssinatura(
+          arquivoUrl,
+          holerite.assinatura_digital,
+          {
+            pageIndex: -1, // Última página
+            x: null, // Centralizar
+            y: 50, // 50 pontos do fundo
+            width: 200,
+            height: 60,
+            opacity: 1.0
+          }
+        )
+        console.log('✅ Assinatura adicionada no PDF do holerite')
+      } catch (signatureError) {
+        console.error('Erro ao adicionar assinatura no PDF:', signatureError)
+        // Continuar mesmo se houver erro - retornar PDF original
+      }
+    }
+
+    // Gerar nome do arquivo
+    const nomeArquivo = `holerite_${holerite.mes_referencia}${holerite.assinatura_digital ? '_assinado' : ''}.pdf`
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
+    res.send(pdfBuffer)
+  } catch (error) {
+    console.error('Erro ao fazer download do holerite:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
   }
 })
 

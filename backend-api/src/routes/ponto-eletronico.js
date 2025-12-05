@@ -1409,7 +1409,7 @@ router.post('/registros', async (req, res) => {
     // Verificar se o funcionário existe na tabela funcionarios
     const { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
-      .select('id, nome, status, obra_atual_id')
+      .select('id, nome, status, obra_atual_id, cargo, cargo_id, cargos(nome)')
       .eq('id', funcionario_id)
       .eq('status', 'Ativo')
       .single();
@@ -1418,6 +1418,28 @@ router.post('/registros', async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Funcionário não encontrado ou inativo'
+      });
+    }
+
+    // VALIDAÇÃO DE CARGO: Apenas Operários e Sinaleiros podem bater ponto
+    // Verificar cargo da tabela cargos (se cargo_id existir) ou campo cargo direto
+    const cargoNome = (funcionario.cargos?.nome || funcionario.cargo || '').toLowerCase()
+    const cargoPermitePonto = (
+      cargoNome.includes('operário') ||
+      cargoNome.includes('operario') ||
+      cargoNome.includes('sinaleiro') ||
+      cargoNome === 'operários' ||
+      cargoNome === 'operarios' ||
+      cargoNome === 'operador' ||
+      cargoNome === 'sinaleiros'
+    )
+
+    if (!cargoPermitePonto) {
+      return res.status(403).json({
+        success: false,
+        message: 'Registro de ponto disponível apenas para funcionários com cargo de Operário ou Sinaleiro',
+        error: 'CARGO_NAO_PERMITIDO',
+        cargo: funcionario.cargos?.nome || funcionario.cargo || 'Não informado'
       });
     }
 

@@ -603,6 +603,174 @@ router.get('/buscar', async (req, res) => {
 })
 
 /**
+ * GET /funcionarios/:id/documentos
+ * Listar documentos de obras onde o funcionário é assinante
+ * IMPORTANTE: Esta rota deve vir ANTES de /:id para evitar conflito
+ */
+router.get('/:id/documentos', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const funcionarioId = parseInt(id);
+
+    if (isNaN(funcionarioId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do funcionário inválido'
+      });
+    }
+
+    // Verificar se funcionário existe
+    const { data: funcionario, error: funcionarioError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome')
+      .eq('id', funcionarioId)
+      .single();
+
+    if (funcionarioError || !funcionario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Funcionário não encontrado'
+      });
+    }
+
+    // Buscar documentos de obras onde o funcionário é assinante
+    // O user_id na tabela obras_documento_assinaturas é VARCHAR(255) e pode ser:
+    // - UUID (string) para usuários do Supabase Auth
+    // - ID numérico (string) para funcionários (ex: "123")
+    // - UUID formatado para funcionários (ex: "00000000-0000-0000-0000-000000000123")
+    const funcionarioIdString = funcionarioId.toString();
+    const funcionarioIdUuid = `00000000-0000-0000-0000-${funcionarioIdString.padStart(12, '0')}`;
+    
+    console.log(`[DEBUG] Buscando documentos para funcionário ID: ${funcionarioId}`);
+    console.log(`[DEBUG] Formatos de busca: "${funcionarioIdString}" e "${funcionarioIdUuid}"`);
+    
+    // Buscar assinaturas do funcionário
+    // Primeiro tentar buscar pelo ID numérico como string
+    let assinaturas = [];
+    let assinaturasError = null;
+    
+    // Tentar buscar pelo formato string primeiro (mais comum)
+    const { data: assinaturasString, error: errorString } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('documento_id, ordem, status, data_assinatura, arquivo_assinado, observacoes, tipo, created_at, updated_at, user_id')
+      .eq('user_id', funcionarioIdString)
+      .order('created_at', { ascending: false });
+    
+    if (errorString) {
+      console.error(`[DEBUG] Erro ao buscar com string "${funcionarioIdString}":`, errorString);
+    } else if (assinaturasString && assinaturasString.length > 0) {
+      assinaturas = assinaturasString;
+      console.log(`[DEBUG] Encontradas ${assinaturas.length} assinaturas com formato string`);
+    } else {
+      // Se não encontrou com string, tentar com UUID formatado
+      console.log(`[DEBUG] Nenhuma assinatura encontrada com string, tentando UUID formatado: "${funcionarioIdUuid}"`);
+      const { data: assinaturasUuid, error: errorUuid } = await supabaseAdmin
+        .from('obras_documento_assinaturas')
+        .select('documento_id, ordem, status, data_assinatura, arquivo_assinado, observacoes, tipo, created_at, updated_at, user_id')
+        .eq('user_id', funcionarioIdUuid)
+        .order('created_at', { ascending: false });
+      
+      if (errorUuid) {
+        console.error(`[DEBUG] Erro ao buscar com UUID "${funcionarioIdUuid}":`, errorUuid);
+        assinaturasError = errorUuid;
+      } else {
+        assinaturas = assinaturasUuid || [];
+        console.log(`[DEBUG] Encontradas ${assinaturas.length} assinaturas com formato UUID`);
+      }
+    }
+    
+    // Se houve erro em ambas as tentativas, usar o último erro
+    if (assinaturasError && assinaturas.length === 0) {
+      assinaturasError = errorString || assinaturasError;
+    }
+    
+    console.log(`[DEBUG] Assinaturas encontradas: ${assinaturas?.length || 0}`);
+    if (assinaturas && assinaturas.length > 0) {
+      console.log(`[DEBUG] Primeira assinatura user_id: ${assinaturas[0].user_id}`);
+    }
+
+    if (assinaturasError) {
+      console.error('Erro ao buscar assinaturas:', assinaturasError);
+      throw assinaturasError;
+    }
+
+    if (!assinaturas || assinaturas.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        funcionario: funcionario.nome,
+        total: 0
+      });
+    }
+
+    // Buscar os documentos relacionados
+    const documentoIds = assinaturas.map(a => a.documento_id);
+    
+    if (documentoIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        funcionario: funcionario.nome,
+        total: 0
+      });
+    }
+    
+    // Buscar documentos sem join para evitar problemas de tipo
+    const { data: documentos, error: documentosError } = await supabaseAdmin
+      .from('obras_documentos')
+      .select('*')
+      .in('id', documentoIds)
+      .order('created_at', { ascending: false });
+
+    if (documentosError) {
+      console.error('Erro ao buscar documentos:', documentosError);
+      throw documentosError;
+    }
+
+    // Buscar informações das obras separadamente
+    const obraIds = [...new Set(documentos.map(doc => doc.obra_id))];
+    const { data: obras, error: obrasError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome')
+      .in('id', obraIds);
+
+    if (obrasError) {
+      console.error('Erro ao buscar obras:', obrasError);
+      // Não falhar se não conseguir buscar obras, apenas continuar sem o nome
+    }
+
+    // Criar mapa de obras para acesso rápido
+    const obrasMap = new Map((obras || []).map(obra => [obra.id, obra.nome]));
+
+    // Combinar documentos com suas assinaturas
+    const documentosComAssinaturas = documentos.map(doc => {
+      const assinaturaDoFuncionario = assinaturas.find(a => a.documento_id === doc.id);
+      
+      return {
+        ...doc,
+        assinatura: assinaturaDoFuncionario || null,
+        obra_nome: obrasMap.get(doc.obra_id) || null
+      };
+    });
+
+    res.json({
+      success: true,
+      data: documentosComAssinaturas,
+      funcionario: funcionario.nome,
+      total: documentosComAssinaturas.length
+    });
+
+  } catch (error) {
+    console.error('Erro ao listar documentos do funcionário:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao listar documentos do funcionário',
+      error: error.message
+    });
+  }
+});
+
+/**
  * @swagger
  * /funcionarios/{id}:
  *   get:

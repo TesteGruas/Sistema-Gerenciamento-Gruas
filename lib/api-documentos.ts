@@ -41,10 +41,16 @@ export interface UploadDocumentoPayload {
 
 /**
  * Buscar documentos de um funcionário específico
+ * Retorna documentos de obras onde o funcionário é assinante
  */
-export const getDocumentosFuncionario = async (funcionarioId: number | string): Promise<DocumentoFuncionario[]> => {
+export const getDocumentosFuncionario = async (funcionarioId: number | string): Promise<any[]> => {
   const response = await api.get(`/funcionarios/${funcionarioId}/documentos`);
-  return response.data.data || response.data;
+  // A API retorna { success: true, data: [...], funcionario: "...", total: N }
+  if (response.data && response.data.success && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  // Fallback para formato antigo
+  return response.data.data || response.data || [];
 };
 
 /**

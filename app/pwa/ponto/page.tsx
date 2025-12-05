@@ -723,6 +723,81 @@ export default function PWAPontoPage() {
   const proximoRegistro = getProximoRegistro()
   const podeRegistrar = proximoRegistro !== null
 
+  // Verificar se o cargo permite bater ponto (apenas Operários e Sinaleiros)
+  const verificarCargoPermitePonto = () => {
+    if (typeof window === 'undefined') return false
+    
+    try {
+      // Obter cargo de todas as fontes possíveis
+      let cargoFromMetadata: string | null = null
+      const userDataStr = localStorage.getItem('user_data')
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr)
+        cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
+      }
+      
+      const userProfileStr = localStorage.getItem('user_profile')
+      let cargoFromProfile: string | null = null
+      if (userProfileStr) {
+        const profile = JSON.parse(userProfileStr)
+        cargoFromProfile = profile?.cargo || null
+      }
+      
+      // Buscar cargo do funcionário se disponível
+      const funcionarioCargo = user?.profile?.cargo || user?.cargo || null
+      
+      // Criar array de todos os cargos possíveis
+      const allCargos = [
+        cargoFromMetadata?.toLowerCase(),
+        cargoFromProfile?.toLowerCase(),
+        funcionarioCargo?.toLowerCase()
+      ].filter(Boolean)
+      
+      // Verificar se é Operário ou Sinaleiro
+      return allCargos.some(cargo => {
+        if (!cargo) return false
+        return (
+          cargo.includes('operário') ||
+          cargo.includes('operario') ||
+          cargo.includes('sinaleiro') ||
+          cargo === 'operários' ||
+          cargo === 'operarios' ||
+          cargo === 'operador' ||
+          cargo === 'sinaleiros'
+        )
+      })
+    } catch (error) {
+      console.error('Erro ao verificar cargo:', error)
+      return false
+    }
+  }
+
+  const podeBaterPonto = verificarCargoPermitePonto()
+
+  // Se não pode bater ponto, mostrar mensagem
+  if (!podeBaterPonto) {
+    return (
+      <ProtectedRoute permission="ponto_eletronico:visualizar">
+        <div className="space-y-4">
+          <Card className="bg-yellow-50 border-yellow-200">
+            <CardContent className="p-8 text-center">
+              <AlertCircle className="w-16 h-16 text-yellow-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Ponto Eletrônico Indisponível
+              </h3>
+              <p className="text-gray-600 mb-4">
+                O registro de ponto eletrônico está disponível apenas para funcionários com os cargos de <strong>Operário</strong> ou <strong>Sinaleiro</strong>.
+              </p>
+              <p className="text-sm text-gray-500">
+                Se você acredita que isso é um erro, entre em contato com o administrador do sistema.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar">
       <div className="space-y-4">

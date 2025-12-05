@@ -24,6 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import * as documentosApi from "@/lib/api-documentos"
+import { downloadDocumento } from "@/lib/api-assinaturas"
 
 type Documento = documentosApi.DocumentoFuncionario
 
@@ -159,11 +160,63 @@ export default function PWADocumentosPage() {
             'ID do funcionário não encontrado'
           )
           console.log('🔍 [PWA Documentos] Usando funcionarioId:', funcionarioId, 'tipo:', typeof funcionarioId)
-          const data = await documentosApi.getDocumentosFuncionario(funcionarioId)
-          const documentosDoUsuario = data.filter((doc: any) => 
-            doc.user_id === user.id.toString() && doc.status === 'aguardando'
-          )
-          setDocumentos(documentosDoUsuario)
+          
+          // Buscar documentos do funcionário
+          const response = await documentosApi.getDocumentosFuncionario(funcionarioId)
+          
+          // A API retorna documentos de obras com estrutura diferente
+          // Mapear para o formato esperado pelo componente
+          const documentosMapeados = (Array.isArray(response) ? response : response.data || []).map((doc: any) => {
+            // Verificar se tem assinatura pendente ou aguardando
+            const assinatura = doc.assinatura || {}
+            const statusAssinatura = assinatura.status || 'pendente'
+            const isPendente = ['pendente', 'aguardando'].includes(statusAssinatura)
+            
+            return {
+              id: doc.id?.toString() || assinatura.documento_id?.toString(),
+              documento_id: doc.id,
+              titulo: doc.titulo || 'Documento sem título',
+              descricao: doc.descricao,
+              tipo: assinatura.tipo || 'interno',
+              ordem: assinatura.ordem || 1,
+              status: statusAssinatura,
+              user_id: assinatura.user_id?.toString(),
+              data_assinatura: assinatura.data_assinatura,
+              arquivo_assinado: assinatura.arquivo_assinado,
+              observacoes: assinatura.observacoes,
+              created_at: doc.created_at || assinatura.created_at,
+              updated_at: doc.updated_at || assinatura.updated_at,
+              obra_id: doc.obra_id,
+              obra_nome: doc.obra_nome,
+              arquivo_original: doc.arquivo_original,
+              caminho_arquivo: doc.caminho_arquivo
+            }
+          }).filter((doc: any) => {
+            // Filtrar documentos do usuário atual (pendentes, aguardando ou já assinados)
+            const docUserId = doc.user_id?.toString() || ''
+            const userFuncionarioId = funcionarioId.toString()
+            const userFuncionarioIdUuid = `00000000-0000-0000-0000-${userFuncionarioId.padStart(12, '0')}`
+            const userAuthId = user?.id?.toString() || ''
+            
+            const userIdMatch = docUserId === userFuncionarioId || 
+                               docUserId === userFuncionarioIdUuid ||
+                               docUserId === userAuthId
+            
+            // Incluir documentos pendentes, aguardando ou já assinados pelo usuário
+            const statusMatch = ['pendente', 'aguardando', 'assinado'].includes(doc.status)
+            
+            console.log(`🔍 [PWA Documentos] Filtro - doc.user_id: ${docUserId}, funcionarioId: ${userFuncionarioId}, match: ${userIdMatch}, status: ${doc.status}, statusMatch: ${statusMatch}`)
+            
+            return userIdMatch && statusMatch
+          })
+          
+          console.log('📄 [PWA Documentos] Documentos mapeados:', documentosMapeados.length)
+          setDocumentos(documentosMapeados)
+          
+          // Salvar no cache
+          if (documentosMapeados.length > 0) {
+            localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosMapeados))
+          }
         } else {
           // Fallback: usar API de documentos pendentes
           console.log('🔍 [PWA Documentos] Usando API de documentos pendentes')
@@ -173,8 +226,12 @@ export default function PWADocumentosPage() {
       } catch (error) {
         console.warn('Erro ao buscar documentos com funcionarioId, tentando API pendentes:', error)
         // Fallback: usar API de documentos pendentes
-        const data = await documentosApi.getDocumentosPendentes()
-        setDocumentos(data)
+        try {
+          const data = await documentosApi.getDocumentosPendentes()
+          setDocumentos(data)
+        } catch (fallbackError) {
+          console.error('Erro ao buscar documentos pendentes:', fallbackError)
+        }
       }
 
     } catch (error: any) {
@@ -203,8 +260,11 @@ export default function PWADocumentosPage() {
   }
 
   const iniciarAssinatura = (documento: Documento) => {
+    console.log('🔍 [PWA Documentos] Iniciando assinatura para documento:', documento)
     setDocumentoSelecionado(documento)
     setSignature(null)
+    setArquivoAssinado(null)
+    setTipoAssinatura('digital')
   }
 
   const iniciarDesenho = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -303,6 +363,7 @@ export default function PWADocumentosPage() {
         token, 
         'ID do funcionário não encontrado'
       )
+      
       // Capturar geolocalização se disponível
       let geoloc: string | undefined
       if (navigator.geolocation) {
@@ -317,95 +378,77 @@ export default function PWADocumentosPage() {
       }
 
       if (tipoAssinatura === 'digital') {
-        // Assinatura digital - lógica original
-        // Se offline, adicionar à fila de sincronização
+        // Assinatura digital - adicionar ao PDF pelo backend
         if (!isOnline) {
-          const filaAssinaturas = JSON.parse(localStorage.getItem('fila_assinaturas_documentos') || '[]')
-          filaAssinaturas.push({
-            documentoId: documentoSelecionado.id,
-            assinatura: signature,
-            funcionario_id: funcionarioId,
-            geoloc,
-            timestamp: new Date().toISOString()
-          })
-          localStorage.setItem('fila_assinaturas_documentos', JSON.stringify(filaAssinaturas))
-          
-          // Atualizar UI localmente
-          setDocumentos(prev => prev.map(doc => 
-            doc.id === documentoSelecionado.id 
-              ? { ...doc, status: 'assinado' as const, assinatura_url: signature || undefined }
-              : doc
-          ))
-          
-          // Atualizar cache
-          const documentosAtualizados = documentos.map(doc => 
-            doc.id === documentoSelecionado.id 
-              ? { ...doc, status: 'assinado' as const, assinatura_url: signature || undefined }
-              : doc
-          )
-          localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosAtualizados))
-          
           toast({
-            title: "Assinatura pendente",
-            description: "A assinatura será sincronizada quando você estiver online",
-            variant: "default"
+            title: "Erro",
+            description: "Assinatura digital requer conexão com internet",
+            variant: "destructive"
           })
-          
-          setDocumentoSelecionado(null)
-          setSignature(null)
-          setArquivoAssinado(null)
-          setTipoAssinatura('digital')
+          setIsAssinando(false)
           return
         }
 
-        await documentosApi.assinarDocumento(documentoSelecionado.id, {
+        // Usar a nova API que adiciona assinatura ao PDF
+        const { assinarDocumentoComPDF } = await import('@/lib/api-assinaturas')
+        await assinarDocumentoComPDF(Number(documentoSelecionado.documento_id), {
           assinatura: signature!,
-          funcionario_id: funcionarioId,
           geoloc,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          observacoes: 'Assinatura digital via PWA'
+        })
+        
+        toast({
+          title: "Documento assinado!",
+          description: "A assinatura foi adicionada ao PDF com sucesso",
+          variant: "default"
         })
       } else {
-        // Upload de arquivo - nova funcionalidade
+        // Upload de arquivo assinado
         if (!isOnline) {
           toast({
             title: "Erro",
             description: "Upload de arquivo requer conexão com internet",
             variant: "destructive"
           })
+          setIsAssinando(false)
           return
         }
 
-        // Importar a função de upload de assinaturas
-        const { uploadArquivoAssinado } = await import('@/lib/api-assinaturas')
+        // Buscar a assinatura do documento para fazer upload
+        const { uploadArquivoAssinado, getDocumentoById } = await import('@/lib/api-assinaturas')
         
-        // Usar o ID da assinatura diretamente
+        // Buscar o documento para obter a assinatura
+        const documentoId = Number(documentoSelecionado.documento_id)
+        const documentoCompleto = await getDocumentoById(documentoId)
+        
+        // Encontrar a assinatura do usuário atual
+        const assinaturaUsuario = documentoCompleto.assinaturas?.find((ass: any) => {
+          const assUserId = ass.user_id?.toString() || ''
+          const userFuncionarioId = funcionarioId.toString()
+          const userFuncionarioIdUuid = `00000000-0000-0000-0000-${userFuncionarioId.padStart(12, '0')}`
+          return assUserId === userFuncionarioId || assUserId === userFuncionarioIdUuid
+        })
+        
+        if (!assinaturaUsuario) {
+          throw new Error('Assinatura não encontrada para este documento')
+        }
+        
         await uploadArquivoAssinado(
-          Number(documentoSelecionado.id),
+          assinaturaUsuario.id,
           arquivoAssinado!,
-          'Assinatura via PWA - Documentos'
+          'Documento assinado via PWA - Upload'
         )
+        
+        toast({
+          title: "Documento assinado!",
+          description: "O documento assinado foi enviado com sucesso",
+          variant: "default"
+        })
       }
       
-      toast({
-        title: "Documento assinado!",
-        description: "O documento foi assinado com sucesso",
-        variant: "default"
-      })
-      
-      // Atualizar lista de documentos
-      setDocumentos(prev => prev.map(doc => 
-        doc.id === documentoSelecionado.id 
-          ? { ...doc, status: 'assinado' as const, assinatura_url: tipoAssinatura === 'digital' ? (signature || undefined) : 'arquivo_assinado' }
-          : doc
-      ))
-      
-      // Atualizar cache
-      const documentosAtualizados = documentos.map(doc => 
-        doc.id === documentoSelecionado.id 
-          ? { ...doc, status: 'assinado' as const, assinatura_url: tipoAssinatura === 'digital' ? (signature || undefined) : 'arquivo_assinado' }
-          : doc
-      )
-      localStorage.setItem('cached_documentos_funcionario', JSON.stringify(documentosAtualizados))
+      // Recarregar documentos
+      await carregarDocumentos()
       
       setDocumentoSelecionado(null)
       setSignature(null)
@@ -448,13 +491,21 @@ export default function PWADocumentosPage() {
     return dataLimite < new Date()
   }
 
-  const handleDownload = async (documento: Documento) => {
+  const handleDownload = async (documento: Documento, comAssinaturas: boolean = false) => {
     try {
-      const blob = await documentosApi.downloadDocumento(documento.id)
+      // Verificar se documento tem assinaturas para sugerir download com assinaturas
+      const temAssinaturas = documento.status === 'assinado' || documento.assinatura_url
+      
+      // Usar documento_id (ID do documento de obra) para o download
+      const documentoId = documento.documento_id || documento.id
+      
+      // Usar a nova API que suporta assinaturas
+      const blob = await downloadDocumento(Number(documentoId), comAssinaturas && temAssinaturas)
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = documento.titulo || `documento_${documento.documento_id}.pdf`
+      const sufixo = comAssinaturas && temAssinaturas ? '_assinado' : ''
+      a.download = `${documento.titulo || `documento_${documento.documento_id}`}${sufixo}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -462,7 +513,7 @@ export default function PWADocumentosPage() {
       
       toast({
         title: "Download iniciado",
-        description: `Baixando ${documento.titulo || `Documento ${documento.documento_id}`}`,
+        description: `Baixando ${documento.titulo || `Documento ${documento.documento_id}`}${comAssinaturas && temAssinaturas ? ' com assinaturas' : ''}`,
         variant: "default"
       })
     } catch (error: any) {
@@ -477,7 +528,7 @@ export default function PWADocumentosPage() {
 
   return (
     <ProtectedRoute permission="assinatura_digital:visualizar">
-      <div className="space-y-6">
+      <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -485,14 +536,6 @@ export default function PWADocumentosPage() {
           <p className="text-gray-600">Assine documentos pendentes</p>
         </div>
         <div className="flex items-center gap-2">
-          {isOnline ? (
-            <Wifi className="w-5 h-5 text-green-600" />
-          ) : (
-            <WifiOff className="w-5 h-5 text-red-600" />
-          )}
-          <span className="text-sm text-gray-600">
-            {isOnline ? "Online" : "Offline"}
-          </span>
           <Button
             variant="outline"
             size="sm"
@@ -561,7 +604,7 @@ export default function PWADocumentosPage() {
                     )}
 
                     <div className="flex gap-2">
-                      {documento.status === 'aguardando' && (
+                      {(documento.status === 'aguardando' || documento.status === 'pendente') && (
                         <Button
                           onClick={() => iniciarAssinatura(documento)}
                           size="sm"
@@ -575,12 +618,25 @@ export default function PWADocumentosPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDownload(documento)}
+                        onClick={() => handleDownload(documento, false)}
                         disabled={!isOnline}
                       >
                         <Download className="w-4 h-4 mr-2" />
                         Baixar
                       </Button>
+                      
+                      {(documento.status === 'assinado' || documento.assinatura_url) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownload(documento, true)}
+                          disabled={!isOnline}
+                          className="bg-green-50 hover:bg-green-100 border-green-300"
+                        >
+                          <FileSignature className="w-4 h-4 mr-2" />
+                          Assinado
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -592,80 +648,157 @@ export default function PWADocumentosPage() {
 
       {/* Modal de Assinatura */}
       {documentoSelecionado && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PenTool className="w-5 h-5" />
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+          onClick={(e) => {
+            // Fechar modal ao clicar fora
+            if (e.target === e.currentTarget) {
+              setDocumentoSelecionado(null)
+              setSignature(null)
+              setArquivoAssinado(null)
+            }
+          }}
+        >
+          <Card className="w-full max-w-md mx-auto my-4 sm:my-8">
+            <CardHeader className="px-4 sm:px-6 pb-4">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <PenTool className="w-4 h-4 sm:w-5 sm:h-5" />
                 Assinar Documento
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm mt-1">
                 {documentoSelecionado.titulo || `Documento ${documentoSelecionado.documento_id}`}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
+              {/* Botão de Download */}
+              <div className="bg-blue-50 p-2.5 sm:p-3 rounded-lg border border-blue-200">
+                <p className="text-xs sm:text-sm text-blue-800 mb-2 leading-tight">
+                  <strong>Passo 1:</strong> Baixe o PDF para revisar antes de assinar
+                </p>
+                <Button
+                  onClick={() => handleDownload(documentoSelecionado, false)}
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-blue-300 text-blue-700 hover:bg-blue-100 text-xs sm:text-sm h-8 sm:h-9"
+                  disabled={!isOnline}
+                >
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                  Baixar PDF Original
+                </Button>
+              </div>
+
               {/* Seletor de tipo de assinatura */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Tipo de Assinatura
+                <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
+                  <strong>Passo 2:</strong> Escolha o tipo de assinatura
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-row gap-2">
                   <Button
                     type="button"
                     variant={tipoAssinatura === 'digital' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setTipoAssinatura('digital')}
-                    className="flex-1"
+                    className="flex-1 text-xs sm:text-sm"
+                    style={{ padding: '10px' }}
                   >
-                    <PenTool className="w-4 h-4 mr-1" />
-                    Digital
+                    <PenTool className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                    <span className="hidden sm:inline">Digital (Adiciona ao PDF)</span>
+                    <span className="sm:hidden">Digital</span>
                   </Button>
                   <Button
                     type="button"
                     variant={tipoAssinatura === 'arquivo' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setTipoAssinatura('arquivo')}
-                    className="flex-1"
+                    className="flex-1 text-xs sm:text-sm"
+                    style={{ padding: '10px' }}
                   >
-                    <Upload className="w-4 h-4 mr-1" />
-                    Arquivo
+                    <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                    <span className="hidden sm:inline">Upload Assinado</span>
+                    <span className="sm:hidden">Upload</span>
                   </Button>
                 </div>
+                <p className="text-xs text-gray-500 mt-2 leading-tight">
+                  {tipoAssinatura === 'digital' 
+                    ? 'Assine digitalmente e a assinatura será adicionada ao PDF automaticamente'
+                    : 'Faça upload do PDF já assinado fisicamente'}
+                </p>
               </div>
 
               {/* Assinatura Digital */}
               {tipoAssinatura === 'digital' && (
                 <div>
-                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                  <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
                     Assinatura Digital
                   </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                    <canvas
-                      ref={canvasRef}
-                      width={300}
-                      height={150}
-                      className="border border-gray-200 rounded cursor-crosshair"
-                      onMouseDown={iniciarDesenho}
-                      onMouseMove={desenhar}
-                      onMouseUp={pararDesenho}
-                      onMouseLeave={pararDesenho}
-                    />
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-2 sm:p-4 overflow-x-auto">
+                    <div className="flex justify-center">
+                      <canvas
+                        ref={canvasRef}
+                        width={300}
+                        height={150}
+                        className="border border-gray-200 rounded cursor-crosshair w-full max-w-full"
+                        style={{ maxWidth: '100%', height: 'auto' }}
+                        onMouseDown={iniciarDesenho}
+                        onMouseMove={desenhar}
+                        onMouseUp={pararDesenho}
+                        onMouseLeave={pararDesenho}
+                        onTouchStart={(e) => {
+                          e.preventDefault()
+                          const touch = e.touches[0]
+                          const canvas = canvasRef.current
+                          if (!canvas) return
+                          const rect = canvas.getBoundingClientRect()
+                          const x = touch.clientX - rect.left
+                          const y = touch.clientY - rect.top
+                          const ctx = canvas.getContext('2d')
+                          if (!ctx) return
+                          setIsDrawing(true)
+                          ctx.beginPath()
+                          ctx.moveTo(x, y)
+                        }}
+                        onTouchMove={(e) => {
+                          e.preventDefault()
+                          if (!isDrawing) return
+                          const canvas = canvasRef.current
+                          if (!canvas) return
+                          const touch = e.touches[0]
+                          const rect = canvas.getBoundingClientRect()
+                          const x = touch.clientX - rect.left
+                          const y = touch.clientY - rect.top
+                          const ctx = canvas.getContext('2d')
+                          if (!ctx) return
+                          ctx.lineWidth = 2
+                          ctx.lineCap = 'round'
+                          ctx.strokeStyle = '#000'
+                          ctx.lineTo(x, y)
+                          ctx.stroke()
+                          ctx.beginPath()
+                          ctx.moveTo(x, y)
+                        }}
+                        onTouchEnd={() => {
+                          setIsDrawing(false)
+                        }}
+                      />
+                    </div>
                   </div>
                   <div className="flex gap-2 mt-2">
                     <Button
                       onClick={limparAssinatura}
                       variant="outline"
                       size="sm"
+                      className="flex-1 text-xs sm:text-sm h-8 sm:h-8"
                     >
-                      <Trash2 className="w-4 h-4 mr-1" />
+                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
                       Limpar
                     </Button>
                     <Button
                       onClick={salvarAssinatura}
                       variant="outline"
                       size="sm"
+                      className="flex-1 text-xs sm:text-sm h-8 sm:h-8"
                     >
-                      <Save className="w-4 h-4 mr-1" />
+                      <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
                       Salvar
                     </Button>
                   </div>
@@ -675,35 +808,37 @@ export default function PWADocumentosPage() {
               {/* Upload de Arquivo */}
               {tipoAssinatura === 'arquivo' && (
                 <div>
-                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                  <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
                     Upload do Documento Assinado
                   </label>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     <input
                       type="file"
                       accept=".pdf"
                       onChange={(e) => setArquivoAssinado(e.target.files?.[0] || null)}
-                      className="w-full p-2 border border-gray-300 rounded-md"
+                      className="w-full p-2 text-xs sm:text-sm border border-gray-300 rounded-md file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs sm:file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
                     
                     {arquivoAssinado && (
-                      <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2 text-green-800">
-                          <FileSignature className="w-4 h-4" />
-                          <span className="font-medium">{arquivoAssinado.name}</span>
-                          <span className="text-sm">({(arquivoAssinado.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      <div className="bg-green-50 p-2.5 sm:p-3 rounded-lg border border-green-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-green-800">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <FileSignature className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                            <span className="font-medium text-xs sm:text-sm truncate">{arquivoAssinado.name}</span>
+                          </div>
+                          <span className="text-xs">({(arquivoAssinado.size / 1024 / 1024).toFixed(2)} MB)</span>
                         </div>
                       </div>
                     )}
                     
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 leading-tight">
                       Faça o upload do documento PDF assinado fisicamente. Máximo 10MB.
                     </p>
                   </div>
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-200">
                 <Button
                   onClick={assinarDocumento}
                   disabled={
@@ -711,14 +846,15 @@ export default function PWADocumentosPage() {
                     (tipoAssinatura === 'digital' && !signature) ||
                     (tipoAssinatura === 'arquivo' && !arquivoAssinado)
                   }
-                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-xs sm:text-sm h-9 sm:h-9 order-2 sm:order-1"
                 >
                   {isAssinando ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5 sm:mr-2" />
                   ) : (
-                    <CheckCircle className="w-4 h-4 mr-2" />
+                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                   )}
-                  {isAssinando ? 'Assinando...' : 'Confirmar Assinatura'}
+                  <span className="hidden sm:inline">{isAssinando ? 'Assinando...' : 'Confirmar Assinatura'}</span>
+                  <span className="sm:hidden">{isAssinando ? 'Assinando...' : 'Confirmar'}</span>
                 </Button>
                 <Button
                   onClick={() => {
@@ -728,6 +864,7 @@ export default function PWADocumentosPage() {
                     setTipoAssinatura('digital')
                   }}
                   variant="outline"
+                  className="text-xs sm:text-sm h-9 sm:h-9 order-1 sm:order-2"
                 >
                   Cancelar
                 </Button>

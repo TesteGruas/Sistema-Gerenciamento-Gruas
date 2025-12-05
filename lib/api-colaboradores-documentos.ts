@@ -274,6 +274,23 @@ export const colaboradoresDocumentosApi = {
         method: 'DELETE',
       })
     },
+
+    // Baixar holerite (com opção de incluir assinatura)
+    async baixar(holeriteId: string, comAssinatura: boolean = false): Promise<Blob> {
+      const url = buildApiUrl(`colaboradores/holerites/${holeriteId}/download`)
+      const params = comAssinatura ? { comAssinatura: 'true' } : {}
+      
+      const response = await fetchWithAuth(url + (Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : ''), {
+        method: 'GET',
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || `Erro ${response.status}: ${response.statusText}`)
+      }
+      
+      return await response.blob()
+    },
   },
 }
 

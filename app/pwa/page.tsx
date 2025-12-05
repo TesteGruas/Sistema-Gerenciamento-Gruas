@@ -390,10 +390,10 @@ export default function PWAMainPage() {
       borderColor: "border-amber-100"
     },
     {
-      title: "Admissionais",
-      description: "Documentos admissionais",
+      title: "Documentos",
+      description: "Documentos",
       icon: FileCheck,
-      href: "/pwa/perfil?tab=documentos-admissionais",
+      href: "/pwa/documentos",
       color: "text-cyan-600",
       bgColor: "bg-cyan-50",
       borderColor: "border-cyan-100"
@@ -750,25 +750,75 @@ export default function PWAMainPage() {
               </h2>
             </div>
             <div className="flex items-center gap-2">
-              {getProximoRegistro() && (
-                <button
-                  onClick={handleRegistrarPonto}
-                  disabled={isRegistrandoPonto}
-                  className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isRegistrandoPonto ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Registrando...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4" />
-                      Registrar Ponto
-                    </>
-                  )}
-                </button>
-              )}
+              {getProximoRegistro() && (() => {
+                // Verificar se o cargo permite bater ponto (apenas Operários e Sinaleiros)
+                let cargoFromMetadata: string | null = null
+                try {
+                  const userDataStr = localStorage.getItem('user_data')
+                  if (userDataStr) {
+                    const userData = JSON.parse(userDataStr)
+                    cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
+                  }
+                } catch (e) {
+                  // Ignorar erro
+                }
+                
+                const hookRole = userRole?.toLowerCase() || ''
+                const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
+                const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
+                const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
+                const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
+                const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
+                const currentRoleLower = currentUserRole?.toLowerCase() || ''
+                
+                const allRolesArray = [
+                  cargoFromMetadataLower,
+                  pwaCargoLower,
+                  roleFromUserDataLower,
+                  currentRoleLower,
+                  hookRole,
+                  roleFromPerfilLower,
+                  pwaRoleLower
+                ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
+                
+                // Verificar se é Operário ou Sinaleiro
+                const podeBaterPonto = allRolesArray.some(role => {
+                  const roleLower = role.toLowerCase()
+                  return (
+                    roleLower.includes('operário') ||
+                    roleLower.includes('operario') ||
+                    roleLower.includes('sinaleiro') ||
+                    roleLower === 'operários' ||
+                    roleLower === 'operarios' ||
+                    roleLower === 'operador' ||
+                    roleLower === 'sinaleiros'
+                  )
+                })
+                
+                if (!podeBaterPonto) {
+                  return null
+                }
+                
+                return (
+                  <button
+                    onClick={handleRegistrarPonto}
+                    disabled={isRegistrandoPonto}
+                    className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isRegistrandoPonto ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Registrando...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4" />
+                        Registrar Ponto
+                      </>
+                    )}
+                  </button>
+                )
+              })()}
             </div>
           </div>
           
@@ -873,8 +923,56 @@ export default function PWAMainPage() {
         <div className="grid grid-cols-2 gap-3">
           {quickActions
             .filter(action => {
-              // Filtrar itens que requerem obra ativa (Ponto e Gruas)
-              // Validação de obra removida - todos os itens estão disponíveis
+              // Filtrar Ponto - apenas Operários e Sinaleiros podem bater ponto
+              if (action.title === "Ponto") {
+                // Obter cargo do user_metadata (mais confiável que perfil)
+                let cargoFromMetadata: string | null = null
+                try {
+                  const userDataStr = localStorage.getItem('user_data')
+                  if (userDataStr) {
+                    const userData = JSON.parse(userDataStr)
+                    cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
+                  }
+                } catch (e) {
+                  // Ignorar erro
+                }
+                
+                // Obter todos os roles possíveis de todas as fontes
+                const hookRole = userRole?.toLowerCase() || ''
+                const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
+                const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
+                const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
+                const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
+                const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
+                const currentRoleLower = currentUserRole?.toLowerCase() || ''
+                
+                // Criar array de todos os roles (sem duplicatas)
+                const allRolesArray = [
+                  cargoFromMetadataLower,
+                  pwaCargoLower,
+                  roleFromUserDataLower,
+                  currentRoleLower,
+                  hookRole,
+                  roleFromPerfilLower,
+                  pwaRoleLower
+                ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
+                
+                // Verificar se é Operário ou Sinaleiro
+                const podeBaterPonto = allRolesArray.some(role => {
+                  const roleLower = role.toLowerCase()
+                  return (
+                    roleLower.includes('operário') ||
+                    roleLower.includes('operario') ||
+                    roleLower.includes('sinaleiro') ||
+                    roleLower === 'operários' ||
+                    roleLower === 'operarios' ||
+                    roleLower === 'operador' ||
+                    roleLower === 'sinaleiros'
+                  )
+                })
+                
+                return podeBaterPonto
+              }
               
               // Filtrar Aprovações - apenas Supervisor para cima (NÃO para Operador)
               if (action.requiresSupervisor) {

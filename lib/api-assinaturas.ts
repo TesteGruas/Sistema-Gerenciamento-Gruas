@@ -77,6 +77,17 @@ export const assinarDocumento = async (
 };
 
 /**
+ * Assina um documento adicionando assinatura digital ao PDF
+ */
+export const assinarDocumentoComPDF = async (
+  id: number, 
+  payload: AssinaturaPayload
+): Promise<DocumentoAssinatura> => {
+  const response = await api.post(`/assinaturas/assinar-com-pdf/${id}`, payload);
+  return response.data;
+};
+
+/**
  * Recusa um documento com justificativa
  */
 export const recusarDocumento = async (
@@ -113,9 +124,13 @@ export const validarAssinatura = async (id: number): Promise<{ valido: boolean, 
 
 /**
  * Baixa um documento para visualização/download
+ * @param id - ID do documento
+ * @param comAssinaturas - Se true, adiciona assinaturas no PDF antes de baixar
  */
-export const downloadDocumento = async (id: number): Promise<Blob> => {
+export const downloadDocumento = async (id: number, comAssinaturas: boolean = false): Promise<Blob> => {
+  const params = comAssinaturas ? { comAssinaturas: 'true' } : {};
   const response = await api.get(`/assinaturas/documento/${id}/download`, {
+    params,
     responseType: 'blob'
   });
   return response.data;

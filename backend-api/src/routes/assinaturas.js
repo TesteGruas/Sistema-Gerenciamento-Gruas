@@ -3,6 +3,7 @@ import multer from 'multer'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { normalizeRoleName, getRoleLevel } from '../config/roles.js'
+import { adicionarMultiplasAssinaturasNoPDF, baixarEAdicionarAssinatura, adicionarAssinaturaNoPDF, adicionarAssinaturaEmTodasPaginas } from '../utils/pdf-signature.js'
 
 const router = express.Router()
 
@@ -221,6 +222,324 @@ router.get('/documento/:id', authenticateToken, async (req, res) => {
 })
 
 /**
+ * POST /api/assinaturas/assinar-com-pdf/:id
+ * Assinar documento adicionando assinatura digital ao PDF
+ */
+router.post('/assinar-com-pdf/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { assinatura, geoloc, timestamp, observacoes } = req.body
+    const userId = req.user.id
+
+    if (!assinatura) {
+      return res.status(400).json({
+        success: false,
+        message: 'Assinatura é obrigatória'
+      })
+    }
+
+    // Buscar documento
+    const { data: documento, error: documentoError } = await supabaseAdmin
+      .from('obras_documentos')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (documentoError || !documento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Documento não encontrado'
+      })
+    }
+
+    // Verificar se o documento está disponível para assinatura
+    if (!['aguardando_assinatura', 'em_assinatura', 'rascunho'].includes(documento.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Documento não está disponível para assinatura'
+      })
+    }
+
+    // Buscar assinatura do usuário
+    // O user_id pode estar em diferentes formatos (UUID, número como string, UUID formatado)
+    // IMPORTANTE: Se o usuário tem funcionario_id, também precisamos buscar por ele
+    const userIdString = userId.toString()
+    const funcionarioId = req.user.funcionario_id // Pode ser null se não for funcionário
+    const funcionarioIdString = funcionarioId ? funcionarioId.toString() : null
+    const funcionarioIdUuid = funcionarioIdString ? `00000000-0000-0000-0000-${funcionarioIdString.padStart(12, '0')}` : null
+    const userIdUuid = `00000000-0000-0000-0000-${userIdString.padStart(12, '0')}`
+    
+    console.log('🔍 [DEBUG] Buscando assinatura:', {
+      documentoId: id,
+      userId,
+      userIdString,
+      userIdUuid,
+      funcionarioId,
+      funcionarioIdString,
+      funcionarioIdUuid,
+      userIdType: typeof userId
+    })
+    
+    // Buscar todas as assinaturas do documento e filtrar no código
+    // Isso evita problemas de conversão de tipo no Supabase
+    const { data: todasAssinaturas, error: assinaturasError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*')
+      .eq('documento_id', id)
+      .in('status', ['aguardando', 'pendente'])
+      .order('ordem', { ascending: true })
+    
+    if (assinaturasError) {
+      console.error('Erro ao buscar assinaturas:', assinaturasError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar assinaturas',
+        error: assinaturasError.message
+      })
+    }
+    
+    console.log('📋 [DEBUG] Assinaturas encontradas:', todasAssinaturas?.map(a => ({
+      id: a.id,
+      user_id: a.user_id,
+      user_id_type: typeof a.user_id,
+      status: a.status,
+      ordem: a.ordem
+    })))
+    
+    // Filtrar assinatura do usuário atual (pode estar em diferentes formatos)
+    // Verificar tanto pelo userId (UUID do Supabase) quanto pelo funcionarioId (número)
+    const assinaturaUser = todasAssinaturas?.find(ass => {
+      const assUserId = ass.user_id?.toString() || ''
+      
+      // Comparar com userId (UUID do Supabase Auth)
+      const matchesUserId = assUserId === userIdString || 
+                           assUserId === userIdUuid || 
+                           assUserId === userId ||
+                           assUserId === userId.toString()
+      
+      // Comparar com funcionarioId (se existir)
+      let matchesFuncionarioId = false
+      if (funcionarioIdString) {
+        matchesFuncionarioId = assUserId === funcionarioIdString ||
+                              assUserId === funcionarioIdUuid ||
+                              (!isNaN(Number(assUserId)) && !isNaN(Number(funcionarioIdString)) && 
+                               Number(assUserId) === Number(funcionarioIdString))
+      }
+      
+      const matches = matchesUserId || matchesFuncionarioId
+      
+      if (matches) {
+        console.log('✅ [DEBUG] Assinatura encontrada:', {
+          assinaturaId: ass.id,
+          assUserId,
+          userIdString,
+          funcionarioIdString,
+          match: true
+        })
+      }
+      
+      return matches
+    })
+    
+    if (!assinaturaUser) {
+      console.error('❌ [DEBUG] Assinatura não encontrada:', {
+        documentoId: id,
+        userId,
+        userIdString,
+        userIdUuid,
+        funcionarioId,
+        funcionarioIdString,
+        funcionarioIdUuid,
+        userIdType: typeof userId,
+        assinaturasDisponiveis: todasAssinaturas?.map(a => ({ 
+          id: a.id,
+          user_id: a.user_id,
+          user_id_type: typeof a.user_id,
+          status: a.status, 
+          ordem: a.ordem 
+        }))
+      })
+      return res.status(403).json({
+        success: false,
+        message: 'Você não tem permissão para assinar este documento',
+        error: 'Assinatura não encontrada para este usuário',
+        debug: {
+          userId,
+          userIdString,
+          userIdUuid,
+          funcionarioId,
+          funcionarioIdString,
+          funcionarioIdUuid,
+          assinaturasDisponiveis: todasAssinaturas?.map(a => ({
+            user_id: a.user_id,
+            status: a.status,
+            ordem: a.ordem
+          }))
+        }
+      })
+    }
+
+    // Buscar o PDF original do storage
+    let pdfBuffer
+    try {
+      const { data: fileData, error: fileError } = await supabaseAdmin.storage
+        .from('arquivos-obras')
+        .download(documento.caminho_arquivo)
+
+      if (fileError || !fileData) {
+        throw new Error('Erro ao baixar PDF original')
+      }
+
+      pdfBuffer = Buffer.from(await fileData.arrayBuffer())
+    } catch (error) {
+      console.error('Erro ao baixar PDF:', error)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao baixar PDF original',
+        error: error.message
+      })
+    }
+
+    // Adicionar assinatura ao PDF
+    let pdfComAssinatura
+    try {
+      pdfComAssinatura = await adicionarAssinaturaNoPDF(pdfBuffer, assinatura, {
+        pageIndex: -1, // Última página
+        y: 50
+      })
+    } catch (error) {
+      console.error('Erro ao adicionar assinatura ao PDF:', error)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao adicionar assinatura ao PDF',
+        error: error.message
+      })
+    }
+
+    // Upload do PDF assinado
+    const fileName = `assinado_${documento.arquivo_original || `documento_${id}.pdf`}`
+    const filePath = `assinados/${documento.id}/${assinaturaUser.id}/${fileName}`
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .upload(filePath, pdfComAssinatura, {
+        contentType: 'application/pdf',
+        cacheControl: '3600',
+        upsert: true
+      })
+
+    if (uploadError) {
+      console.error('Erro no upload:', uploadError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao fazer upload do PDF assinado',
+        error: uploadError.message
+      })
+    }
+
+    // Gerar URL pública
+    const { data: urlData } = supabaseAdmin.storage
+      .from('arquivos-obras')
+      .getPublicUrl(filePath)
+
+    // Atualizar assinatura
+    // IMPORTANTE: Salvar o base64 da assinatura no campo assinatura_base64 para poder aplicar em todas as páginas depois
+    // O campo arquivo_assinado pode conter URL do PDF assinado
+    // O campo assinatura_base64 contém o base64 da assinatura (canvas) para aplicar em todas as páginas
+    const { error: updateAssinaturaError } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .update({
+        status: 'assinado',
+        data_assinatura: new Date().toISOString(),
+        arquivo_assinado: urlData.publicUrl, // URL do PDF assinado
+        assinatura_base64: assinatura, // Base64 da assinatura (canvas) para aplicar em todas as páginas
+        observacoes: observacoes || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', assinaturaUser.id)
+
+    if (updateAssinaturaError) {
+      console.error('Erro ao atualizar assinatura:', updateAssinaturaError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar assinatura',
+        error: updateAssinaturaError.message
+      })
+    }
+
+    // Verificar próximas assinaturas e atualizar status do documento
+    const { data: todasAssinaturasAtualizadas } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select('*')
+      .eq('documento_id', id)
+      .order('ordem', { ascending: true })
+
+    const assinaturasPendentes = todasAssinaturasAtualizadas?.filter(ass => ass.status === 'pendente') || []
+    const proximaAssinatura = assinaturasPendentes.length > 0 ? assinaturasPendentes[0] : null
+
+    let novoStatus = documento.status
+    let proximoAssinanteId = documento.proximo_assinante_id
+
+    if (proximaAssinatura) {
+      await supabaseAdmin
+        .from('obras_documento_assinaturas')
+        .update({ status: 'aguardando' })
+        .eq('id', proximaAssinatura.id)
+      
+      novoStatus = 'em_assinatura'
+      proximoAssinanteId = proximaAssinatura.user_id
+    } else {
+      novoStatus = 'assinado'
+      proximoAssinanteId = null
+    }
+
+    // Atualizar documento
+    await supabaseAdmin
+      .from('obras_documentos')
+      .update({
+        status: novoStatus,
+        proximo_assinante_id: proximoAssinanteId,
+        arquivo_assinado: urlData.publicUrl,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    // Registrar no histórico
+    await supabaseAdmin
+      .from('obras_documento_historico')
+      .insert({
+        documento_id: id,
+        user_id: userId,
+        acao: 'assinou',
+        user_nome: req.user.nome || req.user.email,
+        user_email: req.user.email,
+        user_role: req.user.role,
+        observacoes: `Assinado via PWA - Assinatura digital adicionada ao PDF${geoloc ? ` - Localização: ${geoloc}` : ''}`
+      })
+
+    res.json({
+      success: true,
+      message: 'Documento assinado com sucesso. Assinatura adicionada ao PDF.',
+      data: {
+        status: novoStatus,
+        arquivo_assinado: urlData.publicUrl,
+        proximoAssinante: proximaAssinatura ? {
+          user_id: proximaAssinatura.user_id,
+          ordem: proximaAssinatura.ordem
+        } : null
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao assinar documento com PDF:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
  * POST /api/assinaturas/assinar/:id
  * Assinar um documento digitalmente
  */
@@ -279,12 +598,14 @@ router.post('/assinar/:id', authenticateToken, async (req, res) => {
     // Em produção, você pode querer salvar a imagem da assinatura no Supabase Storage
     
     // Atualizar assinatura do usuário
+    // IMPORTANTE: Salvar o base64 da assinatura no campo assinatura_base64 para poder aplicar em todas as páginas depois
     const { error: updateAssinaturaError } = await supabaseAdmin
       .from('obras_documento_assinaturas')
       .update({
         status: 'assinado',
         data_assinatura: new Date().toISOString(),
-        arquivo_assinado: assinatura, // Base64 da assinatura
+        arquivo_assinado: assinatura, // Base64 da assinatura (mantido para compatibilidade)
+        assinatura_base64: assinatura, // Base64 da assinatura (canvas) para aplicar em todas as páginas
         observacoes: observacoes || null,
         updated_at: new Date().toISOString()
       })
@@ -586,10 +907,13 @@ router.get('/:id/validar', authenticateToken, async (req, res) => {
 /**
  * GET /api/assinaturas/documento/:id/download
  * Download do arquivo do documento
+ * Query params:
+ *   - comAssinaturas=true: Adiciona todas as assinaturas no PDF antes de baixar
  */
 router.get('/documento/:id/download', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
+    const { comAssinaturas } = req.query
 
     const { data: documento, error: documentoError } = await supabaseAdmin
       .from('obras_documentos')
@@ -614,10 +938,14 @@ router.get('/documento/:id/download', authenticateToken, async (req, res) => {
       })
     }
 
+    // IMPORTANTE: Sempre usar o PDF original (caminho_arquivo) para adicionar assinaturas
+    // Não usar arquivo_assinado, pois queremos aplicar as assinaturas no PDF original
+    const caminhoArquivoParaDownload = documento.caminho_arquivo
+    
     // Gerar URL assinada para download
     const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
       .from('arquivos-obras')
-      .createSignedUrl(documento.caminho_arquivo, 3600) // 1 hora
+      .createSignedUrl(caminhoArquivoParaDownload, 3600) // 1 hora
 
     if (urlError) {
       console.error('Erro ao gerar URL:', {
@@ -646,7 +974,7 @@ router.get('/documento/:id/download', authenticateToken, async (req, res) => {
       })
     }
 
-    // Fazer download do arquivo e retornar como blob
+    // Fazer download do arquivo
     const fileResponse = await fetch(signedUrl.signedUrl)
     
     if (!fileResponse.ok) {
@@ -658,11 +986,132 @@ router.get('/documento/:id/download', authenticateToken, async (req, res) => {
       })
     }
 
-    const fileBlob = await fileResponse.arrayBuffer()
+    let pdfBuffer = Buffer.from(await fileResponse.arrayBuffer())
+
+    // Sempre tentar adicionar assinaturas quando disponíveis
+    // Se comAssinaturas=false, ainda assim tentar adicionar (comportamento padrão)
+    // Se comAssinaturas=true, forçar adicionar
+    const deveAdicionarAssinaturas = comAssinaturas !== 'false' && comAssinaturas !== '0'
+    
+    if (deveAdicionarAssinaturas) {
+      try {
+        console.log('📥 [DOWNLOAD] Buscando assinaturas para adicionar ao PDF...')
+        
+        // Buscar todas as assinaturas assinadas do documento
+        const { data: assinaturas, error: assinaturasError } = await supabaseAdmin
+          .from('obras_documento_assinaturas')
+          .select('*')
+          .eq('documento_id', id)
+          .eq('status', 'assinado')
+          .order('ordem', { ascending: true })
+
+        if (assinaturasError) {
+          console.error('❌ [DOWNLOAD] Erro ao buscar assinaturas:', assinaturasError)
+        } else if (assinaturas && assinaturas.length > 0) {
+          console.log(`📋 [DOWNLOAD] ${assinaturas.length} assinatura(s) encontrada(s) para adicionar ao PDF`)
+          console.log('📋 [DOWNLOAD] Detalhes das assinaturas:', assinaturas.map(a => ({
+            id: a.id,
+            ordem: a.ordem,
+            tem_assinatura_base64: !!a.assinatura_base64,
+            tem_arquivo_assinado: !!a.arquivo_assinado,
+            arquivo_assinado_tipo: a.arquivo_assinado?.substring(0, 50)
+          })))
+
+          // Processar cada assinatura
+          // Prioridade: assinatura_base64 > arquivo_assinado (se for base64) > arquivo_assinado (se for URL)
+          const assinaturasParaAdicionar = []
+          
+          for (let i = 0; i < assinaturas.length; i++) {
+            const ass = assinaturas[i]
+            let signatureBase64 = null
+
+            // Prioridade 1: Campo assinatura_base64 (campo dedicado para base64)
+            if (ass.assinatura_base64) {
+              signatureBase64 = ass.assinatura_base64
+              console.log(`✅ [DOWNLOAD] Assinatura ${i + 1}: Usando assinatura_base64 do campo dedicado`)
+            }
+            // Prioridade 2: Campo arquivo_assinado se for base64
+            else if (ass.arquivo_assinado && ass.arquivo_assinado.startsWith('data:image')) {
+              signatureBase64 = ass.arquivo_assinado
+              console.log(`✅ [DOWNLOAD] Assinatura ${i + 1}: Usando base64 do campo arquivo_assinado`)
+            }
+            // Prioridade 3: Campo arquivo_assinado se for URL (tentar baixar)
+            else if (ass.arquivo_assinado && ass.arquivo_assinado.startsWith('http')) {
+              try {
+                console.log(`📥 [DOWNLOAD] Assinatura ${i + 1}: Tentando baixar assinatura de URL: ${ass.arquivo_assinado.substring(0, 100)}...`)
+                const imageResponse = await fetch(ass.arquivo_assinado)
+                if (imageResponse.ok) {
+                  const imageBuffer = await imageResponse.arrayBuffer()
+                  const base64 = Buffer.from(imageBuffer).toString('base64')
+                  signatureBase64 = `data:image/png;base64,${base64}`
+                  console.log(`✅ [DOWNLOAD] Assinatura ${i + 1}: Convertida de URL para base64 (${base64.length} caracteres)`)
+                } else {
+                  console.warn(`⚠️ [DOWNLOAD] Assinatura ${i + 1}: Erro ao baixar assinatura de URL: ${imageResponse.status}`)
+                }
+              } catch (urlError) {
+                console.error(`❌ [DOWNLOAD] Assinatura ${i + 1}: Erro ao processar URL da assinatura:`, urlError.message)
+              }
+            } else {
+              console.warn(`⚠️ [DOWNLOAD] Assinatura ${i + 1}: Nenhuma fonte de assinatura válida encontrada`)
+            }
+
+            if (signatureBase64) {
+              // Validar se o base64 está no formato correto
+              if (!signatureBase64.includes(',')) {
+                // Se não tem prefixo data:, adicionar
+                if (!signatureBase64.startsWith('data:')) {
+                  signatureBase64 = `data:image/png;base64,${signatureBase64}`
+                }
+              }
+              
+              assinaturasParaAdicionar.push({
+                signatureBase64,
+                marginBottom: 20 + (i * 120) // 120px entre cada assinatura (100px altura + 20px espaço)
+              })
+              console.log(`✅ [DOWNLOAD] Assinatura ${i + 1}: Preparada para adicionar (marginBottom: ${20 + (i * 120)}px)`)
+            }
+          }
+
+          if (assinaturasParaAdicionar.length > 0) {
+            console.log(`🎨 [DOWNLOAD] Adicionando ${assinaturasParaAdicionar.length} assinatura(s) em todas as páginas do PDF...`)
+            
+            // Adicionar cada assinatura em todas as páginas
+            for (let i = 0; i < assinaturasParaAdicionar.length; i++) {
+              const assinatura = assinaturasParaAdicionar[i]
+              try {
+                console.log(`🎨 [DOWNLOAD] Processando assinatura ${i + 1}/${assinaturasParaAdicionar.length}...`)
+                pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, assinatura.signatureBase64, {
+                  height: 100, // Altura fixa de 100px
+                  marginRight: 20, // Margem direita de 20px
+                  marginBottom: assinatura.marginBottom, // Margem inferior (empilhamento)
+                  opacity: 1.0
+                })
+                console.log(`✅ [DOWNLOAD] Assinatura ${i + 1}/${assinaturasParaAdicionar.length} adicionada com sucesso`)
+              } catch (sigError) {
+                console.error(`❌ [DOWNLOAD] Erro ao adicionar assinatura ${i + 1}:`, sigError.message)
+                // Continuar com as outras assinaturas mesmo se uma falhar
+              }
+            }
+            console.log(`✅ [DOWNLOAD] ${assinaturasParaAdicionar.length} assinatura(s) adicionada(s) em todas as páginas do PDF`)
+          } else {
+            console.warn('⚠️ [DOWNLOAD] Nenhuma assinatura válida encontrada para adicionar ao PDF')
+          }
+        } else {
+          console.log('ℹ️ [DOWNLOAD] Nenhuma assinatura assinada encontrada para este documento')
+        }
+      } catch (signatureError) {
+        console.error('❌ [DOWNLOAD] Erro ao adicionar assinaturas no PDF:', signatureError)
+        console.error('❌ [DOWNLOAD] Stack trace:', signatureError.stack)
+        // Continuar mesmo se houver erro ao adicionar assinaturas
+        // Retornar PDF original sem assinaturas
+      }
+    } else {
+      console.log('ℹ️ [DOWNLOAD] Download sem assinaturas solicitado (comAssinaturas=false)')
+    }
 
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="${documento.arquivo_original}"`)
-    res.send(Buffer.from(fileBlob))
+    res.send(pdfBuffer)
   } catch (error) {
     console.error('Erro ao fazer download:', error)
     res.status(500).json({

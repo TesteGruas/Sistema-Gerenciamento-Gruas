@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { CardLoader } from "@/components/ui/loader"
+import { FileSignature } from "lucide-react"
 
 interface Holerite {
   id: string
@@ -387,12 +388,40 @@ export default function PWAHoleritesPage() {
     }
   }
 
-  const handleDownload = async (holerite: Holerite) => {
+  const handleDownload = async (holerite: Holerite, comAssinatura: boolean = false) => {
     try {
       if (!holerite.arquivo) {
         throw new Error('Arquivo do holerite não disponível')
       }
+
+      // Se tem assinatura e usuário quer baixar com assinatura, usar nova API
+      if (comAssinatura && estaAssinado(holerite)) {
+        try {
+          const blob = await colaboradoresDocumentosApi.holerites.baixar(holerite.id, true)
+          const url = window.URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `holerite_${holerite.mes_referencia}_assinado.pdf`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          window.URL.revokeObjectURL(url)
+          
+          await confirmarRecebimento(holerite)
+          
+          toast({
+            title: "Download iniciado",
+            description: "O holerite assinado está sendo baixado.",
+            variant: "default"
+          })
+          return
+        } catch (apiError: any) {
+          console.error('[HOLERITES] Erro ao baixar via API:', apiError)
+          // Fallback para método antigo se API falhar
+        }
+      }
       
+      // Método antigo (URL direta) - usado como fallback ou quando não quer assinatura
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
@@ -745,13 +774,25 @@ export default function PWAHoleritesPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDownload(holerite)}
+                                onClick={() => handleDownload(holerite, false)}
                                 className="h-8 px-2 sm:px-3"
                                 title="Baixar holerite"
                               >
                                 <Download className="w-4 h-4 sm:mr-1" />
                                 <span className="hidden sm:inline">Baixar</span>
                               </Button>
+                              {estaAssinado(holerite) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownload(holerite, true)}
+                                  className="h-8 px-2 sm:px-3 bg-green-50 hover:bg-green-100 border-green-300"
+                                  title="Baixar holerite com assinatura"
+                                >
+                                  <FileSignature className="w-4 h-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">Assinado</span>
+                                </Button>
+                              )}
                               {!estaAssinado(holerite) && (
                                 <Button
                                   variant="outline"
@@ -895,7 +936,7 @@ export default function PWAHoleritesPage() {
                             variant="outline"
                             size="sm"
                             className="mt-4"
-                            onClick={() => handleDownload(holeriteSelecionado)}
+                            onClick={() => handleDownload(holeriteSelecionado, false)}
                           >
                             <Download className="w-4 h-4 mr-2" />
                             Baixar PDF
@@ -930,11 +971,21 @@ export default function PWAHoleritesPage() {
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => handleDownload(holeriteSelecionado)}
+                    onClick={() => handleDownload(holeriteSelecionado, false)}
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Baixar PDF
                   </Button>
+                  {estaAssinado(holeriteSelecionado) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleDownload(holeriteSelecionado, true)}
+                      className="bg-green-50 hover:bg-green-100 border-green-300"
+                    >
+                      <FileSignature className="w-4 h-4 mr-2" />
+                      Baixar Assinado
+                    </Button>
+                  )}
                   {!estaAssinado(holeriteSelecionado) && (
                     <Button
                       onClick={() => {
