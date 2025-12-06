@@ -1,16 +1,15 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { SignaturePad } from "@/components/signature-pad"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Download, 
-  Eye, 
   FileText, 
   CheckCircle2, 
   Clock, 
@@ -18,14 +17,20 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  Check,
-  Loader2
+  Loader2,
+  PenTool,
+  Upload,
+  Trash2,
+  Save,
+  FileSignature,
+  CheckCircle,
+  Eye,
+  Check
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { CardLoader } from "@/components/ui/loader"
-import { FileSignature } from "lucide-react"
 
 interface Holerite {
   id: string
@@ -53,6 +58,12 @@ export default function PWAHoleritesPage() {
   const [isLoadingHolerites, setIsLoadingHolerites] = useState(false) // Flag para evitar múltiplas chamadas
   const [urlArquivoAssinada, setUrlArquivoAssinada] = useState<string>('')
   const [carregandoUrlArquivo, setCarregandoUrlArquivo] = useState(false)
+  const [isAssinando, setIsAssinando] = useState(false)
+  const [arquivoAssinado, setArquivoAssinado] = useState<File | null>(null)
+  const [tipoAssinatura, setTipoAssinatura] = useState<'digital' | 'arquivo'>('digital')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [signature, setSignature] = useState<string | null>(null)
 
   // Carregar dados do usuário
   useEffect(() => {
@@ -100,18 +111,8 @@ export default function PWAHoleritesPage() {
         
         if (cachedHolerites) {
           setHolerites(JSON.parse(cachedHolerites))
-          toast({
-            title: "Modo Offline",
-            description: "Exibindo holerites em cache. Conecte-se para atualizar.",
-            variant: "default"
-          })
         } else {
           setHolerites([])
-          toast({
-            title: "Sem conexão",
-            description: "Não há holerites em cache. Conecte-se à internet para carregar seus holerites.",
-            variant: "default"
-          })
         }
         
         return
@@ -253,23 +254,12 @@ export default function PWAHoleritesPage() {
         // Salvar no cache
         localStorage.setItem('cached_holerites', JSON.stringify(holeritesFormatados))
       
-        if (holeritesFormatados.length === 0) {
-          toast({
-            title: "Nenhum holerite encontrado",
-            description: "Você ainda não possui holerites disponíveis.",
-            variant: "default"
-          })
-        } else {
+        if (holeritesFormatados.length > 0) {
           console.log('[HOLERITES] Holerites carregados com sucesso:', holeritesFormatados.length)
         }
       } else {
         console.warn('[HOLERITES] Resposta da API sem sucesso ou sem dados:', response)
         setHolerites([])
-        toast({
-          title: "Nenhum holerite encontrado",
-          description: "Você ainda não possui holerites disponíveis.",
-          variant: "default"
-        })
       }
 
     } catch (error: any) {
@@ -287,18 +277,8 @@ export default function PWAHoleritesPage() {
       if (cachedHolerites) {
         console.log('[HOLERITES] Carregando holerites do cache devido ao erro')
         setHolerites(JSON.parse(cachedHolerites))
-        toast({
-          title: "Erro ao carregar holerites",
-          description: error.message || "Exibindo holerites em cache. Verifique sua conexão.",
-          variant: "destructive"
-        })
       } else {
         setHolerites([])
-        toast({
-          title: "Erro ao carregar holerites",
-          description: error.message || "Não foi possível carregar seus holerites. Verifique sua conexão e tente novamente.",
-          variant: "destructive"
-        })
       }
     } finally {
       setLoading(false)
@@ -340,31 +320,109 @@ export default function PWAHoleritesPage() {
     }
   }
 
-  const handleAssinar = async (holerite: Holerite) => {
-    if (!assinaturaDataUrl) {
-      toast({
-        title: "Erro",
-        description: "Por favor, assine o holerite",
-        variant: "destructive"
-      })
+  // Funções de desenho no canvas
+  const iniciarDesenho = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    setIsDrawing(true)
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+  }
+
+  const desenhar = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.strokeStyle = '#000'
+    ctx.lineTo(x, y)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+  }
+
+  const pararDesenho = () => {
+    setIsDrawing(false)
+  }
+
+  const limparAssinatura = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    setSignature(null)
+  }
+
+  const salvarAssinatura = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const signatureData = canvas.toDataURL('image/png')
+    setSignature(signatureData)
+  }
+
+  const handleAssinar = async () => {
+    if (!holeriteSelecionado) return
+
+    // Verificar se tem assinatura digital ou arquivo
+    if (tipoAssinatura === 'digital' && !signature) {
       return
     }
 
+    if (tipoAssinatura === 'arquivo' && !arquivoAssinado) {
+      return
+    }
+
+    setIsAssinando(true)
     try {
-        await colaboradoresDocumentosApi.holerites.assinar(holerite.id, {
-          assinatura_digital: assinaturaDataUrl
+      if (tipoAssinatura === 'digital') {
+        // Assinatura digital
+        await colaboradoresDocumentosApi.holerites.assinar(holeriteSelecionado.id, {
+          assinatura_digital: signature!
         })
-        
-        toast({
-          title: "Sucesso",
-          description: "Holerite assinado com sucesso"
-        })
-        
-        // Recarregar holerites
-        carregarHolerites()
+      } else {
+        // Upload de arquivo assinado
+        const formData = new FormData()
+        formData.append('arquivo', arquivoAssinado!)
+        // TODO: Implementar endpoint de upload de arquivo assinado se necessário
+        // Por enquanto, usar assinatura digital como fallback
+        setIsAssinando(false)
+        return
+      }
+      
+      // Aprovação automática: quando um holerite é assinado, ele é considerado aprovado automaticamente
+      // Não há necessidade de um botão separado de aprovação - a assinatura já implica aprovação
+      console.log('[HOLERITES] Holerite assinado e aprovado automaticamente')
+      
+      // Recarregar holerites
+      carregarHolerites()
 
       setIsAssinaturaDialogOpen(false)
       setAssinaturaDataUrl('')
+      setSignature(null)
+      setArquivoAssinado(null)
+      setTipoAssinatura('digital')
       setHoleriteSelecionado(null)
     } catch (error: any) {
       console.error('Erro ao assinar holerite:', error)
@@ -379,12 +437,8 @@ export default function PWAHoleritesPage() {
       } else if (error.message) {
         errorMessage = error.message
       }
-      
-      toast({
-        title: "Erro",
-        description: errorMessage,
-        variant: "destructive"
-      })
+    } finally {
+      setIsAssinando(false)
     }
   }
 
@@ -409,11 +463,6 @@ export default function PWAHoleritesPage() {
           
           await confirmarRecebimento(holerite)
           
-          toast({
-            title: "Download iniciado",
-            description: "O holerite assinado está sendo baixado.",
-            variant: "default"
-          })
           return
         } catch (apiError: any) {
           console.error('[HOLERITES] Erro ao baixar via API:', apiError)
@@ -472,19 +521,8 @@ export default function PWAHoleritesPage() {
       
       // Confirmar recebimento automaticamente ao baixar
       await confirmarRecebimento(holerite)
-      
-      toast({
-        title: "Download iniciado",
-        description: "O holerite está sendo baixado.",
-        variant: "default"
-      })
     } catch (error: any) {
       console.error('[HOLERITES] Erro ao baixar holerite:', error)
-      toast({
-        title: "Erro ao baixar holerite",
-        description: error.message || "Não foi possível baixar o holerite",
-        variant: "destructive"
-      })
     }
   }
 
@@ -603,11 +641,6 @@ export default function PWAHoleritesPage() {
         // await colaboradoresDocumentosApi.holerites.confirmarRecebimento(holerite.id)
       }
 
-      toast({
-        title: "Recebimento confirmado",
-        description: `Holerite de ${formatarMesReferencia(holerite.mes_referencia)} marcado como recebido`,
-        variant: "default"
-      })
     } catch (error) {
       console.error('Erro ao confirmar recebimento:', error)
       // Não mostrar erro ao usuário, pois é uma ação secundária
@@ -626,31 +659,21 @@ export default function PWAHoleritesPage() {
     <ProtectedRoute permission="documentos:visualizar">
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Meus Holerites</h1>
             <p className="text-sm sm:text-base text-gray-600">Visualize, baixe e assine seus holerites</p>
           </div>
-          <div className="flex items-center gap-2">
-            {isOnline ? (
-              <Wifi className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
-            ) : (
-              <WifiOff className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
-            )}
-            <span className="text-xs sm:text-sm text-gray-600">
-              {isOnline ? "Online" : "Offline"}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={carregarHolerites}
-              disabled={loading}
-              className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline ml-2">Atualizar</span>
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={carregarHolerites}
+            disabled={loading}
+            className="absolute top-0 right-0 h-8 w-8 sm:h-9 sm:w-auto sm:px-3"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline ml-2">Atualizar</span>
+          </Button>
         </div>
 
         {/* Status de conexão */}
@@ -678,12 +701,12 @@ export default function PWAHoleritesPage() {
               <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[140px]">Mês/Ano</TableHead>
+                      <TableHead className="min-w-[200px]">Mês/Ano</TableHead>
                       <TableHead className="w-[70px]">Status</TableHead>
                       <TableHead className="min-w-[110px] hidden sm:table-cell">Assinatura</TableHead>
                       <TableHead className="min-w-[120px] hidden md:table-cell">Recebimento</TableHead>
                       <TableHead className="min-w-[100px] hidden lg:table-cell">Data Criação</TableHead>
-                      <TableHead className="text-right min-w-[200px] sm:min-w-[280px]">Ações</TableHead>
+                      <TableHead className="text-right w-auto">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -699,9 +722,13 @@ export default function PWAHoleritesPage() {
                         <TableRow key={holerite.id} className="hover:bg-gray-50">
                           <TableCell className="font-medium">
                             <div className="flex flex-col">
-                              <span className="text-lg font-semibold text-gray-900">
-                                {formatarMesReferencia(holerite.mes_referencia)}
-                              </span>
+                              <button
+                                onClick={() => handleVisualizar(holerite)}
+                                className="text-left text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer flex items-center gap-2"
+                              >
+                                <Eye className="w-4 h-4 text-gray-400 hover:text-blue-600 transition-colors" />
+                                <span>{formatarMesReferencia(holerite.mes_referencia)}</span>
+                              </button>
                               <span className="text-xs text-gray-500 mt-0.5 hidden sm:inline">
                                 {holerite.mes_referencia}
                               </span>
@@ -764,16 +791,6 @@ export default function PWAHoleritesPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleVisualizar(holerite)}
-                                className="h-8 px-2 sm:px-3"
-                                title="Visualizar holerite"
-                              >
-                                <Eye className="w-4 h-4 sm:mr-1" />
-                                <span className="hidden sm:inline">Ver</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
                                 onClick={() => handleDownload(holerite, false)}
                                 className="h-8 px-2 sm:px-3"
                                 title="Baixar holerite"
@@ -800,24 +817,25 @@ export default function PWAHoleritesPage() {
                                   onClick={() => {
                                     setHoleriteSelecionado(holerite)
                                     setIsAssinaturaDialogOpen(true)
+                                    setSignature(null)
+                                    setArquivoAssinado(null)
+                                    setTipoAssinatura('digital')
+                                    // Limpar canvas quando abrir
+                                    setTimeout(() => {
+                                      const canvas = canvasRef.current
+                                      if (canvas) {
+                                        const ctx = canvas.getContext('2d')
+                                        if (ctx) {
+                                          ctx.clearRect(0, 0, canvas.width, canvas.height)
+                                        }
+                                      }
+                                    }, 100)
                                   }}
                                   className="h-8 px-2 sm:px-3 bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
                                   title="Assinar holerite"
                                 >
-                                  <FileText className="w-4 h-4 sm:mr-1" />
+                                  <FileSignature className="w-4 h-4 sm:mr-1" />
                                   <span className="hidden sm:inline">Assinar</span>
-                                </Button>
-                              )}
-                              {!estaRecebido(holerite) && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => confirmarRecebimento(holerite)}
-                                  className="h-8 px-2 sm:px-3"
-                                  title="Confirmar recebimento"
-                                >
-                                  <Check className="w-4 h-4 sm:mr-1" />
-                                  <span className="hidden sm:inline">Confirmar</span>
                                 </Button>
                               )}
                             </div>
@@ -830,35 +848,236 @@ export default function PWAHoleritesPage() {
           )}
         </div>
 
-        {/* Dialog de Assinatura */}
-        <Dialog open={isAssinaturaDialogOpen} onOpenChange={setIsAssinaturaDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Assinar Holerite</DialogTitle>
-              <DialogDescription>
-                Assine digitalmente o holerite de {holeriteSelecionado && formatarMesReferencia(holeriteSelecionado.mes_referencia)}
-              </DialogDescription>
-            </DialogHeader>
+        {/* Modal de Assinatura */}
+        {holeriteSelecionado && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+            onClick={(e) => {
+              // Fechar modal ao clicar fora
+              if (e.target === e.currentTarget) {
+                setIsAssinaturaDialogOpen(false)
+                setHoleriteSelecionado(null)
+                setSignature(null)
+                setArquivoAssinado(null)
+                setTipoAssinatura('digital')
+              }
+            }}
+          >
+            <Card className="w-full max-w-md mx-auto my-4 sm:my-8">
+              <CardHeader className="px-4 sm:px-6 pb-4">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <PenTool className="w-4 h-4 sm:w-5 sm:h-5" />
+                  Assinar Holerite
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm mt-1">
+                  {holeriteSelecionado && formatarMesReferencia(holeriteSelecionado.mes_referencia)}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
+                {/* Botão de Download */}
+                <div className="bg-blue-50 p-2.5 sm:p-3 rounded-lg border border-blue-200">
+                  <p className="text-xs sm:text-sm text-blue-800 mb-2 leading-tight">
+                    <strong>Passo 1:</strong> Baixe o PDF para revisar antes de assinar
+                  </p>
+                  <Button
+                    onClick={() => handleDownload(holeriteSelecionado, false)}
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-blue-300 text-blue-700 hover:bg-blue-100 text-xs sm:text-sm h-8 sm:h-9"
+                    disabled={!isOnline}
+                  >
+                    <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                    Baixar PDF Original
+                  </Button>
+                </div>
 
-            <div className="space-y-4">
-              <SignaturePad
-                onSave={(signature) => {
-                  setAssinaturaDataUrl(signature)
-                  if (holeriteSelecionado) {
-                    handleAssinar(holeriteSelecionado)
-                  }
-                }}
-                onCancel={() => {
-                  setIsAssinaturaDialogOpen(false)
-                  setAssinaturaDataUrl('')
-                  setHoleriteSelecionado(null)
-                }}
-                title="Assinar Holerite"
-                description={`Assine digitalmente o holerite de ${holeriteSelecionado && formatarMesReferencia(holeriteSelecionado.mes_referencia)}`}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+                {/* Seletor de tipo de assinatura */}
+                <div>
+                  <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
+                    <strong>Passo 2:</strong> Escolha o tipo de assinatura
+                  </label>
+                  <div className="flex flex-row gap-2">
+                    <Button
+                      type="button"
+                      variant={tipoAssinatura === 'digital' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setTipoAssinatura('digital')}
+                      className="flex-1 text-xs sm:text-sm"
+                      style={{ padding: '10px' }}
+                    >
+                      <PenTool className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                      <span className="hidden sm:inline">Digital (Adiciona ao PDF)</span>
+                      <span className="sm:hidden">Digital</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={tipoAssinatura === 'arquivo' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setTipoAssinatura('arquivo')}
+                      className="flex-1 text-xs sm:text-sm"
+                      style={{ padding: '10px' }}
+                    >
+                      <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                      <span className="hidden sm:inline">Upload Assinado</span>
+                      <span className="sm:hidden">Upload</span>
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 leading-tight">
+                    {tipoAssinatura === 'digital' 
+                      ? 'Assine digitalmente e a assinatura será adicionada ao PDF automaticamente'
+                      : 'Faça upload do PDF já assinado fisicamente'}
+                  </p>
+                </div>
+
+                {/* Assinatura Digital */}
+                {tipoAssinatura === 'digital' && (
+                  <div>
+                    <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
+                      Assinatura Digital
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-2 sm:p-4 overflow-x-auto">
+                      <div className="flex justify-center">
+                        <canvas
+                          ref={canvasRef}
+                          width={300}
+                          height={150}
+                          className="border border-gray-200 rounded cursor-crosshair w-full max-w-full"
+                          style={{ maxWidth: '100%', height: 'auto' }}
+                          onMouseDown={iniciarDesenho}
+                          onMouseMove={desenhar}
+                          onMouseUp={pararDesenho}
+                          onMouseLeave={pararDesenho}
+                          onTouchStart={(e) => {
+                            e.preventDefault()
+                            const touch = e.touches[0]
+                            const canvas = canvasRef.current
+                            if (!canvas) return
+                            const rect = canvas.getBoundingClientRect()
+                            const x = touch.clientX - rect.left
+                            const y = touch.clientY - rect.top
+                            const ctx = canvas.getContext('2d')
+                            if (!ctx) return
+                            setIsDrawing(true)
+                            ctx.beginPath()
+                            ctx.moveTo(x, y)
+                          }}
+                          onTouchMove={(e) => {
+                            e.preventDefault()
+                            if (!isDrawing) return
+                            const canvas = canvasRef.current
+                            if (!canvas) return
+                            const touch = e.touches[0]
+                            const rect = canvas.getBoundingClientRect()
+                            const x = touch.clientX - rect.left
+                            const y = touch.clientY - rect.top
+                            const ctx = canvas.getContext('2d')
+                            if (!ctx) return
+                            ctx.lineWidth = 2
+                            ctx.lineCap = 'round'
+                            ctx.strokeStyle = '#000'
+                            ctx.lineTo(x, y)
+                            ctx.stroke()
+                            ctx.beginPath()
+                            ctx.moveTo(x, y)
+                          }}
+                          onTouchEnd={() => {
+                            setIsDrawing(false)
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        onClick={limparAssinatura}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs sm:text-sm h-8 sm:h-8"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                        Limpar
+                      </Button>
+                      <Button
+                        onClick={salvarAssinatura}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs sm:text-sm h-8 sm:h-8"
+                      >
+                        <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                        Salvar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload de Arquivo */}
+                {tipoAssinatura === 'arquivo' && (
+                  <div>
+                    <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
+                      Upload do Documento Assinado
+                    </label>
+                    <div className="space-y-2 sm:space-y-3">
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => setArquivoAssinado(e.target.files?.[0] || null)}
+                        className="w-full p-2 text-xs sm:text-sm border border-gray-300 rounded-md file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs sm:file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                      
+                      {arquivoAssinado && (
+                        <div className="bg-green-50 p-2.5 sm:p-3 rounded-lg border border-green-200">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-green-800">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              <FileSignature className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                              <span className="font-medium text-xs sm:text-sm truncate">{arquivoAssinado.name}</span>
+                            </div>
+                            <span className="text-xs">({(arquivoAssinado.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <p className="text-xs text-gray-500 leading-tight">
+                        Faça o upload do documento PDF assinado fisicamente. Máximo 10MB.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-200">
+                  <Button
+                    onClick={handleAssinar}
+                    disabled={
+                      isAssinando || 
+                      (tipoAssinatura === 'digital' && !signature) ||
+                      (tipoAssinatura === 'arquivo' && !arquivoAssinado)
+                    }
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-xs sm:text-sm h-9 sm:h-9 order-2 sm:order-1"
+                  >
+                    {isAssinando ? (
+                      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5 sm:mr-2" />
+                    ) : (
+                      <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                    )}
+                    <span className="hidden sm:inline">{isAssinando ? 'Assinando...' : 'Confirmar Assinatura'}</span>
+                    <span className="sm:hidden">{isAssinando ? 'Assinando...' : 'Confirmar'}</span>
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setIsAssinaturaDialogOpen(false)
+                      setHoleriteSelecionado(null)
+                      setSignature(null)
+                      setArquivoAssinado(null)
+                      setTipoAssinatura('digital')
+                    }}
+                    variant="outline"
+                    className="text-xs sm:text-sm h-9 sm:h-9 order-1 sm:order-2"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Dialog de Visualização */}
         <Dialog open={isVisualizacaoDialogOpen} onOpenChange={(open) => {
@@ -920,11 +1139,6 @@ export default function PWAHoleritesPage() {
                         title="Visualização do Holerite"
                         onError={() => {
                           console.error('[HOLERITES] Erro ao carregar iframe com URL:', urlArquivoAssinada)
-                          toast({
-                            title: "Erro",
-                            description: "Não foi possível carregar o PDF. Tente baixar o arquivo.",
-                            variant: "destructive"
-                          })
                         }}
                       />
                     ) : (
@@ -991,9 +1205,22 @@ export default function PWAHoleritesPage() {
                       onClick={() => {
                         setIsVisualizacaoDialogOpen(false)
                         setIsAssinaturaDialogOpen(true)
+                        setSignature(null)
+                        setArquivoAssinado(null)
+                        setTipoAssinatura('digital')
+                        // Limpar canvas quando abrir
+                        setTimeout(() => {
+                          const canvas = canvasRef.current
+                          if (canvas) {
+                            const ctx = canvas.getContext('2d')
+                            if (ctx) {
+                              ctx.clearRect(0, 0, canvas.width, canvas.height)
+                            }
+                          }
+                        }, 100)
                       }}
                     >
-                      <FileText className="w-4 h-4 mr-2" />
+                      <FileSignature className="w-4 h-4 mr-2" />
                       Assinar
                     </Button>
                   )}

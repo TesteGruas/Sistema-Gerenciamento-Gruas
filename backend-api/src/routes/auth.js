@@ -60,6 +60,12 @@ const registerSchema = Joi.object({
   telefone: Joi.string().optional()
 })
 
+const changePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string().min(6).required(),
+  confirmPassword: Joi.string().valid(Joi.ref('newPassword')).required()
+})
+
 /**
  * @swagger
  * /api/auth/login:
@@ -1060,6 +1066,152 @@ router.delete('/reset-tokens', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Erro ao limpar tokens'
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/auth/change-password:
+ *   post:
+ *     summary: Alterar senha do usuário autenticado
+ *     tags: [Autenticação]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - currentPassword
+ *               - newPassword
+ *               - confirmPassword
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 6
+ *               confirmPassword:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Senha alterada com sucesso
+ *       400:
+ *         description: Dados inválidos ou senha atual incorreta
+ *       401:
+ *         description: Não autenticado
+ */
+router.post('/change-password', authenticateToken, async (req, res) => {
+  try {
+    // Validar dados
+    const { error, value } = changePasswordSchema.validate(req.body)
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    const { currentPassword, newPassword } = value
+    const userId = req.user.id
+
+    // Buscar usuário no banco
+    const { data: usuario, error: usuarioError } = await supabase
+      .from('usuarios')
+      .select('id, email, nome')
+      .eq('id', userId)
+      .single()
+
+    if (usuarioError || !usuario) {
+      return res.status(404).json({
+        success: false,
+        error: 'Usuário não encontrado'
+      })
+    }
+
+    // Verificar senha atual fazendo login
+    try {
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: usuario.email,
+        password: currentPassword
+      })
+
+      if (signInError || !authData.user) {
+        return res.status(400).json({
+          success: false,
+          error: 'Senha atual incorreta'
+        })
+      }
+
+      // Buscar usuário no Supabase Auth pelo email
+      const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
+      
+      if (authListError) {
+        console.error('Erro ao listar usuários do Auth:', authListError)
+        return res.status(500).json({
+          success: false,
+          error: 'Erro ao buscar usuário no sistema de autenticação'
+        })
+      }
+
+      const authUser = users.find(u => u.email === usuario.email)
+      
+      if (!authUser) {
+        return res.status(404).json({
+          success: false,
+          error: 'Usuário não encontrado no sistema de autenticação'
+        })
+      }
+
+      // Atualizar senha no Supabase Auth
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+        authUser.id,
+        { password: newPassword }
+      )
+
+      if (authError) {
+        console.error('Erro ao atualizar senha no Supabase Auth:', authError)
+        return res.status(500).json({
+          success: false,
+          error: 'Erro ao atualizar senha',
+          details: authError.message
+        })
+      }
+
+      // Enviar email de confirmação
+      try {
+        await sendPasswordChangedEmail({
+          nome: usuario.nome,
+          email: usuario.email
+        })
+      } catch (emailError) {
+        console.error('Erro ao enviar email de confirmação:', emailError)
+        // Não falhar a operação por causa do email
+      }
+
+      res.json({
+        success: true,
+        message: 'Senha alterada com sucesso'
+      })
+
+    } catch (error) {
+      console.error('Erro ao verificar senha atual:', error)
+      return res.status(400).json({
+        success: false,
+        error: 'Senha atual incorreta'
+      })
+    }
+
+  } catch (error) {
+    console.error('Erro em change-password:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao alterar senha'
     })
   }
 })

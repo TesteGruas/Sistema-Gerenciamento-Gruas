@@ -1422,8 +1422,26 @@ router.post('/registros', async (req, res) => {
     }
 
     // VALIDAÇÃO DE CARGO: Apenas Operários e Sinaleiros podem bater ponto
+    // Supervisores NÃO podem bater ponto
     // Verificar cargo da tabela cargos (se cargo_id existir) ou campo cargo direto
     const cargoNome = (funcionario.cargos?.nome || funcionario.cargo || '').toLowerCase()
+    
+    // PRIMEIRO: Verificar se é Supervisor - se for, BLOQUEAR
+    const isSupervisor = (
+      cargoNome.includes('supervisor') ||
+      cargoNome === 'supervisores'
+    )
+    
+    if (isSupervisor) {
+      return res.status(403).json({
+        success: false,
+        message: 'Supervisores não podem registrar ponto eletrônico',
+        error: 'CARGO_NAO_PERMITIDO',
+        cargo: funcionario.cargos?.nome || funcionario.cargo || 'Não informado'
+      });
+    }
+    
+    // SEGUNDO: Verificar se é Operário ou Sinaleiro
     const cargoPermitePonto = (
       cargoNome.includes('operário') ||
       cargoNome.includes('operario') ||

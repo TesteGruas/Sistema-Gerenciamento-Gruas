@@ -48,11 +48,7 @@ export default function PWAAprovacaoMassaPage() {
       setAprovacoesPendentes(data.filter(a => a.status === 'Pendente Aprovação'));
     } catch (error: any) {
       console.error('Erro ao carregar aprovações:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar as aprovações pendentes',
-        variant: 'destructive'
-      });
+      ;
     } finally {
       setLoadingAprovacoes(false);
     }
@@ -80,29 +76,17 @@ export default function PWAAprovacaoMassaPage() {
 
   const handleAprovarMassa = async () => {
     if (!assinatura.trim()) {
-      toast({
-        title: 'Assinatura Obrigatória',
-        description: 'Por favor, assine digitalmente antes de aprovar.',
-        variant: 'destructive'
-      });
+      ;
       return;
     }
 
     if (aprovacoesSelecionadas.length === 0) {
-      toast({
-        title: 'Seleção Vazia',
-        description: 'Por favor, selecione pelo menos uma aprovação.',
-        variant: 'destructive'
-      });
+      ;
       return;
     }
 
     if (!currentUser) {
-      toast({
-        title: 'Erro',
-        description: 'Usuário não autenticado',
-        variant: 'destructive'
-      });
+      ;
       return;
     }
 
@@ -114,11 +98,6 @@ export default function PWAAprovacaoMassaPage() {
         observacoes: `Aprovado em massa com assinatura digital`
       });
       
-      toast({
-        title: 'Sucesso!',
-        description: `${aprovacoesSelecionadas.length} aprovações realizadas com sucesso`,
-        variant: 'default'
-      });
       
       // Limpar seleções e voltar
       setAprovacoesSelecionadas([]);
@@ -130,11 +109,7 @@ export default function PWAAprovacaoMassaPage() {
       
     } catch (error: any) {
       console.error('Erro ao aprovar horas extras:', error);
-      toast({
-        title: 'Erro',
-        description: error.response?.data?.message || 'Erro ao aprovar horas extras. Tente novamente.',
-        variant: 'destructive'
-      });
+      ;
     } finally {
       setIsLoading(false);
     }

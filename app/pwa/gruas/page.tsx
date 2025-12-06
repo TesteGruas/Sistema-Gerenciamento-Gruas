@@ -78,11 +78,7 @@ export default function PWAGruasPage() {
         
         if (cachedGruas) {
           setGruas(JSON.parse(cachedGruas))
-          toast({
-            title: "Modo Offline",
-            description: "Exibindo gruas em cache. Conecte-se para atualizar.",
-            variant: "default"
-          })
+          
         }
         
         return
@@ -127,17 +123,9 @@ export default function PWAGruasPage() {
       
       if (cachedGruas) {
         setGruas(JSON.parse(cachedGruas))
-        toast({
-          title: "Erro ao carregar gruas",
-          description: "Exibindo gruas em cache. Verifique sua conexão.",
-          variant: "destructive"
-        })
+        
       } else {
-        toast({
-          title: "Erro ao carregar gruas",
-          description: error.message || "Não foi possível carregar as gruas. Verifique sua conexão.",
-          variant: "destructive"
-        })
+        
       }
     } finally {
       setIsLoading(false)
@@ -194,7 +182,6 @@ export default function PWAGruasPage() {
           </Button>
         </div>
       </div>
-
 
       {/* Lista de gruas */}
       {isLoading ? (

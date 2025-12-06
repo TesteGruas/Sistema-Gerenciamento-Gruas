@@ -492,7 +492,15 @@ function PWALoginPageContent(): JSX.Element {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="senha">Senha</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="senha">Senha</Label>
+                  <a
+                    href="/pwa/forgot-password"
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    Esqueceu sua senha?
+                  </a>
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                   <Input

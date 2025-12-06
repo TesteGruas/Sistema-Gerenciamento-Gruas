@@ -87,11 +87,7 @@ export default function PWANotificacoesPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar notificações:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as notificações",
-        variant: "destructive"
-      })
+      
       setNotificacoes([])
     } finally {
       setLoading(false)
@@ -104,17 +100,10 @@ export default function PWANotificacoesPage() {
       setNotificacoes(prev => 
         prev.map(n => n.id === id ? { ...n, lida: true } : n)
       )
-      toast({
-        title: "Sucesso",
-        description: "Notificação marcada como lida",
-      })
+      
     } catch (error) {
       console.error('Erro ao marcar notificação como lida:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível marcar a notificação como lida",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -122,17 +111,10 @@ export default function PWANotificacoesPage() {
     try {
       await NotificacoesAPI.deletar(id)
       setNotificacoes(prev => prev.filter(n => n.id !== id))
-      toast({
-        title: "Notificação excluída",
-        description: "A notificação foi removida",
-      })
+      
     } catch (error) {
       console.error('Erro ao excluir notificação:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível excluir a notificação",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -140,17 +122,10 @@ export default function PWANotificacoesPage() {
     try {
       await NotificacoesAPI.marcarTodasComoLidas()
       setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })))
-      toast({
-        title: "Todas marcadas como lidas",
-        description: "Todas as notificações foram marcadas como lidas",
-      })
+      
     } catch (error) {
       console.error('Erro ao marcar todas como lidas:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível marcar todas as notificações como lidas",
-        variant: "destructive"
-      })
+      
     }
   }
 

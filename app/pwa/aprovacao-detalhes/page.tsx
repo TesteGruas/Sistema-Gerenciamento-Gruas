@@ -57,19 +57,11 @@ function PWAAprovacaoDetalhesPageContent() {
       if (aprovacao) {
         setAprovacaoSelecionada(aprovacao);
       } else {
-        toast({
-          title: 'Erro',
-          description: 'Aprovação não encontrada',
-          variant: 'destructive'
-        });
+        ;
       }
     } catch (error: any) {
       console.error('Erro ao carregar aprovação:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível carregar a aprovação',
-        variant: 'destructive'
-      });
+      ;
     } finally {
       setLoading(false);
     }
@@ -89,21 +81,12 @@ function PWAAprovacaoDetalhesPageContent() {
         }
       );
       
-      toast({
-        title: 'Sucesso!',
-        description: `Horas extras de ${aprovacaoSelecionada.funcionario?.nome} aprovadas com sucesso`,
-        variant: 'default'
-      });
       
       setShowAssinatura(false);
       setTimeout(() => router.back(), 1500);
     } catch (error: any) {
       console.error('Erro ao aprovar horas extras:', error);
-      toast({
-        title: 'Erro',
-        description: error.response?.data?.message || 'Erro ao aprovar horas extras',
-        variant: 'destructive'
-      });
+      ;
     } finally {
       setIsProcessing(false);
     }
@@ -121,22 +104,13 @@ function PWAAprovacaoDetalhesPageContent() {
         }
       );
       
-      toast({
-        title: 'Horas Extras Rejeitadas',
-        description: `Horas extras de ${aprovacaoSelecionada.funcionario?.nome} foram rejeitadas`,
-        variant: 'default'
-      });
       
       setShowRejeitar(false);
       setObservacoesRejeicao('');
       setTimeout(() => router.back(), 1500);
     } catch (error: any) {
       console.error('Erro ao rejeitar horas extras:', error);
-      toast({
-        title: 'Erro',
-        description: error.response?.data?.message || 'Erro ao rejeitar horas extras',
-        variant: 'destructive'
-      });
+      ;
     } finally {
       setIsProcessing(false);
     }

@@ -83,11 +83,7 @@ export default function PWAGruaDetalhesPage() {
         if (cachedGrua) {
           setGrua(JSON.parse(cachedGrua))
           setLoading(false)
-          toast({
-            title: "Modo Offline",
-            description: "Exibindo dados em cache. Conecte-se para atualizar.",
-            variant: "default"
-          })
+          
           return
         }
       }
@@ -118,11 +114,7 @@ export default function PWAGruaDetalhesPage() {
       const cachedGrua = localStorage.getItem(`cached_grua_${gruaId}`)
       if (cachedGrua) {
         setGrua(JSON.parse(cachedGrua))
-        toast({
-          title: "Aviso",
-          description: "Exibindo dados em cache. Verifique sua conexão.",
-          variant: "default"
-        })
+        
       }
     } finally {
       setLoading(false)
@@ -268,19 +260,12 @@ export default function PWAGruaDetalhesPage() {
     if (confirm(`Tem certeza que deseja excluir este checklist?`)) {
       try {
         await livroGruaApi.excluirEntrada(checklist.id)
-        toast({
-          title: "Sucesso",
-          description: "Checklist excluído com sucesso"
-        })
+        
         // Recarregar dados
         carregarGrua()
       } catch (err) {
         console.error('Erro ao excluir checklist:', err)
-        toast({
-          title: "Erro",
-          description: "Erro ao excluir checklist",
-          variant: "destructive"
-        })
+        
       }
     }
   }
@@ -313,19 +298,12 @@ export default function PWAGruaDetalhesPage() {
     if (confirm(`Tem certeza que deseja excluir esta manutenção?`)) {
       try {
         await livroGruaApi.excluirEntrada(manutencao.id)
-        toast({
-          title: "Sucesso",
-          description: "Manutenção excluída com sucesso"
-        })
+        
         // Recarregar dados
         carregarGrua()
       } catch (err) {
         console.error('Erro ao excluir manutenção:', err)
-        toast({
-          title: "Erro",
-          description: "Erro ao excluir manutenção",
-          variant: "destructive"
-        })
+        
       }
     }
   }

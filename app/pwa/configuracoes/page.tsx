@@ -94,31 +94,19 @@ export default function PWAConfiguracoesPage() {
   const handleAutoSyncChange = (checked: boolean) => {
     setAutoSync(checked)
     localStorage.setItem('pwa_auto_sync', checked.toString())
-    toast({
-      title: "Sincronização automática",
-      description: checked ? "Ativada" : "Desativada",
-      variant: "default"
-    })
+    
   }
 
   const handleNotificationsChange = (checked: boolean) => {
     setNotifications(checked)
     localStorage.setItem('pwa_notifications', checked.toString())
-    toast({
-      title: "Notificações",
-      description: checked ? "Ativadas" : "Desativadas",
-      variant: "default"
-    })
+    
   }
 
   const handleLocationChange = (checked: boolean) => {
     setLocationTracking(checked)
     localStorage.setItem('pwa_location_tracking', checked.toString())
-    toast({
-      title: "Rastreamento de localização",
-      description: checked ? "Ativado" : "Desativado",
-      variant: "default"
-    })
+    
   }
 
   const clearCache = () => {
@@ -136,36 +124,18 @@ export default function PWAConfiguracoesPage() {
       keysToRemove.forEach(key => localStorage.removeItem(key))
       
       calculateCacheSize()
-      
-      toast({
-        title: "Cache limpo!",
-        description: "Dados temporários foram removidos",
-        variant: "default"
-      })
+
     } catch (error) {
       console.error('Erro ao limpar cache:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível limpar o cache",
-        variant: "destructive"
-      })
+      
     }
   }
 
   const forceSync = () => {
-    toast({
-      title: "Sincronização forçada",
-      description: "Tentando sincronizar dados...",
-      variant: "default"
-    })
-    
+
     // Simular sincronização
     setTimeout(() => {
-      toast({
-        title: "Sincronização concluída",
-        description: "Todos os dados foram sincronizados",
-        variant: "default"
-      })
+      
     }, 2000)
   }
 
@@ -189,19 +159,10 @@ export default function PWAConfiguracoesPage() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      
-      toast({
-        title: "Dados exportados!",
-        description: "Backup dos seus dados foi baixado",
-        variant: "default"
-      })
+
     } catch (error) {
       console.error('Erro ao exportar dados:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível exportar os dados",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -222,8 +183,6 @@ export default function PWAConfiguracoesPage() {
           <p className="text-gray-600">Gerencie suas preferências</p>
         </div>
       </div>
-
-
 
       {/* Configurações de notificações */}
       <PWANotificationsManager />

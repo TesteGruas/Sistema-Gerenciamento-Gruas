@@ -111,20 +111,8 @@ export default function PWAEncarregadorPage() {
     localStorage.setItem('fila_aprovacoes', JSON.stringify(filaComErros))
     
     if (filaComErros.length === 0) {
-      toast({
-        title: "Sincronização completa",
-        description: `${fila.length} aprovações sincronizadas com sucesso`,
-        variant: "default"
-      })
-      
       // Recarregar dados atualizados
       carregarDados()
-    } else {
-      toast({
-        title: "Sincronização parcial",
-        description: `${fila.length - filaComErros.length} de ${fila.length} aprovações sincronizadas`,
-        variant: "default"
-      })
     }
   }
 
@@ -143,13 +131,7 @@ export default function PWAEncarregadorPage() {
         if (cachedRegistros) {
           setRegistrosPendentes(JSON.parse(cachedRegistros))
         }
-        
-        toast({
-          title: "Modo Offline",
-          description: "Exibindo dados em cache. Conecte-se para atualizar.",
-          variant: "default"
-        })
-        
+
         return
       }
 
@@ -189,14 +171,7 @@ export default function PWAEncarregadorPage() {
       if (cachedRegistros) {
         setRegistrosPendentes(JSON.parse(cachedRegistros))
       }
-      
-      toast({
-        title: "Erro ao carregar dados",
-        description: cachedFuncionarios || cachedRegistros 
-          ? "Exibindo dados em cache. Tente atualizar mais tarde."
-          : "Não foi possível carregar os dados. Verifique sua conexão.",
-        variant: "destructive"
-      })
+
     } finally {
       setIsLoading(false)
     }
@@ -216,26 +191,14 @@ export default function PWAEncarregadorPage() {
         
         // Atualizar UI localmente
         setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
-        
-        toast({
-          title: "Aprovação pendente",
-          description: "A aprovação será sincronizada quando você estiver online",
-          variant: "default"
-        })
-        
+
         return
       }
 
       await encarregadorApi.aprovarRegistro(registroId, {
         observacoes_aprovacao: 'Aprovado via PWA - Encarregador'
       })
-      
-      toast({
-        title: "Registro aprovado!",
-        description: "O registro foi aprovado com sucesso",
-        variant: "default"
-      })
-      
+
       // Atualizar lista
       setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
       
@@ -245,11 +208,7 @@ export default function PWAEncarregadorPage() {
       
     } catch (error: any) {
       console.error('Erro ao aprovar registro:', error)
-      toast({
-        title: "Erro ao aprovar registro",
-        description: error.message || "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -267,26 +226,14 @@ export default function PWAEncarregadorPage() {
         
         // Atualizar UI localmente
         setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
-        
-        toast({
-          title: "Rejeição pendente",
-          description: "A rejeição será sincronizada quando você estiver online",
-          variant: "default"
-        })
-        
+
         return
       }
 
       await encarregadorApi.rejeitarRegistro(registroId, {
         motivo_rejeicao: 'Rejeitado via PWA - Encarregador'
       })
-      
-      toast({
-        title: "Registro rejeitado!",
-        description: "O registro foi rejeitado com sucesso",
-        variant: "default"
-      })
-      
+
       // Atualizar lista
       setRegistrosPendentes(prev => prev.filter(reg => reg.id !== registroId))
       
@@ -296,11 +243,7 @@ export default function PWAEncarregadorPage() {
       
     } catch (error: any) {
       console.error('Erro ao rejeitar registro:', error)
-      toast({
-        title: "Erro ao rejeitar registro",
-        description: error.message || "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
+      
     }
   }
 

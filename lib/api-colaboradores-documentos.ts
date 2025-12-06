@@ -11,6 +11,9 @@ export interface CertificadoBackend {
   data_validade?: string
   arquivo?: string
   alerta_enviado: boolean
+  assinatura_digital?: string
+  assinado_por?: number
+  assinado_em?: string
   created_at: string
   updated_at: string
 }
@@ -27,6 +30,10 @@ export interface CertificadoUpdateData {
   nome?: string
   data_validade?: string
   arquivo?: string
+}
+
+export interface CertificadoAssinaturaData {
+  assinatura_digital: string
 }
 
 export interface CertificadosResponse {
@@ -185,6 +192,35 @@ export const colaboradoresDocumentosApi = {
     async listarVencendo(): Promise<CertificadosResponse> {
       const url = buildApiUrl('colaboradores/certificados/vencendo')
       return apiRequest(url)
+    },
+
+    // Adicionar assinatura digital ao certificado
+    async assinar(certificadoId: string, data: CertificadoAssinaturaData): Promise<CertificadoResponse> {
+      const url = buildApiUrl(`colaboradores/certificados/${certificadoId}/assinatura`)
+      return apiRequest(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+    },
+
+    // Baixar certificado (com opção de incluir assinatura)
+    async baixar(certificadoId: string, comAssinatura: boolean = false): Promise<Blob> {
+      const url = buildApiUrl(`colaboradores/certificados/${certificadoId}/download`)
+      const params = comAssinatura ? { comAssinatura: 'true' } : {}
+      
+      const response = await fetchWithAuth(url + (Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : ''), {
+        method: 'GET',
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || `Erro ${response.status}: ${response.statusText}`)
+      }
+      
+      return await response.blob()
     },
   },
 

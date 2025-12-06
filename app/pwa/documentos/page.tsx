@@ -113,20 +113,8 @@ export default function PWADocumentosPage() {
     localStorage.setItem('fila_assinaturas_documentos', JSON.stringify(filaComErros))
     
     if (filaComErros.length === 0) {
-      toast({
-        title: "Sincronização completa",
-        description: `${fila.length} assinaturas sincronizadas com sucesso`,
-        variant: "default"
-      })
-      
       // Recarregar dados atualizados
       carregarDocumentos()
-    } else {
-      toast({
-        title: "Sincronização parcial",
-        description: `${fila.length - filaComErros.length} de ${fila.length} assinaturas sincronizadas`,
-        variant: "default"
-      })
     }
   }
 
@@ -139,11 +127,7 @@ export default function PWADocumentosPage() {
         
         if (cachedDocumentos) {
           setDocumentos(JSON.parse(cachedDocumentos))
-          toast({
-            title: "Modo Offline",
-            description: "Exibindo documentos em cache. Conecte-se para atualizar.",
-            variant: "default"
-          })
+          
         }
         
         return
@@ -242,17 +226,9 @@ export default function PWADocumentosPage() {
       
       if (cachedDocumentos) {
         setDocumentos(JSON.parse(cachedDocumentos))
-        toast({
-          title: "Erro ao carregar documentos",
-          description: "Exibindo documentos em cache. Verifique sua conexão.",
-          variant: "destructive"
-        })
+        
       } else {
-        toast({
-          title: "Erro ao carregar documentos",
-          description: error.message || "Não foi possível carregar os documentos. Verifique sua conexão.",
-          variant: "destructive"
-        })
+        
       }
     } finally {
       setIsLoading(false)
@@ -333,20 +309,12 @@ export default function PWADocumentosPage() {
 
     // Verificar se tem assinatura digital ou arquivo
     if (tipoAssinatura === 'digital' && !signature) {
-      toast({
-        title: "Erro",
-        description: "Por favor, faça a assinatura digital ou selecione um arquivo",
-        variant: "destructive"
-      })
+      
       return
     }
 
     if (tipoAssinatura === 'arquivo' && !arquivoAssinado) {
-      toast({
-        title: "Erro",
-        description: "Por favor, selecione um arquivo PDF para upload",
-        variant: "destructive"
-      })
+      
       return
     }
 
@@ -380,11 +348,7 @@ export default function PWADocumentosPage() {
       if (tipoAssinatura === 'digital') {
         // Assinatura digital - adicionar ao PDF pelo backend
         if (!isOnline) {
-          toast({
-            title: "Erro",
-            description: "Assinatura digital requer conexão com internet",
-            variant: "destructive"
-          })
+          
           setIsAssinando(false)
           return
         }
@@ -397,20 +361,11 @@ export default function PWADocumentosPage() {
           timestamp: new Date().toISOString(),
           observacoes: 'Assinatura digital via PWA'
         })
-        
-        toast({
-          title: "Documento assinado!",
-          description: "A assinatura foi adicionada ao PDF com sucesso",
-          variant: "default"
-        })
+
       } else {
         // Upload de arquivo assinado
         if (!isOnline) {
-          toast({
-            title: "Erro",
-            description: "Upload de arquivo requer conexão com internet",
-            variant: "destructive"
-          })
+          
           setIsAssinando(false)
           return
         }
@@ -439,12 +394,7 @@ export default function PWADocumentosPage() {
           arquivoAssinado!,
           'Documento assinado via PWA - Upload'
         )
-      
-      toast({
-        title: "Documento assinado!",
-          description: "O documento assinado foi enviado com sucesso",
-        variant: "default"
-      })
+
       }
       
       // Recarregar documentos
@@ -457,11 +407,7 @@ export default function PWADocumentosPage() {
       
     } catch (error: any) {
       console.error('Erro ao assinar documento:', error)
-      toast({
-        title: "Erro ao assinar documento",
-        description: error.message || "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
+      
     } finally {
       setIsAssinando(false)
     }
@@ -511,18 +457,9 @@ export default function PWADocumentosPage() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
       
-      toast({
-        title: "Download iniciado",
-        description: `Baixando ${documento.titulo || `Documento ${documento.documento_id}`}${comAssinaturas && temAssinaturas ? ' com assinaturas' : ''}`,
-        variant: "default"
-      })
     } catch (error: any) {
       console.error('Erro ao baixar documento:', error)
-      toast({
-        title: "Erro ao baixar documento",
-        description: error.message || "Tente novamente",
-        variant: "destructive"
-      })
+      
     }
   }
 

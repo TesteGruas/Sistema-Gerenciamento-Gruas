@@ -8,7 +8,7 @@ import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { checkPermission } from '../middleware/permissions.js'
-import { baixarEAdicionarAssinatura } from '../utils/pdf-signature.js'
+import { baixarEAdicionarAssinatura, adicionarAssinaturaEmTodasPaginas } from '../utils/pdf-signature.js'
 
 const router = express.Router()
 
@@ -223,6 +223,186 @@ router.get('/certificados/vencendo', async (req, res) => {
   } catch (error) {
     console.error('Erro ao listar certificados vencendo:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * PUT /api/certificados/:id/assinatura
+ * Adicionar assinatura digital ao certificado
+ */
+router.put('/certificados/:id/assinatura', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { assinatura_digital } = req.body
+
+    if (!assinatura_digital) {
+      return res.status(400).json({
+        success: false,
+        message: 'Assinatura digital é obrigatória'
+      })
+    }
+
+    // Validar que o ID é um UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'ID inválido', 
+        message: 'O ID do certificado deve ser um UUID válido' 
+      })
+    }
+
+    // Verificar se o certificado existe
+    const { data: certificado, error: certificadoError } = await supabaseAdmin
+      .from('certificados_colaboradores')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (certificadoError || !certificado) {
+      return res.status(404).json({
+        success: false,
+        message: 'Certificado não encontrado'
+      })
+    }
+
+    // Atualizar certificado com assinatura
+    const { data: updatedCertificado, error: updateError } = await supabaseAdmin
+      .from('certificados_colaboradores')
+      .update({
+        assinatura_digital,
+        assinado_por: req.user.id,
+        assinado_em: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (updateError) throw updateError
+
+    res.json({
+      success: true,
+      message: 'Certificado assinado com sucesso',
+      data: updatedCertificado
+    })
+  } catch (error) {
+    console.error('Erro ao assinar certificado:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * GET /api/certificados/:id/download
+ * Download do certificado (com opção de incluir assinatura)
+ */
+router.get('/certificados/:id/download', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comAssinatura } = req.query
+
+    // Validar que o ID é um UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'ID inválido', 
+        message: 'O ID do certificado deve ser um UUID válido' 
+      })
+    }
+
+    // Buscar certificado
+    const { data: certificado, error: certificadoError } = await supabaseAdmin
+      .from('certificados_colaboradores')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (certificadoError || !certificado) {
+      return res.status(404).json({
+        success: false,
+        message: 'Certificado não encontrado'
+      })
+    }
+
+    if (!certificado.arquivo) {
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo do certificado não encontrado'
+      })
+    }
+
+    // Obter URL do arquivo
+    let arquivoUrl = certificado.arquivo
+
+    // Se não for URL completa, tentar obter do Supabase Storage
+    if (!arquivoUrl.startsWith('http')) {
+      try {
+        const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
+          .from('arquivos-obras')
+          .createSignedUrl(arquivoUrl, 3600)
+
+        if (!urlError && signedUrl) {
+          arquivoUrl = signedUrl.signedUrl
+        } else {
+          // Fallback: tentar URL pública
+          const supabaseUrl = process.env.SUPABASE_URL || ''
+          if (supabaseUrl) {
+            arquivoUrl = `${supabaseUrl}/storage/v1/object/public/arquivos-obras/${arquivoUrl}`
+          }
+        }
+      } catch (urlErr) {
+        console.error('Erro ao obter URL do arquivo:', urlErr)
+      }
+    }
+
+    // Baixar o PDF
+    const fileResponse = await fetch(arquivoUrl)
+    
+    if (!fileResponse.ok) {
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo não encontrado',
+        error: 'O arquivo do certificado não pôde ser baixado'
+      })
+    }
+
+    let pdfBuffer = Buffer.from(await fileResponse.arrayBuffer())
+
+    // Se comAssinatura=true e certificado tem assinatura, adicionar no PDF em todas as páginas
+    if ((comAssinatura === 'true' || comAssinatura === '1') && certificado.assinatura_digital) {
+      try {
+        console.log('📥 [CERTIFICADO] Adicionando assinatura em todas as páginas do PDF...')
+        pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, certificado.assinatura_digital, {
+          height: 100, // Altura fixa de 100px
+          marginRight: 20, // Margem direita de 20px
+          marginBottom: 20, // Margem inferior de 20px
+          opacity: 1.0
+        })
+        console.log('✅ [CERTIFICADO] Assinatura adicionada em todas as páginas do PDF')
+      } catch (signatureError) {
+        console.error('❌ [CERTIFICADO] Erro ao adicionar assinatura no PDF:', signatureError)
+        // Continuar mesmo se houver erro - retornar PDF original
+      }
+    }
+
+    // Gerar nome do arquivo
+    const nomeArquivo = `certificado_${certificado.tipo}_${certificado.nome}${certificado.assinatura_digital ? '_assinado' : ''}.pdf`
+      .replace(/[^a-zA-Z0-9._-]/g, '_') // Sanitizar nome do arquivo
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
+    res.send(pdfBuffer)
+  } catch (error) {
+    console.error('Erro ao fazer download do certificado:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
   }
 })
 
@@ -564,6 +744,7 @@ router.put('/holerites/:id/assinatura', async (req, res) => {
     }
 
     // Atualizar holerite com assinatura
+    // A aprovação é automática quando o holerite está assinado (por trás dos panos)
     const { data, error } = await supabaseAdmin
       .from('holerites')
       .update({
@@ -576,6 +757,10 @@ router.put('/holerites/:id/assinatura', async (req, res) => {
       .single()
 
     if (error) throw error
+
+    // Aprovação automática: quando um holerite é assinado, ele é considerado aprovado automaticamente
+    // Não há necessidade de um botão separado de aprovação - a assinatura já implica aprovação
+    console.log(`[HOLERITES] Holerite ${id} assinado e aprovado automaticamente por usuário ${userId}`)
 
     res.json({ success: true, data })
   } catch (error) {
@@ -675,24 +860,19 @@ router.get('/holerites/:id/download', authenticateToken, async (req, res) => {
 
     let pdfBuffer = Buffer.from(await fileResponse.arrayBuffer())
 
-    // Se comAssinatura=true e holerite tem assinatura, adicionar no PDF
+    // Se comAssinatura=true e holerite tem assinatura, adicionar no PDF em todas as páginas
     if ((comAssinatura === 'true' || comAssinatura === '1') && holerite.assinatura_digital) {
       try {
-        pdfBuffer = await baixarEAdicionarAssinatura(
-          arquivoUrl,
-          holerite.assinatura_digital,
-          {
-            pageIndex: -1, // Última página
-            x: null, // Centralizar
-            y: 50, // 50 pontos do fundo
-            width: 200,
-            height: 60,
-            opacity: 1.0
-          }
-        )
-        console.log('✅ Assinatura adicionada no PDF do holerite')
+        console.log('📥 [HOLERITE] Adicionando assinatura em todas as páginas do PDF...')
+        pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, holerite.assinatura_digital, {
+          height: 100, // Altura fixa de 100px
+          marginRight: 20, // Margem direita de 20px
+          marginBottom: 20, // Margem inferior de 20px
+          opacity: 1.0
+        })
+        console.log('✅ [HOLERITE] Assinatura adicionada em todas as páginas do PDF')
       } catch (signatureError) {
-        console.error('Erro ao adicionar assinatura no PDF:', signatureError)
+        console.error('❌ [HOLERITE] Erro ao adicionar assinatura no PDF:', signatureError)
         // Continuar mesmo se houver erro - retornar PDF original
       }
     }

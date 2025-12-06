@@ -88,11 +88,7 @@ export default function PWAEspelhoPontoPage() {
 
   const carregarRegistros = async () => {
     if (!user?.id || !dataInicio || !dataFim) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Período deve ser definido",
-        variant: "destructive"
-      })
+      
       return
     }
 
@@ -123,18 +119,9 @@ export default function PWAEspelhoPontoPage() {
       
       setRegistros((response || []) as RegistroPonto[])
       
-      toast({
-        title: "Sucesso",
-        description: `${response?.length || 0} registros carregados`,
-        variant: "default"
-      })
     } catch (error: any) {
       console.error("Erro ao carregar registros:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os registros",
-        variant: "destructive"
-      })
+      
     } finally {
       setLoading(false)
     }
@@ -142,11 +129,7 @@ export default function PWAEspelhoPontoPage() {
 
   const exportarCSV = () => {
     if (registros.length === 0) {
-      toast({
-        title: "Nenhum dado",
-        description: "Carregue os registros primeiro",
-        variant: "destructive"
-      })
+      
       return
     }
 
@@ -188,27 +171,15 @@ export default function PWAEspelhoPontoPage() {
       link.click()
       document.body.removeChild(link)
 
-      toast({
-        title: "CSV exportado!",
-        description: "Arquivo CSV baixado com sucesso",
-      })
     } catch (error) {
       console.error('Erro ao exportar CSV:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível exportar o CSV",
-        variant: "destructive"
-      })
+      
     }
   }
 
   const exportarPDF = async () => {
     if (registros.length === 0) {
-      toast({
-        title: "Nenhum dado",
-        description: "Carregue os registros primeiro",
-        variant: "destructive"
-      })
+      
       return
     }
 
@@ -276,17 +247,9 @@ export default function PWAEspelhoPontoPage() {
 
       doc.save(`espelho-ponto-${user?.nome}-${dataInicio}-${dataFim}.pdf`)
 
-      toast({
-        title: "PDF gerado!",
-        description: "Arquivo PDF baixado com sucesso",
-      })
     } catch (error) {
       console.error('Erro ao gerar PDF:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível gerar o PDF",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -304,10 +267,7 @@ export default function PWAEspelhoPontoPage() {
     } else {
       // Fallback para copiar para área de transferência
       navigator.clipboard.writeText(window.location.href)
-      toast({
-        title: "Link copiado!",
-        description: "Link copiado para a área de transferência",
-      })
+      
     }
   }
 

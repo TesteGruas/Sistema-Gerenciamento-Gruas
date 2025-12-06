@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -98,6 +98,71 @@ export default function PWAMainPage() {
                          (userRole && String(userRole) !== 'authenticated' ? String(userRole) : null) || 
                          pwaUserData.user?.role || 
                          pwaUserData.user?.cargo
+
+  // Função auxiliar para verificar se é supervisor (usando useMemo para recalcular quando dados mudarem)
+  const isSupervisorUser = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    
+    try {
+      // Buscar cargo de todas as fontes possíveis
+      let cargoFromMetadata: string | null = null
+      let cargoFromProfile: string | null = null
+      
+      const userDataStr = localStorage.getItem('user_data')
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr)
+          cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || userData?.profile?.cargo || null
+        } catch (e) {
+          // Ignorar erro de parsing
+        }
+      }
+      
+      const userProfileStr = localStorage.getItem('user_profile')
+      if (userProfileStr) {
+        try {
+          const profile = JSON.parse(userProfileStr)
+          cargoFromProfile = profile?.cargo || null
+        } catch (e) {
+          // Ignorar erro de parsing
+        }
+      }
+      
+      const hookRole = userRole?.toLowerCase() || ''
+      const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
+      const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
+      const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
+      const cargoFromProfileLower = cargoFromProfile?.toLowerCase() || ''
+      const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
+      const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
+      const currentRoleLower = currentUserRole?.toLowerCase() || ''
+      
+      const allRolesArray = [
+        cargoFromMetadataLower,
+        cargoFromProfileLower,
+        pwaCargoLower,
+        roleFromUserDataLower,
+        currentRoleLower,
+        hookRole,
+        roleFromPerfilLower,
+        pwaRoleLower
+      ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
+      
+      const isSupervisor = allRolesArray.some(role => {
+        if (!role) return false
+        const roleLower = String(role).toLowerCase()
+        return (
+          roleLower.includes('supervisor') ||
+          roleLower === 'supervisores'
+        )
+      })
+      
+      return isSupervisor
+    } catch (error) {
+      console.error('Erro ao verificar se é supervisor:', error)
+      return false
+    }
+  }, [userRole, roleFromPerfil, roleFromUserData, currentUserRole, pwaUserData.user?.role, pwaUserData.user?.cargo])
 
   // Função de navegação direta
   const handleNavigation = (href: string) => {
@@ -275,24 +340,6 @@ export default function PWAMainPage() {
           const mensagem = mensagens[proximoRegistro.tipo as keyof typeof mensagens]
           
           if (mensagem) {
-            toast({
-              title: mensagem.titulo,
-              description: mensagem.descricao,
-              variant: jaPassou ? "destructive" : "default",
-              duration: 10000,
-              action: (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRegistrarPonto}
-                  className="h-8 px-2 text-xs"
-                >
-                  <Play className="w-3 h-3 mr-1" />
-                  Registrar Agora
-                </Button>
-              )
-            })
-
             // Marcar que já mostrou a notificação hoje
             localStorage.setItem(`notificacao_ponto_${proximoRegistro.tipo}_${agora.toDateString()}`, 'true')
           }
@@ -485,11 +532,6 @@ export default function PWAMainPage() {
     const proximoRegistro = getProximoRegistro()
     
     if (!proximoRegistro) {
-      toast({
-        title: "Jornada completa",
-        description: "Você já registrou todos os pontos do dia",
-        variant: "default"
-      })
       return
     }
 
@@ -626,12 +668,6 @@ export default function PWAMainPage() {
         })
         localStorage.setItem('fila_registros_ponto', JSON.stringify(filaRegistros))
         
-        toast({
-          title: "Ponto registrado offline",
-          description: `${proximoRegistro.label} será sincronizada quando você estiver online`,
-          variant: "default"
-        })
-        
         // Recarregar página após 1 segundo para atualizar dados
         setTimeout(() => {
           window.location.reload()
@@ -659,12 +695,6 @@ export default function PWAMainPage() {
         await pontoApi.criarRegistro(dadosRegistro)
       }
 
-      toast({
-        title: "Ponto registrado!",
-        description: `${proximoRegistro.label} registrada às ${horaAtual}`,
-        variant: "default"
-      })
-      
       // Recarregar página após 1 segundo para atualizar dados
       setTimeout(() => {
         window.location.reload()
@@ -672,11 +702,6 @@ export default function PWAMainPage() {
       
     } catch (error: any) {
       console.error('Erro ao registrar ponto:', error)
-      toast({
-        title: "Erro ao registrar ponto",
-        description: error.message || "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
     } finally {
       setIsRegistrandoPonto(false)
     }
@@ -750,7 +775,33 @@ export default function PWAMainPage() {
               </h2>
             </div>
             <div className="flex items-center gap-2">
-              {getProximoRegistro() && (() => {
+              {(() => {
+                // Verificação inline para garantir que funcione
+                let cargoCheck: string | null = null
+                if (typeof window !== 'undefined') {
+                  try {
+                    const userDataStr = localStorage.getItem('user_data')
+                    if (userDataStr) {
+                      const userData = JSON.parse(userDataStr)
+                      cargoCheck = userData?.user_metadata?.cargo || userData?.cargo || null
+                    }
+                  } catch (e) {
+                    // Ignorar erro
+                  }
+                }
+                const cargoLower = cargoCheck?.toLowerCase() || pwaUserData.user?.cargo?.toLowerCase() || ''
+                const isSupervisorCheck = isSupervisorUser || cargoLower.includes('supervisor')
+                
+                // Se for supervisor, não mostrar o botão
+                if (isSupervisorCheck) {
+                  return null
+                }
+                
+                // Se não tiver próximo registro, não mostrar
+                if (!getProximoRegistro()) {
+                  return null
+                }
+                
                 // Verificar se o cargo permite bater ponto (apenas Operários e Sinaleiros)
                 let cargoFromMetadata: string | null = null
                 try {
@@ -800,23 +851,23 @@ export default function PWAMainPage() {
                 }
                 
                 return (
-                <button
-                  onClick={handleRegistrarPonto}
-                  disabled={isRegistrandoPonto}
-                  className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isRegistrandoPonto ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Registrando...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4" />
-                      Registrar Ponto
-                    </>
-                  )}
-                </button>
+                  <button
+                    onClick={handleRegistrarPonto}
+                    disabled={isRegistrandoPonto}
+                    className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isRegistrandoPonto ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Registrando...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4" />
+                        Registrar Ponto
+                      </>
+                    )}
+                  </button>
                 )
               })()}
             </div>
@@ -839,69 +890,95 @@ export default function PWAMainPage() {
           </div>
 
           {/* Mini stats */}
-          <div className="grid gap-2 mt-6 grid-cols-3">
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
-              <p className="text-sm font-bold">
-                {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-              </p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
-              <p className="text-sm font-bold">
-                {pwaUserData.horasTrabalhadas && typeof pwaUserData.horasTrabalhadas === 'string' 
-                  ? pwaUserData.horasTrabalhadas.split(' ')[0] || '0h'
-                  : '0h'}
-              </p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-              <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
-              <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
-            </div>
-          </div>
+          {(() => {
+            // Verificação inline para garantir que funcione
+            let cargoCheck: string | null = null
+            if (typeof window !== 'undefined') {
+              try {
+                const userDataStr = localStorage.getItem('user_data')
+                if (userDataStr) {
+                  const userData = JSON.parse(userDataStr)
+                  cargoCheck = userData?.user_metadata?.cargo || userData?.cargo || null
+                }
+              } catch (e) {
+                // Ignorar erro
+              }
+            }
+            const cargoLower = cargoCheck?.toLowerCase() || pwaUserData.user?.cargo?.toLowerCase() || ''
+            const isSupervisorCheck = isSupervisorUser || cargoLower.includes('supervisor')
+            
+            return (
+              <div className={`grid gap-2 mt-6 ${isSupervisorCheck ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {!isSupervisorCheck && (
+                  <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+                    <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
+                    <p className="text-sm font-bold">
+                      {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
+                    </p>
+                  </div>
+                )}
+                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+                  <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
+                  <p className="text-sm font-bold">
+                    {pwaUserData.horasTrabalhadas && typeof pwaUserData.horasTrabalhadas === 'string' 
+                      ? pwaUserData.horasTrabalhadas.split(' ')[0] || '0h'
+                      : '0h'}
+                  </p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+                  <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
+                  <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       </div>
 
       {/* Status Rápido */}
-      <div className="grid gap-3 grid-cols-3">
-        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-          <div className="flex flex-col items-center text-center">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
-              pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
-            }`}>
-              <CheckCircle className={`w-6 h-6 ${
-                pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
-              }`} />
+      <div className={`grid gap-3 ${isSupervisorUser ? 'grid-cols-1' : 'grid-cols-3'}`}>
+        {!isSupervisorUser && (
+          <>
+            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+              <div className="flex flex-col items-center text-center">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
+                  pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
+                }`}>
+                  <CheckCircle className={`w-6 h-6 ${
+                    pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
+                  }`} />
+                </div>
+                <p className="text-base font-bold text-gray-900">
+                  {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
+              </div>
             </div>
-            <p className="text-base font-bold text-gray-900">
-              {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-            </p>
-            <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
-              <Clock className="w-6 h-6 text-[#871b0b]" />
+            
+            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
+                  <Clock className="w-6 h-6 text-[#871b0b]" />
+                </div>
+                <p className="text-base font-bold text-gray-900">
+                  {pwaUserData.pontoHoje?.saida
+                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
+                    : pwaUserData.pontoHoje?.volta_almoco
+                    ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
+                    : pwaUserData.pontoHoje?.saida_almoco
+                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
+                    : '--:--'}
+                </p>
+                <p className="text-[10px] text-gray-500 font-medium">
+                  {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
+                   pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
+                   pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
+                   'Saída'}
+                </p>
+              </div>
             </div>
-            <p className="text-base font-bold text-gray-900">
-              {pwaUserData.pontoHoje?.saida
-                ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
-                : pwaUserData.pontoHoje?.volta_almoco
-                ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
-                : pwaUserData.pontoHoje?.saida_almoco
-                ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
-                : '--:--'}
-            </p>
-            <p className="text-[10px] text-gray-500 font-medium">
-              {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
-               pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
-               pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
-               'Saída'}
-            </p>
-          </div>
-        </div>
+          </>
+        )}
         
         <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
           <div className="flex flex-col items-center text-center">
@@ -923,8 +1000,8 @@ export default function PWAMainPage() {
         <div className="grid grid-cols-2 gap-3">
           {quickActions
             .filter(action => {
-              // Filtrar Ponto - apenas Operários e Sinaleiros podem bater ponto
-              if (action.title === "Ponto") {
+              // Filtrar Ponto e Espelho - apenas Operários e Sinaleiros podem bater ponto
+              if (action.title === "Ponto" || action.title === "Espelho") {
                 // Obter cargo do user_metadata (mais confiável que perfil)
                 let cargoFromMetadata: string | null = null
                 try {
@@ -957,7 +1034,20 @@ export default function PWAMainPage() {
                   pwaRoleLower
                 ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
                 
-                // Verificar se é Operário ou Sinaleiro
+                // PRIMEIRO: Verificar se é Supervisor - se for, BLOQUEAR
+                const isSupervisor = allRolesArray.some(role => {
+                  const roleLower = role.toLowerCase()
+                  return (
+                    roleLower.includes('supervisor') ||
+                    roleLower === 'supervisores'
+                  )
+                })
+                
+                if (isSupervisor) {
+                  return false // Supervisores NÃO podem bater ponto
+                }
+                
+                // SEGUNDO: Verificar se é Operário ou Sinaleiro
                 const podeBaterPonto = allRolesArray.some(role => {
                   const roleLower = role.toLowerCase()
                   return (

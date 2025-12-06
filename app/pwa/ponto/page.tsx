@@ -183,20 +183,8 @@ export default function PWAPontoPage() {
     localStorage.setItem('fila_registros_ponto', JSON.stringify(filaComErros))
     
     if (filaComErros.length === 0) {
-      toast({
-        title: "Sincronização completa",
-        description: `${fila.length} registros sincronizados com sucesso`,
-        variant: "default"
-      })
-      
       // Recarregar dados atualizados
       carregarRegistrosHoje()
-    } else {
-      toast({
-        title: "Sincronização parcial",
-        description: `${fila.length - filaComErros.length} de ${fila.length} registros sincronizados`,
-        variant: "default"
-      })
     }
   }
 
@@ -216,34 +204,11 @@ export default function PWAPontoPage() {
         const validacao = validarProximidadeObra(coordenadas, obra)
         setValidacaoLocalizacao(validacao)
 
-        if (validacao.valido) {
-          toast({
-            title: "✅ Localização validada!",
-            description: validacao.mensagem,
-            variant: "default"
-          })
-        } else {
-          toast({
-            title: "⚠️ Fora da área permitida",
-            description: validacao.mensagem,
-            variant: "destructive"
-          })
-        }
-      } else {
-        toast({
-          title: "Localização obtida!",
-          description: "Sua localização foi capturada com sucesso",
-          variant: "default"
-        })
+        // Validação realizada
       }
     } catch (error: any) {
       console.error('Erro ao obter localização:', error)
       setLocationError(error.message)
-      toast({
-        title: "Erro na localização",
-        description: error.message || "Não foi possível obter sua localização",
-        variant: "destructive"
-      })
     } finally {
       setIsGettingLocation(false)
     }
@@ -259,11 +224,6 @@ export default function PWAPontoPage() {
         if (cachedRegistros) {
           const registros = JSON.parse(cachedRegistros)
           setRegistrosHoje(registros)
-          toast({
-            title: "Modo Offline",
-            description: "Exibindo registros em cache.",
-            variant: "default"
-          })
         }
         
         return
@@ -317,11 +277,6 @@ export default function PWAPontoPage() {
       
       if (cachedRegistros) {
         setRegistrosHoje(JSON.parse(cachedRegistros))
-        toast({
-          title: "Erro ao carregar registros",
-          description: "Exibindo registros em cache.",
-          variant: "destructive"
-        })
       }
     }
   }
@@ -354,15 +309,7 @@ export default function PWAPontoPage() {
           const validacao = validarProximidadeObra(coordenadas, obra)
           setValidacaoLocalizacao(validacao)
           
-          // Se estiver fora do range, mostrar aviso mas não bloquear ainda (o backend vai bloquear)
-          if (!validacao.valido) {
-            toast({
-              title: "⚠️ Atenção",
-              description: `Você está a ${Math.round(validacao.distancia)}m da obra. O limite é ${obra.raio_permitido || 4000}m. O registro será bloqueado se você estiver fora do range.`,
-              variant: "default",
-              duration: 5000
-            })
-          }
+          // Se estiver fora do range, o backend vai bloquear
         }
       } catch (error: any) {
         console.warn('Não foi possível obter localização:', error)
@@ -413,12 +360,6 @@ export default function PWAPontoPage() {
       
       // Validar localização ANTES de enviar (se tiver validação disponível)
       if (validacaoLocalizacao && !validacaoLocalizacao.valido) {
-        toast({
-          title: "⚠️ Fora da área permitida",
-          description: `${validacaoLocalizacao.mensagem}. Você precisa estar dentro de ${obra?.raio_permitido || 4000}m (${(obra?.raio_permitido || 4000) / 1000}km) para registrar o ponto.`,
-          variant: "destructive",
-          duration: 8000
-        })
         setIsLoading(false)
         return
       }
@@ -475,12 +416,6 @@ export default function PWAPontoPage() {
         }
         localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(novosRegistros))
         
-        toast({
-          title: "Ponto registrado offline",
-          description: `${tipo} será sincronizada quando você estiver online`,
-          variant: "default"
-        })
-        
         return
       }
 
@@ -510,12 +445,6 @@ export default function PWAPontoPage() {
           const tipoAlvo = errorData.tipo === 'grua' ? 'da grua' : 'da obra'
           const nomeAlvo = errorData.alvo || errorData.obra || 'localização'
           
-          toast({
-            title: "⚠️ Fora da área permitida",
-            description: errorData.message || `Você está a ${errorData.distancia}m ${tipoAlvo} (${nomeAlvo}). O limite é ${errorData.raio_permitido}m (${errorData.raio_permitido / 1000}km). Aproxime-se para registrar o ponto.`,
-            variant: "destructive",
-            duration: 8000
-          })
           throw new Error(errorData.message || `Você está fora da área permitida (${errorData.raio_permitido}m) para registrar ponto`)
         }
         throw apiError
@@ -534,19 +463,8 @@ export default function PWAPontoPage() {
       }
       localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(novosRegistros))
 
-      toast({
-        title: "Ponto registrado!",
-        description: `${tipo} registrada às ${horaAtual}`,
-        variant: "default"
-      })
-      
     } catch (error: any) {
       console.error('Erro ao registrar ponto:', error)
-      toast({
-        title: "Erro ao registrar ponto",
-        description: error.message || "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
     } finally {
       setIsLoading(false)
     }
@@ -634,12 +552,6 @@ export default function PWAPontoPage() {
           [tipo.toLowerCase().replace(' ', '_')]: horaAtual
         }))
 
-        toast({
-          title: "✅ Ponto registrado com hora extra!",
-          description: `${tipo} às ${horaAtual} - ${horasExtras.toFixed(1)}h extras (aguardando aprovação)`,
-          variant: "default"
-        })
-        
         // Resetar estados
         setHorasExtras(0)
         setTipoRegistroPendente(null)
@@ -647,11 +559,6 @@ export default function PWAPontoPage() {
       }
     } catch (error: any) {
       console.error('Erro ao registrar ponto:', error)
-      toast({
-        title: "Erro ao registrar ponto",
-        description: error.message || "Tente novamente em alguns instantes",
-        variant: "destructive"
-      })
     } finally {
       setIsLoading(false)
     }
@@ -753,7 +660,20 @@ export default function PWAPontoPage() {
         funcionarioCargo?.toLowerCase()
       ].filter(Boolean)
       
-      // Verificar se é Operário ou Sinaleiro
+      // PRIMEIRO: Verificar se é Supervisor - se for, BLOQUEAR
+      const isSupervisor = allCargos.some(cargo => {
+        if (!cargo) return false
+        return (
+          cargo.includes('supervisor') ||
+          cargo === 'supervisores'
+        )
+      })
+      
+      if (isSupervisor) {
+        return false // Supervisores NÃO podem bater ponto
+      }
+      
+      // SEGUNDO: Verificar se é Operário ou Sinaleiro
       return allCargos.some(cargo => {
         if (!cargo) return false
         return (

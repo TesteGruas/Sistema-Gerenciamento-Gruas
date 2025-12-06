@@ -41,7 +41,9 @@ import {
   Award,
   FileCheck,
   Receipt,
-  Loader2
+  Loader2,
+  Lock,
+  EyeOff
 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -58,19 +60,35 @@ function PWAPerfilPageContent() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { user, pontoHoje, documentosPendentes, horasTrabalhadas, loading } = usePWAUser()
-  const { userRole } = usePWAPermissions()
+  const { userRole, isSupervisor: isSupervisorHook } = usePWAPermissions()
   const { empresa, getEnderecoCompleto, getContatoCompleto, getHorarioFuncionamento } = useEmpresa()
   
   // Verificar se é admin - verificar também no localStorage como fallback
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isSupervisor, setIsSupervisor] = useState(false)
   
   useEffect(() => {
     if (typeof window === 'undefined') return
     
     try {
+      // Buscar cargo de todas as fontes possíveis
+      let cargoFromMetadata: string | null = null
+      let cargoFromProfile: string | null = null
+      
       const userDataFromStorage = localStorage.getItem('user_data')
       const parsedUserData = userDataFromStorage ? JSON.parse(userDataFromStorage) : null
       const userRoleFromStorage = parsedUserData?.role || parsedUserData?.cargo
+      cargoFromMetadata = parsedUserData?.user_metadata?.cargo || parsedUserData?.cargo || null
+      
+      const userProfileStr = localStorage.getItem('user_profile')
+      if (userProfileStr) {
+        try {
+          const profile = JSON.parse(userProfileStr)
+          cargoFromProfile = profile?.cargo || null
+        } catch (e) {
+          // Ignorar erro de parsing
+        }
+      }
       
       const adminCheck = userRole === 'Admin' || 
                         userRoleFromStorage === 'Admin' || 
@@ -79,11 +97,51 @@ function PWAPerfilPageContent() {
                         (typeof userRoleFromStorage === 'string' && userRoleFromStorage.toLowerCase().includes('admin'))
       
       setIsAdmin(adminCheck)
+      
+      // Verificar se é supervisor - verificação robusta de múltiplas fontes
+      const hookRole = userRole?.toLowerCase() || ''
+      const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
+      const cargoFromProfileLower = cargoFromProfile?.toLowerCase() || ''
+      const userCargoLower = (user as any)?.cargo?.toLowerCase() || ''
+      const userRoleFromStorageLower = userRoleFromStorage?.toLowerCase() || ''
+      
+      const allRolesArray = [
+        cargoFromMetadataLower,
+        cargoFromProfileLower,
+        userCargoLower,
+        hookRole,
+        userRoleFromStorageLower
+      ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
+      
+      const supervisorCheck = 
+        isSupervisorHook() || // Usar hook primeiro
+        allRolesArray.some(role => {
+          if (!role) return false
+          const roleLower = String(role).toLowerCase()
+          return (
+            roleLower.includes('supervisor') ||
+            roleLower === 'supervisores'
+          )
+        })
+      
+      setIsSupervisor(supervisorCheck)
+      
+      // Debug: log para verificar se está detectando corretamente
+      if (supervisorCheck) {
+        console.log('[PERFIL] Supervisor detectado:', {
+          userRole,
+          cargoFromMetadata,
+          cargoFromProfile,
+          userCargo: (user as any)?.cargo,
+          isSupervisorHook: isSupervisorHook()
+        })
+      }
     } catch (error) {
-      console.warn('Erro ao verificar se é admin:', error)
+      console.warn('Erro ao verificar role:', error)
       setIsAdmin(false)
+      setIsSupervisor(false)
     }
-  }, [userRole])
+  }, [userRole, user, isSupervisorHook])
   
   const [isEditing, setIsEditing] = useState(false)
   const [userData, setUserData] = useState({
@@ -140,6 +198,16 @@ function PWAPerfilPageContent() {
   const [tipoCertificado, setTipoCertificado] = useState('')
   const [dataValidadeCertificado, setDataValidadeCertificado] = useState('')
   const [enviandoCertificado, setEnviandoCertificado] = useState(false)
+  
+  // Estados para modal de alterar senha
+  const [isModalAlterarSenhaOpen, setIsModalAlterarSenhaOpen] = useState(false)
+  const [senhaAtual, setSenhaAtual] = useState('')
+  const [novaSenha, setNovaSenha] = useState('')
+  const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('')
+  const [mostrarSenhaAtual, setMostrarSenhaAtual] = useState(false)
+  const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false)
+  const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false)
+  const [alterandoSenha, setAlterandoSenha] = useState(false)
 
   // Carregar dados completos do funcionário da API
   useEffect(() => {
@@ -216,13 +284,7 @@ function PWAPerfilPageContent() {
         cargo: 'Encarregador Simulado'
       }
       localStorage.setItem('user_data', JSON.stringify(updatedUser))
-      
-      toast({
-        title: "✅ Modo Gestor Ativado",
-        description: "Você agora tem acesso a funcionalidades de encarregador",
-        variant: "default"
-      })
-      
+
       // Recarregar página para aplicar mudanças
       setTimeout(() => {
         window.location.reload()
@@ -235,13 +297,7 @@ function PWAPerfilPageContent() {
       }
       delete updatedUser.cargo_original
       localStorage.setItem('user_data', JSON.stringify(updatedUser))
-      
-      toast({
-        title: "Modo Gestor Desativado",
-        description: "Você voltou ao seu cargo original",
-        variant: "default"
-      })
-      
+
       setTimeout(() => {
         window.location.reload()
       }, 1000)
@@ -252,30 +308,73 @@ function PWAPerfilPageContent() {
     localStorage.removeItem('access_token')
     localStorage.removeItem('user_data')
     localStorage.removeItem('refresh_token')
-    
-    toast({
-      title: "Logout realizado",
-      description: "Você foi desconectado com sucesso",
-    })
-    
+
     // Como estamos na página PWA, sempre redirecionar para /pwa/login
     router.push('/pwa/login')
+  }
+
+  const handleAlterarSenha = async () => {
+    // Validações
+    if (!senhaAtual || !novaSenha || !confirmarNovaSenha) {
+      
+      return
+    }
+
+    if (novaSenha.length < 6) {
+      
+      return
+    }
+
+    if (novaSenha !== confirmarNovaSenha) {
+      
+      return
+    }
+
+    setAlterandoSenha(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+
+      const response = await fetch(`${apiUrl}/api/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          currentPassword: senhaAtual,
+          newPassword: novaSenha,
+          confirmPassword: confirmarNovaSenha
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+
+        // Limpar formulário
+        setSenhaAtual('')
+        setNovaSenha('')
+        setConfirmarNovaSenha('')
+        setIsModalAlterarSenhaOpen(false)
+      } else {
+        throw new Error(data.error || 'Erro ao alterar senha')
+      }
+    } catch (error) {
+      console.error('Erro ao alterar senha:', error)
+      
+    } finally {
+      setAlterandoSenha(false)
+    }
   }
 
   const handleSave = async () => {
     try {
       // Aqui você faria a chamada para a API para atualizar os dados
-      toast({
-        title: "Dados atualizados",
-        description: "Suas informações foram salvas com sucesso",
-      })
+      
       setIsEditing(false)
     } catch (error) {
-      toast({
-        title: "Erro ao salvar",
-        description: "Não foi possível atualizar os dados",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -290,11 +389,7 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar salários:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os salários",
-        variant: "destructive"
-      })
+      
     } finally {
       setLoadingSalarios(false)
     }
@@ -310,11 +405,7 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar benefícios:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os benefícios",
-        variant: "destructive"
-      })
+      
     } finally {
       setLoadingBeneficios(false)
     }
@@ -330,11 +421,7 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar certificados:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os certificados",
-        variant: "destructive"
-      })
+      
     } finally {
       setLoadingCertificados(false)
     }
@@ -350,11 +437,7 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar documentos admissionais:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os documentos admissionais",
-        variant: "destructive"
-      })
+      
     } finally {
       setLoadingDocumentosAdmissionais(false)
     }
@@ -363,11 +446,7 @@ function PWAPerfilPageContent() {
   // Função para fazer upload do arquivo e criar documento admissional
   const handleUploadDocumento = async () => {
     if (!funcionarioId || !arquivoSelecionado || !tipoDocumento) {
-      toast({
-        title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
-        variant: "destructive"
-      })
+      
       return
     }
 
@@ -412,11 +491,7 @@ function PWAPerfilPageContent() {
       const response = await colaboradoresDocumentosApi.documentosAdmissionais.criar(funcionarioId, documentoData)
 
       if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: "Documento enviado com sucesso"
-        })
-        
+
         // Limpar formulário
         setArquivoSelecionado(null)
         setTipoDocumento('')
@@ -430,11 +505,7 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao enviar documento:', error)
-      toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Não foi possível enviar o documento",
-        variant: "destructive"
-      })
+      
     } finally {
       setEnviandoDocumento(false)
     }
@@ -443,11 +514,7 @@ function PWAPerfilPageContent() {
   // Função para fazer upload do arquivo e criar certificado
   const handleUploadCertificado = async () => {
     if (!funcionarioId || !arquivoCertificadoSelecionado || !nomeCertificado || !tipoCertificado) {
-      toast({
-        title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
-        variant: "destructive"
-      })
+      
       return
     }
 
@@ -491,11 +558,7 @@ function PWAPerfilPageContent() {
       const response = await colaboradoresDocumentosApi.certificados.criar(funcionarioId, certificadoData)
 
       if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: "Certificado enviado com sucesso"
-        })
-        
+
         // Limpar formulário
         setArquivoCertificadoSelecionado(null)
         setNomeCertificado('')
@@ -510,11 +573,7 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao enviar certificado:', error)
-      toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Não foi possível enviar o certificado",
-        variant: "destructive"
-      })
+      
     } finally {
       setEnviandoCertificado(false)
     }
@@ -637,11 +696,7 @@ function PWAPerfilPageContent() {
       document.body.removeChild(link)
     } catch (error) {
       console.error('Erro ao baixar arquivo:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível baixar o arquivo",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -659,11 +714,7 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar detalhes do salário:', error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os detalhes do salário",
-        variant: "destructive"
-      })
+      
     } finally {
       setCarregandoDetalhes(false)
     }
@@ -828,52 +879,27 @@ function PWAPerfilPageContent() {
         </CardContent>
       </Card>
 
-      {/* Estatísticas Rápidas */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col items-center text-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Clock className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Horas Hoje</p>
-                <p className="text-lg font-bold text-gray-900">{horasTrabalhadas}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col items-center text-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Status Ponto</p>
-                <p className="text-lg font-bold text-green-600">
-                  {pontoHoje?.entrada ? 'Registrado' : 'Pendente'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col items-center text-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <FileText className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Documentos</p>
-                <p className="text-lg font-bold text-orange-600">{documentosPendentes}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Card de Alterar Senha */}
+      <Card className="border-2 border-gray-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-[#871b0b]" />
+            Segurança
+          </CardTitle>
+          <CardDescription>
+            Altere sua senha de acesso ao sistema
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => setIsModalAlterarSenhaOpen(true)}
+            className="w-full bg-[#871b0b] hover:bg-[#6b1509]"
+          >
+            <Lock className="w-4 h-4 mr-2" />
+            Alterar Senha
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Links de Teste - Apenas para Admin */}
       {isAdmin && (
@@ -1771,11 +1797,7 @@ function PWAPerfilPageContent() {
                   if (file) {
                     // Validar tamanho (máximo 10MB)
                     if (file.size > 10 * 1024 * 1024) {
-                      toast({
-                        title: "Erro",
-                        description: "Arquivo muito grande. Máximo permitido: 10MB",
-                        variant: "destructive"
-                      })
+                      
                       return
                     }
                     setArquivoSelecionado(file)
@@ -1837,6 +1859,173 @@ function PWAPerfilPageContent() {
         </DialogContent>
       </Dialog>
 
+      {/* Modal de Alterar Senha */}
+      <Dialog open={isModalAlterarSenhaOpen} onOpenChange={setIsModalAlterarSenhaOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5 text-[#871b0b]" />
+              Alterar Senha
+            </DialogTitle>
+            <DialogDescription>
+              Digite sua senha atual e a nova senha desejada
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="senha-atual">
+                Senha Atual <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="senha-atual"
+                  type={mostrarSenhaAtual ? 'text' : 'password'}
+                  placeholder="Digite sua senha atual"
+                  value={senhaAtual}
+                  onChange={(e) => setSenhaAtual(e.target.value)}
+                  className="mt-1 pr-10"
+                  disabled={alterandoSenha}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setMostrarSenhaAtual(!mostrarSenhaAtual)}
+                  disabled={alterandoSenha}
+                >
+                  {mostrarSenhaAtual ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="nova-senha">
+                Nova Senha <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="nova-senha"
+                  type={mostrarNovaSenha ? 'text' : 'password'}
+                  placeholder="Digite sua nova senha (mínimo 6 caracteres)"
+                  value={novaSenha}
+                  onChange={(e) => setNovaSenha(e.target.value)}
+                  className="mt-1 pr-10"
+                  minLength={6}
+                  disabled={alterandoSenha}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setMostrarNovaSenha(!mostrarNovaSenha)}
+                  disabled={alterandoSenha}
+                >
+                  {mostrarNovaSenha ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Mínimo de 6 caracteres
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="confirmar-nova-senha">
+                Confirmar Nova Senha <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="confirmar-nova-senha"
+                  type={mostrarConfirmarSenha ? 'text' : 'password'}
+                  placeholder="Digite novamente sua nova senha"
+                  value={confirmarNovaSenha}
+                  onChange={(e) => setConfirmarNovaSenha(e.target.value)}
+                  className="mt-1 pr-10"
+                  minLength={6}
+                  disabled={alterandoSenha}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setMostrarConfirmarSenha(!mostrarConfirmarSenha)}
+                  disabled={alterandoSenha}
+                >
+                  {mostrarConfirmarSenha ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Indicador de força da senha */}
+            {novaSenha && (
+              <div className="space-y-1">
+                <div className="flex gap-1">
+                  <div className={`h-1 flex-1 rounded ${novaSenha.length >= 6 ? 'bg-green-500' : 'bg-gray-200'}`} />
+                  <div className={`h-1 flex-1 rounded ${novaSenha.length >= 8 ? 'bg-green-500' : 'bg-gray-200'}`} />
+                  <div className={`h-1 flex-1 rounded ${/[A-Z]/.test(novaSenha) && /[0-9]/.test(novaSenha) ? 'bg-green-500' : 'bg-gray-200'}`} />
+                  <div className={`h-1 flex-1 rounded ${/[!@#$%^&*]/.test(novaSenha) ? 'bg-green-500' : 'bg-gray-200'}`} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Força da senha: {
+                    novaSenha.length < 6 ? 'Muito fraca' :
+                    novaSenha.length < 8 ? 'Fraca' :
+                    /[A-Z]/.test(novaSenha) && /[0-9]/.test(novaSenha) ? 'Forte' :
+                    'Média'
+                  }
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsModalAlterarSenhaOpen(false)
+                  setSenhaAtual('')
+                  setNovaSenha('')
+                  setConfirmarNovaSenha('')
+                }}
+                disabled={alterandoSenha}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleAlterarSenha}
+                disabled={alterandoSenha || !senhaAtual || !novaSenha || !confirmarNovaSenha}
+                className="bg-[#871b0b] hover:bg-[#6b1509]"
+              >
+                {alterandoSenha ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Alterando...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 mr-2" />
+                    Alterar Senha
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal de Upload de Certificado */}
       <Dialog open={isModalCertificadoOpen} onOpenChange={setIsModalCertificadoOpen}>
         <DialogContent className="sm:max-w-[500px]">
@@ -1890,11 +2079,7 @@ function PWAPerfilPageContent() {
                   if (file) {
                     // Validar tamanho (máximo 10MB)
                     if (file.size > 10 * 1024 * 1024) {
-                      toast({
-                        title: "Erro",
-                        description: "Arquivo muito grande. Máximo permitido: 10MB",
-                        variant: "destructive"
-                      })
+                      
                       return
                     }
                     setArquivoCertificadoSelecionado(file)

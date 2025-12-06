@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SignaturePad } from "@/components/signature-pad"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Loader2 } from "lucide-react"
+import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Loader2, FileSignature } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 import { DocumentoUpload } from "@/components/documento-upload"
@@ -36,6 +37,9 @@ export interface Certificado {
   data_validade: string
   arquivo: string
   alerta_enviado: boolean
+  assinatura_digital?: string
+  assinado_por?: number
+  assinado_em?: string
 }
 
 export default function CertificadosPage() {
@@ -47,7 +51,10 @@ export default function CertificadosPage() {
   const [certificados, setCertificados] = useState<Certificado[]>([])
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isAssinaturaDialogOpen, setIsAssinaturaDialogOpen] = useState(false)
   const [editingCertificado, setEditingCertificado] = useState<Certificado | null>(null)
+  const [certificadoParaAssinar, setCertificadoParaAssinar] = useState<Certificado | null>(null)
+  const [assinaturaDataUrl, setAssinaturaDataUrl] = useState<string>('')
   const [formData, setFormData] = useState({
     tipo: '',
     nome: '',
@@ -72,7 +79,10 @@ export default function CertificadosPage() {
           nome: cert.nome,
           data_validade: cert.data_validade || '',
           arquivo: cert.arquivo || '',
-          alerta_enviado: cert.alerta_enviado
+          alerta_enviado: cert.alerta_enviado,
+          assinatura_digital: cert.assinatura_digital,
+          assinado_por: cert.assinado_por,
+          assinado_em: cert.assinado_em
         }))
         setCertificados(certificadosConvertidos)
       }
@@ -234,6 +244,73 @@ export default function CertificadosPage() {
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
   }
 
+  const handleDownload = async (certificado: Certificado, comAssinatura: boolean = false) => {
+    try {
+      const blob = await colaboradoresDocumentosApi.certificados.baixar(certificado.id, comAssinatura)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `certificado_${certificado.tipo}_${certificado.nome}${comAssinatura ? '_assinado' : ''}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Download iniciado",
+        description: comAssinatura ? "O certificado assinado está sendo baixado." : "O certificado está sendo baixado.",
+        variant: "default"
+      })
+    } catch (error: any) {
+      console.error('Erro ao baixar certificado:', error)
+      toast({
+        title: "Erro ao baixar certificado",
+        description: error.message || "Não foi possível baixar o certificado",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleAssinar = async (certificado: Certificado) => {
+    if (!assinaturaDataUrl) {
+      toast({
+        title: "Erro",
+        description: "Por favor, assine o certificado",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const response = await colaboradoresDocumentosApi.certificados.assinar(certificado.id, {
+        assinatura_digital: assinaturaDataUrl
+      })
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Certificado assinado com sucesso"
+        })
+        setIsAssinaturaDialogOpen(false)
+        setAssinaturaDataUrl('')
+        setCertificadoParaAssinar(null)
+        loadCertificados()
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao assinar certificado",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleOpenAssinaturaDialog = (certificado: Certificado) => {
+    setCertificadoParaAssinar(certificado)
+    setAssinaturaDataUrl('')
+    setIsAssinaturaDialogOpen(true)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -292,9 +369,35 @@ export default function CertificadosPage() {
                       <TableCell>{getStatusBadge(certificado)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleDownload(certificado, false)}
+                            title="Baixar certificado"
+                          >
                             <Download className="w-4 h-4" />
                           </Button>
+                          {certificado.assinatura_digital && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleDownload(certificado, true)}
+                              title="Baixar certificado assinado"
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {!certificado.assinatura_digital && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleOpenAssinaturaDialog(certificado)}
+                              title="Assinar certificado"
+                            >
+                              <FileSignature className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -393,6 +496,50 @@ export default function CertificadosPage() {
               </Button>
               <Button onClick={handleSave}>
                 {editingCertificado ? 'Atualizar' : 'Criar'} Certificado
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Assinatura */}
+      <Dialog open={isAssinaturaDialogOpen} onOpenChange={setIsAssinaturaDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Assinar Certificado</DialogTitle>
+            <DialogDescription>
+              {certificadoParaAssinar?.nome} - {certificadoParaAssinar?.tipo}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <SignaturePad
+              onSave={(dataUrl) => setAssinaturaDataUrl(dataUrl)}
+              onCancel={() => {
+                setIsAssinaturaDialogOpen(false)
+                setAssinaturaDataUrl('')
+                setCertificadoParaAssinar(null)
+              }}
+              title="Assinatura Digital"
+              description="Assine o certificado digitalmente"
+            />
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsAssinaturaDialogOpen(false)
+                  setAssinaturaDataUrl('')
+                  setCertificadoParaAssinar(null)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={() => certificadoParaAssinar && handleAssinar(certificadoParaAssinar)}
+                disabled={!assinaturaDataUrl}
+              >
+                Confirmar Assinatura
               </Button>
             </div>
           </div>

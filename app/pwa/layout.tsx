@@ -23,8 +23,10 @@ import {
   Briefcase,
   Home,
   Building2,
-  ChevronDown
+  ChevronDown,
+  CheckCircle
 } from "lucide-react"
+import { usePWAUser } from "@/hooks/use-pwa-user"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import { PWAAuthGuard } from "@/components/pwa-auth-guard"
 import { PWAErrorBoundary } from "@/components/pwa-error-boundary"
@@ -75,6 +77,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     userRole,
     loading: permissionsLoading
   } = usePWAPermissions()
+  
+  // Hook para obter documentos pendentes
+  const { documentosPendentes } = usePWAUser()
   
   // Atualizar isClient apenas no cliente para evitar erro de hidratação
   useEffect(() => {
@@ -385,8 +390,103 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     description: 'Meu perfil'
   }
   
-  const essentialNavItems = [
-    // Ponto - sempre disponível
+  // Verificar se o usuário é supervisor (verificando múltiplas fontes)
+  const verificarSeSupervisor = () => {
+    if (typeof window === 'undefined') return false
+    
+    try {
+      // Buscar cargo de todas as fontes possíveis
+      let cargoFromMetadata: string | null = null
+      let cargoFromProfile: string | null = null
+      
+      const userDataStr = localStorage.getItem('user_data')
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr)
+          cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
+        } catch (e) {
+          // Ignorar erro de parsing
+        }
+      }
+      
+      const userProfileStr = localStorage.getItem('user_profile')
+      if (userProfileStr) {
+        try {
+          const profile = JSON.parse(userProfileStr)
+          cargoFromProfile = profile?.cargo || null
+        } catch (e) {
+          // Ignorar erro de parsing
+        }
+      }
+      
+      const hookRole = userRole?.toLowerCase() || ''
+      const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
+      const cargoFromProfileLower = cargoFromProfile?.toLowerCase() || ''
+      const userCargoLower = user?.cargo?.toLowerCase() || ''
+      
+      const allRolesArray = [
+        cargoFromMetadataLower,
+        cargoFromProfileLower,
+        userCargoLower,
+        hookRole
+      ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
+      
+      const isSupervisor = allRolesArray.some(role => {
+        if (!role) return false
+        const roleLower = String(role).toLowerCase()
+        return (
+          roleLower.includes('supervisor') ||
+          roleLower === 'supervisores'
+        )
+      })
+      
+      return isSupervisor
+    } catch (error) {
+      console.error('Erro ao verificar se é supervisor:', error)
+      return false
+    }
+  }
+
+  const isSupervisorUser = verificarSeSupervisor()
+  
+  // Se for supervisor, usar Aprovações e Obras no lugar de Ponto e Espelho
+  const essentialNavItems = isSupervisorUser ? [
+    // Aprovações - para supervisores
+    allNavigationItems.find(item => item.href === '/pwa/aprovacoes') || {
+      name: 'Aprovações',
+      href: '/pwa/aprovacoes',
+      icon: CheckCircle,
+      label: 'Aprovações',
+      description: 'Aprovar horas extras'
+    },
+    // Obras - para supervisores (usando rota de gruas mas com nome Obras)
+    allNavigationItems.find(item => item.href === '/pwa/gruas') || {
+      name: 'Obras',
+      href: '/pwa/gruas',
+      icon: Building2,
+      label: 'Obras',
+      description: 'Ver obras'
+    },
+    // Home (no meio)
+    {
+      name: 'Home',
+      href: '/pwa',
+      icon: Home,
+      label: 'Home',
+      description: 'Página inicial'
+    },
+    // Documentos
+    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
+      name: 'Docs',
+      href: '/pwa/documentos',
+      icon: FileText,
+      label: 'Documentos',
+      description: 'Documentos'
+    },
+    // Perfil - SEMPRE presente
+    perfilItem
+  ] : [
+    // Ponto - sempre disponível (não supervisor)
     allNavigationItems.find(item => item.href === '/pwa/ponto') || {
       name: 'Ponto',
       href: '/pwa/ponto',
@@ -394,7 +494,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       label: 'Ponto',
       description: 'Registrar ponto'
     },
-    // Espelho
+    // Espelho (não supervisor)
     allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
       name: 'Espelho',
       href: '/pwa/espelho-ponto',
@@ -410,13 +510,13 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       label: 'Home',
       description: 'Página inicial'
     },
-    // Notificações
-    allNavigationItems.find(item => item.href === '/pwa/notificacoes') || {
-      name: 'Notif',
-      href: '/pwa/notificacoes',
-      icon: Bell,
-      label: 'Notificações',
-      description: 'Notificações'
+    // Documentos
+    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
+      name: 'Docs',
+      href: '/pwa/documentos',
+      icon: FileText,
+      label: 'Documentos',
+      description: 'Documentos'
     },
     // Perfil - SEMPRE presente
     perfilItem
@@ -479,6 +579,40 @@ function PWALayoutContent({ children }: PWALayoutProps) {
 
                   {/* Menu do Usuário - SEMPRE visível */}
                   <div className="flex items-center gap-2">
+                    {/* Botão de Notificações - SEMPRE visível */}
+                    <div className="relative">
+                      <button
+                        onClick={() => router.push('/pwa/notificacoes')}
+                        className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg relative"
+                        aria-label="Notificações"
+                      >
+                        <Bell className="w-5 h-5 text-white" />
+                        {notificacoesNaoLidas > 0 && (
+                          <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white text-[10px] font-bold border-2 border-white">
+                            {notificacoesNaoLidas > 9 ? '9+' : notificacoesNaoLidas}
+                          </Badge>
+                        )}
+                      </button>
+                    </div>
+                    
+                    {/* Botão de Documentos Pendentes */}
+                    {documentosPendentes > 0 && (
+                      <div className="relative">
+                        <button
+                          onClick={() => router.push('/pwa/documentos')}
+                          className="flex items-center justify-center bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-all duration-200 shadow-lg relative"
+                          aria-label="Documentos pendentes"
+                        >
+                          <FileText className="w-5 h-5 text-white" />
+                          {documentosPendentes > 0 && (
+                            <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white text-[10px] font-bold border-2 border-white">
+                              {documentosPendentes > 9 ? '9+' : documentosPendentes}
+                            </Badge>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                    
                     <div className="relative" data-user-menu>
                       <button
                         onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}

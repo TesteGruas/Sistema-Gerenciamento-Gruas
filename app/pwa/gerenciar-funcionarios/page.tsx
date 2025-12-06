@@ -92,11 +92,7 @@ export default function GerenciarFuncionariosPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar funcionários",
-        variant: "destructive"
-      })
+      
     } finally {
       setLoading(false)
     }
@@ -135,11 +131,7 @@ export default function GerenciarFuncionariosPage() {
       setEspelhoRegistros(response)
     } catch (error) {
       console.error('Erro ao carregar espelho:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar espelho de ponto",
-        variant: "destructive"
-      })
+      
     } finally {
       setLoading(false)
     }
@@ -160,22 +152,14 @@ export default function GerenciarFuncionariosPage() {
       })
 
       if (response.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Horas extras aprovadas com sucesso",
-          variant: "default"
-        })
+        
         carregarRegistrosPendentes()
       } else {
         throw new Error('Erro ao aprovar horas extras')
       }
     } catch (error) {
       console.error('Erro ao aprovar horas extras:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao aprovar horas extras",
-        variant: "destructive"
-      })
+      
     }
   }
 
@@ -194,22 +178,14 @@ export default function GerenciarFuncionariosPage() {
       })
 
       if (response.ok) {
-        toast({
-          title: "Sucesso",
-          description: "Horas extras rejeitadas",
-          variant: "default"
-        })
+        
         carregarRegistrosPendentes()
       } else {
         throw new Error('Erro ao rejeitar horas extras')
       }
     } catch (error) {
       console.error('Erro ao rejeitar horas extras:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao rejeitar horas extras",
-        variant: "destructive"
-      })
+      
     }
   }
 
