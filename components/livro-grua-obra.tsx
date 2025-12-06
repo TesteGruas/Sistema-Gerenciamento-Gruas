@@ -1,11 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { 
-  BookOpen, 
   Building2, 
   User, 
   Wrench, 
@@ -856,33 +855,7 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
   }) || []
 
   return (
-    <div className="space-y-6 print:space-y-4">
-      {/* Cabeçalho do Livro */}
-      <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 pt-6 pb-6 rounded-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-8 h-8 text-blue-600" />
-            <div>
-              <h2 className="text-2xl font-semibold">Livro da Grua</h2>
-              <p className="text-base mt-1 text-muted-foreground">
-                Manual de Operação da Obra - {obra.name}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2 print:hidden">
-            <Button 
-              variant="outline" 
-              onClick={handleExportar} 
-              className="h-9 px-4 py-2"
-              disabled={!obra || !gruaSelecionada}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Exportar PDF
-            </Button>
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-4 print:space-y-4">
       {/* Seletor de Grua */}
       {(() => {
         const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
@@ -995,6 +968,17 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
                 <Building2 className="w-4 h-4" />
                 1. Dados da Obra
               </CardTitle>
+              <CardAction className="print:hidden">
+                <Button 
+                  variant="outline" 
+                  onClick={handleExportar} 
+                  className="h-9 px-4 py-2"
+                  disabled={!obra || !gruaSelecionada}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar PDF
+                </Button>
+              </CardAction>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
