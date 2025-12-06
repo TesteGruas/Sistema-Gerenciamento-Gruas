@@ -197,63 +197,65 @@ export function LivroGruaChecklistDiario({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Informações do Funcionário e Data - Card Unificado */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="w-4 h-4" />
-            Informações
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Nome do Funcionário */}
-            {user && (
-              <div>
-                <Label className="text-xs text-gray-500">Funcionário</Label>
-                <Input
-                  value={user.nome || ''}
-                  disabled
-                  className="bg-gray-50 mt-1"
-                />
-              </div>
-            )}
-            
-            {/* Cargo */}
-            {user && (
-              <div>
-                <Label className="text-xs text-gray-500">Cargo</Label>
-                <Input
-                  value={user.cargo || ''}
-                  disabled
-                  className="bg-gray-50 mt-1"
-                />
-              </div>
-            )}
-
-            {/* Data */}
-            <div>
-              <Label htmlFor="data" className="text-xs text-gray-500">
-                Data <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="data"
-                type="date"
-                value={formData.data}
-                onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                required
-                disabled={!modoEdicao}
-                className={`mt-1 ${!modoEdicao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-              />
-              {!modoEdicao && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Data fixa: hoje
-                </p>
+      {/* Informações do Funcionário e Data - Card Unificado - Oculto em novo checklist */}
+      {checklist && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Informações
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Nome do Funcionário */}
+              {user && (
+                <div>
+                  <Label className="text-xs text-gray-500">Funcionário</Label>
+                  <Input
+                    value={user.nome || ''}
+                    disabled
+                    className="bg-gray-50 mt-1"
+                  />
+                </div>
               )}
+              
+              {/* Cargo */}
+              {user && (
+                <div>
+                  <Label className="text-xs text-gray-500">Cargo</Label>
+                  <Input
+                    value={user.cargo || ''}
+                    disabled
+                    className="bg-gray-50 mt-1"
+                  />
+                </div>
+              )}
+
+              {/* Data */}
+              <div>
+                <Label htmlFor="data" className="text-xs text-gray-500">
+                  Data <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="data"
+                  type="date"
+                  value={formData.data}
+                  onChange={(e) => setFormData({ ...formData, data: e.target.value })}
+                  required
+                  disabled={!modoEdicao}
+                  className={`mt-1 ${!modoEdicao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                />
+                {!modoEdicao && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Data fixa: hoje
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Checklist */}
       <Card>

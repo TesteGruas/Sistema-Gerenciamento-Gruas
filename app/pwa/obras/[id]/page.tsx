@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,7 +25,9 @@ import {
   Clock,
   AlertCircle,
   Download,
-  Eye
+  Eye,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
 import { obrasApi, Obra } from "@/lib/api-obras"
@@ -34,7 +36,9 @@ import { gruaObraApi } from "@/lib/api-grua-obra"
 import { usePermissions } from "@/hooks/use-permissions"
 import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
+import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
 import { LivroGruaObra } from "@/components/livro-grua-obra"
+import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diario"
 import LivroGruaList from "@/components/livro-grua-list"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 
@@ -57,6 +61,18 @@ export default function PWAObraDetalhesPage() {
   const [isOnline, setIsOnline] = useState(true)
   const [funcionarioModal, setFuncionarioModal] = useState<any>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isNovoChecklistOpen, setIsNovoChecklistOpen] = useState(false)
+  const [isEditarChecklistOpen, setIsEditarChecklistOpen] = useState(false)
+  const [isVisualizarChecklistOpen, setIsVisualizarChecklistOpen] = useState(false)
+  const [checklistSelecionado, setChecklistSelecionado] = useState<any>(null)
+  const [gruaSelecionadaChecklist, setGruaSelecionadaChecklist] = useState<string>("")
+  const [isNovaManutencaoOpen, setIsNovaManutencaoOpen] = useState(false)
+  const [isEditarManutencaoOpen, setIsEditarManutencaoOpen] = useState(false)
+  const [isVisualizarManutencaoOpen, setIsVisualizarManutencaoOpen] = useState(false)
+  const [manutencaoSelecionada, setManutencaoSelecionada] = useState<any>(null)
+  const [gruaSelecionadaManutencao, setGruaSelecionadaManutencao] = useState<string>("")
+  const [isInformacoesObraExpanded, setIsInformacoesObraExpanded] = useState(true)
+  const [livroGruaObraData, setLivroGruaObraData] = useState<any>(null)
 
   // Verificar status de conexão
   useEffect(() => {
@@ -265,6 +281,116 @@ export default function PWAObraDetalhesPage() {
     }
   }
 
+  // Handlers Checklist
+  const handleNovoChecklist = (gruaId: string) => {
+    setGruaSelecionadaChecklist(gruaId)
+    setChecklistSelecionado(null)
+    setIsNovoChecklistOpen(true)
+  }
+
+  const handleEditarChecklist = (checklist: any, gruaId: string) => {
+    setGruaSelecionadaChecklist(gruaId)
+    setChecklistSelecionado(checklist)
+    setIsEditarChecklistOpen(true)
+  }
+
+  const handleVisualizarChecklist = (checklist: any) => {
+    setChecklistSelecionado(checklist)
+    setIsVisualizarChecklistOpen(true)
+  }
+
+  const handleExcluirChecklist = async (checklist: any) => {
+    if (!checklist.id) return
+
+    if (confirm(`Tem certeza que deseja excluir este checklist?`)) {
+      try {
+        await livroGruaApi.excluirEntrada(checklist.id)
+        toast({
+          title: "Checklist excluído",
+          description: "O checklist foi excluído com sucesso.",
+        })
+        // Recarregar dados
+        carregarObra()
+      } catch (err) {
+        console.error('Erro ao excluir checklist:', err)
+        toast({
+          title: "Erro",
+          description: "Não foi possível excluir o checklist.",
+          variant: "destructive"
+        })
+      }
+    }
+  }
+
+  const handleSucessoChecklist = () => {
+    setIsNovoChecklistOpen(false)
+    setIsEditarChecklistOpen(false)
+    setIsVisualizarChecklistOpen(false)
+    setChecklistSelecionado(null)
+    setGruaSelecionadaChecklist("")
+    toast({
+      title: "Sucesso",
+      description: "Checklist salvo com sucesso.",
+    })
+    // Recarregar dados
+    carregarObra()
+  }
+
+  // Handlers Manutenção
+  const handleNovaManutencao = (gruaId: string) => {
+    setGruaSelecionadaManutencao(gruaId)
+    setManutencaoSelecionada(null)
+    setIsNovaManutencaoOpen(true)
+  }
+
+  const handleEditarManutencao = (manutencao: any, gruaId: string) => {
+    setGruaSelecionadaManutencao(gruaId)
+    setManutencaoSelecionada(manutencao)
+    setIsEditarManutencaoOpen(true)
+  }
+
+  const handleVisualizarManutencao = (manutencao: any) => {
+    setManutencaoSelecionada(manutencao)
+    setIsVisualizarManutencaoOpen(true)
+  }
+
+  const handleExcluirManutencao = async (manutencao: any) => {
+    if (!manutencao.id) return
+
+    if (confirm(`Tem certeza que deseja excluir esta manutenção?`)) {
+      try {
+        await livroGruaApi.excluirEntrada(manutencao.id)
+        toast({
+          title: "Manutenção excluída",
+          description: "A manutenção foi excluída com sucesso.",
+        })
+        // Recarregar dados
+        carregarObra()
+      } catch (err) {
+        console.error('Erro ao excluir manutenção:', err)
+        toast({
+          title: "Erro",
+          description: "Não foi possível excluir a manutenção.",
+          variant: "destructive"
+        })
+      }
+    }
+  }
+
+  const handleSucessoManutencao = () => {
+    setIsNovaManutencaoOpen(false)
+    setIsEditarManutencaoOpen(false)
+    setIsVisualizarManutencaoOpen(false)
+    setManutencaoSelecionada(null)
+    setGruaSelecionadaManutencao("")
+    toast({
+      title: "Sucesso",
+      description: "Manutenção salva com sucesso.",
+    })
+    // Recarregar dados
+    carregarObra()
+  }
+
   // Carregar dados na inicialização
   useEffect(() => {
     if (obraId) {
@@ -348,24 +474,32 @@ export default function PWAObraDetalhesPage() {
             {obra.endereco}, {obra.cidade} - {obra.estado}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {isOnline ? (
-            <Wifi className="w-4 h-4 text-green-600" />
-          ) : (
-            <WifiOff className="w-4 h-4 text-red-600" />
-          )}
-        </div>
       </div>
 
       {/* Informações da Obra */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Building2 className="w-4 h-4" />
-            Informações da Obra
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="w-4 h-4" />
+              Informações da Obra
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsInformacoesObraExpanded(!isInformacoesObraExpanded)}
+              className="h-8 w-8 p-0"
+            >
+              {isInformacoesObraExpanded ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent>
+        {isInformacoesObraExpanded && (
+          <CardContent>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-gray-600 mb-1">Status</p>
@@ -399,6 +533,7 @@ export default function PWAObraDetalhesPage() {
             )}
           </div>
         </CardContent>
+        )}
       </Card>
 
       {/* Status de conexão */}
@@ -441,7 +576,11 @@ export default function PWAObraDetalhesPage() {
         {/* Aba: Livro da Grua (completo) */}
         <TabsContent value="livro-grua" className="space-y-4">
           {obraId ? (
-            <LivroGruaObra obraId={obraId.toString()} />
+            <LivroGruaObra 
+              obraId={obraId.toString()} 
+              cachedData={livroGruaObraData}
+              onDataLoaded={setLivroGruaObraData}
+            />
           ) : (
             <Card>
               <CardContent className="p-8 text-center">
@@ -598,10 +737,10 @@ export default function PWAObraDetalhesPage() {
                   <CardContent>
                     <LivroGruaChecklistList
                       gruaId={grua.id}
-                      onNovoChecklist={() => {}}
-                      onEditarChecklist={() => {}}
-                      onVisualizarChecklist={() => {}}
-                      onExcluirChecklist={() => {}}
+                      onNovoChecklist={() => handleNovoChecklist(grua.id)}
+                      onEditarChecklist={(checklist) => handleEditarChecklist(checklist, grua.id)}
+                      onVisualizarChecklist={handleVisualizarChecklist}
+                      onExcluirChecklist={handleExcluirChecklist}
                     />
                   </CardContent>
                 </Card>
@@ -630,10 +769,10 @@ export default function PWAObraDetalhesPage() {
                   <CardContent>
                     <LivroGruaManutencaoList
                       gruaId={grua.id}
-                      onNovaManutencao={() => {}}
-                      onEditarManutencao={() => {}}
-                      onVisualizarManutencao={() => {}}
-                      onExcluirManutencao={() => {}}
+                      onNovaManutencao={() => handleNovaManutencao(grua.id)}
+                      onEditarManutencao={(manutencao) => handleEditarManutencao(manutencao, grua.id)}
+                      onVisualizarManutencao={handleVisualizarManutencao}
+                      onExcluirManutencao={handleExcluirManutencao}
                     />
                   </CardContent>
                 </Card>
@@ -775,6 +914,163 @@ export default function PWAObraDetalhesPage() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Modal Novo Checklist */}
+      <Dialog open={isNovoChecklistOpen} onOpenChange={setIsNovoChecklistOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Novo Checklist Diário</DialogTitle>
+          </DialogHeader>
+          {gruaSelecionadaChecklist && (
+            <LivroGruaChecklistDiario
+              gruaId={gruaSelecionadaChecklist}
+              onSave={handleSucessoChecklist}
+              onCancel={() => setIsNovoChecklistOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Checklist */}
+      <Dialog open={isEditarChecklistOpen} onOpenChange={setIsEditarChecklistOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Checklist Diário</DialogTitle>
+          </DialogHeader>
+          {gruaSelecionadaChecklist && checklistSelecionado && (
+            <LivroGruaChecklistDiario
+              gruaId={gruaSelecionadaChecklist}
+              checklist={checklistSelecionado}
+              onSave={handleSucessoChecklist}
+              onCancel={() => setIsEditarChecklistOpen(false)}
+              modoEdicao={true}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Visualizar Checklist */}
+      <Dialog open={isVisualizarChecklistOpen} onOpenChange={setIsVisualizarChecklistOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Visualizar Checklist Diário</DialogTitle>
+          </DialogHeader>
+          {checklistSelecionado && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Data</label>
+                  <p className="text-sm font-medium mt-1">
+                    {new Date(checklistSelecionado.data || checklistSelecionado.data_entrada).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Funcionário</label>
+                  <p className="text-sm mt-1">
+                    {checklistSelecionado.funcionario_nome || 'Não informado'}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase">Itens Verificados</label>
+                <div className="mt-2 space-y-2">
+                  {['cabos', 'polias', 'estrutura', 'movimentos', 'freios', 'limitadores', 'indicadores', 'aterramento'].map((item) => (
+                    <div key={item} className="flex items-center gap-2">
+                      <CheckCircle2 className={`w-4 h-4 ${checklistSelecionado[item] ? 'text-green-600' : 'text-gray-400'}`} />
+                      <span className="text-sm capitalize">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {checklistSelecionado.observacoes && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Observações</label>
+                  <p className="text-sm mt-1">{checklistSelecionado.observacoes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Nova Manutenção */}
+      <Dialog open={isNovaManutencaoOpen} onOpenChange={setIsNovaManutencaoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nova Manutenção</DialogTitle>
+          </DialogHeader>
+          {gruaSelecionadaManutencao && (
+            <LivroGruaManutencao
+              gruaId={gruaSelecionadaManutencao}
+              onSave={handleSucessoManutencao}
+              onCancel={() => setIsNovaManutencaoOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Manutenção */}
+      <Dialog open={isEditarManutencaoOpen} onOpenChange={setIsEditarManutencaoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Manutenção</DialogTitle>
+          </DialogHeader>
+          {gruaSelecionadaManutencao && manutencaoSelecionada && (
+            <LivroGruaManutencao
+              gruaId={gruaSelecionadaManutencao}
+              manutencao={manutencaoSelecionada}
+              onSave={handleSucessoManutencao}
+              onCancel={() => setIsEditarManutencaoOpen(false)}
+              modoEdicao={true}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Visualizar Manutenção */}
+      <Dialog open={isVisualizarManutencaoOpen} onOpenChange={setIsVisualizarManutencaoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Visualizar Manutenção</DialogTitle>
+          </DialogHeader>
+          {manutencaoSelecionada && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Data</label>
+                  <p className="text-sm font-medium mt-1">
+                    {new Date(manutencaoSelecionada.data || manutencaoSelecionada.data_entrada).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Realizado Por</label>
+                  <p className="text-sm mt-1">
+                    {manutencaoSelecionada.realizado_por_nome || manutencaoSelecionada.funcionario_nome || 'Não informado'}
+                  </p>
+                </div>
+                {manutencaoSelecionada.cargo && (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
+                    <p className="text-sm mt-1">{manutencaoSelecionada.cargo}</p>
+                  </div>
+                )}
+              </div>
+              {manutencaoSelecionada.descricao && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Descrição</label>
+                  <p className="text-sm mt-1">{manutencaoSelecionada.descricao}</p>
+                </div>
+              )}
+              {manutencaoSelecionada.observacoes && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Observações</label>
+                  <p className="text-sm mt-1">{manutencaoSelecionada.observacoes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Detalhes do Funcionário */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

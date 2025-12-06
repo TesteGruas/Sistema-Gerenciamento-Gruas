@@ -171,9 +171,9 @@ export function LivroGruaChecklistList({
   }, [checklistsFiltrados, contarItensMarcados])
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <Card className="border-0 shadow-none checklist-card-no-gap">
+      <CardHeader className="px-0">
+        <div className="flex flex-row items-center justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5" />
@@ -183,7 +183,7 @@ export function LivroGruaChecklistList({
               Lista de checklists diários realizados nesta grua
             </CardDescription>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-row gap-2">
             {checklistsFiltrados.length > 0 && (
               <ExportButton
                 dados={formatarDadosParaExportacao()}
@@ -196,7 +196,13 @@ export function LivroGruaChecklistList({
               />
             )}
             {onNovoChecklist && (
-              <Button onClick={onNovoChecklist} className="w-full sm:w-auto">
+              <Button 
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onNovoChecklist()
+                }}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Checklist
               </Button>
@@ -204,7 +210,7 @@ export function LivroGruaChecklistList({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-0">
         {/* Filtros */}
         <div className="flex gap-2 mb-4 items-end">
           <div className="flex-1">
@@ -217,16 +223,15 @@ export function LivroGruaChecklistList({
               className="w-full"
             />
           </div>
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setFiltroData("")
-              }}
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setFiltroData("")
+            }}
+            className="h-9"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Erro */}
@@ -246,7 +251,15 @@ export function LivroGruaChecklistList({
             <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
             <p>Nenhum checklist encontrado</p>
             {onNovoChecklist && (
-              <Button onClick={onNovoChecklist} variant="outline" className="mt-4">
+              <Button 
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onNovoChecklist()
+                }} 
+                variant="outline" 
+                className="mt-4"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Criar Primeiro Checklist
               </Button>

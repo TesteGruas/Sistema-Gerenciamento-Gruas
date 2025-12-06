@@ -30,17 +30,24 @@ import { useToast } from "@/hooks/use-toast"
 
 interface LivroGruaObraProps {
   obraId: string
+  cachedData?: any
+  onDataLoaded?: (data: any) => void
 }
 
-export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
+export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObraProps) {
   const { toast } = useToast()
-  const [loading, setLoading] = useState(true)
-  const [obra, setObra] = useState<any>(null)
-  const [documentos, setDocumentos] = useState<any[]>([])
-  const [gruaSelecionada, setGruaSelecionada] = useState<any>(null)
+  const [loading, setLoading] = useState(!cachedData)
+  const [obra, setObra] = useState<any>(cachedData?.obra || null)
+  const [documentos, setDocumentos] = useState<any[]>(cachedData?.documentos || [])
+  const [gruaSelecionada, setGruaSelecionada] = useState<any>(cachedData?.gruaSelecionada || null)
 
   useEffect(() => {
-    carregarDados()
+    // Só carregar se não houver dados em cache
+    if (!cachedData) {
+      carregarDados()
+    } else {
+      setLoading(false)
+    }
   }, [obraId])
 
   // Selecionar automaticamente a primeira grua quando os dados carregarem
@@ -65,6 +72,15 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
           }
           console.log('✅ Selecionando grua (com grua.grua):', gruaParaSelecionar)
           setGruaSelecionada(gruaParaSelecionar)
+          
+          // Atualizar cache com grua selecionada
+          if (onDataLoaded) {
+            onDataLoaded({
+              obra,
+              documentos,
+              gruaSelecionada: gruaParaSelecionar
+            })
+          }
         } else {
           const gruaParaSelecionar = {
             ...primeiraGrua,
@@ -72,12 +88,21 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
           }
           console.log('✅ Selecionando grua (direto):', gruaParaSelecionar)
           setGruaSelecionada(gruaParaSelecionar)
+          
+          // Atualizar cache com grua selecionada
+          if (onDataLoaded) {
+            onDataLoaded({
+              obra,
+              documentos,
+              gruaSelecionada: gruaParaSelecionar
+            })
+          }
         }
       } else {
         console.log('⚠️ Nenhuma grua disponível para selecionar')
       }
     }
-  }, [obra, gruaSelecionada, loading])
+  }, [obra, gruaSelecionada, loading, documentos, onDataLoaded])
 
   const carregarDados = async () => {
     try {
@@ -105,8 +130,19 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
 
       // Carregar documentos
       const docsResponse = await obrasDocumentosApi.listarPorObra(parseInt(obraId))
+      let documentosData: any[] = []
       if (docsResponse.success && docsResponse.data) {
-        setDocumentos(Array.isArray(docsResponse.data) ? docsResponse.data : [docsResponse.data])
+        documentosData = Array.isArray(docsResponse.data) ? docsResponse.data : [docsResponse.data]
+        setDocumentos(documentosData)
+      }
+
+      // Salvar dados em cache via callback
+      if (onDataLoaded) {
+        onDataLoaded({
+          obra: obraConvertida,
+          documentos: documentosData,
+          gruaSelecionada: null // Será definida pelo useEffect abaixo
+        })
       }
 
       // Processar gruas da API relacionamentos/grua-obra

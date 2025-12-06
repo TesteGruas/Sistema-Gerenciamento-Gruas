@@ -383,3 +383,11 @@ html {
 .space-y-6 {
   padding: 20px;
 }
+
+/* Checklist card sem gap */
+.bg-card.text-card-foreground.flex.flex-col.gap-6.rounded-xl.border.py-6.shadow-sm.checklist-card-no-gap,
+.bg-card.text-card-foreground.flex.flex-col.gap-6.rounded-xl.py-6.shadow-sm.border-0.checklist-card-no-gap {
+  gap: 0px !important;
+  border: none !important;
+  box-shadow: none !important;
+}

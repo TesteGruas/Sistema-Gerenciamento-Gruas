@@ -119,9 +119,9 @@ export function LivroGruaManutencaoList({
   }, [manutencoesFiltradas])
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <Card className="border-0 shadow-none checklist-card-no-gap">
+      <CardHeader className="px-0">
+        <div className="flex flex-row items-center justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Wrench className="w-5 h-5" />
@@ -131,7 +131,7 @@ export function LivroGruaManutencaoList({
               Histórico de manutenções realizadas nesta grua
             </CardDescription>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-row gap-2">
             {manutencoesFiltradas.length > 0 && (
               <ExportButton
                 dados={formatarDadosParaExportacao()}
@@ -144,7 +144,13 @@ export function LivroGruaManutencaoList({
               />
             )}
             {onNovaManutencao && (
-              <Button onClick={onNovaManutencao} className="w-full sm:w-auto">
+              <Button 
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onNovaManutencao()
+                }}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Manutenção
               </Button>
@@ -152,7 +158,7 @@ export function LivroGruaManutencaoList({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-0">
         {/* Filtros */}
         <div className="flex gap-2 mb-4 items-end">
           <div className="flex-1">
@@ -175,17 +181,16 @@ export function LivroGruaManutencaoList({
               className="w-full"
             />
           </div>
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setFiltroDataInicio("")
-                setFiltroDataFim("")
-              }}
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setFiltroDataInicio("")
+              setFiltroDataFim("")
+            }}
+            className="h-9"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Erro */}
@@ -205,7 +210,15 @@ export function LivroGruaManutencaoList({
             <Wrench className="w-12 h-12 mx-auto mb-4 text-gray-400" />
             <p>Nenhuma manutenção encontrada</p>
             {onNovaManutencao && (
-              <Button onClick={onNovaManutencao} variant="outline" className="mt-4">
+              <Button 
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onNovaManutencao()
+                }} 
+                variant="outline" 
+                className="mt-4"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Registrar Primeira Manutenção
               </Button>

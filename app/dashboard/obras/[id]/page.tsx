@@ -6550,11 +6550,13 @@ function ObraDetailsPageContent() {
           <DialogHeader>
             <DialogTitle>Novo Checklist Diário</DialogTitle>
           </DialogHeader>
-          <LivroGruaChecklistDiario
-            gruaId={gruaSelecionadaChecklist}
-            onSave={handleSucessoChecklist}
-            onCancel={() => setIsNovoChecklistOpen(false)}
-          />
+          {gruaSelecionadaChecklist && (
+            <LivroGruaChecklistDiario
+              gruaId={gruaSelecionadaChecklist}
+              onSave={handleSucessoChecklist}
+              onCancel={() => setIsNovoChecklistOpen(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

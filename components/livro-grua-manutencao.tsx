@@ -253,15 +253,16 @@ export function LivroGruaManutencao({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Data e Funcionário - Card Unificado */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="w-4 h-4" />
-            Informações
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* Data e Funcionário - Card Unificado - Oculto em nova manutenção */}
+      {manutencao && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Informações
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Data */}
             <div>
@@ -324,6 +325,7 @@ export function LivroGruaManutencao({
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Checklist de Manutenção */}
       <Card>
