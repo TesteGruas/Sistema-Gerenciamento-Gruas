@@ -380,10 +380,10 @@ export default function PWAMainPage() {
       priority: true
     },
     {
-      title: "Gruas",
-      description: "Ver minhas gruas",
+      title: "Obras",
+      description: "Ver minhas obras",
       icon: Briefcase,
-      href: "/pwa/gruas",
+      href: "/pwa/obras",
       color: "text-purple-600",
       bgColor: "bg-purple-50",
       borderColor: "border-purple-100",

@@ -5,6 +5,7 @@ import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { 
   FileSignature, 
   Download, 
@@ -19,7 +20,9 @@ import {
   PenTool,
   Trash2,
   Save,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  Loader2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
@@ -40,6 +43,10 @@ export default function PWADocumentosPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [signature, setSignature] = useState<string | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [documentoPreview, setDocumentoPreview] = useState<Documento | null>(null)
+  const [urlPreview, setUrlPreview] = useState<string | null>(null)
+  const [carregandoPreview, setCarregandoPreview] = useState(false)
   const { toast } = useToast()
 
   // Carregar dados do usuário
@@ -463,6 +470,47 @@ export default function PWADocumentosPage() {
     }
   }
 
+  const handleVisualizar = async (documento: Documento, comAssinaturas: boolean = false) => {
+    try {
+      setDocumentoPreview(documento)
+      setIsPreviewOpen(true)
+      setUrlPreview(null)
+      setCarregandoPreview(true)
+      
+      // Verificar se documento tem assinaturas para visualizar versão assinada
+      const temAssinaturas = documento.status === 'assinado' || documento.assinatura_url
+      
+      // Usar documento_id (ID do documento de obra) para o download
+      const documentoId = documento.documento_id || documento.id
+      
+      // Usar a nova API que suporta assinaturas
+      const blob = await downloadDocumento(Number(documentoId), comAssinaturas && temAssinaturas)
+      const url = window.URL.createObjectURL(blob)
+      
+      setUrlPreview(url)
+      setCarregandoPreview(false)
+      
+    } catch (error: any) {
+      console.error('Erro ao visualizar documento:', error)
+      setCarregandoPreview(false)
+      toast({
+        title: "Erro",
+        description: "Não foi possível visualizar o documento",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const fecharPreview = () => {
+    if (urlPreview) {
+      window.URL.revokeObjectURL(urlPreview)
+    }
+    setIsPreviewOpen(false)
+    setDocumentoPreview(null)
+    setUrlPreview(null)
+    setCarregandoPreview(false)
+  }
+
   return (
     <ProtectedRoute permission="assinatura_digital:visualizar">
       <div className="space-y-4">
@@ -551,6 +599,16 @@ export default function PWADocumentosPage() {
                           Assinar
                         </Button>
                       )}
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleVisualizar(documento, false)}
+                        disabled={!isOnline}
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        Visualizar
+                      </Button>
                       
                       <Button
                         variant="outline"
@@ -810,6 +868,81 @@ export default function PWADocumentosPage() {
           </Card>
         </div>
       )}
+
+      {/* Modal de Preview */}
+      <Dialog open={isPreviewOpen} onOpenChange={fecharPreview}>
+        <DialogContent className="sm:max-w-[800px] p-0">
+          <DialogHeader className="p-6 pb-4">
+            <DialogTitle>
+              {documentoPreview?.titulo || `Documento ${documentoPreview?.documento_id}`}
+            </DialogTitle>
+            <DialogDescription>
+              {documentoPreview?.tipo} • Ordem: {documentoPreview?.ordem} • Criado em {documentoPreview?.created_at ? formatarData(documentoPreview.created_at) : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 p-6 pt-0">
+            {carregandoPreview ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                <span className="ml-2 text-gray-600">Carregando arquivo...</span>
+              </div>
+            ) : urlPreview ? (
+              <div className="border rounded-lg p-4">
+                <iframe
+                  src={urlPreview}
+                  className="w-full h-[600px] border-0"
+                  title="Visualização do Documento"
+                  onError={() => {
+                    console.error('Erro ao carregar iframe com URL:', urlPreview)
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="border rounded-lg p-8 bg-gray-50">
+                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-lg font-medium mb-2 text-gray-700">Não foi possível exibir o documento.</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Ocorreu um erro ao carregar o arquivo ou o formato não é suportado para visualização direta.
+                </p>
+                {documentoPreview && (
+                  <Button onClick={() => handleDownload(documentoPreview, false)}>
+                    <Download className="w-4 h-4 mr-2" /> Baixar Documento
+                  </Button>
+                )}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              {documentoPreview && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleDownload(documentoPreview, false)}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Baixar PDF
+                  </Button>
+                  {(documentoPreview.status === 'assinado' || documentoPreview.assinatura_url) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleDownload(documentoPreview, true)}
+                      className="bg-green-50 hover:bg-green-100 border-green-300"
+                    >
+                      <FileSignature className="w-4 h-4 mr-2" />
+                      Baixar Assinado
+                    </Button>
+                  )}
+                </>
+              )}
+              <Button
+                variant="outline"
+                onClick={fecharPreview}
+              >
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Status de conexão */}
       {!isOnline && (

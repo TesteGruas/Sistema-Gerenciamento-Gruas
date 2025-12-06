@@ -119,7 +119,7 @@ export function LivroGruaManutencaoList({
   }, [manutencoesFiltradas])
 
   return (
-    <Card>
+    <Card className="border-0 shadow-none">
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -154,8 +154,8 @@ export function LivroGruaManutencaoList({
       </CardHeader>
       <CardContent>
         {/* Filtros */}
-        <div className="flex gap-2 mb-4 items-end">
-          <div className="flex-1">
+        <div className="flex flex-wrap gap-2 mb-4 items-end">
+          <div className="flex-1 min-w-[140px]">
             <Label htmlFor="filtroDataInicio">Data Início</Label>
             <Input
               id="filtroDataInicio"
@@ -165,7 +165,7 @@ export function LivroGruaManutencaoList({
               className="w-full"
             />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-[140px]">
             <Label htmlFor="filtroDataFim">Data Fim</Label>
             <Input
               id="filtroDataFim"

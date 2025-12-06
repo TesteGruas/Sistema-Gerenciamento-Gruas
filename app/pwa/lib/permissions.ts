@@ -57,11 +57,11 @@ export const PWA_MENU_ITEMS: PWAMenuItem[] = [
     description: 'Aprove horas extras e justificativas'
   },
   {
-    label: 'Gruas',
-    path: '/pwa/gruas',
+    label: 'Obras',
+    path: '/pwa/obras',
     icon: Building2,
-    permission: 'gruas:visualizar',
-    description: 'Visualize informações das gruas'
+    permission: 'obras:visualizar',
+    description: 'Visualize informações das obras'
   },
   {
     label: 'Espelho de Ponto',

@@ -23,9 +23,11 @@ import {
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend } from "@/lib/api-obras"
 import { obrasDocumentosApi } from "@/lib/api-obras-documentos"
-import { obraGruasApi } from "@/lib/api-obra-gruas"
+import { gruaObraApi } from "@/lib/api-grua-obra"
 import { CardLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
+
+// Nota: Este componente usa gruaObraApi (não obraGruasApi) para buscar relacionamentos grua-obra
 
 interface LivroGruaObraProps {
   obraId: string
@@ -82,10 +84,15 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
     try {
       setLoading(true)
       
+      // Verificar se a API está disponível
+      if (!gruaObraApi) {
+        throw new Error('gruaObraApi não está disponível')
+      }
+      
       // Carregar obra e gruas em paralelo
       const [obraResponse, gruasResponse] = await Promise.all([
         obrasApi.obterObra(parseInt(obraId)),
-        obraGruasApi.listarGruasObra(parseInt(obraId))
+        gruaObraApi.buscarGruasPorObra(parseInt(obraId))
       ])
       
       const obraData = obraResponse.data || obraResponse
@@ -103,11 +110,11 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
         setDocumentos(Array.isArray(docsResponse.data) ? docsResponse.data : [docsResponse.data])
       }
 
-      // Processar gruas da API obra-gruas (mesma fonte que Checklists Diários)
+      // Processar gruas da API relacionamentos/grua-obra
       let gruasDisponiveis: any[] = []
-      if (gruasResponse.success && gruasResponse.data) {
-        gruasDisponiveis = gruasResponse.data.map((config: any) => {
-          const grua = config.grua || {}
+      if (gruasResponse.success && gruasResponse.data && Array.isArray(gruasResponse.data)) {
+        gruasDisponiveis = gruasResponse.data.map((relacao: any) => {
+          const grua = relacao.grua || {}
           
           // Limpar e corrigir valores de fabricante e modelo
           let fabricante = (grua.fabricante || '').trim()
@@ -131,18 +138,58 @@ export function LivroGruaObra({ obraId }: LivroGruaObraProps) {
             } else if (modelo) {
               nameFinal = modelo
             } else {
-              nameFinal = `Grua ${grua.id || config.grua_id || 'N/A'}`
+              nameFinal = `Grua ${grua.id || relacao.grua_id || 'N/A'}`
             }
           }
           
           return {
-            id: grua.id || config.grua_id,
+            id: grua.id || relacao.grua_id,
             name: nameFinal,
             modelo: modelo || 'Modelo não informado',
             fabricante: fabricante || 'Fabricante não informado',
             tipo: grua.tipo || 'Tipo não informado',
             capacidade: grua.capacidade || 'Capacidade não informada',
-            relacao: config
+            relacao: relacao,
+            // Campos da relação
+            data_inicio_locacao: relacao.data_inicio_locacao,
+            data_fim_locacao: relacao.data_fim_locacao,
+            valor_locacao_mensal: relacao.valor_locacao_mensal,
+            status: relacao.status,
+            observacoes: relacao.observacoes
+          }
+        })
+      }
+      
+      // Também tentar usar grua_obra que vem na resposta da obra
+      if (gruasDisponiveis.length === 0 && obraData.grua_obra && Array.isArray(obraData.grua_obra)) {
+        gruasDisponiveis = obraData.grua_obra.map((relacao: any) => {
+          const grua = relacao.grua || {}
+          
+          let fabricante = (grua.fabricante || '').trim()
+          let modelo = (grua.modelo || '').trim()
+          
+          if (fabricante) {
+            fabricante = fabricante.replace(/^Fabricante/i, '').trim()
+          }
+          if (modelo) {
+            modelo = modelo.replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
+          }
+          
+          let nameFinal = modelo || fabricante || `Grua ${grua.id || relacao.grua_id || 'N/A'}`
+          
+          return {
+            id: grua.id || relacao.grua_id,
+            name: nameFinal,
+            modelo: modelo || 'Modelo não informado',
+            fabricante: fabricante || 'Fabricante não informado',
+            tipo: grua.tipo || 'Tipo não informado',
+            capacidade: grua.capacidade || 'Capacidade não informada',
+            relacao: relacao,
+            data_inicio_locacao: relacao.data_inicio_locacao,
+            data_fim_locacao: relacao.data_fim_locacao,
+            valor_locacao_mensal: relacao.valor_locacao_mensal,
+            status: relacao.status,
+            observacoes: relacao.observacoes
           }
         })
       }

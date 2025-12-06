@@ -459,10 +459,10 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       label: 'Aprovações',
       description: 'Aprovar horas extras'
     },
-    // Obras - para supervisores (usando rota de gruas mas com nome Obras)
-    allNavigationItems.find(item => item.href === '/pwa/gruas') || {
+    // Obras - para supervisores
+    allNavigationItems.find(item => item.href === '/pwa/obras') || {
       name: 'Obras',
-      href: '/pwa/gruas',
+      href: '/pwa/obras',
       icon: Building2,
       label: 'Obras',
       description: 'Ver obras'

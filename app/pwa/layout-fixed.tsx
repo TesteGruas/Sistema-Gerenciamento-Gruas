@@ -188,11 +188,11 @@ export default function PWALayout({ children }: PWALayoutProps) {
       permission: "ponto_eletronico:visualizar"
     },
     {
-      name: "Gruas",
-      href: "/pwa/gruas",
+      name: "Obras",
+      href: "/pwa/obras",
       icon: Briefcase,
-      description: "Minhas gruas",
-      permission: "gruas:visualizar"
+      description: "Minhas obras",
+      permission: "obras:visualizar"
     },
     {
       name: "Docs",
