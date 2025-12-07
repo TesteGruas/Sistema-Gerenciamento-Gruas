@@ -908,7 +908,7 @@ export default function PWAMainPage() {
             const isSupervisorCheck = isSupervisorUser || cargoLower.includes('supervisor')
             
             return (
-              <div className={`grid gap-2 mt-6 ${isSupervisorCheck ? 'grid-cols-2' : 'grid-cols-3'}`}>
+              <div className={`grid gap-2 mt-6 ${isSupervisorCheck ? 'grid-cols-3' : 'grid-cols-3'}`}>
                 {!isSupervisorCheck && (
                   <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
                     <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
@@ -929,6 +929,12 @@ export default function PWAMainPage() {
                   <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
                   <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
                 </div>
+                {isSupervisorCheck && (
+                  <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
+                    <p className="text-[10px] text-red-100 font-medium mb-1">Não lidas</p>
+                    <p className="text-sm font-bold">0</p>
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -979,20 +985,6 @@ export default function PWAMainPage() {
             </div>
           </>
         )}
-        
-        <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-          <div className="flex flex-col items-center text-center">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
-              pwaUserData.documentosPendentes > 0 ? 'bg-blue-100 animate-pulse' : 'bg-gray-100'
-            }`}>
-              <AlertCircle className={`w-6 h-6 ${
-                pwaUserData.documentosPendentes > 0 ? 'text-blue-600' : 'text-gray-400'
-              }`} />
-            </div>
-            <p className="text-base font-bold text-gray-900">{pwaUserData.documentosPendentes}</p>
-            <p className="text-[10px] text-gray-500 font-medium">Não lidas</p>
-          </div>
-        </div>
       </div>
 
       {/* Ações Rápidas - Filtradas por permissões */}
