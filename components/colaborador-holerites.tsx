@@ -49,8 +49,38 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   const [mesReferencia, setMesReferencia] = useState('')
   const [uploading, setUploading] = useState(false)
   
-  // Estado para filtro de mês/ano
-  const [filtroMesAno, setFiltroMesAno] = useState<string>('')
+  // Estado para filtro de mês/ano - inicializar com mês atual
+  const [filtroMesAno, setFiltroMesAno] = useState<string>(() => {
+    const agora = new Date()
+    return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`
+  })
+  
+  // Gerar opções de meses e anos
+  const gerarOpcoesMesAno = () => {
+    const opcoes: { value: string; label: string }[] = []
+    const agora = new Date()
+    const anoAtual = agora.getFullYear()
+    const mesAtual = agora.getMonth() + 1
+    
+    // Adicionar últimos 12 meses
+    for (let i = 0; i < 12; i++) {
+      const data = new Date(anoAtual, mesAtual - i - 1, 1)
+      const ano = data.getFullYear()
+      const mes = data.getMonth() + 1
+      const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`
+      const mesNome = data.toLocaleString('pt-BR', { month: 'long' })
+      const mesNomeCapitalizado = mesNome.charAt(0).toUpperCase() + mesNome.slice(1)
+      
+      opcoes.push({
+        value: mesFormatado,
+        label: `${mesNomeCapitalizado} / ${ano}`
+      })
+    }
+    
+    return opcoes
+  }
+  
+  const opcoesMesAno = gerarOpcoesMesAno()
 
   useEffect(() => {
     loadHolerites()
@@ -327,33 +357,26 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
             <div>
               <CardTitle>Holerites Mensais</CardTitle>
               <CardDescription>
-                {filtroMesAno ? holeritesFiltrados.length : holerites.length} holerite(s) disponível(is)
-                {filtroMesAno && ` (filtrado)`}
+                {holeritesFiltrados.length} holerite(s) disponível(is) para o período selecionado
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="filtro-mes-ano" className="text-xs text-muted-foreground">
-                  Filtrar por Mês/Ano
-                </Label>
-                <Input
-                  id="filtro-mes-ano"
-                  type="month"
-                  value={filtroMesAno}
-                  onChange={(e) => setFiltroMesAno(e.target.value)}
-                  className="w-40"
-                  placeholder="Todos"
-                />
-              </div>
-              {filtroMesAno && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFiltroMesAno('')}
-                >
-                  Limpar Filtro
-                </Button>
-              )}
+              <Select
+                value={filtroMesAno}
+                onValueChange={setFiltroMesAno}
+                className="w-48"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o mês" />
+                </SelectTrigger>
+                <SelectContent>
+                  {opcoesMesAno.map((opcao) => (
+                    <SelectItem key={opcao.value} value={opcao.value}>
+                      {opcao.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {!readOnly && (
                 <Button
                   onClick={() => setIsUploadDialogOpen(true)}
@@ -369,9 +392,9 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
         <CardContent>
           {loading ? (
             <div className="text-center py-8">Carregando...</div>
-          ) : (filtroMesAno ? holeritesFiltrados : holerites).length === 0 ? (
+          ) : holeritesFiltrados.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              {filtroMesAno ? 'Nenhum holerite encontrado para o período selecionado' : 'Nenhum holerite disponível'}
+              Nenhum holerite encontrado para o período selecionado
             </div>
           ) : (
             <Table>
@@ -384,7 +407,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(filtroMesAno ? holeritesFiltrados : holerites).map((holerite) => (
+                {holeritesFiltrados.map((holerite) => (
                   <TableRow key={holerite.id}>
                     <TableCell className="font-medium capitalize">
                       {holerite.mes} / {holerite.ano}
