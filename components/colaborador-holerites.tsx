@@ -24,6 +24,7 @@ export interface Holerite {
   data_assinatura?: string
   assinatura_digital?: string
   created_at?: string
+  mes_referencia?: string // Formato YYYY-MM para filtro
 }
 
 interface ColaboradorHoleritesProps {
@@ -36,6 +37,7 @@ interface ColaboradorHoleritesProps {
 export function ColaboradorHolerites({ colaboradorId, readOnly = false, isCliente = false, isFuncionario = false }: ColaboradorHoleritesProps) {
   const { toast } = useToast()
   const [holerites, setHolerites] = useState<Holerite[]>([])
+  const [holeritesFiltrados, setHoleritesFiltrados] = useState<Holerite[]>([])
   const [loading, setLoading] = useState(true)
   const [isAssinaturaDialogOpen, setIsAssinaturaDialogOpen] = useState(false)
   const [holeriteSelecionado, setHoleriteSelecionado] = useState<Holerite | null>(null)
@@ -46,6 +48,9 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   const [arquivoHolerite, setArquivoHolerite] = useState<File | null>(null)
   const [mesReferencia, setMesReferencia] = useState('')
   const [uploading, setUploading] = useState(false)
+  
+  // Estado para filtro de mês/ano
+  const [filtroMesAno, setFiltroMesAno] = useState<string>('')
 
   useEffect(() => {
     loadHolerites()
@@ -65,9 +70,11 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
           arquivo_url: h.arquivo,
           assinado: !!h.assinatura_digital && !!h.assinado_em,
           data_assinatura: h.assinado_em,
-          assinatura_digital: h.assinatura_digital
+          assinatura_digital: h.assinatura_digital,
+          mes_referencia: h.mes_referencia // Guardar o formato original para filtro
         }))
         setHolerites(holeritesConvertidos)
+        aplicarFiltro(holeritesConvertidos, filtroMesAno)
       }
     } catch (error: any) {
       toast({
@@ -79,6 +86,33 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
       setLoading(false)
     }
   }
+
+  // Função para aplicar filtro
+  const aplicarFiltro = (listaHolerites: Holerite[], filtro: string) => {
+    if (!filtro) {
+      setHoleritesFiltrados(listaHolerites)
+      return
+    }
+
+    const holeritesFiltrados = listaHolerites.filter((h) => {
+      // Se o holerite tem mes_referencia, comparar diretamente
+      if ((h as any).mes_referencia) {
+        return (h as any).mes_referencia === filtro
+      }
+      // Caso contrário, construir a data a partir de mes e ano
+      const mesNumero = new Date(`${h.mes} 1, ${h.ano}`).getMonth() + 1
+      const mesFormatado = `${h.ano}-${String(mesNumero).padStart(2, '0')}`
+      return mesFormatado === filtro
+    })
+
+    setHoleritesFiltrados(holeritesFiltrados)
+  }
+
+  // Efeito para aplicar filtro quando mudar
+  useEffect(() => {
+    aplicarFiltro(holerites, filtroMesAno)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroMesAno, holerites.length])
 
   const handleAssinar = async (holerite: Holerite) => {
     if (!assinaturaDataUrl) {
@@ -289,30 +323,55 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <CardTitle>Holerites Mensais</CardTitle>
               <CardDescription>
-                {holerites.length} holerite(s) disponível(is)
+                {filtroMesAno ? holeritesFiltrados.length : holerites.length} holerite(s) disponível(is)
+                {filtroMesAno && ` (filtrado)`}
               </CardDescription>
             </div>
-            {!readOnly && (
-              <Button
-                onClick={() => setIsUploadDialogOpen(true)}
-                variant="default"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Enviar Holerite
-              </Button>
-            )}
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="filtro-mes-ano" className="text-xs text-muted-foreground">
+                  Filtrar por Mês/Ano
+                </Label>
+                <Input
+                  id="filtro-mes-ano"
+                  type="month"
+                  value={filtroMesAno}
+                  onChange={(e) => setFiltroMesAno(e.target.value)}
+                  className="w-40"
+                  placeholder="Todos"
+                />
+              </div>
+              {filtroMesAno && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFiltroMesAno('')}
+                >
+                  Limpar Filtro
+                </Button>
+              )}
+              {!readOnly && (
+                <Button
+                  onClick={() => setIsUploadDialogOpen(true)}
+                  variant="default"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Enviar Holerite
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-center py-8">Carregando...</div>
-          ) : holerites.length === 0 ? (
+          ) : (filtroMesAno ? holeritesFiltrados : holerites).length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              Nenhum holerite disponível
+              {filtroMesAno ? 'Nenhum holerite encontrado para o período selecionado' : 'Nenhum holerite disponível'}
             </div>
           ) : (
             <Table>
@@ -325,7 +384,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {holerites.map((holerite) => (
+                {(filtroMesAno ? holeritesFiltrados : holerites).map((holerite) => (
                   <TableRow key={holerite.id}>
                     <TableCell className="font-medium capitalize">
                       {holerite.mes} / {holerite.ano}
@@ -368,7 +427,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                             className="bg-green-50 hover:bg-green-100 border-green-300"
                           >
                             <FileSignature className="w-4 h-4 mr-1" />
-                            Assinado
+                            Baixar Assinado
                           </Button>
                         )}
                         {!holerite.assinado && podeAssinar && (

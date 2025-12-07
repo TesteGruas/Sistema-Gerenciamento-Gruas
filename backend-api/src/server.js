@@ -118,6 +118,7 @@ import whatsappLogsRoutes from './routes/whatsapp-logs.js'
 import whatsappEvolutionRoutes from './routes/whatsapp-evolution.js'
 import complementosRoutes from './routes/complementos.js'
 import alugueisResidenciasRoutes from './routes/alugueis-residencias.js'
+import avatarRoutes from './routes/avatar.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -367,6 +368,7 @@ app.use('/api/obras', obrasRoutes)
 app.use('/api/contratos', contratosRoutes)
 app.use('/api/funcionarios', funcionariosRoutes)
 app.use('/api/funcionarios/documentos', funcionariosDocumentosRoutes)
+app.use('/api/avatar', avatarRoutes)
 app.use('/api/equipamentos', equipamentosRoutes)
 app.use('/api/relacionamentos', relacionamentosRoutes)
 app.use('/api/gestao-gruas', gestaoGruasRoutes)

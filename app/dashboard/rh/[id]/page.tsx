@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -232,6 +232,13 @@ export default function FuncionarioDetalhesPage() {
   const [folhaParaUpload, setFolhaParaUpload] = useState<SalarioDetalhado | null>(null)
   const [arquivoHolerite, setArquivoHolerite] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+
+  // Estados para histórico de salários e modal de edição
+  const [mostrarHistoricoSalarios, setMostrarHistoricoSalarios] = useState(false)
+  const [isSalarioDialogOpen, setIsSalarioDialogOpen] = useState(false)
+  const [salarioForm, setSalarioForm] = useState({
+    salario: funcionario?.salario?.toString() || ''
+  })
 
   // Documentos
   const [documentos, setDocumentos] = useState<DocumentoFuncionario[]>([])
@@ -638,6 +645,53 @@ export default function FuncionarioDetalhesPage() {
       toast({
         title: "Erro",
         description: error.message || "Erro ao atualizar informações do funcionário",
+        variant: "destructive"
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleSalvarSalario = async () => {
+    if (!funcionario) return
+
+    try {
+      setSubmitting(true)
+
+      // Converter salário para número
+      const salarioNumero = parseFloat(salarioForm.salario.replace(/[^\d,.-]/g, '').replace(',', '.'))
+
+      if (isNaN(salarioNumero) || salarioNumero < 0) {
+        toast({
+          title: "Erro",
+          description: "Por favor, informe um valor de salário válido",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Atualizar apenas o salário
+      const response = await funcionariosApi.atualizarFuncionario(funcionario.id, {
+        salario: salarioNumero
+      })
+
+      if (response.success) {
+        // Recarregar dados do funcionário
+        await carregarFuncionario()
+        setIsSalarioDialogOpen(false)
+        setSalarioForm({ salario: '' })
+        toast({
+          title: "Sucesso",
+          description: "Salário atualizado com sucesso!",
+        })
+      } else {
+        throw new Error('Erro ao atualizar salário')
+      }
+    } catch (error: any) {
+      console.error('Erro ao salvar salário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar salário",
         variant: "destructive"
       })
     } finally {
@@ -1866,14 +1920,13 @@ export default function FuncionarioDetalhesPage() {
 
       {/* Tabs de Detalhes */}
       <Tabs defaultValue="informacoes" className="w-full">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="informacoes">Informações</TabsTrigger>
           <TabsTrigger value="obra">Obra</TabsTrigger>
           <TabsTrigger value="salarios">Salários</TabsTrigger>
           <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
           <TabsTrigger value="certificados">Certificados</TabsTrigger>
           <TabsTrigger value="documentos-admissionais">Admissionais</TabsTrigger>
-          <TabsTrigger value="holerites">Holerites</TabsTrigger>
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
         </TabsList>
 
@@ -2305,154 +2358,209 @@ export default function FuncionarioDetalhesPage() {
 
         {/* Tab Salários */}
         <TabsContent value="salarios" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Histórico de Salários</CardTitle>
-                  <CardDescription>Controle de salários e pagamentos</CardDescription>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="mes-calculo" className="text-xs text-muted-foreground">
-                      Mês/Ano para Cálculo
-                    </Label>
-                    <Input
-                      id="mes-calculo"
-                      type="month"
-                      value={mesCalculo}
-                      onChange={(e) => setMesCalculo(e.target.value)}
-                      className="w-40"
-                    />
+          {/* Holerites Mensais */}
+          {funcionario && (
+            <div className="space-y-4">
+              <ColaboradorHolerites
+                colaboradorId={funcionario.id}
+                readOnly={false}
+                isCliente={false}
+                isFuncionario={false}
+              />
+              
+              {/* Botão para gerenciar salário */}
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold">Salário Atual</p>
+                      <p className="text-2xl font-bold text-primary">
+                        R$ {funcionario.salario?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'}
+                      </p>
+                    </div>
+                    <Button onClick={() => {
+                      setSalarioForm({ salario: funcionario.salario?.toString() || '' })
+                      setIsSalarioDialogOpen(true)
+                    }}>
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Alterar Salário
+                    </Button>
                   </div>
-                  <Button onClick={calcularSalario} disabled={calculandoSalario || loading}>
-                    {calculandoSalario ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Calculando...
-                      </>
-                    ) : (
-                      <>
-                        <Calculator className="w-4 h-4 mr-2" />
-                        Calcular Salário
-                      </>
-                    )}
-                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Botão para mostrar histórico */}
+              <Button
+                variant="outline"
+                onClick={() => setMostrarHistoricoSalarios(!mostrarHistoricoSalarios)}
+                className="w-full"
+              >
+                {mostrarHistoricoSalarios ? (
+                  <>
+                    <Eye className="w-4 h-4 mr-2" />
+                    Ocultar Histórico de Salários
+                  </>
+                ) : (
+                  <>
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Mostrar Histórico de Salários
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Histórico de Salários (oculto por padrão) */}
+          {mostrarHistoricoSalarios && (
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Histórico de Salários</CardTitle>
+                    <CardDescription>Controle de salários e pagamentos</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-1">
+                      <Label htmlFor="mes-calculo" className="text-xs text-muted-foreground">
+                        Mês/Ano para Cálculo
+                      </Label>
+                      <Input
+                        id="mes-calculo"
+                        type="month"
+                        value={mesCalculo}
+                        onChange={(e) => setMesCalculo(e.target.value)}
+                        className="w-40"
+                      />
+                    </div>
+                    <Button onClick={calcularSalario} disabled={calculandoSalario || loading}>
+                      {calculandoSalario ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Calculando...
+                        </>
+                      ) : (
+                        <>
+                          <Calculator className="w-4 h-4 mr-2" />
+                          Calcular Salário
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {salarios.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mês/Ano</TableHead>
-                      <TableHead>Salário Base</TableHead>
-                      <TableHead>Proventos</TableHead>
-                      <TableHead>Descontos</TableHead>
-                      <TableHead>Líquido</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Data Pagamento</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {salarios.map((salario) => {
-                      // Extrair mês e ano do formato YYYY-MM ou usar mes/ano separados
-                      let mesExibicao = salario.mes
-                      let anoExibicao = salario.ano
-                      
-                      // Se mes está no formato YYYY-MM, extrair
-                      if (typeof salario.mes === 'string' && salario.mes.includes('-')) {
-                        const [ano, mes] = salario.mes.split('-')
-                        mesExibicao = mes
-                        anoExibicao = parseInt(ano)
-                      }
-                      
-                      return (
-                        <TableRow key={salario.id}>
-                          <TableCell>
-                            <span className="font-medium">
-                              {String(mesExibicao).padStart(2, '0')}/{anoExibicao}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-medium">R$ {(salario.salario_base || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-medium text-green-600">
-                              R$ {(salario.total_proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-medium text-red-600">
-                              R$ {(salario.total_descontos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-bold text-blue-600">
-                              R$ {(salario.salario_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={`${getStatusColor(salario.status)} border`}>
-                              {getStatusIcon(salario.status)}
-                              <span className="ml-1">{salario.status}</span>
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm">
-                              {salario.data_pagamento ? format(new Date(salario.data_pagamento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleVisualizarFolha(salario)}
-                              title="Visualizar detalhes"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            {!salario.arquivo_holerite && !salario.holerite_url && (
+              </CardHeader>
+              <CardContent>
+                {salarios.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Mês/Ano</TableHead>
+                        <TableHead>Salário Base</TableHead>
+                        <TableHead>Proventos</TableHead>
+                        <TableHead>Descontos</TableHead>
+                        <TableHead>Líquido</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data Pagamento</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {salarios.map((salario) => {
+                        // Extrair mês e ano do formato YYYY-MM ou usar mes/ano separados
+                        let mesExibicao = salario.mes
+                        let anoExibicao = salario.ano
+                        
+                        // Se mes está no formato YYYY-MM, extrair
+                        if (typeof salario.mes === 'string' && salario.mes.includes('-')) {
+                          const [ano, mes] = salario.mes.split('-')
+                          mesExibicao = mes
+                          anoExibicao = parseInt(ano)
+                        }
+                        
+                        return (
+                          <TableRow key={salario.id}>
+                            <TableCell>
+                              <span className="font-medium">
+                                {String(mesExibicao).padStart(2, '0')}/{anoExibicao}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-medium">R$ {(salario.salario_base || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-medium text-green-600">
+                                R$ {(salario.total_proventos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-medium text-red-600">
+                                R$ {(salario.total_descontos || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-bold text-blue-600">
+                                R$ {(salario.salario_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={`${getStatusColor(salario.status)} border`}>
+                                {getStatusIcon(salario.status)}
+                                <span className="ml-1">{salario.status}</span>
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">
+                                {salario.data_pagamento ? format(new Date(salario.data_pagamento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
                               <Button 
                                 variant="outline" 
                                 size="sm"
-                                onClick={() => {
-                                  setFolhaParaUpload(salario)
-                                  setIsUploadDialogOpen(true)
-                                }}
-                                title="Enviar holerite"
+                                onClick={() => handleVisualizarFolha(salario)}
+                                title="Visualizar detalhes"
                               >
-                                <UploadIcon className="w-4 h-4" />
+                                <Eye className="w-4 h-4" />
                               </Button>
-                            )}
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleDownloadFolha(salario)}
-                              title="Baixar holerite"
-                              disabled={!salario.arquivo_holerite && !salario.holerite_url}
-                            >
-                              <Download className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Calculator className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p>Nenhum registro de salário encontrado</p>
-                  <p className="text-sm">Os dados de salários serão implementados em breve</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                              {!salario.arquivo_holerite && !salario.holerite_url && (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setFolhaParaUpload(salario)
+                                    setIsUploadDialogOpen(true)
+                                  }}
+                                  title="Enviar holerite"
+                                >
+                                  <UploadIcon className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleDownloadFolha(salario)}
+                                title="Baixar holerite"
+                                disabled={!salario.arquivo_holerite && !salario.holerite_url}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                            </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Calculator className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>Nenhum registro de salário encontrado</p>
+                    <p className="text-sm">Os dados de salários serão implementados em breve</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Tab Benefícios */}
@@ -2764,18 +2872,6 @@ export default function FuncionarioDetalhesPage() {
                 <p className="text-center text-gray-500">Carregando dados do funcionário...</p>
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
-
-        {/* Tab Holerites */}
-        <TabsContent value="holerites" className="space-y-6">
-          {funcionario && (
-            <ColaboradorHolerites
-              colaboradorId={funcionario.id}
-              readOnly={false}
-              isCliente={false}
-              isFuncionario={false}
-            />
           )}
         </TabsContent>
 
@@ -3281,6 +3377,106 @@ export default function FuncionarioDetalhesPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Edição de Salário */}
+      <Dialog open={isSalarioDialogOpen} onOpenChange={setIsSalarioDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alterar Salário</DialogTitle>
+            <DialogDescription>
+              {funcionario && (
+                <>Salário atual: <strong>R$ {funcionario.salario?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'}</strong></>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="novo-salario">Novo Salário (R$)</Label>
+              <Input
+                id="novo-salario"
+                type="text"
+                placeholder="0,00"
+                value={salarioForm.salario}
+                onChange={(e) => {
+                  // Permitir apenas números, vírgula e ponto
+                  const value = e.target.value.replace(/[^\d,.-]/g, '')
+                  setSalarioForm({ ...salarioForm, salario: value })
+                }}
+                onBlur={(e) => {
+                  // Formatar como moeda brasileira
+                  const value = e.target.value.replace(',', '.')
+                  const numValue = parseFloat(value)
+                  if (!isNaN(numValue)) {
+                    setSalarioForm({ 
+                      ...salarioForm, 
+                      salario: numValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    })
+                  }
+                }}
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Informe o novo valor do salário. Pode ser maior ou menor que o atual.
+              </p>
+            </div>
+            
+            {funcionario && salarioForm.salario && (() => {
+              const salarioAtual = funcionario.salario || 0
+              const novoSalario = parseFloat(salarioForm.salario.replace(/[^\d,.-]/g, '').replace(',', '.'))
+              if (!isNaN(novoSalario)) {
+                const diferenca = novoSalario - salarioAtual
+                const percentual = salarioAtual > 0 ? ((diferenca / salarioAtual) * 100).toFixed(2) : 0
+                return (
+                  <div className="bg-muted p-3 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-muted-foreground">Diferença:</span>
+                      <span className={`font-semibold ${diferenca >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {diferenca >= 0 ? '+' : ''}R$ {Math.abs(diferenca).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Variação:</span>
+                      <span className={`font-semibold ${diferenca >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {diferenca >= 0 ? '+' : ''}{percentual}%
+                      </span>
+                    </div>
+                  </div>
+                )
+              }
+              return null
+            })()}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsSalarioDialogOpen(false)
+                  setSalarioForm({ salario: '' })
+                }}
+                disabled={submitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSalvarSalario}
+                disabled={submitting || !salarioForm.salario}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Salvar Salário
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

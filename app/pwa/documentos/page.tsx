@@ -833,24 +833,7 @@ export default function PWADocumentosPage() {
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-200">
-                <Button
-                  onClick={assinarDocumento}
-                  disabled={
-                    isAssinando || 
-                    (tipoAssinatura === 'digital' && !signature) ||
-                    (tipoAssinatura === 'arquivo' && !arquivoAssinado)
-                  }
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-xs sm:text-sm h-9 sm:h-9 order-2 sm:order-1"
-                >
-                  {isAssinando ? (
-                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5 sm:mr-2" />
-                  ) : (
-                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                  )}
-                  <span className="hidden sm:inline">{isAssinando ? 'Assinando...' : 'Confirmar Assinatura'}</span>
-                  <span className="sm:hidden">{isAssinando ? 'Assinando...' : 'Confirmar'}</span>
-                </Button>
+              <div className="flex flex-row gap-2 pt-2 border-t border-gray-200">
                 <Button
                   onClick={() => {
                     setDocumentoSelecionado(null)
@@ -859,9 +842,26 @@ export default function PWADocumentosPage() {
                     setTipoAssinatura('digital')
                   }}
                   variant="outline"
-                  className="text-xs sm:text-sm h-9 sm:h-9 order-1 sm:order-2"
+                  className="text-xs sm:text-sm h-9 sm:h-9"
                 >
                   Cancelar
+                </Button>
+                <Button
+                  onClick={assinarDocumento}
+                  disabled={
+                    isAssinando || 
+                    (tipoAssinatura === 'digital' && !signature) ||
+                    (tipoAssinatura === 'arquivo' && !arquivoAssinado)
+                  }
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-xs sm:text-sm h-9 sm:h-9"
+                >
+                  {isAssinando ? (
+                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5 sm:mr-2" />
+                  ) : (
+                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                  )}
+                  <span className="hidden sm:inline">{isAssinando ? 'Assinando...' : 'Confirmar Assinatura'}</span>
+                  <span className="sm:hidden">{isAssinando ? 'Assinando...' : 'Confirmar'}</span>
                 </Button>
               </div>
             </CardContent>

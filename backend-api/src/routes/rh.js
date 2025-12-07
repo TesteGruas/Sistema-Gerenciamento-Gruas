@@ -448,4 +448,198 @@ router.get('/estatisticas', authenticateToken, requirePermission('rh:visualizar'
   }
 })
 
+/**
+ * @swagger
+ * /api/rh/funcionarios/{id}/calcular-salario:
+ *   get:
+ *     summary: Calcular salário do funcionário para um mês específico
+ *     tags: [RH]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário
+ *       - in: query
+ *         name: mes
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Mês (1-12)
+ *       - in: query
+ *         name: ano
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Ano (ex: 2025)
+ *     responses:
+ *       200:
+ *         description: Salário calculado com sucesso
+ *       404:
+ *         description: Funcionário não encontrado
+ */
+router.get('/funcionarios/:id/calcular-salario', authenticateToken, requirePermission('rh:visualizar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { mes, ano } = req.query
+
+    if (!mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros obrigatórios: mes e ano'
+      })
+    }
+
+    const mesNum = parseInt(mes)
+    const anoNum = parseInt(ano)
+
+    if (mesNum < 1 || mesNum > 12) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mês deve estar entre 1 e 12'
+      })
+    }
+
+    // Buscar funcionário
+    const { data: funcionario, error: funcionarioError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, salario, salario_base')
+      .eq('id', id)
+      .single()
+
+    if (funcionarioError) {
+      if (funcionarioError.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          error: 'Funcionário não encontrado'
+        })
+      }
+      throw funcionarioError
+    }
+
+    // Calcular data de início e fim do mês
+    const mesStr = String(mesNum).padStart(2, '0')
+    const dataInicio = `${anoNum}-${mesStr}-01`
+    const ultimoDia = new Date(anoNum, mesNum, 0).getDate()
+    const dataFim = `${anoNum}-${mesStr}-${String(ultimoDia).padStart(2, '0')}`
+
+    // Buscar registros de ponto do funcionário para o mês
+    let totalHorasTrabalhadas = 0
+    let totalHorasExtras = 0
+
+    try {
+      const { data: registrosPonto, error: pontoError } = await supabaseAdmin
+        .from('ponto_eletronico_registros')
+        .select('horas_trabalhadas, horas_extras')
+        .eq('funcionario_id', id)
+        .gte('data', dataInicio)
+        .lte('data', dataFim)
+
+      if (!pontoError && registrosPonto && registrosPonto.length > 0) {
+        totalHorasTrabalhadas = registrosPonto.reduce((sum, registro) => {
+          return sum + (parseFloat(String(registro.horas_trabalhadas || 0)))
+        }, 0)
+
+        totalHorasExtras = registrosPonto.reduce((sum, registro) => {
+          return sum + (parseFloat(String(registro.horas_extras || 0)))
+        }, 0)
+      }
+    } catch (pontoError) {
+      console.warn('Erro ao buscar registros de ponto, continuando sem horas extras:', pontoError)
+      // Continuar sem horas extras se não conseguir buscar
+    }
+
+    // Calcular valor da hora extra
+    // Valor da hora = salário base / 220 horas (jornada mensal padrão)
+    const salarioBase = parseFloat(funcionario.salario_base || funcionario.salario || 0)
+    const valorHora = salarioBase / 220
+    const valorHoraExtra = valorHora * 1.5 // 50% adicional
+    const valorTotalHorasExtras = Math.round((totalHorasExtras * valorHoraExtra) * 100) / 100
+
+    // Verificar se já existe folha para este mês
+    const mesCompetencia = `${anoNum}-${mesStr}`
+    const { data: folhaExistente } = await supabaseAdmin
+      .from('folha_pagamento')
+      .select('id')
+      .eq('funcionario_id', id)
+      .eq('mes', mesCompetencia)
+      .single()
+
+    let folhaId = null
+    let folhaAtualizada = false
+
+    if (folhaExistente) {
+      // Atualizar folha existente
+      folhaId = folhaExistente.id
+      const { data: folhaAtualizadaData, error: updateError } = await supabaseAdmin
+        .from('folha_pagamento')
+        .update({
+          horas_trabalhadas: Math.round(totalHorasTrabalhadas * 100) / 100,
+          horas_extras: Math.round(totalHorasExtras * 100) / 100,
+          valor_hora_extra: Math.round(valorHoraExtra * 100) / 100,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', folhaId)
+        .select()
+        .single()
+
+      if (!updateError) {
+        folhaAtualizada = true
+      }
+    } else {
+      // Criar nova folha de pagamento
+      const { data: novaFolha, error: createError } = await supabaseAdmin
+        .from('folha_pagamento')
+        .insert({
+          funcionario_id: id,
+          mes: mesCompetencia,
+          salario_base: salarioBase,
+          horas_trabalhadas: Math.round(totalHorasTrabalhadas * 100) / 100,
+          horas_extras: Math.round(totalHorasExtras * 100) / 100,
+          valor_hora_extra: Math.round(valorHoraExtra * 100) / 100
+        })
+        .select()
+        .single()
+
+      if (!createError && novaFolha) {
+        folhaId = novaFolha.id
+        folhaAtualizada = true
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        funcionario_id: id,
+        funcionario_nome: funcionario.nome,
+        mes: mesNum,
+        ano: anoNum,
+        salario_base: salarioBase,
+        horas_trabalhadas: Math.round(totalHorasTrabalhadas * 100) / 100,
+        horas_extras: Math.round(totalHorasExtras * 100) / 100,
+        valor_hora: Math.round(valorHora * 100) / 100,
+        valor_hora_extra: Math.round(valorHoraExtra * 100) / 100,
+        valor_total_horas_extras: valorTotalHorasExtras,
+        folha_id: folhaId,
+        folha_atualizada: folhaAtualizada
+      },
+      message: folhaAtualizada 
+        ? 'Salário calculado e folha de pagamento atualizada com sucesso'
+        : 'Salário calculado com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao calcular salário:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 export default router

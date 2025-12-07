@@ -19,7 +19,6 @@ import {
   RefreshCw,
   Loader2,
   PenTool,
-  Upload,
   Trash2,
   Save,
   FileSignature,
@@ -385,35 +384,31 @@ export default function PWAHoleritesPage() {
   const handleAssinar = async () => {
     if (!holeriteSelecionado) return
 
-    // Verificar se tem assinatura digital ou arquivo
-    if (tipoAssinatura === 'digital' && !signature) {
-      return
-    }
-
-    if (tipoAssinatura === 'arquivo' && !arquivoAssinado) {
+    // Verificar se tem assinatura digital
+    if (!signature) {
+      toast({
+        title: "Assinatura necessária",
+        description: "Por favor, desenhe sua assinatura antes de confirmar.",
+        variant: "destructive"
+      })
       return
     }
 
     setIsAssinando(true)
     try {
-      if (tipoAssinatura === 'digital') {
-        // Assinatura digital
-        await colaboradoresDocumentosApi.holerites.assinar(holeriteSelecionado.id, {
-          assinatura_digital: signature!
-        })
-      } else {
-        // Upload de arquivo assinado
-        const formData = new FormData()
-        formData.append('arquivo', arquivoAssinado!)
-        // TODO: Implementar endpoint de upload de arquivo assinado se necessário
-        // Por enquanto, usar assinatura digital como fallback
-        setIsAssinando(false)
-        return
-      }
+      // Assinatura digital
+      await colaboradoresDocumentosApi.holerites.assinar(holeriteSelecionado.id, {
+        assinatura_digital: signature!
+      })
       
       // Aprovação automática: quando um holerite é assinado, ele é considerado aprovado automaticamente
       // Não há necessidade de um botão separado de aprovação - a assinatura já implica aprovação
       console.log('[HOLERITES] Holerite assinado e aprovado automaticamente')
+      
+      toast({
+        title: "Holerite assinado!",
+        description: "O holerite foi assinado com sucesso.",
+      })
       
       // Recarregar holerites
       carregarHolerites()
@@ -437,6 +432,12 @@ export default function PWAHoleritesPage() {
       } else if (error.message) {
         errorMessage = error.message
       }
+      
+      toast({
+        title: "Erro ao assinar",
+        description: errorMessage,
+        variant: "destructive"
+      })
     } finally {
       setIsAssinando(false)
     }
@@ -860,6 +861,16 @@ export default function PWAHoleritesPage() {
                 setSignature(null)
                 setArquivoAssinado(null)
                 setTipoAssinatura('digital')
+                // Limpar canvas
+                setTimeout(() => {
+                  const canvas = canvasRef.current
+                  if (canvas) {
+                    const ctx = canvas.getContext('2d')
+                    if (ctx) {
+                      ctx.clearRect(0, 0, canvas.width, canvas.height)
+                    }
+                  }
+                }, 100)
               }
             }}
           >
@@ -891,51 +902,15 @@ export default function PWAHoleritesPage() {
                   </Button>
                 </div>
 
-                {/* Seletor de tipo de assinatura */}
+                {/* Assinatura Digital */}
                 <div>
                   <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
-                    <strong>Passo 2:</strong> Escolha o tipo de assinatura
+                    <strong>Passo 2:</strong> Assinatura Digital
                   </label>
-                  <div className="flex flex-row gap-2">
-                    <Button
-                      type="button"
-                      variant={tipoAssinatura === 'digital' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setTipoAssinatura('digital')}
-                      className="flex-1 text-xs sm:text-sm"
-                      style={{ padding: '10px' }}
-                    >
-                      <PenTool className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                      <span className="hidden sm:inline">Digital (Adiciona ao PDF)</span>
-                      <span className="sm:hidden">Digital</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={tipoAssinatura === 'arquivo' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setTipoAssinatura('arquivo')}
-                      className="flex-1 text-xs sm:text-sm"
-                      style={{ padding: '10px' }}
-                    >
-                      <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                      <span className="hidden sm:inline">Upload Assinado</span>
-                      <span className="sm:hidden">Upload</span>
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2 leading-tight">
-                    {tipoAssinatura === 'digital' 
-                      ? 'Assine digitalmente e a assinatura será adicionada ao PDF automaticamente'
-                      : 'Faça upload do PDF já assinado fisicamente'}
+                  <p className="text-xs text-gray-500 mb-2 leading-tight">
+                    Assine digitalmente e a assinatura será adicionada ao PDF automaticamente
                   </p>
-                </div>
-
-                {/* Assinatura Digital */}
-                {tipoAssinatura === 'digital' && (
-                  <div>
-                    <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
-                      Assinatura Digital
-                    </label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-2 sm:p-4 overflow-x-auto">
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-2 sm:p-4 overflow-x-auto">
                       <div className="flex justify-center">
                         <canvas
                           ref={canvasRef}
@@ -1006,51 +981,36 @@ export default function PWAHoleritesPage() {
                         Salvar
                       </Button>
                     </div>
-                  </div>
-                )}
+                </div>
 
-                {/* Upload de Arquivo */}
-                {tipoAssinatura === 'arquivo' && (
-                  <div>
-                    <label className="text-xs sm:text-sm font-medium text-gray-700 mb-2 block">
-                      Upload do Documento Assinado
-                    </label>
-                    <div className="space-y-2 sm:space-y-3">
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        onChange={(e) => setArquivoAssinado(e.target.files?.[0] || null)}
-                        className="w-full p-2 text-xs sm:text-sm border border-gray-300 rounded-md file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs sm:file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                      />
-                      
-                      {arquivoAssinado && (
-                        <div className="bg-green-50 p-2.5 sm:p-3 rounded-lg border border-green-200">
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-green-800">
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              <FileSignature className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                              <span className="font-medium text-xs sm:text-sm truncate">{arquivoAssinado.name}</span>
-                            </div>
-                            <span className="text-xs">({(arquivoAssinado.size / 1024 / 1024).toFixed(2)} MB)</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <p className="text-xs text-gray-500 leading-tight">
-                        Faça o upload do documento PDF assinado fisicamente. Máximo 10MB.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-200">
+                <div className="flex flex-row gap-2 pt-2 border-t border-gray-200">
+                  <Button
+                    onClick={() => {
+                      setIsAssinaturaDialogOpen(false)
+                      setHoleriteSelecionado(null)
+                      setSignature(null)
+                      setArquivoAssinado(null)
+                      setTipoAssinatura('digital')
+                      // Limpar canvas
+                      setTimeout(() => {
+                        const canvas = canvasRef.current
+                        if (canvas) {
+                          const ctx = canvas.getContext('2d')
+                          if (ctx) {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height)
+                          }
+                        }
+                      }, 100)
+                    }}
+                    variant="outline"
+                    className="text-xs sm:text-sm h-9 sm:h-9"
+                  >
+                    Cancelar
+                  </Button>
                   <Button
                     onClick={handleAssinar}
-                    disabled={
-                      isAssinando || 
-                      (tipoAssinatura === 'digital' && !signature) ||
-                      (tipoAssinatura === 'arquivo' && !arquivoAssinado)
-                    }
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-xs sm:text-sm h-9 sm:h-9 order-2 sm:order-1"
+                    disabled={isAssinando || !signature}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-xs sm:text-sm h-9 sm:h-9"
                   >
                     {isAssinando ? (
                       <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5 sm:mr-2" />
@@ -1059,19 +1019,6 @@ export default function PWAHoleritesPage() {
                     )}
                     <span className="hidden sm:inline">{isAssinando ? 'Assinando...' : 'Confirmar Assinatura'}</span>
                     <span className="sm:hidden">{isAssinando ? 'Assinando...' : 'Confirmar'}</span>
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setIsAssinaturaDialogOpen(false)
-                      setHoleriteSelecionado(null)
-                      setSignature(null)
-                      setArquivoAssinado(null)
-                      setTipoAssinatura('digital')
-                    }}
-                    variant="outline"
-                    className="text-xs sm:text-sm h-9 sm:h-9 order-1 sm:order-2"
-                  >
-                    Cancelar
                   </Button>
                 </div>
               </CardContent>
