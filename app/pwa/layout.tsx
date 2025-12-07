@@ -38,6 +38,7 @@ import { PageLoader } from "@/components/ui/loader"
 import { EmpresaProvider, useEmpresa } from "@/hooks/use-empresa"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
+import { useVencimentosDocumentos } from "@/hooks/use-vencimentos-documentos"
 import Image from "next/image"
 
 interface PWALayoutProps {
@@ -80,6 +81,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   
   // Hook para obter documentos pendentes
   const { documentosPendentes } = usePWAUser()
+  
+  // Hook para verificar vencimentos de documentos
+  useVencimentosDocumentos()
   
   // Atualizar isClient apenas no cliente para evitar erro de hidratação
   useEffect(() => {

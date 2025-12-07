@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { NotificacoesAPI, Notificacao as NotificacaoAPI } from "@/lib/api-notificacoes"
+import { STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hooks/use-vencimentos-documentos"
 
 interface Notificacao {
   id: string
@@ -41,11 +42,7 @@ export default function PWANotificacoesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    carregarNotificacoes()
-  }, [filtro])
-
-  const carregarNotificacoes = async () => {
+  const carregarNotificacoes = useCallback(async () => {
     setLoading(true)
     try {
       // Buscar notificações reais da API
@@ -55,16 +52,39 @@ export default function PWANotificacoesPage() {
         lida: filtro === 'todas' ? undefined : false
       })
 
-      if (response.success && response.data) {
-        // Mapear notificações da API para o formato esperado
-        const notificacoesMapeadas: Notificacao[] = response.data.map((notif: NotificacaoAPI) => {
+      // Buscar notificações locais (fallback para vencimentos)
+      // IMPORTANTE: Usar a constante exportada do hook para garantir que é a mesma chave
+      const notificacoesLocaisKey = STORAGE_KEY_NOTIFICACOES_LOCAIS
+      const notificacoesLocaisStr = localStorage.getItem(notificacoesLocaisKey)
+      let notificacoesLocais: any[] = []
+      
+      try {
+        if (notificacoesLocaisStr) {
+          const parsed = JSON.parse(notificacoesLocaisStr)
+          // Garantir que é um array - se não for, algo está errado
+          if (Array.isArray(parsed)) {
+            notificacoesLocais = parsed
+          } else {
+            notificacoesLocais = []
+          }
+        } else {
+          notificacoesLocais = []
+        }
+      } catch (parseError) {
+        notificacoesLocais = []
+      }
+
+      // Mapear notificações da API para o formato esperado (mesmo que seja array vazio)
+      const notificacoesMapeadas: Notificacao[] = (response.success && response.data && Array.isArray(response.data))
+        ? response.data.map((notif: NotificacaoAPI) => {
           // Mapear tipos da API para tipos do componente
           let tipo: 'info' | 'alerta' | 'sucesso' | 'erro' = 'info'
-          if (notif.tipo === 'warning' || notif.tipo === 'alerta') {
+          const tipoOriginal = notif.tipo
+          if (tipoOriginal === 'warning') {
             tipo = 'alerta'
-          } else if (notif.tipo === 'success' || notif.tipo === 'sucesso') {
+          } else if (tipoOriginal === 'success') {
             tipo = 'sucesso'
-          } else if (notif.tipo === 'error' || notif.tipo === 'erro') {
+          } else if (tipoOriginal === 'error') {
             tipo = 'erro'
           }
 
@@ -76,15 +96,41 @@ export default function PWANotificacoesPage() {
             mensagem: notif.mensagem,
             lida: notif.lida,
             data: notif.data || notif.created_at || new Date().toISOString(),
-            acao: notif.link
+              acao: notif.link
+            }
+          })
+        : []
+
+      // Adicionar notificações locais ao final (sempre, mesmo se a API retornar vazio)
+      const notificacoesLocaisMapeadas: Notificacao[] = notificacoesLocais
+        .filter((n: any) => {
+          // Validar que é um objeto válido
+          if (!n || typeof n !== 'object') {
+            return false
+          }
+          
+          // Filtrar apenas notificações não lidas se o filtro for 'nao-lidas'
+          if (filtro === 'nao-lidas' && n.lida) {
+            return false
+          }
+          return true
+        })
+        .map((n: any) => {
+          return {
+            id: n.id || `local_${Date.now()}_${Math.random()}`,
+            tipo: (n.tipo === 'warning' ? 'alerta' : 'info') as 'info' | 'alerta' | 'sucesso' | 'erro',
+            tipoOriginal: n.tipo || 'warning',
+            titulo: n.titulo || 'Notificação',
+            mensagem: n.mensagem || '',
+            lida: n.lida || false,
+            data: n.data || new Date().toISOString(),
+            acao: n.link || n.acao
           }
         })
 
-        setNotificacoes(notificacoesMapeadas)
-      } else {
-        console.warn('Resposta da API sem dados:', response)
-        setNotificacoes([])
-      }
+      // Combinar notificações da API com notificações locais
+      const todasNotificacoes = [...notificacoesMapeadas, ...notificacoesLocaisMapeadas]
+      setNotificacoes(todasNotificacoes)
     } catch (error) {
       console.error('Erro ao carregar notificações:', error)
       
@@ -92,7 +138,80 @@ export default function PWANotificacoesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filtro])
+
+  useEffect(() => {
+    carregarNotificacoes()
+  }, [carregarNotificacoes])
+
+  // Recarregar notificações quando houver mudanças no localStorage (notificações locais)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY_NOTIFICACOES_LOCAIS) {
+        carregarNotificacoes()
+      }
+    }
+    
+    // Listener para evento customizado (mesma aba)
+    const handleNotificacoesAtualizadas = (e: CustomEvent) => {
+      // Pequeno delay para garantir que o localStorage foi atualizado
+      setTimeout(() => {
+        carregarNotificacoes()
+      }, 100)
+    }
+
+    // Listener para mudanças no localStorage (outras abas)
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Listener para evento customizado (mesma aba)
+    window.addEventListener('notificacoes-locais-atualizadas', handleNotificacoesAtualizadas as EventListener)
+
+    // Verificar mudanças periodicamente (mesma aba - storage event não funciona na mesma aba)
+    const intervalId = setInterval(() => {
+      try {
+        const locaisStr = localStorage.getItem(STORAGE_KEY_NOTIFICACOES_LOCAIS)
+        if (!locaisStr) {
+          // Se não há notificações locais mas havia antes, recarregar para limpar
+          if (notificacoes.some(n => n.id?.startsWith('local_'))) {
+            carregarNotificacoes()
+          }
+          return
+        }
+        
+        let locais: any[] = []
+        try {
+          const parsed = JSON.parse(locaisStr)
+          locais = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' ? Object.values(parsed) : [])
+        } catch (parseErr) {
+          return
+        }
+        
+        // Verificar se há notificações locais que não estão sendo exibidas
+        if (locais.length > 0) {
+          const temLocaisNaLista = notificacoes.some(n => n.id?.startsWith('local_'))
+          const totalLocaisNaLista = notificacoes.filter(n => n.id?.startsWith('local_')).length
+          
+          // Se o número de notificações locais no localStorage é diferente do número na lista, recarregar
+          if (totalLocaisNaLista !== locais.length || (!temLocaisNaLista && locais.length > 0)) {
+            carregarNotificacoes()
+          }
+        } else {
+          // Se não há notificações locais mas havia antes, recarregar para limpar
+          if (notificacoes.some(n => n.id?.startsWith('local_'))) {
+            carregarNotificacoes()
+          }
+        }
+      } catch (err) {
+        // Silenciar erros na verificação periódica
+      }
+    }, 2000) // Verificar a cada 2 segundos
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('notificacoes-locais-atualizadas', handleNotificacoesAtualizadas as EventListener)
+      clearInterval(intervalId)
+    }
+  }, [notificacoes, carregarNotificacoes]) // Usar carregarNotificacoes como dependência
 
   const marcarComoLida = async (id: string) => {
     try {
@@ -222,82 +341,66 @@ export default function PWANotificacoesPage() {
                           : 'bg-white border-blue-200 shadow-sm'
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        {getIconeNotificacao(notif.tipo, notif.tipoOriginal)}
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <h4 className="font-medium text-gray-900">{notif.titulo}</h4>
-                            {!notif.lida && (
-                              <Badge className="bg-blue-100 text-blue-800 text-xs">
-                                Nova
-                              </Badge>
-                            )}
-                            {getBadgeTipo(notif.tipoOriginal) && (
-                              <Badge className={`text-xs ${getBadgeTipo(notif.tipoOriginal)?.className}`}>
-                                {getBadgeTipo(notif.tipoOriginal)?.label}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600 mb-2">{notif.mensagem}</p>
-                          <div className="flex items-center gap-4 text-xs text-gray-500">
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {new Date(notif.data).toLocaleString('pt-BR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setNotificacaoSelecionada(notif)
-                              setIsModalOpen(true)
-                            }}
-                            title="Ver detalhes"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
+                      {/* Conteúdo principal - título e texto ocupando 100% */}
+                      <div className="w-full">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <h4 className="font-medium text-gray-900 flex-1">{notif.titulo}</h4>
                           {!notif.lida && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => marcarComoLida(notif.id)}
-                              title="Marcar como lida"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
+                            <Badge className="bg-blue-100 text-blue-800 text-xs">
+                              Nova
+                            </Badge>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => excluirNotificacao(notif.id)}
-                            title="Excluir"
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {getBadgeTipo(notif.tipoOriginal) && (
+                            <Badge className={`text-xs ${getBadgeTipo(notif.tipoOriginal)?.className}`}>
+                              {getBadgeTipo(notif.tipoOriginal)?.label}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 mb-3">{notif.mensagem}</p>
+                        <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
+                          <Clock className="w-3 h-3" />
+                          {new Date(notif.data).toLocaleString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
                         </div>
                       </div>
 
-                      {notif.acao && (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
+                      {/* Botões de ação na parte inferior */}
+                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setNotificacaoSelecionada(notif)
+                            setIsModalOpen(true)
+                          }}
+                          title="Ver detalhes"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {!notif.lida && (
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            onClick={() => window.location.href = notif.acao!}
+                            onClick={() => marcarComoLida(notif.id)}
+                            title="Marcar como lida"
                           >
-                            Ver Detalhes
+                            <CheckCircle className="w-4 h-4" />
                           </Button>
-                        </div>
-                      )}
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => excluirNotificacao(notif.id)}
+                          title="Excluir"
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
