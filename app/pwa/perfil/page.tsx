@@ -55,6 +55,46 @@ import { useEmpresa } from "@/hooks/use-empresa"
 import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
 
+// Função helper para calcular dias até vencimento
+function calcularDiasParaVencimento(dataValidade: string): number {
+  if (!dataValidade) return Infinity
+  
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  
+  const dataVencimento = new Date(dataValidade)
+  dataVencimento.setHours(0, 0, 0, 0)
+  
+  const diffTime = dataVencimento.getTime() - hoje.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  
+  return diffDays
+}
+
+// Função para obter badge de aviso de vencimento
+function getAvisoVencimento(dias: number) {
+  if (dias < 0) {
+    return {
+      texto: 'Vencido',
+      className: 'bg-red-100 text-red-800 border-red-300',
+      icon: AlertCircle
+    }
+  } else if (dias <= 7) {
+    return {
+      texto: `Vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`,
+      className: 'bg-orange-100 text-orange-800 border-orange-300',
+      icon: AlertCircle
+    }
+  } else if (dias <= 30) {
+    return {
+      texto: `Vence em ${dias} dias`,
+      className: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+      icon: Clock
+    }
+  }
+  return null
+}
+
 function PWAPerfilPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -362,7 +402,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao alterar senha:', error)
-      
     } finally {
       setAlterandoSenha(false)
     }
@@ -374,7 +413,7 @@ function PWAPerfilPageContent() {
       
       setIsEditing(false)
     } catch (error) {
-      
+      // Erro ao salvar
     }
   }
 
@@ -389,7 +428,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar salários:', error)
-      
     } finally {
       setLoadingSalarios(false)
     }
@@ -405,7 +443,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar benefícios:', error)
-      
     } finally {
       setLoadingBeneficios(false)
     }
@@ -421,7 +458,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar certificados:', error)
-      
     } finally {
       setLoadingCertificados(false)
     }
@@ -437,7 +473,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar documentos admissionais:', error)
-      
     } finally {
       setLoadingDocumentosAdmissionais(false)
     }
@@ -505,7 +540,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao enviar documento:', error)
-      
     } finally {
       setEnviandoDocumento(false)
     }
@@ -573,7 +607,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao enviar certificado:', error)
-      
     } finally {
       setEnviandoCertificado(false)
     }
@@ -696,7 +729,6 @@ function PWAPerfilPageContent() {
       document.body.removeChild(link)
     } catch (error) {
       console.error('Erro ao baixar arquivo:', error)
-      
     }
   }
 
@@ -714,7 +746,6 @@ function PWAPerfilPageContent() {
       }
     } catch (error) {
       console.error('Erro ao carregar detalhes do salário:', error)
-      
     } finally {
       setCarregandoDetalhes(false)
     }
@@ -743,11 +774,11 @@ function PWAPerfilPageContent() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-h-screen" style={{ backgroundColor: '#75180a' }}>
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Meu Perfil</h1>
-        <p className="text-gray-600">Gerencie suas informações pessoais</p>
+        <h1 className="text-2xl font-bold text-white">Meu Perfil</h1>
+        <p className="text-gray-200">Gerencie suas informações pessoais</p>
       </div>
 
       {/* Foto e Informações Principais */}
@@ -1426,16 +1457,42 @@ function PWAPerfilPageContent() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {certificados.map((certificado) => (
+                  {certificados.map((certificado) => {
+                    const diasParaVencimento = certificado.data_validade 
+                      ? calcularDiasParaVencimento(certificado.data_validade)
+                      : Infinity
+                    const avisoVencimento = diasParaVencimento !== Infinity 
+                      ? getAvisoVencimento(diasParaVencimento)
+                      : null
+                    
+                    const IconComponent = avisoVencimento ? avisoVencimento.icon : null
+                    
+                    return (
                     <div 
                       key={certificado.id} 
-                      className="bg-white rounded-xl p-4 hover:shadow-md transition-shadow border border-gray-100"
+                      className={`bg-white rounded-xl p-4 hover:shadow-md transition-shadow border ${
+                        diasParaVencimento < 0 
+                          ? 'border-red-200 bg-red-50' 
+                          : diasParaVencimento <= 7 
+                          ? 'border-orange-200 bg-orange-50'
+                          : diasParaVencimento <= 30
+                          ? 'border-yellow-200 bg-yellow-50'
+                          : 'border-gray-100'
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <h4 className="font-semibold text-lg mb-3">
-                            {certificado.nome}
-                          </h4>
+                          <div className="flex items-start justify-between mb-3">
+                            <h4 className="font-semibold text-lg">
+                              {certificado.nome}
+                            </h4>
+                            {avisoVencimento && IconComponent && (
+                              <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                <IconComponent className="w-3 h-3" />
+                                {avisoVencimento.texto}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
                               <p className="text-gray-500 text-xs mb-1">Tipo</p>
@@ -1471,7 +1528,8 @@ function PWAPerfilPageContent() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1502,16 +1560,42 @@ function PWAPerfilPageContent() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {documentosAdmissionais.map((doc) => (
+                  {documentosAdmissionais.map((doc) => {
+                    const diasParaVencimento = doc.data_validade 
+                      ? calcularDiasParaVencimento(doc.data_validade)
+                      : Infinity
+                    const avisoVencimento = diasParaVencimento !== Infinity 
+                      ? getAvisoVencimento(diasParaVencimento)
+                      : null
+                    
+                    const IconComponent = avisoVencimento ? avisoVencimento.icon : null
+                    
+                    return (
                     <div 
                       key={doc.id} 
-                      className="bg-white rounded-xl p-4 hover:shadow-md transition-shadow border border-gray-100"
+                      className={`bg-white rounded-xl p-4 hover:shadow-md transition-shadow border ${
+                        diasParaVencimento < 0 
+                          ? 'border-red-200 bg-red-50' 
+                          : diasParaVencimento <= 7 
+                          ? 'border-orange-200 bg-orange-50'
+                          : diasParaVencimento <= 30
+                          ? 'border-yellow-200 bg-yellow-50'
+                          : 'border-gray-100'
+                      }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <h4 className="font-semibold text-lg mb-3">
-                            {doc.tipo}
-                          </h4>
+                          <div className="flex items-start justify-between mb-3">
+                            <h4 className="font-semibold text-lg">
+                              {doc.tipo}
+                            </h4>
+                            {avisoVencimento && IconComponent && (
+                              <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                <IconComponent className="w-3 h-3" />
+                                {avisoVencimento.texto}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="grid grid-cols-2 gap-3 text-sm">
                             {doc.data_validade && (
                               <div>
@@ -1549,7 +1633,8 @@ function PWAPerfilPageContent() {
                         )}
                       </div>
                     </div>
-                  ))}
+                  )
+                  })}
                 </div>
               )}
             </div>
@@ -1797,7 +1882,11 @@ function PWAPerfilPageContent() {
                   if (file) {
                     // Validar tamanho (máximo 10MB)
                     if (file.size > 10 * 1024 * 1024) {
-                      
+                      toast({
+                        title: 'Arquivo muito grande',
+                        description: 'O arquivo deve ter no máximo 10MB',
+                        variant: 'destructive'
+                      })
                       return
                     }
                     setArquivoSelecionado(file)
@@ -2079,7 +2168,11 @@ function PWAPerfilPageContent() {
                   if (file) {
                     // Validar tamanho (máximo 10MB)
                     if (file.size > 10 * 1024 * 1024) {
-                      
+                      toast({
+                        title: 'Arquivo muito grande',
+                        description: 'O arquivo deve ter no máximo 10MB',
+                        variant: 'destructive'
+                      })
                       return
                     }
                     setArquivoCertificadoSelecionado(file)

@@ -38,7 +38,7 @@ import { PageLoader } from "@/components/ui/loader"
 import { EmpresaProvider, useEmpresa } from "@/hooks/use-empresa"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
-import { useVencimentosDocumentos } from "@/hooks/use-vencimentos-documentos"
+import { useVencimentosDocumentos, STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hooks/use-vencimentos-documentos"
 import Image from "next/image"
 
 interface PWALayoutProps {
@@ -178,57 +178,105 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     return () => clearInterval(intervalId)
   }, [user?.id])
 
+  // Listener para atualizar contagem quando notificações locais mudarem
+  useEffect(() => {
+    const handleNotificacoesAtualizadas = () => {
+      if (user?.id) {
+        // Pequeno delay para garantir que o localStorage foi atualizado
+        setTimeout(() => {
+          carregarNotificacoesNaoLidas(user.id)
+        }, 100)
+      }
+    }
+
+    // Listener para evento customizado (mesma aba)
+    window.addEventListener('notificacoes-locais-atualizadas', handleNotificacoesAtualizadas as EventListener)
+    
+    // Listener para mudanças no localStorage (outras abas)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY_NOTIFICACOES_LOCAIS && user?.id) {
+        carregarNotificacoesNaoLidas(user.id)
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+
+    return () => {
+      window.removeEventListener('notificacoes-locais-atualizadas', handleNotificacoesAtualizadas as EventListener)
+      window.removeEventListener('storage', handleStorageChange)
+    }
+  }, [user?.id])
+
   const carregarNotificacoesNaoLidas = async (userId: number) => {
     try {
+      let countAPI = 0
       const token = localStorage.getItem('access_token')
-      if (!token) {
-        setNotificacoesNaoLidas(0)
-        return
-      }
+      
+      if (token) {
+        // Verificar se o token não está expirado
+        try {
+          const tokenParts = token.split('.')
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(atob(tokenParts[1]))
+            if (payload.exp) {
+              const isExpired = payload.exp * 1000 < Date.now()
+              if (isExpired) {
+                // Token expirado, continuar para contar apenas notificações locais
+              } else {
+                // Token válido, buscar notificações da API
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+                const response = await fetch(
+                  `${apiUrl}/api/notificacoes/count/nao-lidas`,
+                  {
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    }
+                  }
+                )
 
-      // Verificar se o token não está expirado
-      try {
-        const tokenParts = token.split('.')
-        if (tokenParts.length === 3) {
-          const payload = JSON.parse(atob(tokenParts[1]))
-          if (payload.exp) {
-            const isExpired = payload.exp * 1000 < Date.now()
-            if (isExpired) {
-              setNotificacoesNaoLidas(0)
-              return
+                // Se receber 403 ou 401, token é inválido - continuar para contar apenas locais
+                if (response.ok) {
+                  const data = await response.json()
+                  countAPI = data.count || 0
+                }
+              }
             }
           }
+        } catch (tokenError) {
+          // Se não conseguir decodificar, continuar para contar apenas notificações locais
         }
-      } catch (tokenError) {
-        // Se não conseguir decodificar, continuar
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
-      const response = await fetch(
-        `${apiUrl}/api/notificacoes/count/nao-lidas`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+      // Contar notificações locais não lidas
+      let countLocais = 0
+      try {
+        const notificacoesLocaisStr = localStorage.getItem(STORAGE_KEY_NOTIFICACOES_LOCAIS)
+        if (notificacoesLocaisStr) {
+          const parsed = JSON.parse(notificacoesLocaisStr)
+          const notificacoesLocais = Array.isArray(parsed) ? parsed : []
+          countLocais = notificacoesLocais.filter((n: any) => !n.lida).length
         }
-      )
-
-      // Se receber 403 ou 401, token é inválido - não tentar novamente
-      if (response.status === 403 || response.status === 401) {
-        setNotificacoesNaoLidas(0)
-        return
+      } catch (error) {
+        // Erro ao parsear notificações locais, ignorar
       }
 
-      if (response.ok) {
-        const data = await response.json()
-        setNotificacoesNaoLidas(data.count || 0)
-      } else {
-        setNotificacoesNaoLidas(0)
-      }
+      // Soma total de notificações não lidas (API + locais)
+      setNotificacoesNaoLidas(countAPI + countLocais)
     } catch (error) {
-      // Não logar erros de rede silenciosamente
-      setNotificacoesNaoLidas(0)
+      // Em caso de erro, tentar contar apenas notificações locais
+      try {
+        const notificacoesLocaisStr = localStorage.getItem(STORAGE_KEY_NOTIFICACOES_LOCAIS)
+        if (notificacoesLocaisStr) {
+          const parsed = JSON.parse(notificacoesLocaisStr)
+          const notificacoesLocais = Array.isArray(parsed) ? parsed : []
+          const countLocais = notificacoesLocais.filter((n: any) => !n.lida).length
+          setNotificacoesNaoLidas(countLocais)
+        } else {
+          setNotificacoesNaoLidas(0)
+        }
+      } catch (localError) {
+        setNotificacoesNaoLidas(0)
+      }
     }
   }
 
@@ -592,7 +640,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                       >
                         <Bell className="w-5 h-5 text-white" />
                         {notificacoesNaoLidas > 0 && (
-                          <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white text-[10px] font-bold border-2 border-white">
+                          <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-white text-[10px] font-bold border-2 border-white" style={{ backgroundColor: '#75180a' }}>
                             {notificacoesNaoLidas > 9 ? '9+' : notificacoesNaoLidas}
                           </Badge>
                         )}
