@@ -40,6 +40,7 @@ import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
 import { useVencimentosDocumentos, STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hooks/use-vencimentos-documentos"
 import Image from "next/image"
+import { ChatIa } from "@/components/chat-ia"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -952,6 +953,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                 </Card>
               </div>
             )}
+
+            {/* Chat de IA - Botão Flutuante */}
+            <ChatIa floating={true} />
           </div>
         ) : (
           <div className="min-h-screen">

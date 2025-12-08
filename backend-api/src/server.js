@@ -26,6 +26,12 @@ if (result.error) {
   dotenv.config()
 } else {
   console.log('Servidor - Arquivo .env carregado com sucesso')
+  // Verificar se a chave do Gemini está configurada
+  if (process.env.GOOGLE_GEMINI_API_KEY) {
+    console.log('✅ Servidor - GOOGLE_GEMINI_API_KEY configurada')
+  } else {
+    console.warn('⚠️  Servidor - GOOGLE_GEMINI_API_KEY não encontrada no .env')
+  }
 }
 
 // Importar rotas
@@ -119,6 +125,7 @@ import whatsappEvolutionRoutes from './routes/whatsapp-evolution.js'
 import complementosRoutes from './routes/complementos.js'
 import alugueisResidenciasRoutes from './routes/alugueis-residencias.js'
 import avatarRoutes from './routes/avatar.js'
+import chatIaRoutes from './routes/chat-ia.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -447,6 +454,7 @@ app.use('/api/whatsapp-evolution', whatsappEvolutionRoutes)
 app.use('/api/complementos', complementosRoutes)
 app.use('/api/alugueis-residencias', alugueisResidenciasRoutes)
 app.use('/api/geocoding', geocodingRoutes)
+app.use('/api/chat-ia', chatIaRoutes)
 
 // Rota raiz
 app.get('/', (req, res) => {

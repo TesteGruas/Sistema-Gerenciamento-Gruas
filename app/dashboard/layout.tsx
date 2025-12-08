@@ -40,6 +40,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
 import { EmpresaProvider, useEmpresa } from "@/hooks/use-empresa"
 import Image from "next/image"
+import { ChatIa } from "@/components/chat-ia"
 
 // Dynamic imports para componentes pesados - carregam apenas quando necessário
 const NotificationsDropdown = dynamic(
@@ -770,6 +771,9 @@ function DashboardLayoutContent({
           {children}
         </main>
       </div>
+      
+      {/* Chat de IA - Botão Flutuante */}
+      <ChatIa floating={true} />
       
       {/* Global Loading */}
       <GlobalLoading show={isLoading} message={message} />
