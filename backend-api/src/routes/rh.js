@@ -476,7 +476,7 @@ router.get('/estatisticas', authenticateToken, requirePermission('rh:visualizar'
  *         required: true
  *         schema:
  *           type: integer
- *         description: Ano (ex: 2025)
+ *         description: Ano, exemplo 2025
  *     responses:
  *       200:
  *         description: Salário calculado com sucesso

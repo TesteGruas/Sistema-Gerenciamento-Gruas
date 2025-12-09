@@ -11,12 +11,13 @@ O sistema possui um chat de IA integrado que ajuda os usuários com:
 
 ## 🔧 Solução Utilizada
 
-Utilizamos a **Google Gemini API** (modelo `gemini-1.5-flash`) por ser:
-- ✅ **100% Gratuita** (tier gratuito generoso)
-- ✅ **60 requisições/minuto**
-- ✅ **1.500 requisições/dia**
+Utilizamos a **Google Gemini API** (modelo `gemini-2.5-flash-lite`) por ser:
+- ✅ **100% Gratuita** (tier gratuito)
+- ✅ **10 requisições/minuto** (gemini-2.5-flash-lite)
+- ✅ **20 requisições/dia** por modelo no tier gratuito
 - ✅ **Sem necessidade de cartão de crédito** inicialmente
 - ✅ **Fácil integração**
+- ✅ **Modelos 2.5 disponíveis na API v1beta** (modelos 1.5 foram descontinuados)
 
 ## 🚀 Como Configurar
 
@@ -164,7 +165,7 @@ No arquivo `backend-api/src/routes/chat-ia.js`:
 
 ```javascript
 const model = genAI.getGenerativeModel({ 
-  model: 'gemini-1.5-pro' // ou outro modelo disponível
+  model: 'gemini-2.5-flash-lite' // ou gemini-2.5-flash (modelos 1.5 foram descontinuados)
 });
 ```
 

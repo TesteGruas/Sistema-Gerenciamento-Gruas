@@ -18,8 +18,10 @@
    
    Deve mostrar:
    ```
-   GOOGLE_GEMINI_API_KEY=AIzaSyAY75VeolQjTrpf0YtOEHmRk_carKr-zNs
+   GOOGLE_GEMINI_API_KEY=sua_chave_aqui
    ```
+   
+   > ⚠️ **NUNCA** compartilhe sua chave de API publicamente. Se exposta, ela será desabilitada automaticamente.
 
 3. **Reinicie o servidor:**
    ```bash
@@ -55,8 +57,10 @@ node -e "require('dotenv').config(); console.log('API Key:', process.env.GOOGLE_
 - **Sintoma:** Erro ao fazer requisição
 - **Solução:** Verifique se não há espaços antes ou depois do `=` no .env:
    ```
-   ✅ Correto: GOOGLE_GEMINI_API_KEY=AIzaSy...
-   ❌ Errado: GOOGLE_GEMINI_API_KEY = AIzaSy...
+   ✅ Correto: GOOGLE_GEMINI_API_KEY=sua_chave_aqui
+   ❌ Errado: GOOGLE_GEMINI_API_KEY = sua_chave_aqui
+   
+   > ⚠️ **NUNCA** compartilhe sua chave de API em commits, documentação pública ou repositórios.
    ```
 
 #### 4. Chave inválida ou expirada

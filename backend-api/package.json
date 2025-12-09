@@ -17,7 +17,8 @@
     "test:clientes:db-corrected": "node src/routes/tests/clientes-database-corrected.test.js",
     "docs": "swagger-jsdoc -d swaggerDef.js src/routes/*.js -o docs/swagger.json",
     "gerar-receitas-retroativas": "node scripts/gerar-receitas-retroativas.js",
-    "gerar-contexto-ia": "node scripts/gerar-contexto-ia.js"
+    "gerar-contexto-ia": "node scripts/gerar-contexto-ia.js",
+    "verificar-chave-gemini": "node scripts/verificar-chave-gemini.js"
   },
   "keywords": [
     "api",

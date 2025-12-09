@@ -61,6 +61,7 @@ export default function AlugueisIntegradoPage() {
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativo' | 'encerrado'>('todos')
   const [openNovaResidencia, setOpenNovaResidencia] = useState(false)
   const [openNovoAluguel, setOpenNovoAluguel] = useState(false)
+  const [activeTab, setActiveTab] = useState('alugueis')
   const { toast } = useToast()
 
   // Form states - Nova Residência
@@ -147,6 +148,7 @@ export default function AlugueisIntegradoPage() {
       setValorBase('')
       setMobiliada(false)
       setOpenNovaResidencia(false)
+      setActiveTab('residencias')
       carregar()
     } catch (error) {
       toast({
@@ -219,9 +221,20 @@ export default function AlugueisIntegradoPage() {
       setValorMensal('')
       setDiaVencimento('5')
       setDescontoFolha(true)
+      setResidenciaId('')
+      setFuncionarioId('')
+      setFuncionarioNome('')
+      setFuncionarioCargo('')
+      setFuncionarioCpf('')
+      setFuncionarioSelecionado(null)
+      setDataInicio('')
+      setValorMensal('')
+      setDiaVencimento('5')
+      setDescontoFolha(true)
       setPorcentagemDesconto('')
       setObservacoes('')
       setOpenNovoAluguel(false)
+      setActiveTab('alugueis')
       carregar()
     } catch (error) {
       toast({
@@ -333,11 +346,349 @@ export default function AlugueisIntegradoPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Aluguéis de Residências</h1>
-        <p className="text-gray-600 mt-2">
-          Gerencie residências e aluguéis para funcionários
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Aluguéis de Residências</h1>
+          <p className="text-gray-600 mt-2">
+            Gerencie residências e aluguéis para funcionários
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Dialog open={openNovaResidencia} onOpenChange={setOpenNovaResidencia}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Building className="h-4 w-4 mr-2" />
+                Nova Residência
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Cadastrar Nova Residência</DialogTitle>
+                <DialogDescription>
+                  Adicione uma nova residência para disponibilizar
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={handleCadastrarResidencia} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nome">Nome/Identificação *</Label>
+                  <Input
+                    id="nome"
+                    placeholder="Ex: Casa Vila Nova"
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="endereco">Endereço *</Label>
+                    <Input
+                      id="endereco"
+                      placeholder="Rua, número"
+                      value={endereco}
+                      onChange={(e) => setEndereco(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cidade">Cidade *</Label>
+                    <Input
+                      id="cidade"
+                      value={cidade}
+                      onChange={(e) => setCidade(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="estado">Estado *</Label>
+                    <Select value={estado} onValueChange={setEstado}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SP">SP</SelectItem>
+                        <SelectItem value="RJ">RJ</SelectItem>
+                        <SelectItem value="MG">MG</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cep">CEP *</Label>
+                    <Input
+                      id="cep"
+                      value={cep}
+                      onChange={(e) => setCep(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Quartos *</Label>
+                    <Select value={quartos} onValueChange={setQuartos}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5].map(n => (
+                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Banheiros *</Label>
+                    <Select value={banheiros} onValueChange={setBanheiros}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4].map(n => (
+                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="area">Área (m²) *</Label>
+                    <Input
+                      id="area"
+                      type="number"
+                      value={area}
+                      onChange={(e) => setArea(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="valorBase">Valor Base (R$) *</Label>
+                  <Input
+                    id="valorBase"
+                    type="number"
+                    step="0.01"
+                    value={valorBase}
+                    onChange={(e) => setValorBase(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="mobiliada"
+                    checked={mobiliada}
+                    onCheckedChange={(checked) => setMobiliada(checked as boolean)}
+                  />
+                  <label htmlFor="mobiliada" className="text-sm font-medium">
+                    Mobiliada
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setOpenNovaResidencia(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit">Cadastrar</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={openNovoAluguel} onOpenChange={setOpenNovoAluguel}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Aluguel
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Criar Novo Aluguel</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados para criar um novo aluguel de residência
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCriarAluguel} className="space-y-6 mt-4">
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Home className="h-4 w-4" />
+                    Residência
+                  </h3>
+                  <div className="space-y-2">
+                    <Label>Selecione a Residência *</Label>
+                    <Select value={residenciaId} onValueChange={setResidenciaId} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Escolha uma residência" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {residencias.filter(r => r.disponivel).map((residencia) => (
+                          <SelectItem key={residencia.id} value={residencia.id}>
+                            {residencia.nome} - {residencia.cidade}/{residencia.estado}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {residenciasSelecionada && (
+                    <div className="bg-white border rounded-lg p-3 text-sm">
+                      <p className="font-medium">{residenciasSelecionada.endereco}</p>
+                      <p className="text-gray-600">{residenciasSelecionada.quartos}Q • {residenciasSelecionada.banheiros}B • {residenciasSelecionada.area}m²</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Funcionário
+                  </h3>
+                  <div className="space-y-2">
+                    <Label>Selecione o Funcionário *</Label>
+                    <FuncionarioSearch
+                      selectedFuncionario={funcionarioSelecionado}
+                      onFuncionarioSelect={(funcionario) => {
+                        if (!funcionario) {
+                          setFuncionarioId('')
+                          setFuncionarioNome('')
+                          setFuncionarioCargo('')
+                          setFuncionarioCpf('')
+                          setFuncionarioSelecionado(null)
+                          return
+                        }
+                        setFuncionarioSelecionado(funcionario)
+                        setFuncionarioId(String(funcionario.id))
+                        setFuncionarioNome(funcionario.name || funcionario.nome || '')
+                        setFuncionarioCargo(funcionario.role || funcionario.cargo || '')
+                        setFuncionarioCpf(funcionario.cpf || '')
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-semibold">Contrato</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="dataInicio">Data de Início *</Label>
+                      <Input
+                        id="dataInicio"
+                        type="date"
+                        value={dataInicio}
+                        onChange={(e) => setDataInicio(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="valorMensal">Valor Mensal (R$) *</Label>
+                      <Input
+                        id="valorMensal"
+                        type="number"
+                        step="0.01"
+                        value={valorMensal}
+                        onChange={(e) => setValorMensal(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Dia Vencimento</Label>
+                      <Select value={diaVencimento} onValueChange={setDiaVencimento}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
+                            <SelectItem key={dia} value={String(dia)}>
+                              Dia {dia}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="porcentagemDesconto">Subsídio (%)</Label>
+                      <Input
+                        id="porcentagemDesconto"
+                        type="number"
+                        max="100"
+                        value={porcentagemDesconto}
+                        onChange={(e) => setPorcentagemDesconto(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="descontoFolha"
+                      checked={descontoFolha}
+                      onCheckedChange={(checked) => setDescontoFolha(checked as boolean)}
+                    />
+                    <label htmlFor="descontoFolha" className="text-sm font-medium">
+                      Descontar da folha
+                    </label>
+                  </div>
+
+                  {valorMensal && porcentagemDesconto && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-blue-600 text-xs">Total</p>
+                          <p className="font-semibold">R$ {parseFloat(valorMensal).toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-blue-600 text-xs">Empresa ({porcentagemDesconto}%)</p>
+                          <p className="font-semibold">R$ {(parseFloat(valorMensal) * parseFloat(porcentagemDesconto) / 100).toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-blue-600 text-xs">Funcionário</p>
+                          <p className="font-semibold">R$ {(parseFloat(valorMensal) * (1 - parseFloat(porcentagemDesconto) / 100)).toFixed(2)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="observacoes">Observações</Label>
+                  <Textarea
+                    id="observacoes"
+                    value={observacoes}
+                    onChange={(e) => setObservacoes(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setOpenNovoAluguel(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit">
+                    Criar Aluguel
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Stats */}
@@ -388,8 +739,8 @@ export default function AlugueisIntegradoPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="alugueis" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="alugueis">
             <List className="h-4 w-4 mr-2" />
             Aluguéis
@@ -397,10 +748,6 @@ export default function AlugueisIntegradoPage() {
           <TabsTrigger value="residencias">
             <Building className="h-4 w-4 mr-2" />
             Residências
-          </TabsTrigger>
-          <TabsTrigger value="novo-aluguel">
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Aluguel
           </TabsTrigger>
         </TabsList>
 
@@ -556,157 +903,6 @@ export default function AlugueisIntegradoPage() {
               />
             </div>
 
-            <Dialog open={openNovaResidencia} onOpenChange={setOpenNovaResidencia}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nova Residência
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Cadastrar Nova Residência</DialogTitle>
-                  <DialogDescription>
-                    Adicione uma nova residência para disponibilizar
-                  </DialogDescription>
-                </DialogHeader>
-
-                <form onSubmit={handleCadastrarResidencia} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="nome">Nome/Identificação *</Label>
-                    <Input
-                      id="nome"
-                      placeholder="Ex: Casa Vila Nova"
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2 space-y-2">
-                      <Label htmlFor="endereco">Endereço *</Label>
-                      <Input
-                        id="endereco"
-                        placeholder="Rua, número"
-                        value={endereco}
-                        onChange={(e) => setEndereco(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="cidade">Cidade *</Label>
-                      <Input
-                        id="cidade"
-                        value={cidade}
-                        onChange={(e) => setCidade(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="estado">Estado *</Label>
-                      <Select value={estado} onValueChange={setEstado}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="SP">SP</SelectItem>
-                          <SelectItem value="RJ">RJ</SelectItem>
-                          <SelectItem value="MG">MG</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="cep">CEP *</Label>
-                      <Input
-                        id="cep"
-                        value={cep}
-                        onChange={(e) => setCep(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label>Quartos *</Label>
-                      <Select value={quartos} onValueChange={setQuartos}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 3, 4, 5].map(n => (
-                            <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Banheiros *</Label>
-                      <Select value={banheiros} onValueChange={setBanheiros}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 3, 4].map(n => (
-                            <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="area">Área (m²) *</Label>
-                      <Input
-                        id="area"
-                        type="number"
-                        value={area}
-                        onChange={(e) => setArea(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="valorBase">Valor Base (R$) *</Label>
-                    <Input
-                      id="valorBase"
-                      type="number"
-                      step="0.01"
-                      value={valorBase}
-                      onChange={(e) => setValorBase(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="mobiliada"
-                      checked={mobiliada}
-                      onCheckedChange={(checked) => setMobiliada(checked as boolean)}
-                    />
-                    <label htmlFor="mobiliada" className="text-sm font-medium">
-                      Mobiliada
-                    </label>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4 border-t">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setOpenNovaResidencia(false)}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button type="submit">Cadastrar</Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
           </div>
 
           {loading ? (
@@ -777,177 +973,6 @@ export default function AlugueisIntegradoPage() {
               ))}
             </div>
           )}
-        </TabsContent>
-
-        {/* Tab: Novo Aluguel */}
-        <TabsContent value="novo-aluguel">
-          <Card>
-            <CardHeader>
-              <CardTitle>Criar Novo Aluguel</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleCriarAluguel} className="space-y-6">
-                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Home className="h-4 w-4" />
-                    Residência
-                  </h3>
-                  <div className="space-y-2">
-                    <Label>Selecione a Residência *</Label>
-                    <Select value={residenciaId} onValueChange={setResidenciaId} required>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Escolha uma residência" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {residencias.filter(r => r.disponivel).map((residencia) => (
-                          <SelectItem key={residencia.id} value={residencia.id}>
-                            {residencia.nome} - {residencia.cidade}/{residencia.estado}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {residenciasSelecionada && (
-                    <div className="bg-white border rounded-lg p-3 text-sm">
-                      <p className="font-medium">{residenciasSelecionada.endereco}</p>
-                      <p className="text-gray-600">{residenciasSelecionada.quartos}Q • {residenciasSelecionada.banheiros}B • {residenciasSelecionada.area}m²</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Funcionário
-                  </h3>
-                  <div className="space-y-2">
-                    <Label>Selecione o Funcionário *</Label>
-                    <FuncionarioSearch
-                      selectedFuncionario={funcionarioSelecionado}
-                      onFuncionarioSelect={(funcionario) => {
-                        if (!funcionario) {
-                          setFuncionarioId('')
-                          setFuncionarioNome('')
-                          setFuncionarioCargo('')
-                          setFuncionarioCpf('')
-                          setFuncionarioSelecionado(null)
-                          return
-                        }
-                        setFuncionarioSelecionado(funcionario)
-                        setFuncionarioId(String(funcionario.id))
-                        setFuncionarioNome(funcionario.name || funcionario.nome || '')
-                        setFuncionarioCargo(funcionario.role || funcionario.cargo || '')
-                        setFuncionarioCpf(funcionario.cpf || '')
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-semibold">Contrato</h3>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="dataInicio">Data de Início *</Label>
-                      <Input
-                        id="dataInicio"
-                        type="date"
-                        value={dataInicio}
-                        onChange={(e) => setDataInicio(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="valorMensal">Valor Mensal (R$) *</Label>
-                      <Input
-                        id="valorMensal"
-                        type="number"
-                        step="0.01"
-                        value={valorMensal}
-                        onChange={(e) => setValorMensal(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Dia Vencimento</Label>
-                      <Select value={diaVencimento} onValueChange={setDiaVencimento}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
-                            <SelectItem key={dia} value={String(dia)}>
-                              Dia {dia}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="porcentagemDesconto">Subsídio (%)</Label>
-                      <Input
-                        id="porcentagemDesconto"
-                        type="number"
-                        max="100"
-                        value={porcentagemDesconto}
-                        onChange={(e) => setPorcentagemDesconto(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="descontoFolha"
-                      checked={descontoFolha}
-                      onCheckedChange={(checked) => setDescontoFolha(checked as boolean)}
-                    />
-                    <label htmlFor="descontoFolha" className="text-sm font-medium">
-                      Descontar da folha
-                    </label>
-                  </div>
-
-                  {valorMensal && porcentagemDesconto && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <p className="text-blue-600 text-xs">Total</p>
-                          <p className="font-semibold">R$ {parseFloat(valorMensal).toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <p className="text-blue-600 text-xs">Empresa ({porcentagemDesconto}%)</p>
-                          <p className="font-semibold">R$ {(parseFloat(valorMensal) * parseFloat(porcentagemDesconto) / 100).toFixed(2)}</p>
-                        </div>
-                        <div>
-                          <p className="text-blue-600 text-xs">Funcionário</p>
-                          <p className="font-semibold">R$ {(parseFloat(valorMensal) * (1 - parseFloat(porcentagemDesconto) / 100)).toFixed(2)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="observacoes">Observações</Label>
-                  <Textarea
-                    id="observacoes"
-                    value={observacoes}
-                    onChange={(e) => setObservacoes(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="submit">
-                    Criar Aluguel
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>

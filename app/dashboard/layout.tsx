@@ -113,6 +113,7 @@ const baseNavigation: NavigationItemWithPermission[] = [
   
   // SEÇÃO FINANCEIRA
   { name: "Financeiro", href: "/dashboard/financeiro", icon: DollarSign, category: "financeiro", permission: "financeiro:visualizar" },
+  { name: "Aluguéis", href: "/dashboard/financeiro/alugueis", icon: Home, category: "financeiro", permission: "financeiro:visualizar" },
   
   // SEÇÃO RELATÓRIOS E ANÁLISES
   { name: "Relatórios", href: "/dashboard/relatorios", icon: BarChart3, category: "relatorios", permission: "relatorios:visualizar" },
@@ -243,6 +244,11 @@ function DashboardLayoutContent({
       
       // Financeiro - apenas Admin e Gerente
       if (item.href === '/dashboard/financeiro') {
+        return canAccessFinanceiro()
+      }
+      
+      // Aluguéis - apenas Admin e Gerente (mesma permissão do financeiro)
+      if (item.href === '/dashboard/financeiro/alugueis') {
         return canAccessFinanceiro()
       }
       

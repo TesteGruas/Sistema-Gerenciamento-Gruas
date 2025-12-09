@@ -1644,7 +1644,7 @@ router.delete('/:id', async (req, res) => {
  *           description: Capacidade da grua
  *         status:
  *           type: string
- *           enum: [disponivel, em_obra, manutencao, inativa]
+ *           enum: [Disponível, Operacional, Manutenção, Vendida, disponivel, em_obra, manutencao, inativa]
  *           default: disponivel
  *           description: Status atual da grua
  *         obraId:
@@ -1674,11 +1674,6 @@ router.delete('/:id', async (req, res) => {
  *           minimum: 1900
  *           maximum: 2025
  *           description: Ano de fabricação
- *         status:
- *           type: string
- *           enum: [Disponível, Operacional, Manutenção, Vendida, disponivel, em_obra, manutencao, inativa]
- *           default: Disponível
- *           description: Status atual da grua
  *         localizacao:
  *           type: string
  *           description: Localização atual da grua

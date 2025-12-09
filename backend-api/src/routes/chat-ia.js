@@ -11,6 +11,102 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
+// Rate limiting simples (em memória)
+// Limite: 50 requisições por minuto por usuário (deixando margem para o limite de 60/min da API)
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minuto em milissegundos
+const RATE_LIMIT_MAX_REQUESTS = 50; // Máximo de requisições por minuto
+
+// Função para verificar rate limit
+function checkRateLimit(userId) {
+  const now = Date.now();
+  const userRequests = rateLimitMap.get(userId) || [];
+  
+  // Remover requisições antigas (fora da janela de 1 minuto)
+  const recentRequests = userRequests.filter(timestamp => now - timestamp < RATE_LIMIT_WINDOW);
+  
+  if (recentRequests.length >= RATE_LIMIT_MAX_REQUESTS) {
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((recentRequests[0] + RATE_LIMIT_WINDOW - now) / 1000) // segundos
+    };
+  }
+  
+  // Adicionar nova requisição
+  recentRequests.push(now);
+  rateLimitMap.set(userId, recentRequests);
+  
+  return { allowed: true };
+}
+
+// Função para extrair tempo de retry do erro da API
+function extractRetryAfter(error) {
+  try {
+    // Tentar extrair do campo retryDelay se disponível
+    if (error.retryDelay) {
+      return Math.ceil(error.retryDelay / 1000); // Converter para segundos
+    }
+    
+    // Tentar extrair da mensagem de erro
+    const errorMessage = error.message || error.toString() || '';
+    
+    // Procurar por padrões como "Please retry in 55.338727046s"
+    const retryMatch = errorMessage.match(/retry in ([\d.]+)s/i);
+    if (retryMatch) {
+      return Math.ceil(parseFloat(retryMatch[1]));
+    }
+    
+    // Procurar por "RetryInfo" no JSON do erro
+    if (errorMessage.includes('RetryInfo')) {
+      const retryInfoMatch = errorMessage.match(/retryDelay["\s:]+"?([^"}\s]+)/i);
+      if (retryInfoMatch) {
+        const delay = retryInfoMatch[1].replace(/s$/, ''); // Remove 's' se presente
+        return Math.ceil(parseFloat(delay));
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ [Chat IA] Erro ao extrair retryAfter:', e.message);
+  }
+  
+  return null; // Não foi possível extrair
+}
+
+// Função para fazer retry com backoff exponencial
+async function retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000) {
+  let lastError = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const errorMessage = error.message || error.toString() || '';
+      
+      // Se for erro de quota/rate limit, tentar extrair o tempo de retry
+      if (errorMessage.includes('QUOTA') || errorMessage.includes('quota') || 
+          errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+        
+        const retryAfter = extractRetryAfter(error);
+        
+        if (retryAfter && attempt < maxRetries - 1) {
+          console.log(`⏳ [Chat IA] Rate limit atingido. Aguardando ${retryAfter}s antes de tentar novamente...`);
+          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+          continue; // Tentar novamente após o delay
+        }
+      }
+      
+      // Para outros erros ou se não conseguir extrair retryAfter, usar backoff exponencial
+      if (attempt < maxRetries - 1) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        console.log(`⏳ [Chat IA] Erro na tentativa ${attempt + 1}/${maxRetries}. Aguardando ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
 // Função para carregar contexto do sistema
 function carregarContextoSistema() {
   try {
@@ -152,6 +248,19 @@ NOTA: Para informações mais detalhadas sobre endpoints e funcionalidades, exec
  */
 router.post('/', authenticateToken, async (req, res) => {
   try {
+    // Verificar rate limit antes de processar
+    const userId = req.user?.id || req.user?.userId || req.ip || 'unknown';
+    const rateLimitCheck = checkRateLimit(userId);
+    
+    if (!rateLimitCheck.allowed) {
+      console.warn(`⚠️ [Chat IA] Rate limit excedido para usuário ${userId}`);
+      return res.status(429).json({
+        success: false,
+        error: 'Muitas requisições. Aguarde um momento antes de tentar novamente.',
+        retryAfter: rateLimitCheck.retryAfter
+      });
+    }
+
     // Validar entrada
     const { error, value } = chatMessageSchema.validate(req.body);
     if (error) {
@@ -164,7 +273,13 @@ router.post('/', authenticateToken, async (req, res) => {
     const { message, conversationHistory = [] } = value;
 
     // Verificar se a API key está configurada
-    const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+    let apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+    
+    // Limpar espaços antes e depois da chave
+    if (apiKey) {
+      apiKey = apiKey.trim();
+    }
+    
     console.log('🔍 [Chat IA] Verificando API key:', apiKey ? `Configurada (${apiKey.substring(0, 20)}...)` : 'NÃO ENCONTRADA');
     
     if (!apiKey) {
@@ -176,18 +291,50 @@ router.post('/', authenticateToken, async (req, res) => {
       
       return res.status(500).json({
         success: false,
-        error: 'Serviço de IA não configurado. Entre em contato com o administrador.'
+        error: 'Serviço de IA não configurado. Entre em contato com o administrador.',
+        details: process.env.NODE_ENV === 'development' ? {
+          suggestion: 'Execute: node scripts/verificar-chave-gemini.js para diagnosticar o problema'
+        } : undefined
+      });
+    }
+    
+    // Verificar se a chave parece válida
+    if (!apiKey.startsWith('AIza')) {
+      console.error('❌ [Chat IA] Chave de API inválida: não começa com "AIza"');
+      console.error('📊 [Chat IA] Chave recebida:', apiKey.substring(0, 30) + '...');
+      return res.status(500).json({
+        success: false,
+        error: 'Chave de API inválida. A chave deve começar com "AIza".',
+        details: process.env.NODE_ENV === 'development' ? {
+          tip: 'Verifique se copiou a chave corretamente do Google AI Studio',
+          suggestion: 'Execute: node scripts/verificar-chave-gemini.js para testar a chave',
+          link: 'https://aistudio.google.com/apikey'
+        } : undefined
+      });
+    }
+    
+    if (apiKey.length < 30) {
+      console.error('❌ [Chat IA] Chave de API muito curta:', apiKey.length, 'caracteres');
+      return res.status(500).json({
+        success: false,
+        error: 'Chave de API inválida. A chave parece estar incompleta.',
+        details: process.env.NODE_ENV === 'development' ? {
+          tip: 'Chaves de API geralmente têm mais de 30 caracteres',
+          suggestion: 'Execute: node scripts/verificar-chave-gemini.js para testar a chave'
+        } : undefined
       });
     }
 
     // Inicializar o modelo Gemini
-    // Modelos disponíveis conforme documentação oficial (2024/2025):
-    // - gemini-2.5-flash: Modelo mais recente e recomendado (documentação oficial)
-    // - gemini-1.5-flash: Modelo rápido e estável
-    // - gemini-1.5-pro: Modelo mais poderoso
-    // - gemini-2.0-flash-exp: Modelo experimental
+    // Modelos disponíveis na API v1beta (2025):
+    // - gemini-2.5-flash-lite: Modelo leve e rápido (10 RPM, recomendado para chat/FAQ) ⭐
+    // - gemini-2.5-flash: Modelo completo (5 RPM, para contexto maior)
     // Referência: https://ai.google.dev/gemini-api/docs/api-key
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    // NOTA: 
+    // - gemini-2.0-flash-exp: Removido (quota 0 no tier gratuito)
+    // - gemini-1.5-pro: Removido (não disponível na API v1beta, descontinuado)
+    // - gemini-1.5-flash: Pode estar descontinuado, não incluído na lista
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
     console.log(`🤖 [Chat IA] Inicializando Gemini API com modelo: ${modelName}`);
     
     // Construir prompt completo com contexto do sistema
@@ -196,30 +343,51 @@ router.post('/', authenticateToken, async (req, res) => {
     console.log('💬 [Chat IA] Enviando mensagem (primeiros 100 chars):', fullPrompt.substring(0, 100) + '...');
     
     // Lista de modelos para tentar em ordem de preferência (baseado na documentação oficial)
-    // Ordem: modelos mais recentes primeiro, depois fallbacks
+    // Ordem: modelos com quota disponível no tier gratuito e disponíveis na API v1beta
+    // NOTA: 
+    // - gemini-2.0-flash-exp foi removido pois tem quota 0 no tier gratuito
+    // - gemini-1.5-pro foi removido pois não está disponível na API v1beta (descontinuado)
+    // - gemini-1.5-flash pode estar descontinuado, então priorizamos modelos 2.5
     const modelsToTry = [
       modelName, // Primeiro tenta o modelo escolhido pelo usuário
-      'gemini-2.5-flash', // Modelo mais recente (documentação oficial)
-      'gemini-1.5-flash', // Modelo estável e rápido
-      'gemini-1.5-pro', // Modelo mais poderoso
-      'gemini-2.0-flash-exp' // Experimental
-    ].filter((m, index, arr) => arr.indexOf(m) === index); // Remove duplicatas
+      'gemini-2.5-flash-lite', // Modelo leve (10 RPM, ideal para chat/FAQ) ⭐
+      'gemini-2.5-flash', // Modelo completo (5 RPM, para contexto maior)
+      // Modelos 1.5 podem estar descontinuados - removidos da lista principal
+    ].filter((m, index, arr) => {
+      // Remove duplicatas
+      const isUnique = arr.indexOf(m) === index;
+      // Remove modelos descontinuados ou sem quota
+      const isAllowed = m !== 'gemini-2.0-flash-exp' && 
+                       m !== 'gemini-1.5-pro' &&
+                       m !== null && 
+                       m !== undefined;
+      return isUnique && isAllowed;
+    });
     
     let lastError = null;
     
-    // Tentar cada modelo até um funcionar
+    // Tentar cada modelo até um funcionar (com retry automático para erros de quota)
     for (const tryModel of modelsToTry) {
       try {
         console.log(`🔄 [Chat IA] Tentando modelo: ${tryModel}`);
-        const tryGenAI = new GoogleGenerativeAI(apiKey);
-        const tryModelInstance = tryGenAI.getGenerativeModel({ model: tryModel });
         
-        // Fazer a requisição para o Gemini
-        const result = await tryModelInstance.generateContent(fullPrompt);
+        // Usar retry com backoff para lidar com erros temporários de quota
+        const result = await retryWithBackoff(async () => {
+          // Garantir que a chave está limpa (sem espaços)
+          const cleanApiKey = apiKey.trim();
+          const tryGenAI = new GoogleGenerativeAI(cleanApiKey);
+          const tryModelInstance = tryGenAI.getGenerativeModel({ model: tryModel });
+          
+          // Fazer a requisição para o Gemini
+          const result = await tryModelInstance.generateContent(fullPrompt);
+          return result;
+        }, 2); // Máximo 2 tentativas por modelo (3 total: 1 inicial + 2 retries)
+        
         const response = await result.response;
         const text = response.text();
         
         console.log(`✅ [Chat IA] Resposta recebida do modelo ${tryModel} (primeiros 100 chars):`, text.substring(0, 100) + '...');
+        console.log(`📊 [Chat IA] Modelo ${tryModel} usado com sucesso para usuário ${userId}`);
         
         // Retornar resposta
         return res.json({
@@ -231,7 +399,8 @@ router.post('/', authenticateToken, async (req, res) => {
           }
         });
       } catch (modelError) {
-        console.warn(`⚠️ [Chat IA] Modelo ${tryModel} falhou:`, modelError.message?.substring(0, 100));
+        const errorMsg = modelError.message?.substring(0, 100) || 'Erro desconhecido';
+        console.warn(`⚠️ [Chat IA] Modelo ${tryModel} falhou após retries:`, errorMsg);
         lastError = modelError;
         // Continuar para o próximo modelo
         continue;
@@ -249,21 +418,84 @@ router.post('/', authenticateToken, async (req, res) => {
     // Tratar erros específicos da API do Gemini
     const errorMessage = error.message || error.toString() || 'Erro desconhecido';
     
-    if (errorMessage.includes('API_KEY') || errorMessage.includes('API key')) {
-      console.error('❌ [Chat IA] Erro de API Key');
+    if (errorMessage.includes('API_KEY') || errorMessage.includes('API key') || 
+        errorMessage.includes('API_KEY_INVALID') || errorMessage.includes('not valid') ||
+        errorMessage.includes('API key not valid')) {
+      const rawApiKey = process.env.GOOGLE_GEMINI_API_KEY || '';
+      const cleanApiKey = rawApiKey.trim();
+      
+      console.error('❌ [Chat IA] Erro de API Key inválida');
+      console.error('📊 [Chat IA] Chave configurada:', rawApiKey ? 
+        `${rawApiKey.substring(0, 20)}... (${rawApiKey.length} chars)` : 'NÃO ENCONTRADA');
+      console.error('📊 [Chat IA] Chave após trim:', cleanApiKey ? 
+        `${cleanApiKey.substring(0, 20)}... (${cleanApiKey.length} chars)` : 'VAZIA');
+      
+      if (rawApiKey !== cleanApiKey) {
+        console.warn('⚠️ [Chat IA] ATENÇÃO: A chave contém espaços extras!');
+        console.warn('   Chave original:', `"${rawApiKey}"`);
+        console.warn('   Chave limpa:', `"${cleanApiKey}"`);
+      }
+      
       return res.status(500).json({
         success: false,
-        error: 'Chave de API inválida. Entre em contato com o administrador.',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        error: 'Chave de API inválida. Verifique se a chave está correta e se o servidor foi reiniciado.',
+        details: process.env.NODE_ENV === 'development' ? {
+          message: errorMessage,
+          suggestion: 'Execute o script de verificação: node scripts/verificar-chave-gemini.js',
+          tips: [
+            '1. Verifique se a chave está correta no arquivo .env',
+            '2. Verifique se não há espaços antes ou depois da chave',
+            '3. Reinicie o servidor após atualizar o .env',
+            '4. A chave deve começar com "AIza" e ter mais de 30 caracteres',
+            '5. Crie uma nova chave em: https://aistudio.google.com/apikey se necessário',
+            '6. Se a chave foi exposta, ela pode ter sido desabilitada - veja: docs/CHAT-IA-NOVA-CHAVE-API.md'
+          ],
+          chaveInfo: {
+            encontrada: !!rawApiKey,
+            tamanho: rawApiKey.length,
+            comecaComAIza: rawApiKey.startsWith('AIza'),
+            temEspacos: rawApiKey !== cleanApiKey
+          }
+        } : undefined
       });
     }
 
-    if (errorMessage.includes('QUOTA') || errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
+    if (errorMessage.includes('QUOTA') || errorMessage.includes('quota') || 
+        errorMessage.includes('rate limit') || errorMessage.includes('429') ||
+        errorMessage.includes('Too Many Requests')) {
+      const userId = req.user?.id || req.user?.userId || req.ip || 'unknown';
+      const retryAfter = extractRetryAfter(error);
+      
+      // Log detalhado para monitoramento
       console.error('❌ [Chat IA] Erro de quota/rate limit');
+      console.error(`📊 [Chat IA] Usuário: ${userId}`);
+      console.error(`📊 [Chat IA] Modelo tentado: ${process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'}`);
+      console.error(`📊 [Chat IA] Retry após: ${retryAfter || 'N/A'} segundos`);
+      console.error(`💡 [Chat IA] Ação recomendada: Verificar uso em https://ai.dev/usage?tab=rate-limit`);
+      
+      // Se for erro 429, pode ser hora de considerar billing ou limitar acesso
+      if (errorMessage.includes('free_tier') && errorMessage.includes('limit: 0')) {
+        console.warn('⚠️ [Chat IA] ATENÇÃO: Modelo sem quota no tier gratuito. Considere trocar de modelo ou ativar billing.');
+      }
+      
       return res.status(429).json({
         success: false,
-        error: 'Limite de requisições excedido. Tente novamente mais tarde.',
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        error: retryAfter 
+          ? `Limite de requisições excedido. Tente novamente em ${Math.ceil(retryAfter)} segundos.`
+          : 'Limite de requisições excedido. Tente novamente mais tarde.',
+        retryAfter: retryAfter || undefined,
+        details: process.env.NODE_ENV === 'development' ? {
+          message: errorMessage,
+          suggestion: 'O tier gratuito do Gemini tem limites por modelo. Considere:',
+          tips: [
+            '1. Aguardar alguns minutos antes de tentar novamente',
+            '2. Verificar seu uso em: https://ai.dev/usage?tab=rate-limit',
+            '3. Usar gemini-2.5-flash-lite (10 RPM) ou gemini-2.5-flash (5 RPM)',
+            '4. Para uso intensivo, considere ativar billing no Google AI Studio',
+            '5. Implementar limite de requisições por usuário no sistema'
+          ],
+          currentModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite'
+        } : undefined
       });
     }
 
@@ -278,16 +510,16 @@ router.post('/', authenticateToken, async (req, res) => {
 
     if (errorMessage.includes('not found') || errorMessage.includes('not supported') || errorMessage.includes('404')) {
       console.error('❌ [Chat IA] Modelo não encontrado ou não suportado');
-      const currentModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const currentModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
       return res.status(500).json({
         success: false,
         error: `Nenhum modelo disponível funcionou. Verifique sua chave de API e permissões no Google AI Studio.`,
         details: process.env.NODE_ENV === 'development' ? {
           message: errorMessage,
           currentModel: currentModel,
-          suggestion: 'Modelos recomendados: gemini-2.5-flash, gemini-1.5-flash, gemini-1.5-pro',
+          suggestion: 'Modelos recomendados com quota free e disponíveis na API v1beta: gemini-2.5-flash-lite (10 RPM), gemini-2.5-flash (5 RPM)',
           documentation: 'https://ai.google.dev/gemini-api/docs/api-key',
-          tip: 'Verifique se sua chave de API tem acesso aos modelos no Google AI Studio'
+          tip: 'Verifique se sua chave de API tem acesso aos modelos no Google AI Studio. Modelos 1.5 foram descontinuados. Use apenas modelos 2.5.'
         } : undefined
       });
     }
