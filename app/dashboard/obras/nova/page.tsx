@@ -1043,7 +1043,6 @@ export default function NovaObraPage() {
                       onChange={(e) => setObraFormData({ ...obraFormData, name: e.target.value })}
                       placeholder="Ex: Obra Residencial Jardim das Flores"
                       required
-                      disabled
                     />
                   </div>
                   <div className="md:col-span-2">

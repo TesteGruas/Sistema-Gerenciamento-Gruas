@@ -17,12 +17,29 @@ export function ChunkErrorHandler() {
       if (
         error?.name === 'ChunkLoadError' ||
         error?.message?.includes('Loading chunk') ||
-        error?.message?.includes('Failed to fetch dynamically imported module')
+        error?.message?.includes('Failed to fetch dynamically imported module') ||
+        error?.message?.includes('Cannot find module') ||
+        error?.message?.includes('require stack')
       ) {
         // Ignorar erros de chunks de rotas que não existem ou não são mais necessárias
         const errorMessage = error?.message || ''
         if (errorMessage.includes('validar-obra')) {
           console.warn('ChunkLoadError para rota validar-obra ignorado (rota pode não ser mais necessária)')
+          return
+        }
+        
+        // Tratar erros de módulos não encontrados (geralmente cache corrompido)
+        if (errorMessage.includes('Cannot find module') || errorMessage.includes('require stack')) {
+          console.warn('Erro de módulo não encontrado detectado (cache corrompido), recarregando página...', error)
+          // Limpar cache do navegador e recarregar
+          if ('caches' in window) {
+            caches.keys().then(names => {
+              names.forEach(name => caches.delete(name))
+            })
+          }
+          setTimeout(() => {
+            window.location.reload()
+          }, 100)
           return
         }
         
@@ -72,13 +89,31 @@ export function ChunkErrorHandler() {
       if (
         reason?.name === 'ChunkLoadError' ||
         reason?.message?.includes('Loading chunk') ||
-        reason?.message?.includes('Failed to fetch dynamically imported module')
+        reason?.message?.includes('Failed to fetch dynamically imported module') ||
+        reason?.message?.includes('Cannot find module') ||
+        reason?.message?.includes('require stack')
       ) {
         // Ignorar erros de chunks de rotas que não existem ou não são mais necessárias
         const errorMessage = reason?.message || ''
         if (errorMessage.includes('validar-obra')) {
           console.warn('ChunkLoadError para rota validar-obra ignorado (rota pode não ser mais necessária)')
           event.preventDefault()
+          return
+        }
+        
+        // Tratar erros de módulos não encontrados (geralmente cache corrompido)
+        if (errorMessage.includes('Cannot find module') || errorMessage.includes('require stack')) {
+          console.warn('Erro de módulo não encontrado em Promise rejection (cache corrompido), recarregando página...', reason)
+          event.preventDefault()
+          // Limpar cache do navegador e recarregar
+          if ('caches' in window) {
+            caches.keys().then(names => {
+              names.forEach(name => caches.delete(name))
+            })
+          }
+          setTimeout(() => {
+            window.location.reload()
+          }, 100)
           return
         }
         

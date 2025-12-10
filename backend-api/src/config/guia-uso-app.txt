@@ -1,0 +1,418 @@
+# GUIA COMPLETO DE USO DO SISTEMA DE GERENCIAMENTO DE GRUAS
+
+## 📱 ACESSO AO SISTEMA
+
+### Versão Web (Dashboard)
+- Acesse através do navegador: `/dashboard`
+- Requer login com usuário e senha
+- Interface completa para gestores e administradores
+
+### Versão PWA (Mobile)
+- Acesse através do navegador mobile: `/pwa`
+- Pode ser instalado como aplicativo no celular
+- Interface otimizada para uso em campo
+- Funciona offline (com sincronização quando online)
+
+---
+
+## 🔐 LOGIN E AUTENTICAÇÃO
+
+1. Acesse a página de login (`/pwa/login` ou `/dashboard`)
+2. Digite seu email e senha
+3. Clique em "Entrar"
+4. O sistema redireciona automaticamente para a página inicial
+
+**Recuperação de Senha:**
+- Clique em "Esqueci minha senha"
+- Digite seu email
+- Siga as instruções enviadas por email
+
+---
+
+## ⏰ PONTO ELETRÔNICO
+
+### Quem pode usar:
+- ✅ **Operários** e **Sinaleiros** podem bater ponto
+- ❌ **Supervisores** NÃO podem bater ponto
+
+### Como bater o ponto (PWA Mobile):
+
+**Passo 1: Acessar o Módulo**
+- Na tela inicial do PWA (`/pwa`), procure o card "Ponto Eletrônico"
+- Ou acesse diretamente: `/pwa/ponto`
+
+**Passo 2: Registrar Horas**
+- O sistema detecta automaticamente seu funcionário vinculado
+- Você verá 4 botões principais:
+  - **▶️ Entrada**: Registra o horário de entrada
+  - **☕ Saída Almoço**: Registra quando saiu para almoço
+  - **▶️ Volta Almoço**: Registra quando voltou do almoço
+  - **⏹️ Saída**: Registra o horário de saída
+
+**Passo 3: Confirmação**
+- Após cada registro, o sistema mostra uma confirmação
+- O horário é registrado automaticamente com a hora atual
+- A localização é capturada automaticamente (se permitido)
+
+**Regras Importantes:**
+- Não é possível registrar saída sem ter registrado entrada
+- Não é possível registrar volta do almoço sem ter registrado saída para almoço
+- O sistema calcula automaticamente as horas trabalhadas
+- O sistema calcula automaticamente as horas extras (acima de 8h/dia)
+
+### Como bater o ponto (Dashboard Web):
+
+**Passo 1: Acessar**
+- Menu: **Dashboard > Ponto Eletrônico**
+- Ou acesse: `/dashboard/ponto`
+
+**Passo 2: Selecionar Funcionário**
+- Escolha o funcionário no dropdown
+- Apenas funcionários com cargo de Operário ou Sinaleiro aparecem
+
+**Passo 3: Registrar**
+- Clique nos botões de Entrada, Saída Almoço, Volta Almoço ou Saída
+- O horário é registrado automaticamente
+
+**Passo 4: Visualizar Registros**
+- Veja todos os registros do dia na tabela
+- O sistema mostra horas trabalhadas e horas extras automaticamente
+
+---
+
+## 🏗️ GERENCIAMENTO DE OBRAS
+
+### Criar Nova Obra (Dashboard):
+
+**Navegação:** Dashboard > Obras > Nova Obra
+
+**Aba "Dados da Obra":**
+1. Preencha o **Nome da Obra** (obrigatório)
+2. Preencha o **Endereço** (obrigatório)
+3. Preencha a **Cidade** (obrigatório)
+4. Selecione o **Estado** (obrigatório)
+5. Selecione o **Tipo** (Residencial/Comercial/Industrial/Infraestrutura)
+6. Busque e selecione o **Cliente** (obrigatório)
+7. Preencha **Data de Início** e **Orçamento** (opcionais)
+8. Adicione **Descrição** e **Observações** (opcionais)
+9. Selecione o **Responsável/Gestor** (opcional)
+
+**Aba "Grua":**
+1. Clique em "Adicionar Grua"
+2. Busque e selecione uma grua disponível
+3. Informe o **Valor de Locação** (ex: R$ 15.000,00)
+4. Informe a **Taxa Mensal** (ex: R$ 15.000,00)
+5. Clique em "Adicionar"
+6. Repita para adicionar mais gruas (opcional)
+
+**Aba "Funcionários":**
+1. Clique em "Adicionar Funcionário"
+2. Busque o funcionário desejado
+3. Selecione a **Função** do funcionário na obra
+4. Clique em "Adicionar"
+5. Repita para adicionar mais funcionários
+
+**Aba "Custos Mensais":**
+1. Preencha o **Item** (código, ex: 01.01)
+2. Preencha a **Descrição** (ex: "Locação de grua torre")
+3. Selecione a **Unidade** (ex: mês, unidade, etc.)
+4. Informe a **Quantidade**
+5. Informe o **Valor Unitário**
+6. Selecione o **Mês**
+7. Clique em "Adicionar Custo"
+
+**Finalizar:**
+- Revise todas as informações
+- Clique em "Criar Obra"
+- Aguarde a confirmação de sucesso
+
+### Visualizar Obra (PWA Mobile):
+
+**Navegação:** Menu > Obras > [Selecione a obra]
+
+**Informações Disponíveis:**
+- Dados gerais da obra
+- Gruas vinculadas
+- Funcionários alocados
+- Custos mensais
+- Documentos relacionados
+- Registros de ponto dos funcionários
+
+---
+
+## 🏗️ GERENCIAMENTO DE GRUAS
+
+### Visualizar Gruas (PWA Mobile):
+
+**Navegação:** Menu > Gruas
+
+**Funcionalidades:**
+- Lista todas as gruas cadastradas
+- Ver detalhes de cada grua
+- Verificar status (Disponível, Em Obra, Manutenção)
+- Visualizar histórico de manutenções
+- Acessar checklist diário
+
+### Checklist Diário da Grua:
+
+**Navegação:** Gruas > [Selecione a grua] > Checklist Diário
+
+**Passos:**
+1. Preencha a data do checklist
+2. Verifique cada item da lista
+3. Marque como "OK" ou "NÃO OK"
+4. Adicione observações se necessário
+5. Adicione fotos se houver problemas
+6. Salve o checklist
+
+---
+
+## 👥 RECURSOS HUMANOS
+
+### Visualizar Perfil (PWA Mobile):
+
+**Navegação:** Menu > Perfil
+
+**Informações Disponíveis:**
+- Dados pessoais
+- Cargo e função
+- Obra atual
+- Documentos pessoais
+- Holerites
+- Histórico de ponto
+
+### Visualizar Holerites:
+
+**Navegação:** Menu > Holerites
+
+**Funcionalidades:**
+- Lista todos os holerites disponíveis
+- Visualizar holerite em PDF
+- Filtrar por mês/ano
+- Download do holerite
+
+### Gerenciar Funcionários (Dashboard):
+
+**Navegação:** Dashboard > RH > Funcionários
+
+**Funcionalidades:**
+- Cadastrar novo funcionário
+- Editar dados do funcionário
+- Vincular funcionário a obra
+- Gerenciar documentos
+- Visualizar histórico de ponto
+- Gerenciar férias e vales
+
+---
+
+## 📄 DOCUMENTOS E ASSINATURAS
+
+### Assinar Documento (PWA Mobile):
+
+**Navegação:** Menu > Documentos
+
+**Passos:**
+1. Veja a lista de documentos pendentes de assinatura
+2. Clique no documento desejado
+3. Leia o documento
+4. Clique em "Assinar"
+5. Desenhe sua assinatura na tela (ou use teclado)
+6. Confirme a assinatura
+7. O documento será assinado digitalmente
+
+**Nota:** A assinatura é vinculada ao seu usuário e inclui data/hora e localização.
+
+### Upload de Documentos (Dashboard):
+
+**Navegação:** Dashboard > Documentos
+
+**Passos:**
+1. Clique em "Novo Documento"
+2. Selecione o tipo de documento
+3. Escolha o arquivo (PDF, imagem, etc.)
+4. Vincule a uma obra ou funcionário (opcional)
+5. Adicione descrição
+6. Faça upload
+
+---
+
+## ✅ APROVAÇÕES
+
+### Aprovar Horas Extras (PWA Mobile - Supervisores):
+
+**Navegação:** Menu > Aprovações
+
+**Passos:**
+1. Veja a lista de solicitações pendentes
+2. Clique em uma solicitação
+3. Revise os detalhes (funcionário, data, horas, justificativa)
+4. Aprove ou rejeite
+5. Adicione observações se necessário
+6. Confirme a ação
+
+**Quem pode aprovar:**
+- Supervisores
+- Gestores
+- Administradores
+
+---
+
+## 🔔 NOTIFICAÇÕES
+
+### Visualizar Notificações (PWA Mobile):
+
+**Navegação:** Menu > Notificações
+
+**Tipos de Notificações:**
+- Documentos pendentes de assinatura
+- Aprovações pendentes
+- Vencimentos de documentos
+- Alertas de sistema
+- Mensagens importantes
+
+**Funcionalidades:**
+- Marcar como lida
+- Filtrar por tipo
+- Ver histórico
+
+---
+
+## 📊 RELATÓRIOS E ESTATÍSTICAS
+
+### Espelho de Ponto (PWA Mobile):
+
+**Navegação:** Menu > Espelho de Ponto
+
+**Funcionalidades:**
+- Visualizar registros de ponto do mês
+- Ver horas trabalhadas
+- Ver horas extras
+- Filtrar por período
+- Exportar relatório
+
+---
+
+## ⚙️ CONFIGURAÇÕES
+
+### Configurações do PWA (Mobile):
+
+**Navegação:** Menu > Configurações
+
+**Opções Disponíveis:**
+- Notificações push
+- Sincronização offline
+- Permissões de localização
+- Tema (claro/escuro)
+- Idioma
+
+---
+
+## 🆘 DICAS E TROUBLESHOOTING
+
+### Problemas Comuns:
+
+**1. Não consigo bater ponto:**
+- Verifique se seu cargo é Operário ou Sinaleiro
+- Verifique se está vinculado a uma obra
+- Verifique sua conexão com internet
+- Tente atualizar a página
+
+**2. Não vejo o botão de ponto:**
+- Apenas Operários e Sinaleiros veem o botão
+- Verifique seu cargo no perfil
+- Entre em contato com o administrador
+
+**3. Documento não aparece para assinatura:**
+- Verifique se você está vinculado à obra correta
+- Verifique se o documento foi enviado para você
+- Atualize a página
+
+**4. App não funciona offline:**
+- Verifique se o PWA está instalado
+- Verifique as permissões do navegador
+- Tente reinstalar o PWA
+
+**5. Localização não funciona:**
+- Verifique as permissões do navegador
+- Verifique as configurações do dispositivo
+- Ative a localização GPS no celular
+
+---
+
+## 📞 SUPORTE
+
+Se precisar de ajuda:
+1. Use o **Assistente Virtual** (botão de chat no canto inferior direito)
+2. Entre em contato com o administrador do sistema
+3. Consulte a documentação técnica
+
+---
+
+## 🔑 PERMISSÕES E ROLES
+
+### Operários e Sinaleiros:
+- ✅ Bater ponto eletrônico
+- ✅ Visualizar próprio perfil
+- ✅ Visualizar próprios holerites
+- ✅ Assinar documentos
+- ✅ Visualizar obras vinculadas
+- ✅ Visualizar gruas da obra
+
+### Supervisores:
+- ✅ Todas as permissões de Operário
+- ✅ Aprovar horas extras
+- ✅ Visualizar registros de ponto da equipe
+- ✅ Gerenciar funcionários da obra
+- ❌ NÃO podem bater ponto
+
+### Gestores:
+- ✅ Todas as permissões de Supervisor
+- ✅ Criar e editar obras
+- ✅ Gerenciar gruas
+- ✅ Acessar relatórios financeiros
+- ✅ Gerenciar custos
+
+### Administradores:
+- ✅ Acesso total ao sistema
+- ✅ Gerenciar usuários
+- ✅ Configurações do sistema
+- ✅ Todos os relatórios
+
+---
+
+## 📱 INSTALAÇÃO DO PWA
+
+### Android (Chrome):
+1. Abra o site no Chrome
+2. Toque no menu (3 pontos)
+3. Selecione "Adicionar à tela inicial"
+4. Confirme a instalação
+
+### iOS (Safari):
+1. Abra o site no Safari
+2. Toque no botão de compartilhar
+3. Selecione "Adicionar à Tela de Início"
+4. Confirme a instalação
+
+---
+
+## 💡 FUNCIONALIDADES AVANÇADAS
+
+### Sincronização Offline:
+- O PWA funciona offline
+- Dados são sincronizados automaticamente quando online
+- Registros de ponto são salvos localmente e enviados quando possível
+
+### Geolocalização:
+- O sistema captura automaticamente a localização ao bater ponto
+- A localização é usada para validação e segurança
+- Permissões de localização são necessárias
+
+### Notificações Push:
+- Receba notificações de documentos pendentes
+- Receba alertas de aprovações
+- Configure nas Configurações do PWA
+
+---
+
+IMPORTANTE: Este guia é uma referência completa sobre como usar o Sistema de Gerenciamento de Gruas. Use essas informações para orientar os usuários sobre todas as funcionalidades disponíveis.

@@ -111,14 +111,29 @@ async function retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000) {
 function carregarContextoSistema() {
   try {
     const contextoPath = path.join(__dirname, '../config/contexto-ia-prompt.txt');
+    const guiaUsoPath = path.join(__dirname, '../config/guia-uso-app.txt');
+    
+    let contextoCompleto = '';
+    
+    // Carregar contexto técnico (se existir)
     if (fs.existsSync(contextoPath)) {
       const contexto = fs.readFileSync(contextoPath, 'utf-8');
-      console.log('✅ [Chat IA] Contexto do sistema carregado com sucesso');
-      return contexto;
+      contextoCompleto += contexto + '\n\n';
+      console.log('✅ [Chat IA] Contexto técnico do sistema carregado com sucesso');
     } else {
-      console.warn('⚠️ [Chat IA] Arquivo de contexto não encontrado. Execute: npm run gerar-contexto-ia');
-      return null;
+      console.warn('⚠️ [Chat IA] Arquivo de contexto técnico não encontrado. Execute: npm run gerar-contexto-ia');
     }
+    
+    // Carregar guia de uso do app (sempre tentar carregar)
+    if (fs.existsSync(guiaUsoPath)) {
+      const guiaUso = fs.readFileSync(guiaUsoPath, 'utf-8');
+      contextoCompleto += '# GUIA COMPLETO DE USO DO APLICATIVO\n\n' + guiaUso;
+      console.log('✅ [Chat IA] Guia de uso do aplicativo carregado com sucesso');
+    } else {
+      console.warn('⚠️ [Chat IA] Arquivo de guia de uso não encontrado em:', guiaUsoPath);
+    }
+    
+    return contextoCompleto || null;
   } catch (error) {
     console.error('❌ [Chat IA] Erro ao carregar contexto:', error.message);
     return null;
@@ -147,6 +162,34 @@ const chatMessageSchema = Joi.object({
 // Prompt base do sistema
 const PROMPT_BASE = `Você é um assistente virtual especializado no Sistema de Gerenciamento de Gruas. 
 Seu papel é ajudar os usuários a entender como usar o sistema, responder dúvidas sobre funcionalidades e fornecer orientações gerais.
+
+## INSTRUÇÕES PRINCIPAIS:
+
+1. **Quando o usuário perguntar "Como usar o App?" ou "Como fazer X no sistema?"**:
+   - Use o GUIA COMPLETO DE USO DO APLICATIVO que está incluído no contexto
+   - Forneça instruções passo a passo claras e detalhadas
+   - Sempre mencione a navegação específica (ex: "Menu > Obras > Nova Obra")
+   - Explique cada etapa de forma didática
+
+2. **Exemplos de perguntas que você deve responder usando o guia:**
+   - "Como bato o ponto?"
+   - "Como cadastrar uma obra?"
+   - "Como assinar um documento?"
+   - "Como aprovar horas extras?"
+   - "Como visualizar meu holerite?"
+   - "Como acessar o PWA no celular?"
+   - Qualquer pergunta sobre funcionalidades do sistema
+
+3. **Sobre Ponto Eletrônico:**
+   - IMPORTANTE: Apenas Operários e Sinaleiros podem bater ponto
+   - Supervisores NÃO podem bater ponto
+   - Sempre mencione essa restrição quando explicar sobre ponto eletrônico
+   - Explique os 4 tipos de registro: Entrada, Saída Almoço, Volta Almoço, Saída
+
+4. **Sobre Permissões:**
+   - Diferentes cargos têm diferentes permissões
+   - Sempre verifique se o usuário tem permissão para a ação que está perguntando
+   - Explique as diferenças entre Operários, Sinaleiros, Supervisores, Gestores e Administradores
 
 ALÉM DISSO, você também pode responder perguntas gerais sobre:
 - Cálculos trabalhistas (custo de funcionários CLT, encargos sociais, FGTS, INSS, etc.)

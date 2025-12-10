@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useEmpresa } from "@/hooks/use-empresa"
+import { useAuth } from "@/hooks/use-auth"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -51,6 +52,15 @@ const formatCurrency = (value: string) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amount)
+}
+
+// Função para formatar valor já em reais (não em centavos)
+const formatCurrencyFromReais = (value: number) => {
+  if (!value || value === 0) return ''
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value)
 }
 
 // Função para converter valor formatado para número
@@ -91,11 +101,15 @@ export default function NovoOrcamentoPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { user } = useAuth()
   const orcamentoId = searchParams.get('id')
   const tipo = searchParams.get('tipo') || 'locacao' // 'obra' ou 'locacao'
   const isObra = tipo === 'obra'
   const [isLoadingOrcamento, setIsLoadingOrcamento] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  
+  // Verificar se o usuário é admin@admin.com
+  const isAdminUser = user?.email === 'admin@admin.com'
   
   const [formData, setFormData] = useState({
     // Identificação básica
@@ -808,6 +822,153 @@ export default function NovoOrcamentoPage() {
     }
   }
 
+  // Função para preencher todos os campos com dados de debug
+  const handleDebugFill = () => {
+    // Preencher formData
+    setFormData({
+      cliente_id: '1',
+      cliente_nome: 'Cliente Teste Debug',
+      obra_nome: 'Obra Residencial Jardim das Flores - Debug',
+      obra_endereco: 'Rua das Flores, 123 - Centro',
+      obra_cidade: 'São Paulo',
+      obra_estado: 'SP',
+      tipo_obra: 'Residencial',
+      equipamento: 'Grua Torre / XCMG QTZ40B',
+      altura_inicial: '21',
+      altura_final: '95',
+      comprimento_lanca: '30',
+      carga_maxima: '2000',
+      carga_ponta: '1300',
+      potencia_eletrica: '42 KVA',
+      energia_necessaria: '380V',
+      valor_locacao_mensal: '15000',
+      valor_operador: '8000',
+      valor_sinaleiro: '6000',
+      valor_manutencao: '2000',
+      prazo_locacao_meses: '13',
+      data_inicio_estimada: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      tolerancia_dias: '15',
+      escopo_incluso: 'Operador e sinaleiro por turno (carga horária mensal definida). Manutenção em horário normal de trabalho. Treinamento, ART e documentação conforme NR-18.',
+      responsabilidades_cliente: 'Fornecer energia 380V no local. Disponibilizar sinaleiros para içamento. Acessos preparados para transporte e montagem. Cumprimento das normas NR-18 e infraestrutura para instalação.',
+      condicoes_comerciais: 'Medição mensal e pagamento até dia 15. Valores isentos de impostos por serem locação. Multa em caso de cancelamento após mobilização (geralmente 2 meses de locação). Validade da proposta enquanto houver equipamento disponível.',
+      condicoes_gerais: 'Condições gerais de contrato, termos legais, cláusulas contratuais conforme legislação vigente.',
+      logistica: 'Transporte da grua até a obra e retorno ao depósito. Prazo de entrega: 15 dias úteis após assinatura do contrato.',
+      garantias: 'Garantia de funcionamento da grua durante todo o período de locação. Garantia de peças e manutenção preventiva.',
+      observacoes: 'Dados preenchidos automaticamente para debug e testes do sistema.'
+    })
+
+    // Preencher cliente selecionado (mock)
+    setClienteSelecionado({
+      id: 1,
+      name: 'Cliente Teste Debug',
+      nome: 'Cliente Teste Debug'
+    })
+
+    // Preencher grua selecionada (mock)
+    setGruaSelecionada({
+      id: 1,
+      tipo: 'Grua Torre',
+      fabricante: 'XCMG',
+      modelo: 'QTZ40B',
+      lanca: 30,
+      altura_final: 95,
+      tipo_base: 'Fixada',
+      ano: 2020,
+      potencia_instalada: 42,
+      capacidade_1_cabo: 2000,
+      capacidade_2_cabos: 1300,
+      voltagem: '380V'
+    })
+
+    // Preencher custos mensais
+    setCustosMensais([
+      {
+        id: 'cm_1',
+        tipo: 'Locação',
+        descricao: 'Locação da grua',
+        valor_mensal: 15000,
+        obrigatorio: true,
+        observacoes: 'Valor mensal de locação do equipamento'
+      },
+      {
+        id: 'cm_2',
+        tipo: 'Operador',
+        descricao: 'Operador',
+        valor_mensal: 8000,
+        obrigatorio: true,
+        observacoes: 'Operador qualificado'
+      },
+      {
+        id: 'cm_3',
+        tipo: 'Sinaleiro',
+        descricao: 'Sinaleiro',
+        valor_mensal: 6000,
+        obrigatorio: true,
+        observacoes: 'Sinaleiro certificado'
+      },
+      {
+        id: 'cm_4',
+        tipo: 'Manutenção',
+        descricao: 'Manutenção preventiva',
+        valor_mensal: 2000,
+        obrigatorio: true,
+        observacoes: 'Manutenção mensal preventiva'
+      }
+    ])
+
+    // Preencher valores fixos (apenas para locação)
+    if (!isObra) {
+      setValoresFixos([
+        {
+          id: 'vf_1',
+          tipo: 'Locação',
+          descricao: 'Transporte de Ida e Retorno',
+          quantidade: 1,
+          valor_unitario: 3000,
+          valor_total: 3000,
+          observacoes: 'Transporte da grua até a obra e retorno'
+        },
+        {
+          id: 'vf_2',
+          tipo: 'Serviço',
+          descricao: 'Serviço de Montagem',
+          quantidade: 8,
+          valor_unitario: 150,
+          valor_total: 1200,
+          observacoes: '8 horas de montagem'
+        }
+      ])
+    }
+
+    // Adicionar alguns complementos
+    const garfoPaleteiro = CATALOGO_COMPLEMENTOS.find(c => c.sku === 'ACESS-001')
+    const transporte = CATALOGO_COMPLEMENTOS.find(c => c.sku === 'SERV-004')
+    
+    const complementosDebug = []
+    if (garfoPaleteiro) {
+      // Mensal: preço * quantidade
+      complementosDebug.push({
+        ...garfoPaleteiro,
+        quantidade: 2,
+        valor_total: (garfoPaleteiro.preco_unitario_centavos / 100) * 2
+      })
+    }
+    if (transporte) {
+      // Único: preço * quantidade
+      complementosDebug.push({
+        ...transporte,
+        quantidade: 1,
+        valor_total: transporte.preco_unitario_centavos / 100
+      })
+    }
+    setComplementosSelecionados(complementosDebug)
+
+    toast({
+      title: "Debug",
+      description: "Todos os campos foram preenchidos com dados de teste!",
+    })
+  }
+
   if (isLoadingOrcamento) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -841,6 +1002,18 @@ export default function NovoOrcamentoPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {/* Botão de Debug - apenas para admin@admin.com */}
+          {isAdminUser && (
+            <Button 
+              variant="outline" 
+              onClick={handleDebugFill}
+              className="bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-700"
+              title="Preencher todos os campos com dados de teste"
+            >
+              <Wrench className="w-4 h-4 mr-2" />
+              Debug Campos
+            </Button>
+          )}
           <Button 
             variant="outline" 
             onClick={() => handleSave(true)}
@@ -1155,7 +1328,7 @@ export default function NovoOrcamentoPage() {
                             <Label>Valor Mensal (R$/mês) *</Label>
                             <Input
                               type="text"
-                              value={custoMensal.valor_mensal > 0 ? formatCurrency((custoMensal.valor_mensal * 100).toString()) : ''}
+                              value={custoMensal.valor_mensal > 0 ? formatCurrencyFromReais(custoMensal.valor_mensal) : ''}
                               onChange={(e) => {
                                 const formatted = formatCurrency(e.target.value)
                                 const valor = parseCurrency(formatted)
@@ -1814,6 +1987,18 @@ export default function NovoOrcamentoPage() {
       </Tabs>
 
       <div className="flex justify-end gap-2 sticky bottom-0 bg-white p-4 border-t -mx-6 px-6">
+        {/* Botão de Debug - apenas para admin@admin.com */}
+        {isAdminUser && (
+          <Button 
+            variant="outline" 
+            onClick={handleDebugFill}
+            className="bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-700"
+            title="Preencher todos os campos com dados de teste"
+          >
+            <Wrench className="w-4 h-4 mr-2" />
+            Debug Campos
+          </Button>
+        )}
         <Button variant="outline" onClick={() => router.back()} disabled={isSaving}>
           Voltar
         </Button>

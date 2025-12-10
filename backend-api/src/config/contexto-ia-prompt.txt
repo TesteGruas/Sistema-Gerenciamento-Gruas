@@ -1,0 +1,140 @@
+# CONTEXTO DO SISTEMA DE GERENCIAMENTO DE GRUAS
+
+## INFORMAÇÕES GERAIS
+- **Nome:** Sistema de Gerenciamento de Gruas
+- **Descrição:** Sistema completo para gerenciamento de gruas, obras, funcionários, RH e controle financeiro
+- **Stack Tecnológico:**
+  - Frontend: Next.js 15 com PWA (Progressive Web App)
+  - Backend: Node.js/Express
+  - Banco de Dados: PostgreSQL (Supabase)
+  - Autenticação: JWT
+  - IA: Google Gemini API
+
+## MÓDULOS DO SISTEMA
+
+### OBRAS
+Cadastro e gerenciamento de obras, sinaleiros, responsáveis técnicos
+
+**Principais Endpoints da API:**
+- GET /api/: Sem descrição
+- GET /api/:id: Sem descrição
+- POST /api/: Sem descrição
+- PUT /api/:id: Sem descrição
+- POST /api/:id/notificar-envolvidos: Sem descrição
+- DELETE /api/:id: Sem descrição
+- POST /api/:id/responsavel-tecnico: Sem descrição
+- GET /api/:id/responsavel-tecnico: Sem descrição
+- PUT /api/:id/documentos: Sem descrição
+- POST /api/:id/sinaleiros: Sem descrição
+- ... e mais 5 endpoints
+
+
+### GRUAS
+Controle de equipamentos, manutenções, configurações, livro de grua
+
+**Principais Endpoints da API:**
+- GET /api/clientes/buscar: Sem descrição
+- GET /api/: Sem descrição
+- GET /api/funcionario/:funcionario_id: Sem descrição
+- GET /api/export: Sem descrição
+- GET /api/:id: Sem descrição
+- POST /api/: Criar nova grua
+- PUT /api/:id: Sem descrição
+- DELETE /api/:id: Sem descrição
+
+
+### RH
+Gestão completa de colaboradores, documentos, holerites, férias, vales
+
+**Principais Endpoints da API:**
+- GET /api/funcionarios: Sem descrição
+- GET /api/funcionarios/:id: Obter funcionário por ID
+- POST /api/funcionarios: Sem descrição
+- PUT /api/funcionarios/:id: Sem descrição
+- GET /api/estatisticas: Obter estatísticas do RH
+- GET /api/funcionarios/:id/calcular-salario: Sem descrição
+
+
+### PONTO
+Registro e aprovação de horas trabalhadas, ponto eletrônico
+
+
+### FINANCEIRO
+Receitas, custos, medições, contas a pagar/receber, orçamentos
+
+
+### DOCUMENTOS
+Upload, assinaturas digitais, certificados
+
+
+### NOTIFICACOES
+Sistema de alertas em tempo real
+
+**Principais Endpoints da API:**
+- GET /api/: Sem descrição
+- GET /api/nao-lidas: Listar apenas notificações não lidas
+- GET /api/count/nao-lidas: Retorna contagem de notificações não lidas
+- POST /api/: Sem descrição
+- PATCH /api/:id/marcar-lida: Marca notificação específica como lida
+- PATCH /api/marcar-todas-lidas: Marca todas as notificações do usuário como lidas
+- DELETE /api/:id: Exclui notificação específica
+- DELETE /api/todas: Exclui todas as notificações do usuário
+
+
+### ESTOQUE
+Gestão de estoque e produtos
+
+**Principais Endpoints da API:**
+- GET /api/: Sem descrição
+- POST /api/: Sem descrição
+- PUT /api/:id: Sem descrição
+- DELETE /api/:id: Excluir produto
+- POST /api/movimentar: Sem descrição
+- POST /api/reservar: Sem descrição
+- POST /api/liberar-reserva: Sem descrição
+- GET /api/relatorio: Sem descrição
+- GET /api/movimentacoes: Sem descrição
+- GET /api/:id: Obter produto por ID
+
+
+### CLIENTES
+Cadastro e gerenciamento de clientes
+
+**Principais Endpoints da API:**
+- GET /api/: Sem descrição
+- GET /api/:id: Obter cliente por ID
+- POST /api/: Sem descrição
+- PUT /api/:id: Sem descrição
+- DELETE /api/:id: Excluir cliente
+
+
+### RELATORIOS
+Relatórios e análises do sistema
+
+**Principais Endpoints da API:**
+- GET /api/utilizacao: Sem descrição
+- GET /api/financeiro: Sem descrição
+- GET /api/faturamento: Sem descrição
+- GET /api/manutencao: Sem descrição
+- GET /api/dashboard: Dashboard de status do parque de gruas
+- GET /api/performance-gruas: Sem descrição
+
+
+## ESTATÍSTICAS DO SISTEMA
+- Total de Rotas da API: 670
+- Total de Páginas: 106
+- Total de Componentes: 93
+- Módulos: 93
+
+## COMPONENTES PRINCIPAIS
+use, use, use, use, use, use, use, use, use, use, use, use, use, use, use, use, use, use, use, use
+
+## COMO AJUDAR OS USUÁRIOS
+
+Você deve usar essas informações para:
+1. **Responder dúvidas sobre funcionalidades** - Saber quais endpoints e páginas existem
+2. **Orientar sobre como usar o sistema** - Explicar fluxos e processos
+3. **Explicar a estrutura do sistema** - Entender como os módulos se relacionam
+4. **Fornecer informações técnicas** - Sobre APIs, componentes e arquitetura
+
+IMPORTANTE: Sempre responda em português brasileiro e seja claro e objetivo.

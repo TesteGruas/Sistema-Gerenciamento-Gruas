@@ -72,7 +72,8 @@ const criarOrcamentoSchema = Joi.object({
   tipo_orcamento: Joi.string().valid('equipamento', 'servico', 'locacao', 'venda').required(),
   numero: Joi.string().allow(''),
   
-  // Campos de obra
+  // Campos de obra (opcional - não obrigatório para orçamentos de venda)
+  // Para orçamentos de venda de complementos, a obra não é necessária
   obra_id: Joi.number().integer().allow(null),
   obra_nome: Joi.string().allow(''),
   obra_tipo: Joi.string().allow(''),
@@ -857,6 +858,57 @@ router.post('/', async (req, res) => {
       servicos_adicionais,
       ...orcamentoData 
     } = req.body;
+
+    // Verificar se o cliente existe
+    const { data: cliente, error: clienteError } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('id', orcamentoData.cliente_id)
+      .single();
+
+    if (clienteError || !cliente) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cliente não encontrado',
+        error: `Cliente com ID ${orcamentoData.cliente_id} não existe no banco de dados`
+      });
+    }
+
+    // Verificar se a grua existe (se fornecida)
+    if (orcamentoData.grua_id) {
+      const { data: grua, error: gruaError } = await supabase
+        .from('gruas')
+        .select('id')
+        .eq('id', orcamentoData.grua_id)
+        .single();
+
+      if (gruaError || !grua) {
+        return res.status(400).json({
+          success: false,
+          message: 'Grua não encontrada',
+          error: `Grua com ID ${orcamentoData.grua_id} não existe no banco de dados`
+        });
+      }
+    }
+
+    // Verificar se a obra existe (se fornecida)
+    // NOTA: Para orçamentos de venda (tipo_orcamento: 'venda'), a obra não é obrigatória,
+    // pois pode ser para clientes que não têm obras conosco ou para vendas de complementos
+    if (orcamentoData.obra_id) {
+      const { data: obra, error: obraError } = await supabase
+        .from('obras')
+        .select('id')
+        .eq('id', orcamentoData.obra_id)
+        .single();
+
+      if (obraError || !obra) {
+        return res.status(400).json({
+          success: false,
+          message: 'Obra não encontrada',
+          error: `Obra com ID ${orcamentoData.obra_id} não existe no banco de dados`
+        });
+      }
+    }
 
     // Gerar número do orçamento se não fornecido
     if (!orcamentoData.numero) {

@@ -1,0 +1,4444 @@
+{
+  "geradoEm": "2025-12-09T14:04:34.307Z",
+  "versao": "1.0.0",
+  "sistema": {
+    "nome": "Sistema de Gerenciamento de Gruas",
+    "descricao": "Sistema completo para gerenciamento de gruas, obras, funcionários, RH e controle financeiro",
+    "stack": {
+      "frontend": "Next.js 15 com PWA (Progressive Web App)",
+      "backend": "Node.js/Express",
+      "bancoDados": "PostgreSQL (Supabase)",
+      "autenticacao": "JWT",
+      "ia": "Google Gemini API"
+    }
+  },
+  "modulos": {
+    "obras": {
+      "descricao": "Cadastro e gerenciamento de obras, sinaleiros, responsáveis técnicos",
+      "rotas": [
+        {
+          "metodo": "GET",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "PUT",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/:id/notificar-envolvidos",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "DELETE",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/:id/responsavel-tecnico",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/:id/responsavel-tecnico",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "PUT",
+          "caminho": "/api/:id/documentos",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/:id/sinaleiros",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/:id/sinaleiros",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/sinaleiros/:id/documentos",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/sinaleiros/:id/documentos",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "PUT",
+          "caminho": "/api/documentos-sinaleiro/:id/aprovar",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/alertas/fim-proximo",
+          "descricao": "Sem descrição"
+        }
+      ],
+      "paginas": []
+    },
+    "gruas": {
+      "descricao": "Controle de equipamentos, manutenções, configurações, livro de grua",
+      "rotas": [
+        {
+          "metodo": "GET",
+          "caminho": "/api/clientes/buscar",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/funcionario/:funcionario_id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/export",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/",
+          "descricao": "Criar nova grua"
+        },
+        {
+          "metodo": "PUT",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "DELETE",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        }
+      ],
+      "paginas": []
+    },
+    "rh": {
+      "descricao": "Gestão completa de colaboradores, documentos, holerites, férias, vales",
+      "rotas": [
+        {
+          "metodo": "GET",
+          "caminho": "/api/funcionarios",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/funcionarios/:id",
+          "descricao": "Obter funcionário por ID"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/funcionarios",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "PUT",
+          "caminho": "/api/funcionarios/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/estatisticas",
+          "descricao": "Obter estatísticas do RH"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/funcionarios/:id/calcular-salario",
+          "descricao": "Sem descrição"
+        }
+      ],
+      "paginas": []
+    },
+    "ponto": {
+      "descricao": "Registro e aprovação de horas trabalhadas, ponto eletrônico",
+      "rotas": [],
+      "paginas": []
+    },
+    "financeiro": {
+      "descricao": "Receitas, custos, medições, contas a pagar/receber, orçamentos",
+      "rotas": [],
+      "paginas": []
+    },
+    "documentos": {
+      "descricao": "Upload, assinaturas digitais, certificados",
+      "rotas": [],
+      "paginas": []
+    },
+    "notificacoes": {
+      "descricao": "Sistema de alertas em tempo real",
+      "rotas": [
+        {
+          "metodo": "GET",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/nao-lidas",
+          "descricao": "Listar apenas notificações não lidas"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/count/nao-lidas",
+          "descricao": "Retorna contagem de notificações não lidas"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "PATCH",
+          "caminho": "/api/:id/marcar-lida",
+          "descricao": "Marca notificação específica como lida"
+        },
+        {
+          "metodo": "PATCH",
+          "caminho": "/api/marcar-todas-lidas",
+          "descricao": "Marca todas as notificações do usuário como lidas"
+        },
+        {
+          "metodo": "DELETE",
+          "caminho": "/api/:id",
+          "descricao": "Exclui notificação específica"
+        },
+        {
+          "metodo": "DELETE",
+          "caminho": "/api/todas",
+          "descricao": "Exclui todas as notificações do usuário"
+        }
+      ],
+      "paginas": []
+    },
+    "estoque": {
+      "descricao": "Gestão de estoque e produtos",
+      "rotas": [
+        {
+          "metodo": "GET",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "PUT",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "DELETE",
+          "caminho": "/api/:id",
+          "descricao": "Excluir produto"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/movimentar",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/reservar",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/liberar-reserva",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/relatorio",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/movimentacoes",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/:id",
+          "descricao": "Obter produto por ID"
+        }
+      ],
+      "paginas": []
+    },
+    "clientes": {
+      "descricao": "Cadastro e gerenciamento de clientes",
+      "rotas": [
+        {
+          "metodo": "GET",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/:id",
+          "descricao": "Obter cliente por ID"
+        },
+        {
+          "metodo": "POST",
+          "caminho": "/api/",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "PUT",
+          "caminho": "/api/:id",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "DELETE",
+          "caminho": "/api/:id",
+          "descricao": "Excluir cliente"
+        }
+      ],
+      "paginas": []
+    },
+    "relatorios": {
+      "descricao": "Relatórios e análises do sistema",
+      "rotas": [
+        {
+          "metodo": "GET",
+          "caminho": "/api/utilizacao",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/financeiro",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/faturamento",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/manutencao",
+          "descricao": "Sem descrição"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/dashboard",
+          "descricao": "Dashboard de status do parque de gruas"
+        },
+        {
+          "metodo": "GET",
+          "caminho": "/api/performance-gruas",
+          "descricao": "Sem descrição"
+        }
+      ],
+      "paginas": []
+    }
+  },
+  "estatisticas": {
+    "totalRotas": 670,
+    "totalPaginas": 106,
+    "totalComponentes": 93,
+    "modulos": 93
+  },
+  "componentesPrincipais": [
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use",
+    "use"
+  ],
+  "todasRotas": [
+    {
+      "metodo": "POST",
+      "caminho": "/api/test",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-test"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/test-completo",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-test"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/seed-horas-extras",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-test"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-logs"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/estatisticas",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-logs"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/export",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-logs"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/instance/create",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-evolution"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/instance/connect/:instanceName",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-evolution"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/instance/connectionState/:instanceName",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-evolution"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/instance/sync",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-evolution"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/instance/:userId",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-evolution"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/instance",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-evolution"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/instance/delete/:instanceName",
+      "descricao": "Sem descrição",
+      "modulo": "whatsapp-evolution"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/confirmar",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/from-orcamento/:orcamentoId",
+      "descricao": "Sem descrição",
+      "modulo": "vendas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "vales"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "vales"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "vales"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "vales"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "vales"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/pagar",
+      "descricao": "Sem descrição",
+      "modulo": "vales"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "vales"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/test-auth",
+      "descricao": "Sem descrição",
+      "modulo": "users"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "users"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter usuário por ID",
+      "modulo": "users"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "users"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "users"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir usuário",
+      "modulo": "users"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "transferencias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "transferencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "transferencias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "transferencias"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "transferencias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/confirmar",
+      "descricao": "Sem descrição",
+      "modulo": "transferencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionarios",
+      "descricao": "Sem descrição",
+      "modulo": "rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionarios/:id",
+      "descricao": "Obter funcionário por ID",
+      "modulo": "rh"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/funcionarios",
+      "descricao": "Sem descrição",
+      "modulo": "rh"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/funcionarios/:id",
+      "descricao": "Sem descrição",
+      "modulo": "rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/estatisticas",
+      "descricao": "Obter estatísticas do RH",
+      "modulo": "rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionarios/:id/calcular-salario",
+      "descricao": "Sem descrição",
+      "modulo": "rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/buscar",
+      "descricao": "Sem descrição",
+      "modulo": "responsaveis-tecnicos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/gruas",
+      "descricao": "Sem descrição",
+      "modulo": "rentabilidade"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/gruas/:id",
+      "descricao": "Análise detalhada de rentabilidade de uma grua específica",
+      "modulo": "rentabilidade"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/comparativo",
+      "descricao": "Comparativo de rentabilidade entre períodos",
+      "modulo": "rentabilidade"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/folha-pagamento",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/folha-pagamento/:id",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/folha-pagamento",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/folha-pagamento/:id",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/descontos-tipo",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/descontos-tipo",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/beneficios-tipo",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/beneficios-tipo",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/funcionario-descontos",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionario-beneficios",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/funcionario-beneficios",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/funcionario-beneficios/:id",
+      "descricao": "Sem descrição",
+      "modulo": "remuneracao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/utilizacao",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/financeiro",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/faturamento",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/manutencao",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/dashboard",
+      "descricao": "Dashboard de status do parque de gruas",
+      "modulo": "relatorios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/performance-gruas",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-rh"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-rh"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-rh"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-rh"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/gerar/:tipo",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/orcamentos/:id/pdf",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-orcamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/orcamentos-locacao/:id/pdf",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-orcamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/medicoes/:orcamento_id/pdf",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-medicoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:mes/:ano",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-impostos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/periodo",
+      "descricao": "Relatório de impostos por período (vários meses)",
+      "modulo": "relatorios-impostos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/anual/:ano",
+      "descricao": "Relatório anual consolidado de impostos",
+      "modulo": "relatorios-impostos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-faturamento"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/por-tipo",
+      "descricao": "Faturamento detalhado por tipo de operação",
+      "modulo": "relatorios-faturamento"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/componentes-estoque/pdf",
+      "descricao": "Sem descrição",
+      "modulo": "relatorios-componentes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/grua-obra",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/grua-obra",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/grua-funcionario",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/grua-funcionario",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/grua-equipamento",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/grua-equipamento",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/grua-obra/:id",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/grua-funcionario/:id",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/grua-equipamento/:id",
+      "descricao": "Sem descrição",
+      "modulo": "relacionamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/export",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/resumo",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/confirm",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/cancel",
+      "descricao": "Sem descrição",
+      "modulo": "receitas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/fluxo-caixa",
+      "descricao": "Projeções de fluxo de caixa baseadas em histórico",
+      "modulo": "projecoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/receitas",
+      "descricao": "Projeções de receitas por categoria",
+      "modulo": "projecoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Listar produtos",
+      "modulo": "produtos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Buscar produto por ID",
+      "modulo": "produtos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Criar produto",
+      "modulo": "produtos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Atualizar produto",
+      "modulo": "produtos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir produto",
+      "modulo": "produtos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/stats",
+      "descricao": "Estatísticas de produtos",
+      "modulo": "produtos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/baixo-estoque",
+      "descricao": "Produtos com estoque baixo",
+      "modulo": "produtos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionarios",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/registros",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/registros/estatisticas",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/registros/calcular",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/registros/validar",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/registros/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/registros",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/registros/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/registros/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/registros/:id/rejeitar",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/justificativas",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/justificativas",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/justificativas/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/justificativas/:id/rejeitar",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/justificativas/mensal",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/justificativas/periodo",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/justificativas/estatisticas",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/mensal",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/horas-extras",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/historico/:registro_id",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obras/:obra_id/gestores",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/registros/:id/enviar-aprovacao",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/registros/:id/aprovar-assinatura",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/horas-extras",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/horas-extras",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/horas-extras/:id/notificar",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/horas-extras/estatisticas",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/horas-extras/aprovar-lote",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/horas-extras/rejeitar-lote",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/mensal/funcionario/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/frequencia",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/atrasos",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorios/exportar",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/horas-trabalhadas",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico-graficos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/frequencia",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico-graficos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/status",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico-graficos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/horas-extras",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico-graficos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/atrasos",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico-graficos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/dashboard",
+      "descricao": "Sem descrição",
+      "modulo": "ponto-eletronico-graficos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/perfis",
+      "descricao": "Listar todos os perfis",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/perfis/:id",
+      "descricao": "Obter perfil por ID",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/perfis",
+      "descricao": "Sem descrição",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/perfis/:id",
+      "descricao": "Sem descrição",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/perfis/:id",
+      "descricao": "Excluir perfil",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/permissoes",
+      "descricao": "Listar todas as permissões",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/perfis/:perfilId/permissoes",
+      "descricao": "Obter permissões de um perfil",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/perfis/:perfilId/permissoes",
+      "descricao": "Sem descrição",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/permissoes",
+      "descricao": "Sem descrição",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/usuarios/:usuarioId/perfil",
+      "descricao": "Sem descrição",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/usuarios/:usuarioId/perfil",
+      "descricao": "Obter perfil atual de um usuário",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/usuarios/:usuarioId/perfil/:perfilId",
+      "descricao": "Sem descrição",
+      "modulo": "permissoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/enviar-orcamento",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/aprovar-orcamento",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/enviar-financeiro",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/registrar-pagamento",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/aprovar-final",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/rejeitar",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/pendentes/aprovacao",
+      "descricao": "Sem descrição",
+      "modulo": "ordem-compras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/enviar",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/rejeitar",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/pdf",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos-locacao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos-locacao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos-locacao"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos-locacao"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos-locacao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/enviar",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos-locacao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "orcamentos-locacao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/notificar-envolvidos",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/responsavel-tecnico",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/responsavel-tecnico",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/sinaleiros",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/sinaleiros",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/sinaleiros/:id/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/sinaleiros/:id/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/documentos-sinaleiro/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/alertas/fim-proximo",
+      "descricao": "Sem descrição",
+      "modulo": "obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/todos",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obraId/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:obraId/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obraId/documentos/:documentoId",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:obraId/documentos/:documentoId/enviar",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obraId/documentos/:documentoId/download",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:obraId/documentos/:documentoId",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:obraId/documentos/:documentoId",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/documentos/:documentoId",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/test/create-document",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/test/users",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/test/table-structure",
+      "descricao": "Sem descrição",
+      "modulo": "obras-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obraId/arquivos",
+      "descricao": "Sem descrição",
+      "modulo": "obras-arquivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:obraId/arquivos",
+      "descricao": "Sem descrição",
+      "modulo": "obras-arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obraId/arquivos/:arquivoId",
+      "descricao": "Sem descrição",
+      "modulo": "obras-arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obraId/arquivos/:arquivoId/download",
+      "descricao": "Sem descrição",
+      "modulo": "obras-arquivos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:obraId/arquivos/:arquivoId",
+      "descricao": "Sem descrição",
+      "modulo": "obras-arquivos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:obraId/arquivos/:arquivoId",
+      "descricao": "Sem descrição",
+      "modulo": "obras-arquivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:obraId/arquivos/upload-multiple",
+      "descricao": "Sem descrição",
+      "modulo": "obras-arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obraId",
+      "descricao": "Listar gruas de uma obra",
+      "modulo": "obra-gruas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "obra-gruas"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "obra-gruas"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Remover grua da obra",
+      "modulo": "obra-gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/nao-lidas",
+      "descricao": "Listar apenas notificações não lidas",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/count/nao-lidas",
+      "descricao": "Retorna contagem de notificações não lidas",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/marcar-lida",
+      "descricao": "Marca notificação específica como lida",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/marcar-todas-lidas",
+      "descricao": "Marca todas as notificações do usuário como lidas",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Exclui notificação específica",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/todas",
+      "descricao": "Exclui todas as notificações do usuário",
+      "modulo": "notificacoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/upload",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/download",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais-locacao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais-locacao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais-locacao"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais-locacao"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais-locacao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/stats",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais-locacao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/upload",
+      "descricao": "Sem descrição",
+      "modulo": "notas-fiscais-locacao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notas-debito"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-debito"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "notas-debito"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-debito"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "notas-debito"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/emitir",
+      "descricao": "Sem descrição",
+      "modulo": "notas-debito"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/marcar-paga",
+      "descricao": "Sem descrição",
+      "modulo": "notas-debito"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/finalizar",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/gerar-automatica",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/finalizar",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obra/:obra_id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/orcamento/:orcamento_id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-componentes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:medicaoId/componentes",
+      "descricao": "Listar componentes de uma medição",
+      "modulo": "medicoes-componentes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "medicoes-componentes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Remover componente da medição",
+      "modulo": "medicoes-componentes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/agenda-preventiva",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/agenda-preventiva/:grua_id",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/agenda-preventiva/proximas",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/agenda-preventiva/:id",
+      "descricao": "Sem descrição",
+      "modulo": "manutencoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/manifestos",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/manifestos",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/manifestos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/manifestos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/manifestos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/manifestos/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/manifestos/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/veiculos",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/veiculos",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/veiculos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/veiculos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/veiculos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "logistica"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "locacoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "locacoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "locacoes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "locacoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "locacoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/stats/overview",
+      "descricao": "Sem descrição",
+      "modulo": "locacoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relacoes-grua-obra",
+      "descricao": "Sem descrição",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relacoes-grua-obra-debug",
+      "descricao": "Sem descrição",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter entrada específica do livro",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir entrada do livro da grua",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/export/:grua_id",
+      "descricao": "Sem descrição",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/stats/:grua_id",
+      "descricao": "Obter estatísticas do livro da grua",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/grua-by-relation/:id",
+      "descricao": "Buscar grua pelo ID da relação grua_obra",
+      "modulo": "livro-grua"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relacoes-grua-obra",
+      "descricao": "Sem descrição",
+      "modulo": "livro-grua-relacoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "impostos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "impostos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "impostos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "impostos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "impostos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/pagar",
+      "descricao": "Sem descrição",
+      "modulo": "impostos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Listar impostos",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/calcular",
+      "descricao": "Calcular valor de imposto",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/calcular-mes",
+      "descricao": "Calcular impostos automaticamente baseado nas receitas do mês",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorio",
+      "descricao": "Relatório de impostos por período",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Buscar imposto por ID",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Criar imposto",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Atualizar imposto",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir imposto",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/pagamento",
+      "descricao": "Registrar pagamento de imposto",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/vencendo",
+      "descricao": "Impostos vencendo em X dias",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/atrasados",
+      "descricao": "Impostos atrasados",
+      "modulo": "impostos-financeiros"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "horas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "horas-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "horas-mensais"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "horas-mensais"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "horas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionario/:funcionario_id/mes/:mes",
+      "descricao": "Sem descrição",
+      "modulo": "horas-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/calcular",
+      "descricao": "Sem descrição",
+      "modulo": "horas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/gruas/:gruaId",
+      "descricao": "Sem descrição",
+      "modulo": "historico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/geral",
+      "descricao": "Sem descrição",
+      "modulo": "historico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/gruas",
+      "descricao": "Sem descrição",
+      "modulo": "historico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/componentes",
+      "descricao": "Sem descrição",
+      "modulo": "historico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/ponto",
+      "descricao": "Sem descrição",
+      "modulo": "historico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/estatisticas",
+      "descricao": "Obter estatísticas do histórico",
+      "modulo": "historico"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionario/:funcionario_id",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/timeline/:funcionario_id",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/estatisticas/geral",
+      "descricao": "Sem descrição",
+      "modulo": "historico-rh"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/clientes/buscar",
+      "descricao": "Sem descrição",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionario/:funcionario_id",
+      "descricao": "Sem descrição",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/export",
+      "descricao": "Sem descrição",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Criar nova grua",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/estatisticas/:mes",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/ranking/:mes",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/grua/:gruaId/historico",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/inicializar-mes",
+      "descricao": "Sem descrição",
+      "modulo": "gruas-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "grua-obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obras/:obraId/gruas",
+      "descricao": "Sem descrição",
+      "modulo": "grua-obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Adicionar grua à obra",
+      "modulo": "grua-obras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "grua-obras"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Remover grua da obra",
+      "modulo": "grua-obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/transferir",
+      "descricao": "Transferir grua entre obras",
+      "modulo": "grua-obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Criar nova configuração",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir configuração",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/componentes",
+      "descricao": "Sem descrição",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id/componentes/:componenteId",
+      "descricao": "Sem descrição",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/calcular-valor",
+      "descricao": "Sem descrição",
+      "modulo": "grua-configuracoes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "grua-componentes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "grua-componentes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Criar novo componente",
+      "modulo": "grua-componentes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "grua-componentes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir componente",
+      "modulo": "grua-componentes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/movimentar",
+      "descricao": "Sem descrição",
+      "modulo": "grua-componentes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/transferir",
+      "descricao": "Sem descrição",
+      "modulo": "gestao-gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/historico-grua/:grua_id",
+      "descricao": "Sem descrição",
+      "modulo": "gestao-gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/historico/:grua_id",
+      "descricao": "Sem descrição",
+      "modulo": "gestao-gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/disponibilidade",
+      "descricao": "Sem descrição",
+      "modulo": "gestao-gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/status/:grua_id",
+      "descricao": "Obter status atual de uma grua específica",
+      "modulo": "gestao-gruas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/validar-conflitos",
+      "descricao": "Sem descrição",
+      "modulo": "gestao-gruas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/setup-historico",
+      "descricao": "Configurar tabela de histórico de locações",
+      "modulo": "gestao-gruas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/cep/:cep",
+      "descricao": "Sem descrição",
+      "modulo": "geocoding"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/endereco",
+      "descricao": "Sem descrição",
+      "modulo": "geocoding"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/buscar",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/reset-password",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/desassociar-gruas",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/historico-obras",
+      "descricao": "Obter histórico de obras de um funcionário",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obra/:obra_id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/finalizar",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/transferir",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obra/:obra_id/funcionarios",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-obras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-documentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-documentos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionario/:funcionario_id",
+      "descricao": "Sem descrição",
+      "modulo": "funcionarios-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/notificacoes",
+      "descricao": "Sem descrição",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/notificacoes/automaticas",
+      "descricao": "Verificar notificações automáticas pendentes",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/calendario",
+      "descricao": "Sem descrição",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/backup",
+      "descricao": "Sem descrição",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/auditoria",
+      "descricao": "Sem descrição",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/auditoria/log",
+      "descricao": "Sem descrição",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/webhooks",
+      "descricao": "Sem descrição",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/setup",
+      "descricao": "Configurar tabelas para funcionalidades avançadas",
+      "modulo": "funcionalidades-avancadas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Listar fornecedores",
+      "modulo": "fornecedores"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Buscar fornecedor por ID",
+      "modulo": "fornecedores"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Criar fornecedor",
+      "modulo": "fornecedores"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Atualizar fornecedor",
+      "modulo": "fornecedores"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir fornecedor",
+      "modulo": "fornecedores"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/stats",
+      "descricao": "Estatísticas de fornecedores",
+      "modulo": "fornecedores"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "financial-data"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/resumo",
+      "descricao": "Sem descrição",
+      "modulo": "financial-data"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/ferias",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/ferias/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/ferias",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/ferias/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/ferias/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/afastamentos",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/afastamentos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/afastamentos",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/afastamentos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/afastamentos/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/ferias/:id/finalizar",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/afastamentos/:id/finalizar",
+      "descricao": "Sem descrição",
+      "modulo": "ferias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:tipo",
+      "descricao": "Sem descrição",
+      "modulo": "exportar"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/pdf/financeiro",
+      "descricao": "Exportar relatório financeiro em PDF",
+      "modulo": "exportar-relatorios"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/excel/financeiro",
+      "descricao": "Exportar relatório financeiro em Excel",
+      "modulo": "exportar-relatorios"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir produto",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/movimentar",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/reservar",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/liberar-reserva",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/relatorio",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/movimentacoes",
+      "descricao": "Sem descrição",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter produto por ID",
+      "modulo": "estoque"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "equipamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/buscar",
+      "descricao": "Sem descrição",
+      "modulo": "equipamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "equipamentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "equipamentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "equipamentos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "equipamentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Obter configurações SMTP atuais",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/",
+      "descricao": "Atualizar configurações SMTP",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/templates",
+      "descricao": "Listar todos os templates de email",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/templates/:type",
+      "descricao": "Obter template específico",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/templates/:type",
+      "descricao": "Atualizar template de email",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/test",
+      "descricao": "Enviar email de teste",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/logs",
+      "descricao": "Obter histórico de emails enviados",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/stats",
+      "descricao": "Obter estatísticas de envio de emails",
+      "modulo": "email-config"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/export",
+      "descricao": "Sem descrição",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter custo por ID",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir custo",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/resumo",
+      "descricao": "Sem descrição",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obra/:obra_id",
+      "descricao": "Sem descrição",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/status",
+      "descricao": "Sem descrição",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/confirm",
+      "descricao": "Confirmar custo",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/cancel",
+      "descricao": "Cancelar custo",
+      "modulo": "custos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter custo mensal por ID",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir custo mensal",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obra/:obra_id",
+      "descricao": "Sem descrição",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/replicar",
+      "descricao": "Sem descrição",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/meses-disponiveis/:obra_id",
+      "descricao": "Obter meses disponíveis para uma obra",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/proximos-meses/:obra_id",
+      "descricao": "Gerar próximos meses disponíveis",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/quantidade",
+      "descricao": "Sem descrição",
+      "modulo": "custos-mensais"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "contratos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter contrato por ID",
+      "modulo": "contratos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "contratos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "contratos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir contrato",
+      "modulo": "contratos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/vencendo",
+      "descricao": "Lista contas vencendo nos próximos 7 dias",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/vencidas",
+      "descricao": "Lista contas já vencidas",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/alertas",
+      "descricao": "Sistema de alertas para contas a receber",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Busca uma conta a receber por ID",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Cria uma nova conta a receber",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Atualiza uma conta a receber",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/pagar",
+      "descricao": "Marca uma conta como paga",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Exclui uma conta a receber",
+      "modulo": "contas-receber"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Lista todas as contas a pagar",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/vencendo",
+      "descricao": "Lista contas vencendo nos próximos 7 dias",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/vencidas",
+      "descricao": "Lista contas já vencidas",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/alertas",
+      "descricao": "Sistema de alertas para contas a pagar",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Busca uma conta a pagar por ID",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Cria uma nova conta a pagar",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Atualiza uma conta a pagar",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/pagar",
+      "descricao": "Marca uma conta como paga",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Exclui uma conta a pagar",
+      "modulo": "contas-pagar"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "contas-bancarias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "contas-bancarias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "contas-bancarias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "contas-bancarias"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "contas-bancarias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id/saldo",
+      "descricao": "Sem descrição",
+      "modulo": "contas-bancarias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/receber",
+      "descricao": "Sem descrição",
+      "modulo": "compras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "complementos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Buscar complemento por ID",
+      "modulo": "complementos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Criar novo complemento",
+      "modulo": "complementos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Atualizar complemento",
+      "modulo": "complementos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir complemento",
+      "modulo": "complementos"
+    },
+    {
+      "metodo": "PATCH",
+      "caminho": "/api/:id/toggle-ativo",
+      "descricao": "Alternar status ativo/inativo do complemento",
+      "modulo": "complementos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/certificados",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/certificados",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/certificados/:id",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/certificados/:id",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/certificados/vencendo",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/certificados/:id/assinatura",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/certificados/:id/download",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/documentos-admissionais",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/documentos-admissionais",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/documentos-admissionais/:id",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/documentos-admissionais/:id",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/documentos-admissionais/vencendo",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/holerites",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/holerites",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/holerites/:id/assinatura",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/holerites/:id",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/holerites/:id/download",
+      "descricao": "Sem descrição",
+      "modulo": "colaboradores-documentos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "clientes"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter cliente por ID",
+      "modulo": "clientes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "clientes"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "clientes"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir cliente",
+      "modulo": "clientes"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/modelos",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/modelos/:obra_id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/modelos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/modelos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:obra_id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/detalhes/:id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/nc/:id/atualizar-status",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/nc/:obra_id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-diario"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/finalizar",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/itens",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/itens/:itemId",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/itens/:itemId/foto",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/relatorio",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/grua/:gruaId/historico",
+      "descricao": "Sem descrição",
+      "modulo": "checklist-devolucao"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "chat-ia"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/health",
+      "descricao": "Sem descrição",
+      "modulo": "chat-ia"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "categorias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter categoria por ID",
+      "modulo": "categorias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "categorias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "categorias"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Excluir categoria",
+      "modulo": "categorias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "cargos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "cargos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "cargos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "cargos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "cargos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/reativar",
+      "descricao": "Sem descrição",
+      "modulo": "cargos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "busca-global"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Obter avatar do funcionário",
+      "modulo": "avatar"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/login",
+      "descricao": "Sem descrição",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/register",
+      "descricao": "Sem descrição",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/logout",
+      "descricao": "Fazer logout",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/me",
+      "descricao": "Obter dados do usuário logado",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/refresh",
+      "descricao": "Renovar token de acesso",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/forgot-password",
+      "descricao": "Solicitar redefinição de senha",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/validate-reset-token/:token",
+      "descricao": "Validar token de redefinição",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/reset-password",
+      "descricao": "Sem descrição",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/reset-tokens",
+      "descricao": "Limpar tokens expirados (Admin)",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/change-password",
+      "descricao": "Sem descrição",
+      "modulo": "auth"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/pendentes",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/documentos",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/documento/:id",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/assinar-com-pdf/:id",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/assinar/:id",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/recusar/:id",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/historico",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/validar",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/documento/:id/download",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/lembrete",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/upload-assinado",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id/arquivo-assinado",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id/status",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/cancelar",
+      "descricao": "Sem descrição",
+      "modulo": "assinaturas"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/upload",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/upload/grua/:gruaId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/upload/:obraId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/upload-multiple/:obraId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/grua/:gruaId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/obra/:obraId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/download/:arquivoId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/url-assinada",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:arquivoId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:arquivoId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/stats/:obraId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/upload/livro-grua/:livroGruaId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/test-upload/:obraId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos-test"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/test-upload-grua/:gruaId",
+      "descricao": "Sem descrição",
+      "modulo": "arquivos-test"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/pendentes",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionario/:id",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id/rejeitar",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/aprovar-lote",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/rejeitar-lote",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/estatisticas",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacoes-horas-extras"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacao-publica"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacao-publica"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/rejeitar",
+      "descricao": "Sem descrição",
+      "modulo": "aprovacao-publica"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/residencias",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/residencias/:id",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/residencias",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/residencias/:id",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/residencias/:id",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/ativos",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/funcionario/:funcionarioId",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id/encerrar",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:aluguelId/pagamentos",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:aluguelId/pagamentos",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/pagamentos/:id",
+      "descricao": "Sem descrição",
+      "modulo": "alugueis-residencias"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "aditivos"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "aditivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/",
+      "descricao": "Sem descrição",
+      "modulo": "aditivos"
+    },
+    {
+      "metodo": "PUT",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "aditivos"
+    },
+    {
+      "metodo": "DELETE",
+      "caminho": "/api/:id",
+      "descricao": "Sem descrição",
+      "modulo": "aditivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/aprovar",
+      "descricao": "Sem descrição",
+      "modulo": "aditivos"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/api/:id/rejeitar",
+      "descricao": "Sem descrição",
+      "modulo": "aditivos"
+    }
+  ]
+}
