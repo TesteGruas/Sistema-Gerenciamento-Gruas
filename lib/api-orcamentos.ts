@@ -48,6 +48,14 @@ export interface OrcamentoItem {
   tipo: 'produto' | 'servico' | 'equipamento'
   unidade?: string
   observacoes?: string
+  // Campos específicos de complementos
+  codigo?: string
+  estado?: 'novo' | 'usado' | 'recondicionado'
+  medida_capacidade?: string
+  peso?: number
+  frete?: 'CIF' | 'FOB'
+  icms_percentual?: number
+  desconto_percentual?: number
 }
 
 export interface CreateOrcamentoData {

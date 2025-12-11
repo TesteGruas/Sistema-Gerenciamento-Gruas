@@ -3,7 +3,8 @@ import { api } from './api';
 export interface MedicaoMensal {
   id: number;
   orcamento_id?: number | null; // Tornar opcional
-  obra_id?: number | null; // NOVO
+  obra_id?: number | null;
+  grua_id?: number | null; // NOVO
   numero: string;
   periodo: string; // YYYY-MM
   data_medicao: string;
@@ -15,9 +16,14 @@ export interface MedicaoMensal {
   valor_descontos: number;
   valor_total: number;
   status: 'pendente' | 'finalizada' | 'cancelada' | 'enviada';
+  status_aprovacao?: 'pendente' | 'aprovada' | 'rejeitada' | null; // NOVO
   data_finalizacao?: string;
   data_envio?: string;
+  data_aprovacao?: string; // NOVO
+  aprovado_por?: number | null; // NOVO
   observacoes?: string;
+  observacoes_aprovacao?: string | null; // NOVO
+  editavel?: boolean; // NOVO
   created_at: string;
   updated_at: string;
   created_by?: number;
@@ -36,7 +42,7 @@ export interface MedicaoMensal {
       cnpj_cpf?: string;
     };
   };
-  obras?: { // NOVO
+  obras?: {
     id: number;
     nome: string;
     cliente_id: number;
@@ -47,10 +53,34 @@ export interface MedicaoMensal {
       cnpj?: string;
     };
   };
+  gruas?: { // NOVO
+    id: number;
+    nome: string;
+    modelo?: string;
+    fabricante?: string;
+    capacidade?: string;
+    status?: string;
+  };
   custos_mensais?: MedicaoCustoMensal[];
   horas_extras?: MedicaoHoraExtra[];
   servicos_adicionais?: MedicaoServicoAdicional[];
   aditivos?: MedicaoAditivo[];
+  documentos?: MedicaoDocumento[]; // NOVO
+}
+
+export interface MedicaoDocumento {
+  id: number;
+  medicao_id: number;
+  tipo_documento: 'nf_servico' | 'nf_produto' | 'nf_locacao' | 'boleto';
+  numero_documento?: string | null;
+  caminho_arquivo?: string | null;
+  data_emissao?: string | null;
+  data_vencimento?: string | null;
+  valor?: number | null;
+  status: 'pendente' | 'gerado' | 'enviado' | 'pago' | 'cancelado';
+  observacoes?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface MedicaoCustoMensal {
@@ -102,6 +132,7 @@ export interface MedicaoAditivo {
 export interface MedicaoMensalCreate {
   orcamento_id?: number | null;
   obra_id?: number | null;
+  grua_id?: number | null; // NOVO
   numero: string;
   periodo: string;
   data_medicao: string;
@@ -128,7 +159,8 @@ export interface MedicaoMensalUpdate extends Partial<MedicaoMensalCreate> {
 
 export interface MedicaoMensalFilters {
   orcamento_id?: number | null;
-  obra_id?: number | null; // NOVO
+  obra_id?: number | null;
+  grua_id?: number | null; // NOVO
   periodo?: string;
   status?: 'pendente' | 'finalizada' | 'cancelada' | 'enviada';
   data_inicio?: string;
@@ -227,10 +259,77 @@ export const medicoesMensaisApi = {
   },
 
   /**
+   * Listar todas as medições de uma grua
+   */
+  async listarPorGrua(grua_id: number | string): Promise<{ success: boolean; data: MedicaoMensal[]; total: number }> {
+    const response = await api.get(`/medicoes-mensais/grua/${grua_id}`);
+    return response.data;
+  },
+
+  /**
+   * Enviar medição ao cliente
+   */
+  async enviar(id: number, email?: string, telefone?: string): Promise<{ success: boolean; data: MedicaoMensal; message: string }> {
+    const response = await api.patch(`/medicoes-mensais/${id}/enviar`, { email, telefone });
+    return response.data;
+  },
+
+  /**
+   * Aprovar ou rejeitar medição
+   */
+  async aprovar(id: number, status_aprovacao: 'aprovada' | 'rejeitada', observacoes_aprovacao?: string): Promise<{ success: boolean; data: MedicaoMensal; message: string }> {
+    const response = await api.patch(`/medicoes-mensais/${id}/aprovar`, { status_aprovacao, observacoes_aprovacao });
+    return response.data;
+  },
+
+  /**
    * Deletar medição mensal
    */
   async deletar(id: number): Promise<{ success: boolean; message: string }> {
     const response = await api.delete(`/medicoes-mensais/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Listar documentos de uma medição
+   */
+  async listarDocumentos(medicao_id: number): Promise<{ success: boolean; data: MedicaoDocumento[] }> {
+    const response = await api.get(`/medicoes-mensais/${medicao_id}/documentos`);
+    return response.data;
+  },
+
+  /**
+   * Criar documento para uma medição (com upload de arquivo opcional)
+   */
+  async criarDocumento(medicao_id: number, documento: Partial<MedicaoDocumento>, arquivo?: File): Promise<{ success: boolean; data: MedicaoDocumento; message: string }> {
+    const formData = new FormData();
+    
+    // Adicionar campos do documento
+    Object.keys(documento).forEach(key => {
+      const value = documento[key as keyof MedicaoDocumento];
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
+    });
+    
+    // Adicionar arquivo se fornecido
+    if (arquivo) {
+      formData.append('arquivo', arquivo);
+    }
+    
+    const response = await api.post(`/medicoes-mensais/${medicao_id}/documentos`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  },
+
+  /**
+   * Atualizar documento de uma medição
+   */
+  async atualizarDocumento(medicao_id: number, documento_id: number, documento: Partial<MedicaoDocumento>): Promise<{ success: boolean; data: MedicaoDocumento; message: string }> {
+    const response = await api.put(`/medicoes-mensais/${medicao_id}/documentos/${documento_id}`, documento);
     return response.data;
   }
 };

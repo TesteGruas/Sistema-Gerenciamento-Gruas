@@ -54,6 +54,7 @@ import funcionalidadesAvancadasRoutes from './routes/funcionalidades-avancadas.j
 import arquivosRoutes from './routes/arquivos.js'
 import arquivosTestRoutes from './routes/arquivos-test.js'
 import custosMensaisRoutes from './routes/custos-mensais.js'
+import itensCustosMensaisRoutes from './routes/itens-custos-mensais.js'
 import obrasDocumentosRoutes from './routes/obras-documentos.js'
 import assinaturasRoutes from './routes/assinaturas.js'
 import obrasArquivosRoutes from './routes/obras-arquivos.js'
@@ -385,6 +386,7 @@ app.use('/api/funcionalidades-avancadas', funcionalidadesAvancadasRoutes)
 app.use('/api/arquivos', arquivosRoutes)
 app.use('/api/arquivos-test', arquivosTestRoutes)
 app.use('/api/custos-mensais', custosMensaisRoutes)
+app.use('/api/itens-custos-mensais', itensCustosMensaisRoutes)
 app.use('/api/obras-documentos', obrasDocumentosRoutes)
 app.use('/api/assinaturas', assinaturasRoutes)
 app.use('/api/obras-arquivos', obrasArquivosRoutes)

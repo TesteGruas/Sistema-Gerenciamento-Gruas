@@ -169,7 +169,15 @@ const criarOrcamentoSchema = Joi.object({
       valor_total: Joi.number().precision(2).required(),
       tipo: Joi.string().valid('produto', 'servico', 'equipamento').required(),
       unidade: Joi.string().allow(''),
-      observacoes: Joi.string().allow('')
+      observacoes: Joi.string().allow(''),
+      // Campos específicos de complementos
+      codigo: Joi.string().allow('').optional(),
+      estado: Joi.string().valid('novo', 'usado', 'recondicionado').optional(),
+      medida_capacidade: Joi.string().allow('').optional(),
+      peso: Joi.number().precision(2).optional(),
+      frete: Joi.string().valid('CIF', 'FOB').optional(),
+      icms_percentual: Joi.number().precision(2).optional(),
+      desconto_percentual: Joi.number().precision(2).optional()
     })
   ).optional()
 });
@@ -184,7 +192,15 @@ const itemOrcamentoSchema = Joi.object({
   valor_total: Joi.number().precision(2).required(),
   tipo: Joi.string().valid('produto', 'servico', 'equipamento').required(),
   unidade: Joi.string().allow(''),
-  observacoes: Joi.string().allow('')
+  observacoes: Joi.string().allow(''),
+  // Campos específicos de complementos
+  codigo: Joi.string().allow('').optional(),
+  estado: Joi.string().valid('novo', 'usado', 'recondicionado').optional(),
+  medida_capacidade: Joi.string().allow('').optional(),
+  peso: Joi.number().precision(2).optional(),
+  frete: Joi.string().valid('CIF', 'FOB').optional(),
+  icms_percentual: Joi.number().precision(2).optional(),
+  desconto_percentual: Joi.number().precision(2).optional()
 });
 
 /**

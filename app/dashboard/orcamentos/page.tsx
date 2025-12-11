@@ -26,7 +26,8 @@ import {
   CheckCircle2,
   XCircle,
   Download,
-  Save
+  Save,
+  Package
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useEmpresa } from "@/hooks/use-empresa"
@@ -528,6 +529,10 @@ export default function OrcamentosPage() {
     router.push('/dashboard/orcamentos/novo?tipo=locacao')
   }
 
+  const handleCreateNovoOrcamentoComplementos = () => {
+    router.push('/dashboard/orcamentos/complementos')
+  }
+
   // Função para formatar texto em Title Case (primeira letra maiúscula)
   const formatTitleCase = (text: string | undefined | null): string => {
     if (!text) return '-'
@@ -772,6 +777,10 @@ export default function OrcamentosPage() {
               <FileText className="w-4 h-4 mr-2" />
               Orçamento de Locação
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleCreateNovoOrcamentoComplementos}>
+              <Package className="w-4 h-4 mr-2" />
+              Orçamento de Complementos
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -907,10 +916,11 @@ export default function OrcamentosPage() {
                             {item.tolerancia_dias && (
                               <div className="text-xs text-gray-500">
                                 ±{item.tolerancia_dias} dias
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        </div>
+                      )}
+                      </div>
+                    </div>
+                    )}
                       </TableCell>
                       <TableCell>{getStatusBadge(item.status)}</TableCell>
                       <TableCell className="text-right">
@@ -1246,6 +1256,23 @@ export default function OrcamentosPage() {
         // Garantir que editedOrcamento está sincronizado com selectedOrcamento
         const orcamentoAtual = editedOrcamento || selectedOrcamento
         
+        // Detectar se é orçamento de complementos
+        const itens = (orcamentoAtual as any)?.itens || (orcamentoAtual as any)?.orcamento_itens || []
+        const isComplemento = itens.some((item: any) => item.estado || item.medida_capacidade || item.frete)
+        const tipoOrcamento = (orcamentoAtual as any)?.tipo_orcamento
+        const isOrcamentoComplementos = isComplemento || tipoOrcamento === 'venda'
+        
+        // Calcular totais de complementos
+        const totalICMS = itens.reduce((sum: number, item: any) => {
+          if (item.icms_percentual) {
+            const valorBase = item.valor_unitario * item.quantidade
+            const valorComDesconto = valorBase * (1 - (item.desconto_percentual || 0) / 100)
+            const valorICMS = valorComDesconto * (item.icms_percentual / 100)
+            return sum + valorICMS
+          }
+          return sum
+        }, 0)
+        
         return (
           <div 
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -1261,7 +1288,12 @@ export default function OrcamentosPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Orçamento de Obra - {selectedOrcamento.numero}</CardTitle>
+                    <CardTitle>
+                      {isOrcamentoComplementos 
+                        ? `Orçamento de Complementos - ${selectedOrcamento.numero}`
+                        : `Orçamento de Obra - ${selectedOrcamento.numero}`
+                      }
+                    </CardTitle>
                     <CardDescription>{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || 'Cliente não informado'}</CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1289,35 +1321,115 @@ export default function OrcamentosPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Informações Básicas */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Cliente</label>
-                      <p className="text-sm font-medium">{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || '-'}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Status</label>
-                      <div className="mt-1 inline-block">
-                        {orcamentoAtual && getStatusBadge(orcamentoAtual.status)}
+                {isOrcamentoComplementos ? (
+                    <>
+                      {/* Informações Básicas - Complementos */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Cliente</label>
+                            <p className="text-sm font-medium">{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || '-'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Status</label>
+                            <div className="mt-1 inline-block">
+                              {orcamentoAtual && getStatusBadge(orcamentoAtual.status)}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Número da Proposta</label>
+                            <p className="text-sm font-medium">{selectedOrcamento.numero || '-'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Data</label>
+                            <p className="text-sm">
+                              {formatarData((orcamentoAtual as any)?.data_orcamento || orcamentoAtual?.created_at)}
+                            </p>
+                          </div>
+                          {orcamentoAtual?.obra_nome && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Obra</label>
+                              <p className="text-sm font-medium">{orcamentoAtual.obra_nome}</p>
+                              {orcamentoAtual?.obra_endereco && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {orcamentoAtual.obra_endereco}
+                                  {orcamentoAtual.obra_cidade && `, ${orcamentoAtual.obra_cidade}`}
+                                  {orcamentoAtual.obra_estado && ` - ${orcamentoAtual.obra_estado}`}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {tipoOrcamento === 'venda' && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Tipo de Transação</label>
+                              <p className="text-sm font-medium">Venda</p>
+                            </div>
+                          )}
+                          {tipoOrcamento !== 'venda' && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Tipo de Transação</label>
+                              <p className="text-sm font-medium">Locação</p>
+                            </div>
+                          )}
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Data de Validade</label>
+                            <p className="text-sm">
+                              {formatarData((orcamentoAtual as any)?.data_validade || orcamentoAtual?.validade_proposta)}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Valor Total</label>
+                            <p className="text-lg font-bold text-blue-600">
+                              {(() => {
+                                const valorTotal = (orcamentoAtual as any)?.valor_total || 0
+                                return `R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                              })()}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Valor do ICMS</label>
+                            <p className="text-sm font-medium">
+                              R$ {totalICMS.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Garantia</label>
+                            <p className="text-sm">3 meses contra defeitos de fabricação</p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Obra</label>
-                      <p className="text-sm font-medium">{orcamentoAtual?.obra_nome || '-'}</p>
-                      {orcamentoAtual?.obra_endereco && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          {orcamentoAtual.obra_endereco}
-                          {orcamentoAtual.obra_cidade && `, ${orcamentoAtual.obra_cidade}`}
-                          {orcamentoAtual.obra_estado && ` - ${orcamentoAtual.obra_estado}`}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
-                      <p className="text-sm">{(orcamentoAtual as any)?.obra_tipo || orcamentoAtual?.tipo_obra || '-'}</p>
-                    </div>
+                ) : (
+                  <>
+                    {/* Informações Básicas - Obra Normal */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Cliente</label>
+                            <p className="text-sm font-medium">{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || '-'}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Status</label>
+                            <div className="mt-1 inline-block">
+                              {orcamentoAtual && getStatusBadge(orcamentoAtual.status)}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Obra</label>
+                            <p className="text-sm font-medium">{orcamentoAtual?.obra_nome || '-'}</p>
+                            {orcamentoAtual?.obra_endereco && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {orcamentoAtual.obra_endereco}
+                                {orcamentoAtual.obra_cidade && `, ${orcamentoAtual.obra_cidade}`}
+                                {orcamentoAtual.obra_estado && ` - ${orcamentoAtual.obra_estado}`}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
+                            <p className="text-sm">{(orcamentoAtual as any)?.obra_tipo || orcamentoAtual?.tipo_obra || '-'}</p>
+                          </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Equipamento</label>
                       {(orcamentoAtual as any)?.grua_modelo ? (
@@ -1400,13 +1512,15 @@ export default function OrcamentosPage() {
                     )}
                   </div>
                 </div>
+                    </>
+                  )}
 
-                {/* Especificações Técnicas */}
-                {(orcamentoAtual?.altura_final || orcamentoAtual?.comprimento_lanca || orcamentoAtual?.carga_maxima || orcamentoAtual?.potencia_eletrica) && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Especificações Técnicas</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {orcamentoAtual?.altura_inicial && (
+                    {/* Especificações Técnicas - Apenas para orçamentos de obra */}
+                    {!isOrcamentoComplementos && (orcamentoAtual?.altura_final || orcamentoAtual?.comprimento_lanca || orcamentoAtual?.carga_maxima || orcamentoAtual?.potencia_eletrica) && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Especificações Técnicas</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          {orcamentoAtual?.altura_inicial && (
                         <div>
                           <label className="text-sm font-medium text-gray-700">Altura Inicial (m)</label>
                           <p className="text-sm">{orcamentoAtual.altura_inicial}</p>
@@ -1447,71 +1561,71 @@ export default function OrcamentosPage() {
                           <label className="text-sm font-medium text-gray-700">Energia Necessária</label>
                           <p className="text-sm">{orcamentoAtual.energia_necessaria}</p>
                         </div>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                    )}
 
-                {/* Custos Mensais */}
-                {(orcamentoAtual?.valor_locacao_mensal || orcamentoAtual?.valor_operador || orcamentoAtual?.valor_sinaleiro || orcamentoAtual?.valor_manutencao) && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {orcamentoAtual?.valor_locacao_mensal !== undefined && orcamentoAtual.valor_locacao_mensal > 0 && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Locação da Grua</label>
-                          <p className="text-sm font-semibold">
-                            R$ {orcamentoAtual.valor_locacao_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
+                    {/* Custos Mensais - Apenas para orçamentos de obra */}
+                    {!isOrcamentoComplementos && (orcamentoAtual?.valor_locacao_mensal || orcamentoAtual?.valor_operador || orcamentoAtual?.valor_sinaleiro || orcamentoAtual?.valor_manutencao) && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          {orcamentoAtual?.valor_locacao_mensal !== undefined && orcamentoAtual.valor_locacao_mensal > 0 && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Locação da Grua</label>
+                              <p className="text-sm font-semibold">
+                                R$ {orcamentoAtual.valor_locacao_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          )}
+                          {orcamentoAtual?.valor_operador !== undefined && orcamentoAtual.valor_operador > 0 && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Operador</label>
+                              <p className="text-sm font-semibold">
+                                R$ {orcamentoAtual.valor_operador.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          )}
+                          {orcamentoAtual?.valor_sinaleiro !== undefined && orcamentoAtual.valor_sinaleiro > 0 && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Sinaleiro</label>
+                              <p className="text-sm font-semibold">
+                                R$ {orcamentoAtual.valor_sinaleiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          )}
+                          {orcamentoAtual?.valor_manutencao !== undefined && orcamentoAtual.valor_manutencao > 0 && (
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Manutenção Preventiva</label>
+                              <p className="text-sm font-semibold">
+                                R$ {orcamentoAtual.valor_manutencao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          )}
+                          {orcamentoAtual?.total_mensal !== undefined && orcamentoAtual.total_mensal > 0 && (
+                            <div className="col-span-2 pt-2 border-t-2 border-gray-300">
+                              <label className="text-base font-bold text-gray-900">Total Mensal</label>
+                              <p className="text-lg font-bold text-green-600">
+                                R$ {orcamentoAtual.total_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {orcamentoAtual?.valor_operador !== undefined && orcamentoAtual.valor_operador > 0 && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Operador</label>
-                          <p className="text-sm font-semibold">
-                            R$ {orcamentoAtual.valor_operador.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.valor_sinaleiro !== undefined && orcamentoAtual.valor_sinaleiro > 0 && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Sinaleiro</label>
-                          <p className="text-sm font-semibold">
-                            R$ {orcamentoAtual.valor_sinaleiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.valor_manutencao !== undefined && orcamentoAtual.valor_manutencao > 0 && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Manutenção Preventiva</label>
-                          <p className="text-sm font-semibold">
-                            R$ {orcamentoAtual.valor_manutencao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.total_mensal !== undefined && orcamentoAtual.total_mensal > 0 && (
-                        <div className="col-span-2 pt-2 border-t-2 border-gray-300">
-                          <label className="text-base font-bold text-gray-900">Total Mensal</label>
-                          <p className="text-lg font-bold text-green-600">
-                            R$ {orcamentoAtual.total_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Escopo Básico Incluso */}
-                {orcamentoAtual?.escopo_incluso && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Escopo Básico Incluso</h3>
-                    <Textarea
-                      readOnly
-                      value={orcamentoAtual.escopo_incluso}
-                      className="min-h-[100px] bg-gray-50"
-                    />
-                  </div>
-                )}
+                      </div>
+                    )}
+                    
+                    {/* Escopo Básico Incluso - Apenas para orçamentos de obra */}
+                    {!isOrcamentoComplementos && orcamentoAtual?.escopo_incluso && (
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Escopo Básico Incluso</h3>
+                        <Textarea
+                          readOnly
+                          value={orcamentoAtual.escopo_incluso}
+                          className="min-h-[100px] bg-gray-50"
+                        />
+                      </div>
+                    )}
 
                 {/* Responsabilidades do Cliente */}
                 {orcamentoAtual?.responsabilidades_cliente && (
@@ -1651,120 +1765,231 @@ export default function OrcamentosPage() {
                 </div>
               )}
 
-              {/* Itens do Orçamento */}
-              {orcamentoAtual && ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens) && 
-               ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens).length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto/Serviço</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens || []).map((item: any) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.produto_servico}</TableCell>
-                          <TableCell>{item.descricao || '-'}</TableCell>
-                          <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
-                          <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                    {/* Itens do Orçamento */}
+                    {orcamentoAtual && ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens) && 
+                     ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens).length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
+                        {isOrcamentoComplementos ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nome / Código</TableHead>
+                            <TableHead>Estado</TableHead>
+                            <TableHead>Medida/Capacidade</TableHead>
+                            <TableHead>Quantidade</TableHead>
+                            <TableHead>Peso</TableHead>
+                            <TableHead>Preço Unit.</TableHead>
+                            <TableHead>Frete</TableHead>
+                            <TableHead>ICMS (%)</TableHead>
+                            <TableHead>Desconto (%)</TableHead>
+                            <TableHead>Preço Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {itens.map((item: any) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{item.produto_servico}</p>
+                                  {item.codigo && (
+                                    <p className="text-xs text-gray-500">{item.codigo}</p>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {item.estado === 'novo' ? 'Novo' : 
+                                 item.estado === 'usado' ? 'Usado' : 
+                                 item.estado === 'recondicionado' ? 'Recondicionado' : '-'}
+                              </TableCell>
+                              <TableCell>{item.medida_capacidade || '-'}</TableCell>
+                              <TableCell>{item.quantidade} {item.unidade || 'unidade'}</TableCell>
+                              <TableCell>{item.peso ? `${item.peso} kg` : '-'}</TableCell>
+                              <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                              <TableCell>{item.frete || '-'}</TableCell>
+                              <TableCell>{item.icms_percentual ? `${item.icms_percentual}%` : '-'}</TableCell>
+                              <TableCell>{item.desconto_percentual ? `${item.desconto_percentual}%` : '-'}</TableCell>
+                              <TableCell className="font-semibold">
+                                R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Produto/Serviço</TableHead>
+                            <TableHead>Descrição</TableHead>
+                            <TableHead>Quantidade</TableHead>
+                            <TableHead>Valor Unitário</TableHead>
+                            <TableHead>Valor Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {itens.map((item: any) => (
+                            <TableRow key={item.id}>
+                              <TableCell>{item.produto_servico}</TableCell>
+                              <TableCell>{item.descricao || '-'}</TableCell>
+                              <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
+                              <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-semibold">
+                                R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
 
+                    {/* Horas Extras */}
+                    {orcamentoAtual && ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras) && 
+                     ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras).length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Horas Extras</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Dia da Semana</TableHead>
+                              <TableHead>Valor/Hora</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras || []).map((he: any) => (
+                              <TableRow key={he.id}>
+                                <TableCell>
+                                  {he.tipo === 'operador' ? 'Operador' : 
+                                   he.tipo === 'sinaleiro' ? 'Sinaleiro' : 
+                                   he.tipo === 'equipamento' ? 'Equipamento' : he.tipo}
+                                </TableCell>
+                                <TableCell>
+                                  {he.dia_semana === 'sabado' ? 'Sábado' : 
+                                   he.dia_semana === 'domingo_feriado' ? 'Domingo/Feriado' : 
+                                   he.dia_semana === 'normal' ? 'Normal' : he.dia_semana}
+                                </TableCell>
+                                <TableCell className="font-semibold">
+                                  R$ {he.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
 
-              {/* Horas Extras */}
-              {orcamentoAtual && ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras) && 
-               ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras).length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Horas Extras</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Dia da Semana</TableHead>
-                        <TableHead>Valor/Hora</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras || []).map((he: any) => (
-                        <TableRow key={he.id}>
-                          <TableCell>
-                            {he.tipo === 'operador' ? 'Operador' : 
-                             he.tipo === 'sinaleiro' ? 'Sinaleiro' : 
-                             he.tipo === 'equipamento' ? 'Equipamento' : he.tipo}
-                          </TableCell>
-                          <TableCell>
-                            {he.dia_semana === 'sabado' ? 'Sábado' : 
-                             he.dia_semana === 'domingo_feriado' ? 'Domingo/Feriado' : 
-                             he.dia_semana === 'normal' ? 'Normal' : he.dia_semana}
-                          </TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {he.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                    {/* Serviços Adicionais */}
+                    {orcamentoAtual && ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais) && 
+                     ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais).length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Serviços Adicionais</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Descrição</TableHead>
+                              <TableHead>Quantidade</TableHead>
+                              <TableHead>Valor Unitário</TableHead>
+                              <TableHead>Valor Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais || []).map((sa: any) => (
+                              <TableRow key={sa.id}>
+                                <TableCell>{sa.tipo}</TableCell>
+                                <TableCell>{sa.descricao}</TableCell>
+                                <TableCell>{sa.quantidade}</TableCell>
+                                <TableCell>R$ {sa.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                <TableCell className="font-semibold">
+                                  R$ {sa.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
 
-              {/* Serviços Adicionais */}
-              {orcamentoAtual && ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais) && 
-               ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais).length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Serviços Adicionais</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais || []).map((sa: any) => (
-                        <TableRow key={sa.id}>
-                          <TableCell>{sa.tipo}</TableCell>
-                          <TableCell>{sa.descricao}</TableCell>
-                          <TableCell>{sa.quantidade}</TableCell>
-                          <TableCell>R$ {sa.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {sa.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                    {/* Valores Fixos */}
+                    {orcamentoAtual && ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos) && 
+                     ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos).length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Valores Fixos</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Descrição</TableHead>
+                              <TableHead>Quantidade</TableHead>
+                              <TableHead>Valor Unitário</TableHead>
+                              <TableHead>Valor Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos || []).map((vf: any) => (
+                              <TableRow key={vf.id}>
+                                <TableCell>{vf.tipo}</TableCell>
+                                <TableCell>{vf.descricao}</TableCell>
+                                <TableCell>{vf.quantidade}</TableCell>
+                                <TableCell>R$ {vf.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                <TableCell className="font-semibold">
+                                  R$ {vf.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
 
-              {/* Observações */}
-              {orcamentoAtual?.observacoes && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Observações</h3>
-                  <Textarea
-                    readOnly
-                    value={orcamentoAtual.observacoes}
-                    className="min-h-[100px] bg-gray-50"
-                  />
-                </div>
-              )}
+                    {/* Custos Mensais */}
+                    {orcamentoAtual && ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais) && 
+                     ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais).length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Descrição</TableHead>
+                              <TableHead>Valor Mensal</TableHead>
+                              <TableHead>Obrigatório</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais || []).map((cm: any) => (
+                              <TableRow key={cm.id}>
+                                <TableCell>{cm.tipo}</TableCell>
+                                <TableCell>{cm.descricao}</TableCell>
+                                <TableCell className="font-semibold">
+                                  R$ {cm.valor_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={cm.obrigatorio ? "default" : "secondary"}>
+                                    {cm.obrigatorio ? "Sim" : "Não"}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
 
-              <div className="flex justify-end gap-2 pt-4 border-t">
+                    {/* Observações */}
+                    {orcamentoAtual?.observacoes && (
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Observações</h3>
+                        <Textarea
+                          readOnly
+                          value={orcamentoAtual.observacoes}
+                          className="min-h-[100px] bg-gray-50"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => {
                   setIsViewDialogOpen(false)
                   setSelectedOrcamento(null)
@@ -1793,10 +2018,12 @@ export default function OrcamentosPage() {
                     Criar Obra
                   </Button>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         )
       })()}
 

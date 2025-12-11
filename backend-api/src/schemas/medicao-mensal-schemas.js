@@ -15,6 +15,14 @@ const medicaoMensalSchema = Joi.object({
     'number.integer': 'ID da obra deve ser um número inteiro',
     'number.positive': 'ID da obra deve ser positivo'
   }),
+  
+  // grua_id é novo campo opcional (pode ser string ou number, pois gruas.id é VARCHAR)
+  grua_id: Joi.alternatives().try(
+    Joi.string().allow(null, ''),
+    Joi.number().integer().positive()
+  ).optional().messages({
+    'alternatives.match': 'ID da grua deve ser uma string ou número positivo'
+  }),
   numero: Joi.string().min(1).max(50).required().messages({
     'string.min': 'Número da medição deve ter pelo menos 1 caractere',
     'string.max': 'Número da medição deve ter no máximo 50 caracteres',
@@ -60,6 +68,12 @@ const medicaoMensalSchema = Joi.object({
   }),
   status: Joi.string().valid('pendente', 'finalizada', 'cancelada', 'enviada').default('pendente').messages({
     'any.only': 'Status deve ser: pendente, finalizada, cancelada ou enviada'
+  }),
+  status_aprovacao: Joi.string().valid('pendente', 'aprovada', 'rejeitada').allow(null).optional().messages({
+    'any.only': 'Status de aprovação deve ser: pendente, aprovada ou rejeitada'
+  }),
+  editavel: Joi.boolean().default(true).messages({
+    'boolean.base': 'Editável deve ser verdadeiro ou falso'
   }),
   observacoes: Joi.string().max(2000).allow('').optional().messages({
     'string.max': 'Observações devem ter no máximo 2000 caracteres'
@@ -108,10 +122,10 @@ const medicaoMensalSchema = Joi.object({
     })
   ).optional()
 }).custom((value, helpers) => {
-  // Validação customizada: pelo menos obra_id ou orcamento_id deve ser fornecido
-  if (!value.obra_id && !value.orcamento_id) {
+  // Validação customizada: pelo menos obra_id, orcamento_id ou grua_id deve ser fornecido
+  if (!value.obra_id && !value.orcamento_id && !value.grua_id) {
     return helpers.error('any.custom', {
-      message: 'É necessário fornecer obra_id ou orcamento_id'
+      message: 'É necessário fornecer obra_id, orcamento_id ou grua_id'
     });
   }
   return value;
@@ -126,7 +140,11 @@ const medicaoMensalUpdateSchema = medicaoMensalSchema.fork(
 // Schema para filtros de medições mensais
 const medicaoMensalFiltersSchema = Joi.object({
   orcamento_id: Joi.number().integer().positive().allow(null).optional(),
-  obra_id: Joi.number().integer().positive().allow(null).optional(), // NOVO
+  obra_id: Joi.number().integer().positive().allow(null).optional(),
+  grua_id: Joi.alternatives().try(
+    Joi.string().allow(null, ''),
+    Joi.number().integer().positive()
+  ).optional(), // NOVO - pode ser string ou number
   periodo: Joi.string().pattern(/^\d{4}-\d{2}$/).optional(),
   status: Joi.string().valid('pendente', 'finalizada', 'cancelada', 'enviada').optional(),
   data_inicio: Joi.date().iso().optional(),
@@ -134,7 +152,7 @@ const medicaoMensalFiltersSchema = Joi.object({
   mes_referencia: Joi.number().integer().min(1).max(12).optional(),
   ano_referencia: Joi.number().integer().min(2000).max(2100).optional(),
   page: Joi.number().integer().min(1).default(1),
-  limit: Joi.number().integer().min(1).max(100).default(10)
+  limit: Joi.number().integer().min(1).max(1000).default(10)
 });
 
 // Schema para gerar medição automaticamente a partir do orçamento

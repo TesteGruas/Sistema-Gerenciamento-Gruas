@@ -49,6 +49,8 @@ const verificarPermissaoPorTipo = (req, res, next) => {
     permission = 'gruas:visualizar';
   } else if (tipo === 'clientes') {
     permission = 'clientes:visualizar';
+  } else if (tipo === 'medicoes') {
+    permission = 'obras:visualizar'; // Medições usam permissão de obras
   }
 
   // Usar o middleware de permissão
@@ -229,6 +231,69 @@ async function buscarDadosPorTipo(tipo, filtros = {}) {
 
       if (error) throw error;
       return data || [];
+    }
+
+    case 'medicoes': {
+      let query = supabaseAdmin
+        .from('medicoes_mensais')
+        .select(`
+          *,
+          obras:obra_id (
+            id,
+            nome
+          ),
+          gruas:grua_id (
+            id,
+            name,
+            modelo,
+            fabricante
+          )
+        `)
+        .order('periodo', { ascending: false })
+        .order('data_medicao', { ascending: false });
+
+      // Aplicar filtros
+      if (filtros.grua_id) {
+        query = query.eq('grua_id', filtros.grua_id);
+      }
+      if (filtros.obra_id) {
+        query = query.eq('obra_id', filtros.obra_id);
+      }
+      if (filtros.periodo) {
+        query = query.eq('periodo', filtros.periodo);
+      }
+      if (filtros.status) {
+        query = query.eq('status', filtros.status);
+      }
+      if (filtros.data_inicio) {
+        query = query.gte('data_medicao', filtros.data_inicio);
+      }
+      if (filtros.data_fim) {
+        query = query.lte('data_medicao', filtros.data_fim);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      // Formatar dados para exportação
+      return (data || []).map(medicao => ({
+        id: medicao.id,
+        numero: medicao.numero,
+        periodo: medicao.periodo,
+        data_medicao: medicao.data_medicao,
+        grua: medicao.gruas?.name || '-',
+        obra: medicao.obras?.nome || '-',
+        valor_mensal_bruto: medicao.valor_mensal_bruto || 0,
+        valor_aditivos: medicao.valor_aditivos || 0,
+        valor_custos_extras: medicao.valor_custos_extras || 0,
+        valor_descontos: medicao.valor_descontos || 0,
+        valor_total: medicao.valor_total || 0,
+        status: medicao.status,
+        status_aprovacao: medicao.status_aprovacao || '-',
+        data_envio: medicao.data_envio || '-',
+        data_aprovacao: medicao.data_aprovacao || '-',
+        observacoes: medicao.observacoes || ''
+      }));
     }
 
     default:

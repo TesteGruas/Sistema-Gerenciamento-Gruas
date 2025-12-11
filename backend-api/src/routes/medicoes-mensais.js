@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { 
@@ -9,6 +10,34 @@ import {
 } from '../schemas/medicao-mensal-schemas.js';
 
 const router = express.Router();
+
+// Configuração do multer para upload de arquivos
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB por arquivo
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de arquivo não permitido'), false);
+    }
+  }
+});
 
 /**
  * GET /api/medicoes-mensais
@@ -24,7 +53,7 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       });
     }
 
-    const { orcamento_id, obra_id, periodo, status, data_inicio, data_fim, mes_referencia, ano_referencia, page, limit } = value;
+    const { orcamento_id, obra_id, grua_id, periodo, status, data_inicio, data_fim, mes_referencia, ano_referencia, page, limit } = value;
     const offset = (page - 1) * limit;
 
     let query = supabaseAdmin
@@ -56,12 +85,21 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
             nome,
             cnpj
           )
+        ),
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante,
+          capacidade,
+          status
         )
       `, { count: 'exact' });
 
     // Aplicar filtros
     if (orcamento_id) query = query.eq('orcamento_id', orcamento_id);
-    if (obra_id) query = query.eq('obra_id', obra_id); // NOVO
+    if (obra_id) query = query.eq('obra_id', obra_id);
+    if (grua_id) query = query.eq('grua_id', grua_id); // NOVO
     if (periodo) query = query.eq('periodo', periodo);
     if (status) query = query.eq('status', status);
     if (data_inicio) query = query.gte('data_medicao', data_inicio);
@@ -83,9 +121,37 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       });
     }
 
+    // Buscar documentos para cada medição (se houver medições)
+    let medicoesComDocumentos = data || []
+    if (medicoesComDocumentos.length > 0) {
+      const medicaoIds = medicoesComDocumentos.map(m => m.id)
+      const { data: documentos, error: documentosError } = await supabaseAdmin
+        .from('medicao_documentos')
+        .select('*')
+        .in('medicao_id', medicaoIds)
+        .order('created_at', { ascending: false })
+
+      if (!documentosError && documentos) {
+        // Agrupar documentos por medicao_id
+        const documentosPorMedicao = documentos.reduce((acc, doc) => {
+          if (!acc[doc.medicao_id]) {
+            acc[doc.medicao_id] = []
+          }
+          acc[doc.medicao_id].push(doc)
+          return acc
+        }, {})
+
+        // Adicionar documentos a cada medição
+        medicoesComDocumentos = medicoesComDocumentos.map((medicao) => ({
+          ...medicao,
+          documentos: documentosPorMedicao[medicao.id] || []
+        }))
+      }
+    }
+
     res.json({
       success: true,
-      data: data || [],
+      data: medicoesComDocumentos,
       pagination: {
         page,
         limit,
@@ -139,6 +205,14 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
             nome,
             cnpj
           )
+        ),
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante,
+          capacidade,
+          status
         )
       `)
       .eq('id', id)
@@ -156,12 +230,14 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
       { data: custosMensais, error: custosError },
       { data: horasExtras, error: horasError },
       { data: servicosAdicionais, error: servicosError },
-      { data: aditivos, error: aditivosError }
+      { data: aditivos, error: aditivosError },
+      { data: documentos, error: documentosError }
     ] = await Promise.all([
       supabaseAdmin.from('medicao_custos_mensais').select('*').eq('medicao_id', id).order('id'),
       supabaseAdmin.from('medicao_horas_extras').select('*').eq('medicao_id', id).order('id'),
       supabaseAdmin.from('medicao_servicos_adicionais').select('*').eq('medicao_id', id).order('id'),
-      supabaseAdmin.from('medicao_aditivos').select('*').eq('medicao_id', id).order('id')
+      supabaseAdmin.from('medicao_aditivos').select('*').eq('medicao_id', id).order('id'),
+      supabaseAdmin.from('medicao_documentos').select('*').eq('medicao_id', id).order('created_at', { ascending: false })
     ]);
 
     if (custosError || horasError || servicosError || aditivosError) {
@@ -178,7 +254,8 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
         custos_mensais: custosMensais || [],
         horas_extras: horasExtras || [],
         servicos_adicionais: servicosAdicionais || [],
-        aditivos: aditivos || []
+        aditivos: aditivos || [],
+        documentos: documentos || []
       }
     });
   } catch (error) {
@@ -211,14 +288,15 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
       aditivos,
       obra_id,
       orcamento_id,
+      grua_id,
       ...medicaoData 
     } = value;
 
-    // Validar que pelo menos um dos dois foi fornecido
-    if (!obra_id && !orcamento_id) {
+    // Validar que pelo menos um dos três foi fornecido
+    if (!obra_id && !orcamento_id && !grua_id) {
       return res.status(400).json({
         error: 'Dados inválidos',
-        message: 'É necessário fornecer obra_id ou orcamento_id'
+        message: 'É necessário fornecer obra_id, orcamento_id ou grua_id'
       });
     }
 
@@ -254,9 +332,33 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
       }
     }
 
+    // Se grua_id foi fornecido, verificar se a grua existe
+    if (grua_id) {
+      const { data: grua, error: gruaError } = await supabaseAdmin
+        .from('gruas')
+        .select('id')
+        .eq('id', grua_id)
+        .single();
+
+      if (gruaError || !grua) {
+        return res.status(404).json({
+          error: 'Grua não encontrada',
+          message: 'A grua especificada não existe'
+        });
+      }
+    }
+
     // Verificar se já existe medição para este período
     let medicaoExistente;
-    if (orcamento_id) {
+    if (grua_id) {
+      const { data } = await supabaseAdmin
+        .from('medicoes_mensais')
+        .select('id')
+        .eq('grua_id', grua_id)
+        .eq('periodo', medicaoData.periodo)
+        .single();
+      medicaoExistente = data;
+    } else if (orcamento_id) {
       const { data } = await supabaseAdmin
         .from('medicoes_mensais')
         .select('id')
@@ -283,9 +385,10 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
       });
     }
 
-    // Adicionar obra_id e orcamento_id aos dados da medição
+    // Adicionar obra_id, orcamento_id e grua_id aos dados da medição
     medicaoData.obra_id = obra_id || null;
     medicaoData.orcamento_id = orcamento_id || null;
+    medicaoData.grua_id = grua_id ? String(grua_id) : null; // Converter para string pois gruas.id é VARCHAR
     medicaoData.created_by = req.user?.id;
 
     // Criar medição
@@ -559,6 +662,27 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       ...medicaoData 
     } = value;
 
+    // Verificar se a medição pode ser editada
+    const { data: medicaoAtual, error: checkError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select('id, editavel, status')
+      .eq('id', id)
+      .single();
+
+    if (checkError) {
+      return res.status(404).json({
+        error: 'Medição não encontrada',
+        message: checkError.message
+      });
+    }
+
+    if (medicaoAtual.editavel === false || medicaoAtual.status === 'enviada') {
+      return res.status(400).json({
+        error: 'Medição não pode ser editada',
+        message: 'Esta medição foi enviada ao cliente e não pode mais ser editada'
+      });
+    }
+
     // Atualizar medição
     const { data: medicao, error: medicaoError } = await supabaseAdmin
       .from('medicoes_mensais')
@@ -783,6 +907,302 @@ router.get('/orcamento/:orcamento_id', authenticateToken, requirePermission('obr
 });
 
 /**
+ * GET /api/medicoes-mensais/grua/:grua_id
+ * Listar todas as medições de uma grua
+ */
+router.get('/grua/:grua_id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { grua_id } = req.params;
+
+    // Verificar se a grua existe
+    const { data: grua, error: gruaError } = await supabaseAdmin
+      .from('gruas')
+      .select('id, name')
+      .eq('id', grua_id)
+      .single();
+
+    if (gruaError || !grua) {
+      return res.status(404).json({
+        error: 'Grua não encontrada',
+        message: 'A grua especificada não existe'
+      });
+    }
+
+    // Buscar medições da grua com todos os relacionamentos
+    const { data: medicoes, error } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select(`
+        *,
+        obras:obra_id (
+          id,
+          nome,
+          cliente_id,
+          status,
+          clientes:cliente_id (
+            id,
+            nome,
+            cnpj
+          )
+        ),
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante,
+          capacidade,
+          status
+        )
+      `)
+      .eq('grua_id', grua_id)
+      .order('periodo', { ascending: false })
+      .order('data_medicao', { ascending: false });
+
+    if (error) {
+      console.error('Erro ao buscar medições da grua:', error);
+      return res.status(500).json({
+        error: 'Erro ao buscar medições da grua',
+        message: error.message
+      });
+    }
+
+    res.json({
+      success: true,
+      data: medicoes || [],
+      total: medicoes?.length || 0
+    });
+  } catch (error) {
+    console.error('Erro ao buscar medições da grua:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PATCH /api/medicoes-mensais/:id/enviar
+ * Enviar medição ao cliente (bloqueia edição)
+ */
+router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email, telefone } = req.body;
+
+    // Buscar medição
+    const { data: medicao, error: medicaoError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select(`
+        *,
+        obras:obra_id (
+          id,
+          nome,
+          cliente_id,
+          clientes:cliente_id (
+            id,
+            nome,
+            cnpj,
+            email,
+            telefone
+          )
+        ),
+        orcamentos:orcamento_id (
+          id,
+          numero,
+          cliente_id,
+          clientes:cliente_id (
+            id,
+            nome,
+            cnpj,
+            email,
+            telefone
+          )
+        ),
+        gruas:grua_id (
+          id,
+          name
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (medicaoError || !medicao) {
+      return res.status(404).json({
+        error: 'Medição não encontrada',
+        message: 'A medição especificada não existe'
+      });
+    }
+
+    // Verificar se já foi enviada
+    if (medicao.status === 'enviada') {
+      return res.status(400).json({
+        error: 'Medição já enviada',
+        message: 'Esta medição já foi enviada ao cliente'
+      });
+    }
+
+    // Atualizar medição: status enviada, bloquear edição
+    const { data: medicaoAtualizada, error: updateError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .update({
+        status: 'enviada',
+        data_envio: new Date().toISOString(),
+        editavel: false, // Bloquear edição após envio
+        status_aprovacao: 'pendente',
+        updated_at: new Date().toISOString(),
+        updated_by: req.user?.id
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({
+        error: 'Erro ao enviar medição',
+        message: updateError.message
+      });
+    }
+
+    // Buscar dados do cliente
+    const cliente = medicao.obras?.clientes || medicao.orcamentos?.clientes;
+    const emailCliente = email || cliente?.email;
+    const telefoneCliente = telefone || cliente?.telefone;
+
+    // Enviar notificações (e-mail e WhatsApp) - assíncrono
+    if (emailCliente || telefoneCliente) {
+      (async () => {
+        try {
+          const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+          const linkMedicao = `${FRONTEND_URL}/dashboard/medicoes/${id}`;
+
+          // Enviar e-mail
+          if (emailCliente) {
+            try {
+              const { sendEmail } = await import('../services/email.service.js');
+              await sendEmail({
+                to: emailCliente,
+                subject: `Medição ${medicao.numero} - ${medicao.periodo}`,
+                html: `
+                  <h2>Nova Medição Disponível</h2>
+                  <p>Uma nova medição foi enviada para sua aprovação:</p>
+                  <ul>
+                    <li><strong>Número:</strong> ${medicao.numero}</li>
+                    <li><strong>Período:</strong> ${medicao.periodo}</li>
+                    <li><strong>Valor Total:</strong> R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}</li>
+                    ${medicao.gruas ? `<li><strong>Grua:</strong> ${medicao.gruas.name}</li>` : ''}
+                  </ul>
+                  <p><a href="${linkMedicao}">Visualizar Medição</a></p>
+                `,
+                tipo: 'medicao_enviada'
+              });
+            } catch (emailErr) {
+              console.error('Erro ao enviar e-mail:', emailErr);
+            }
+          }
+
+          // Enviar WhatsApp
+          if (telefoneCliente) {
+            try {
+              const { enviarMensagemWebhook } = await import('../services/whatsapp-service.js');
+              const mensagem = `🔔 *Nova Medição Disponível*\n\nMedição ${medicao.numero} - ${medicao.periodo}\nValor: R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}\n\n${linkMedicao}`;
+              await enviarMensagemWebhook(telefoneCliente, mensagem, linkMedicao, { tipo: 'medicao_enviada' });
+            } catch (whatsappErr) {
+              console.error('Erro ao enviar WhatsApp:', whatsappErr);
+            }
+          }
+        } catch (notifError) {
+          console.error('Erro ao enviar notificações:', notifError);
+        }
+      })();
+    }
+
+    res.json({
+      success: true,
+      data: medicaoAtualizada,
+      message: 'Medição enviada ao cliente com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao enviar medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PATCH /api/medicoes-mensais/:id/aprovar
+ * Aprovar ou rejeitar medição pelo cliente
+ */
+router.patch('/:id/aprovar', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status_aprovacao, observacoes_aprovacao } = req.body;
+
+    if (!status_aprovacao || !['aprovada', 'rejeitada'].includes(status_aprovacao)) {
+      return res.status(400).json({
+        error: 'Status inválido',
+        message: 'status_aprovacao deve ser "aprovada" ou "rejeitada"'
+      });
+    }
+
+    // Buscar medição
+    const { data: medicao, error: medicaoError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select('id, status, status_aprovacao')
+      .eq('id', id)
+      .single();
+
+    if (medicaoError || !medicao) {
+      return res.status(404).json({
+        error: 'Medição não encontrada',
+        message: 'A medição especificada não existe'
+      });
+    }
+
+    if (medicao.status !== 'enviada') {
+      return res.status(400).json({
+        error: 'Medição não enviada',
+        message: 'Apenas medições enviadas podem ser aprovadas/rejeitadas'
+      });
+    }
+
+    // Atualizar status de aprovação
+    const { data: medicaoAtualizada, error: updateError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .update({
+        status_aprovacao,
+        data_aprovacao: new Date().toISOString(),
+        aprovado_por: req.user?.id,
+        observacoes_aprovacao: observacoes_aprovacao || null,
+        updated_at: new Date().toISOString(),
+        updated_by: req.user?.id
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({
+        error: 'Erro ao atualizar aprovação',
+        message: updateError.message
+      });
+    }
+
+    res.json({
+      success: true,
+      data: medicaoAtualizada,
+      message: `Medição ${status_aprovacao === 'aprovada' ? 'aprovada' : 'rejeitada'} com sucesso`
+    });
+  } catch (error) {
+    console.error('Erro ao aprovar/rejeitar medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
  * DELETE /api/medicoes-mensais/:id
  * Deletar medição mensal (apenas se não estiver finalizada)
  */
@@ -830,6 +1250,204 @@ router.delete('/:id', authenticateToken, requirePermission('obras:editar'), asyn
     });
   } catch (error) {
     console.error('Erro ao deletar medição mensal:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/medicoes-mensais/:id/documentos
+ * Listar documentos de uma medição
+ */
+router.get('/:id/documentos', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: documentos, error } = await supabaseAdmin
+      .from('medicao_documentos')
+      .select('*')
+      .eq('medicao_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao buscar documentos',
+        message: error.message
+      });
+    }
+
+    res.json({
+      success: true,
+      data: documentos || []
+    });
+  } catch (error) {
+    console.error('Erro ao buscar documentos da medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/medicoes-mensais/:id/documentos
+ * Criar documento para uma medição (com upload de arquivo opcional)
+ */
+router.post('/:id/documentos', authenticateToken, requirePermission('obras:editar'), upload.single('arquivo'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tipo_documento, numero_documento, caminho_arquivo, data_emissao, data_vencimento, valor, status, observacoes } = req.body;
+    const file = req.file;
+
+    if (!tipo_documento || !['nf_servico', 'nf_produto', 'nf_locacao', 'boleto'].includes(tipo_documento)) {
+      return res.status(400).json({
+        error: 'Tipo de documento inválido',
+        message: 'Tipo deve ser: nf_servico, nf_produto, nf_locacao ou boleto'
+      });
+    }
+
+    // Verificar se a medição existe
+    const { data: medicao, error: medicaoError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (medicaoError || !medicao) {
+      return res.status(404).json({
+        error: 'Medição não encontrada',
+        message: 'A medição especificada não existe'
+      });
+    }
+
+    let arquivoPath = caminho_arquivo || null;
+
+    // Se houver arquivo enviado, fazer upload para o Supabase Storage
+    if (file) {
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(2, 15);
+      const extension = file.originalname.split('.').pop();
+      const fileName = `medicao_${id}_${tipo_documento}_${timestamp}_${randomString}.${extension}`;
+      const filePath = `medicoes/${id}/${fileName}`;
+
+      // Upload para o Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+        .from('arquivos-obras')
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Erro no upload:', uploadError);
+        return res.status(500).json({
+          error: 'Erro ao fazer upload do arquivo',
+          message: uploadError.message
+        });
+      }
+
+      // Obter URL pública do arquivo
+      const { data: urlData } = supabaseAdmin.storage
+        .from('arquivos-obras')
+        .getPublicUrl(filePath);
+
+      arquivoPath = urlData?.publicUrl || filePath;
+    }
+
+    const { data: documento, error: documentoError } = await supabaseAdmin
+      .from('medicao_documentos')
+      .insert([{
+        medicao_id: parseInt(id),
+        tipo_documento,
+        numero_documento: numero_documento || null,
+        caminho_arquivo: arquivoPath,
+        data_emissao: data_emissao || null,
+        data_vencimento: data_vencimento || null,
+        valor: valor || null,
+        status: status || 'pendente',
+        observacoes: observacoes || null
+      }])
+      .select()
+      .single();
+
+    if (documentoError) {
+      return res.status(500).json({
+        error: 'Erro ao criar documento',
+        message: documentoError.message
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: documento,
+      message: 'Documento criado com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao criar documento:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/medicoes-mensais/:id/documentos/:documento_id
+ * Atualizar documento de uma medição
+ */
+router.put('/:id/documentos/:documento_id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id, documento_id } = req.params;
+    const { numero_documento, caminho_arquivo, data_emissao, data_vencimento, valor, status, observacoes } = req.body;
+
+    // Verificar se o documento pertence à medição
+    const { data: documentoExistente, error: checkError } = await supabaseAdmin
+      .from('medicao_documentos')
+      .select('id')
+      .eq('id', documento_id)
+      .eq('medicao_id', id)
+      .single();
+
+    if (checkError || !documentoExistente) {
+      return res.status(404).json({
+        error: 'Documento não encontrado',
+        message: 'O documento especificado não existe ou não pertence a esta medição'
+      });
+    }
+
+    const { data: documento, error: documentoError } = await supabaseAdmin
+      .from('medicao_documentos')
+      .update({
+        numero_documento: numero_documento !== undefined ? numero_documento : null,
+        caminho_arquivo: caminho_arquivo !== undefined ? caminho_arquivo : null,
+        data_emissao: data_emissao !== undefined ? data_emissao : null,
+        data_vencimento: data_vencimento !== undefined ? data_vencimento : null,
+        valor: valor !== undefined ? valor : null,
+        status: status || 'pendente',
+        observacoes: observacoes !== undefined ? observacoes : null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', documento_id)
+      .select()
+      .single();
+
+    if (documentoError) {
+      return res.status(500).json({
+        error: 'Erro ao atualizar documento',
+        message: documentoError.message
+      });
+    }
+
+    res.json({
+      success: true,
+      data: documento,
+      message: 'Documento atualizado com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar documento:', error);
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message

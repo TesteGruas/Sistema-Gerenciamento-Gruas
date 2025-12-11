@@ -34,6 +34,7 @@ import {
   Lock,
   Layers,
   MessageSquare,
+  Calculator,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -103,6 +104,7 @@ const baseNavigation: NavigationItemWithPermission[] = [
   { name: "Orçamentos", href: "/dashboard/orcamentos", icon: FileText, category: "operacional", permission: "orcamentos:visualizar" },
   { name: "Obras", href: "/dashboard/obras", icon: Building2, category: "operacional", permission: "obras:visualizar" },
   { name: "Gruas", href: "/dashboard/gruas", icon: Crane, category: "operacional", permission: "gruas:visualizar" },
+  { name: "Medições", href: "/dashboard/medicoes", icon: Calculator, category: "operacional", permission: "obras:visualizar" },
   { name: "Livros de Gruas", href: "/dashboard/livros-gruas", icon: BookOpen, category: "operacional", permission: "livros_gruas:visualizar" },
   { name: "Estoque", href: "/dashboard/estoque", icon: Package, category: "operacional", permission: "estoque:visualizar" },
   { name: "Complementos", href: "/dashboard/complementos", icon: Layers, category: "operacional", permission: "complementos:visualizar" },
@@ -230,6 +232,11 @@ function DashboardLayoutContent({
       // Orçamentos - apenas Admin, Gestor e Financeiro
       if (item.href === '/dashboard/orcamentos') {
         return hasPermission('orcamentos:visualizar')
+      }
+      
+      // Medições - mesma permissão de obras
+      if (item.href === '/dashboard/medicoes') {
+        return canAccessObras()
       }
       
       // Ponto Eletrônico - Admin, Gerente, Supervisor
