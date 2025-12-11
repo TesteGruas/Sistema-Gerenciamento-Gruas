@@ -52,3 +52,4 @@ COMMENT ON COLUMN orcamento_itens.peso IS 'Peso do item em kg';
 COMMENT ON COLUMN orcamento_itens.frete IS 'Tipo de frete: CIF (pago pelo vendedor) ou FOB (pago pelo comprador)';
 COMMENT ON COLUMN orcamento_itens.icms_percentual IS 'Percentual de ICMS aplicado ao item';
 COMMENT ON COLUMN orcamento_itens.desconto_percentual IS 'Percentual de desconto aplicado ao item (usado principalmente para itens usados ou recondicionados)';
+

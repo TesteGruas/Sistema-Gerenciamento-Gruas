@@ -642,6 +642,53 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
  *       404:
  *         description: Cliente não encontrado
  */
+/**
+ * GET /api/clientes/usuario/:usuario_id
+ * Buscar cliente por usuario_id
+ * Se o usuário for cliente, só pode buscar seu próprio cliente
+ */
+router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
+  try {
+    const { usuario_id } = req.params
+    const userId = req.user?.id
+
+    // Se o usuário for cliente, só pode buscar seu próprio cliente
+    const userRole = req.user?.role?.toLowerCase() || ''
+    if (userRole.includes('cliente') || req.user?.level === 1) {
+      if (parseInt(usuario_id) !== userId) {
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para acessar este cliente'
+        })
+      }
+    }
+
+    const { data: cliente, error } = await supabaseAdmin
+      .from('clientes')
+      .select('*')
+      .eq('contato_usuario_id', usuario_id)
+      .single()
+
+    if (error || !cliente) {
+      return res.status(404).json({
+        error: 'Cliente não encontrado',
+        message: 'Nenhum cliente encontrado para este usuário'
+      })
+    }
+
+    res.json({
+      success: true,
+      data: cliente
+    })
+  } catch (error) {
+    console.error('Erro ao buscar cliente por usuario_id:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 router.delete('/:id', authenticateToken, requirePermission('clientes:excluir'), async (req, res) => {
   try {
     const { id } = req.params

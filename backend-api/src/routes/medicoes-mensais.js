@@ -53,7 +53,7 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       });
     }
 
-    const { orcamento_id, obra_id, grua_id, periodo, status, data_inicio, data_fim, mes_referencia, ano_referencia, page, limit } = value;
+    const { orcamento_id, obra_id, grua_id, periodo, status, data_inicio, data_fim, mes_referencia, ano_referencia, search, page, limit } = value;
     const offset = (page - 1) * limit;
 
     let query = supabaseAdmin
@@ -106,6 +106,49 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
     if (data_fim) query = query.lte('data_medicao', data_fim);
     if (mes_referencia) query = query.eq('mes_referencia', mes_referencia);
     if (ano_referencia) query = query.eq('ano_referencia', ano_referencia);
+    
+    // Aplicar busca por texto
+    if (search && search.trim()) {
+      const searchTerm = search.trim()
+      const searchPattern = `%${searchTerm}%`
+      
+      // Buscar IDs de obras que correspondem ao termo de busca
+      const { data: obrasEncontradas } = await supabaseAdmin
+        .from('obras')
+        .select('id')
+        .ilike('nome', searchPattern)
+      
+      const obraIds = obrasEncontradas?.map(o => o.id) || []
+      
+      // Buscar IDs de gruas que correspondem ao termo de busca
+      const { data: gruasEncontradas } = await supabaseAdmin
+        .from('gruas')
+        .select('id')
+        .or(`name.ilike.${searchPattern},modelo.ilike.${searchPattern},fabricante.ilike.${searchPattern}`)
+      
+      const gruaIds = gruasEncontradas?.map(g => g.id) || []
+      
+      // Construir condições de busca
+      const searchConditions = []
+      
+      // Busca em numero e periodo
+      searchConditions.push(`numero.ilike.%${searchTerm}%`)
+      searchConditions.push(`periodo.ilike.%${searchTerm}%`)
+      
+      // Adicionar condições para obras e gruas se encontradas
+      if (obraIds.length > 0) {
+        searchConditions.push(`obra_id.in.(${obraIds.join(',')})`)
+      }
+      
+      if (gruaIds.length > 0) {
+        searchConditions.push(`grua_id.in.(${gruaIds.join(',')})`)
+      }
+      
+      // Aplicar todas as condições com OR
+      if (searchConditions.length > 0) {
+        query = query.or(searchConditions.join(','))
+      }
+    }
 
     // Aplicar paginação e ordenação
     query = query.order('periodo', { ascending: false })
@@ -917,7 +960,7 @@ router.get('/grua/:grua_id', authenticateToken, requirePermission('obras:visuali
     // Verificar se a grua existe
     const { data: grua, error: gruaError } = await supabaseAdmin
       .from('gruas')
-      .select('id, name')
+      .select('id, nome')
       .eq('id', grua_id)
       .single();
 
@@ -1145,10 +1188,19 @@ router.patch('/:id/aprovar', authenticateToken, requirePermission('obras:visuali
       });
     }
 
-    // Buscar medição
+    // Buscar medição com obra e cliente
     const { data: medicao, error: medicaoError } = await supabaseAdmin
       .from('medicoes_mensais')
-      .select('id, status, status_aprovacao')
+      .select(`
+        id, 
+        status, 
+        status_aprovacao,
+        obra_id,
+        obras:obra_id (
+          id,
+          cliente_id
+        )
+      `)
       .eq('id', id)
       .single();
 
@@ -1164,6 +1216,32 @@ router.patch('/:id/aprovar', authenticateToken, requirePermission('obras:visuali
         error: 'Medição não enviada',
         message: 'Apenas medições enviadas podem ser aprovadas/rejeitadas'
       });
+    }
+
+    // Verificar se o usuário é cliente e se a medição pertence a ele
+    const userRole = req.user?.role?.toLowerCase() || ''
+    if (userRole.includes('cliente') || req.user?.level === 1) {
+      // Buscar cliente do usuário
+      const { data: cliente, error: clienteError } = await supabaseAdmin
+        .from('clientes')
+        .select('id')
+        .eq('contato_usuario_id', req.user.id)
+        .single()
+
+      if (clienteError || !cliente) {
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Cliente não encontrado para este usuário'
+        })
+      }
+
+      // Verificar se a obra da medição pertence ao cliente
+      if (!medicao.obras || medicao.obras.cliente_id !== cliente.id) {
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para aprovar esta medição'
+        })
+      }
     }
 
     // Atualizar status de aprovação
@@ -1452,6 +1530,187 @@ router.put('/:id/documentos/:documento_id', authenticateToken, requirePermission
       error: 'Erro interno do servidor',
       message: error.message
     });
+  }
+});
+
+/**
+ * GET /api/medicoes-mensais/obras-sem-medicao
+ * Listar obras ativas que não possuem medição para o período atual
+ */
+router.get('/obras-sem-medicao', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    // Calcular período atual (YYYY-MM)
+    const agora = new Date();
+    const periodoAtual = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+
+    // Buscar todas as obras ativas (status = 'Em Andamento')
+    const { data: obrasAtivas, error: obrasError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome, status, cliente_id, clientes:cliente_id(id, nome)')
+      .eq('status', 'Em Andamento');
+
+    if (obrasError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar obras',
+        message: obrasError.message
+      });
+    }
+
+    if (!obrasAtivas || obrasAtivas.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        periodo: periodoAtual,
+        message: 'Nenhuma obra ativa encontrada'
+      });
+    }
+
+    // Buscar todas as medições do período atual
+    const { data: medicoesPeriodo, error: medicoesError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select('obra_id')
+      .eq('periodo', periodoAtual);
+
+    if (medicoesError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar medições',
+        message: medicoesError.message
+      });
+    }
+
+    // Criar Set com IDs de obras que já têm medição
+    const obrasComMedicao = new Set(
+      (medicoesPeriodo || [])
+        .map(m => m.obra_id)
+        .filter(id => id !== null)
+    );
+
+    // Filtrar obras que não têm medição
+    const obrasSemMedicao = obrasAtivas
+      .filter(obra => !obrasComMedicao.has(obra.id))
+      .map(obra => ({
+        id: obra.id,
+        nome: obra.nome,
+        status: obra.status,
+        cliente_id: obra.cliente_id,
+        cliente: obra.clientes ? {
+          id: obra.clientes.id,
+          nome: obra.clientes.nome
+        } : null
+      }));
+
+    res.json({
+      success: true,
+      data: obrasSemMedicao,
+      periodo: periodoAtual,
+      total: obrasSemMedicao.length,
+      message: obrasSemMedicao.length > 0 
+        ? `${obrasSemMedicao.length} obra(s) ativa(s) sem medição para o período ${periodoAtual}`
+        : 'Todas as obras ativas possuem medição para o período atual'
+    });
+  } catch (error) {
+    console.error('Erro ao buscar obras sem medição:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/medicoes-mensais/cliente/:cliente_id
+ * Listar medições de um cliente (apenas enviadas, para aprovação)
+ * Se o usuário for cliente, valida que o cliente_id corresponde ao usuário
+ */
+router.get('/cliente/:cliente_id', authenticateToken, async (req, res) => {
+  try {
+    const { cliente_id } = req.params
+    const userId = req.user?.id
+
+    // Se o usuário for cliente, verificar se o cliente_id corresponde ao usuário
+    const userRole = req.user?.role?.toLowerCase() || ''
+    if (userRole.includes('cliente') || req.user?.level === 1) {
+      const { data: cliente, error: clienteError } = await supabaseAdmin
+        .from('clientes')
+        .select('id')
+        .eq('contato_usuario_id', userId)
+        .eq('id', cliente_id)
+        .single()
+
+      if (clienteError || !cliente) {
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para acessar estas medições'
+        })
+      }
+    }
+
+    // Buscar obras do cliente
+    const { data: obras, error: obrasError } = await supabaseAdmin
+      .from('obras')
+      .select('id')
+      .eq('cliente_id', cliente_id)
+
+    if (obrasError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar obras do cliente',
+        message: obrasError.message
+      })
+    }
+
+    const obraIds = obras?.map(o => o.id) || []
+
+    if (obraIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        total: 0
+      })
+    }
+
+    // Buscar medições das obras que estão enviadas (aguardando aprovação)
+    const { data: medicoes, error } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select(`
+        *,
+        obras:obra_id (
+          id,
+          nome,
+          cliente_id,
+          status
+        ),
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante,
+          capacidade,
+          status
+        )
+      `)
+      .in('obra_id', obraIds)
+      .eq('status', 'enviada')
+      .order('periodo', { ascending: false })
+      .order('data_medicao', { ascending: false })
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao buscar medições',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: medicoes || [],
+      total: medicoes?.length || 0
+    })
+  } catch (error) {
+    console.error('Erro ao buscar medições do cliente:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
   }
 });
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { 
   Calculator, 
   Search, 
@@ -25,7 +26,7 @@ import {
   Download,
   Filter,
   Building2,
-  Crane,
+  Forklift,
   FileText,
   Plus,
   Receipt,
@@ -36,6 +37,8 @@ import {
 import { ExportButton } from "@/components/export-button"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoMensalCreate, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
 import { gruasApi } from "@/lib/api-gruas"
+import { obrasApi } from "@/lib/api-obras"
+import { getOrcamentos } from "@/lib/api-orcamentos"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -46,14 +49,22 @@ interface Grua {
   fabricante?: string
 }
 
+interface Obra {
+  id: number
+  nome: string
+  cliente_id?: number
+  status?: string
+}
+
 export default function MedicoesPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [medicoes, setMedicoes] = useState<MedicaoMensal[]>([])
   const [gruas, setGruas] = useState<Grua[]>([])
+  const [obras, setObras] = useState<Obra[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingGruas, setLoadingGruas] = useState(false)
-  const [activeTab, setActiveTab] = useState<"todas" | "por-grua">("todas")
+  const [activeTab, setActiveTab] = useState<"todas" | "por-obra">("todas")
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
@@ -67,24 +78,33 @@ export default function MedicoesPage() {
   const [emailEnvio, setEmailEnvio] = useState("")
   const [telefoneEnvio, setTelefoneEnvio] = useState("")
   const [enviando, setEnviando] = useState(false)
+  
+  // Estados para histórico de medições
+  const [isHistoricoDialogOpen, setIsHistoricoDialogOpen] = useState(false)
+  const [obraSelecionada, setObraSelecionada] = useState<Obra | null>(null)
+  const [historicoMedicoes, setHistoricoMedicoes] = useState<MedicaoMensal[]>([])
+  const [loadingHistorico, setLoadingHistorico] = useState(false)
 
   useEffect(() => {
-    carregarMedicoes()
     carregarGruas()
+    carregarObras()
   }, [])
 
-  const carregarMedicoes = async () => {
+  const carregarMedicoes = useCallback(async () => {
     try {
       setLoading(true)
       const filters: any = { limit: 1000 }
       if (gruaFilter !== "all") {
-        filters.grua_id = gruaFilter
+        filters.grua_id = parseInt(gruaFilter)
       }
       if (periodoFilter) {
         filters.periodo = periodoFilter
       }
       if (statusFilter !== "all") {
         filters.status = statusFilter
+      }
+      if (searchTerm && searchTerm.trim()) {
+        filters.search = searchTerm.trim()
       }
       
       const response = await medicoesMensaisApi.listar(filters)
@@ -100,7 +120,17 @@ export default function MedicoesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [gruaFilter, periodoFilter, statusFilter, searchTerm, toast])
+
+  // Recarregar medições quando os filtros mudarem (incluindo busca)
+  useEffect(() => {
+    // Debounce para busca por texto (aguardar 500ms após parar de digitar)
+    const timeoutId = setTimeout(() => {
+      carregarMedicoes()
+    }, searchTerm ? 500 : 0)
+    
+    return () => clearTimeout(timeoutId)
+  }, [carregarMedicoes, searchTerm])
 
   const carregarGruas = async () => {
     try {
@@ -115,6 +145,18 @@ export default function MedicoesPage() {
       setLoadingGruas(false)
     }
   }
+
+  const carregarObras = async () => {
+    try {
+      const response = await obrasApi.listarObras({ limit: 1000 })
+      if (response.success) {
+        setObras(response.data || [])
+      }
+    } catch (error: any) {
+      console.error("Erro ao carregar obras:", error)
+    }
+  }
+
 
 
   const handleEnviar = async () => {
@@ -144,6 +186,76 @@ export default function MedicoesPage() {
     }
   }
 
+  const handleVerHistorico = async (obra: Obra) => {
+    setObraSelecionada(obra)
+    setIsHistoricoDialogOpen(true)
+    setLoadingHistorico(true)
+    setHistoricoMedicoes([])
+
+    try {
+      const todasMedicoes: MedicaoMensal[] = []
+
+      // 1. Buscar medições diretamente da obra (sem orçamento)
+      try {
+        const response = await medicoesMensaisApi.listarPorObra(obra.id)
+        if (response.success && response.data) {
+          todasMedicoes.push(...response.data)
+        }
+      } catch (error) {
+        console.error('Erro ao carregar medições da obra:', error)
+      }
+
+      // 2. Buscar orçamentos vinculados à obra
+      try {
+        const orcamentosResponse = await getOrcamentos({ obra_id: obra.id, limit: 1000 })
+        if (orcamentosResponse.success && orcamentosResponse.data) {
+          // Buscar medições de cada orçamento
+          for (const orcamento of orcamentosResponse.data) {
+            try {
+              const medicoesResponse = await medicoesMensaisApi.listarPorOrcamento(orcamento.id)
+              if (medicoesResponse.success && medicoesResponse.data) {
+                // Adicionar apenas medições que ainda não foram adicionadas
+                medicoesResponse.data.forEach((medicao: MedicaoMensal) => {
+                  if (!todasMedicoes.find(m => m.id === medicao.id)) {
+                    todasMedicoes.push(medicao)
+                  }
+                })
+              }
+            } catch (error) {
+              console.error(`Erro ao carregar medições do orçamento ${orcamento.id}:`, error)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao carregar orçamentos da obra:', error)
+      }
+
+      // 3. Ordenar por período (mais recente primeiro)
+      todasMedicoes.sort((a, b) => {
+        if (a.periodo > b.periodo) return -1
+        if (a.periodo < b.periodo) return 1
+        return 0
+      })
+
+      setHistoricoMedicoes(todasMedicoes)
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar histórico de medições",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingHistorico(false)
+    }
+  }
+
+  // Função para obter o mês passado no formato YYYY-MM
+  const getMesPassado = () => {
+    const agora = new Date()
+    const mesPassado = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
+    return `${mesPassado.getFullYear()}-${String(mesPassado.getMonth() + 1).padStart(2, '0')}`
+  }
+
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -167,48 +279,137 @@ export default function MedicoesPage() {
     return <Badge variant={aprovacaoInfo.variant}>{aprovacaoInfo.label}</Badge>
   }
 
+  // Os filtros são aplicados via API, então filteredMedicoes é igual a medicoes
   const filteredMedicoes = useMemo(() => {
-    return medicoes.filter(medicao => {
-      const matchesSearch = 
-        medicao.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        medicao.periodo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        medicao.obras?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        medicao.gruas?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const matchesStatus = statusFilter === "all" || medicao.status === statusFilter
-      const matchesGrua = gruaFilter === "all" || String(medicao.grua_id) === gruaFilter
-      const matchesPeriodo = !periodoFilter || medicao.periodo === periodoFilter
-      
-      return matchesSearch && matchesStatus && matchesGrua && matchesPeriodo
-    })
-  }, [medicoes, searchTerm, statusFilter, gruaFilter, periodoFilter])
+    return medicoes
+  }, [medicoes])
 
-  // Agrupar medições por grua
-  const medicoesPorGrua = useMemo(() => {
-    const agrupadas: Record<string, { grua: Grua; medicoes: MedicaoMensal[] }> = {}
+  // Agrupar medições por obra -> grua (apenas obras com medições)
+  const medicoesPorObra = useMemo(() => {
+    const agrupadas: Record<string, {
+      obra: Obra;
+      gruas: Record<string, {
+        grua: Grua;
+        medicoes: MedicaoMensal[];
+      }>;
+      totalMedicoes: number;
+    }> = {}
     
+    // Processar todas as medições
     filteredMedicoes.forEach(medicao => {
-      if (medicao.grua_id && medicao.gruas) {
+      // Determinar obra_id - pode vir de medicao.obra_id ou precisar buscar
+      let obraId: string | null = null
+      let obraInfo: Obra | null = null
+      
+      // Se tem obra_id e relacionamento populado
+      if (medicao.obra_id && medicao.obras) {
+        obraId = String(medicao.obra_id)
+        obraInfo = {
+          id: medicao.obra_id,
+          nome: medicao.obras.nome,
+          cliente_id: medicao.obras.cliente_id,
+          status: medicao.obras.status
+        }
+      } 
+      // Se tem obra_id mas não tem relacionamento populado, buscar na lista de obras
+      else if (medicao.obra_id) {
+        const obraEncontrada = obras.find(o => o.id === medicao.obra_id)
+        if (obraEncontrada) {
+          obraId = String(medicao.obra_id)
+          obraInfo = {
+            id: obraEncontrada.id,
+            nome: obraEncontrada.nome,
+            cliente_id: obraEncontrada.cliente_id,
+            status: obraEncontrada.status
+          }
+        }
+      }
+      
+      // Se não encontrou obra, pular esta medição (ou criar grupo "Sem Obra")
+      if (!obraId || !obraInfo) {
+        return // Pula medições sem obra definida
+      }
+      
+      // Criar ou obter grupo da obra
+      if (!agrupadas[obraId]) {
+        agrupadas[obraId] = {
+          obra: obraInfo,
+          gruas: {},
+          totalMedicoes: 0
+        }
+      }
+      
+      // Agrupar por grua dentro da obra
+      if (medicao.grua_id) {
         const gruaId = String(medicao.grua_id)
-        if (!agrupadas[gruaId]) {
-          agrupadas[gruaId] = {
-            grua: {
+        let gruaInfo: Grua | null = null
+        
+        // Se tem relacionamento populado
+        if (medicao.gruas) {
+          gruaInfo = {
+            id: medicao.grua_id,
+            name: medicao.gruas.name || medicao.gruas.nome || 'Grua sem nome',
+            modelo: medicao.gruas.modelo,
+            fabricante: medicao.gruas.fabricante
+          }
+        } 
+        // Se não tem relacionamento populado, buscar na lista de gruas
+        else {
+          const gruaEncontrada = gruas.find(g => g.id === medicao.grua_id || String(g.id) === String(medicao.grua_id))
+          if (gruaEncontrada) {
+            gruaInfo = {
+              id: gruaEncontrada.id,
+              name: gruaEncontrada.name,
+              modelo: gruaEncontrada.modelo,
+              fabricante: gruaEncontrada.fabricante
+            }
+          } else {
+            // Grua não encontrada, criar com ID
+            gruaInfo = {
               id: medicao.grua_id,
-              name: medicao.gruas.name,
-              modelo: medicao.gruas.modelo,
-              fabricante: medicao.gruas.fabricante
+              name: `Grua #${medicao.grua_id}`
+            }
+          }
+        }
+        
+        if (gruaInfo) {
+          if (!agrupadas[obraId].gruas[gruaId]) {
+            agrupadas[obraId].gruas[gruaId] = {
+              grua: gruaInfo,
+              medicoes: []
+            }
+          }
+          agrupadas[obraId].gruas[gruaId].medicoes.push(medicao)
+        }
+      } else {
+        // Medição sem grua - criar grupo especial
+        const semGruaId = 'sem-grua'
+        if (!agrupadas[obraId].gruas[semGruaId]) {
+          agrupadas[obraId].gruas[semGruaId] = {
+            grua: {
+              id: semGruaId,
+              name: 'Sem Grua Definida'
             },
             medicoes: []
           }
         }
-        agrupadas[gruaId].medicoes.push(medicao)
+        agrupadas[obraId].gruas[semGruaId].medicoes.push(medicao)
       }
+      
+      agrupadas[obraId].totalMedicoes++
     })
     
-    return Object.values(agrupadas).sort((a, b) => 
-      a.grua.name.localeCompare(b.grua.name)
-    )
-  }, [filteredMedicoes])
+    // Converter para array, filtrar apenas obras com medições, e ordenar
+    return Object.values(agrupadas)
+      .filter(item => item.totalMedicoes > 0) // Só retornar obras com medições
+      .map(item => ({
+        ...item,
+        gruas: Object.values(item.gruas).sort((a, b) => 
+          a.grua.name.localeCompare(b.grua.name)
+        )
+      }))
+      .sort((a, b) => a.obra.nome.localeCompare(b.obra.nome))
+  }, [filteredMedicoes, obras, gruas])
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
@@ -257,93 +458,11 @@ export default function MedicoesPage() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Filtros
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Buscar por número, período, obra ou grua..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Status</SelectItem>
-                <SelectItem value="pendente">Pendente</SelectItem>
-                <SelectItem value="finalizada">Finalizada</SelectItem>
-                <SelectItem value="enviada">Enviada</SelectItem>
-                <SelectItem value="cancelada">Cancelada</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={gruaFilter} onValueChange={setGruaFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Grua" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as Gruas</SelectItem>
-                {gruas.map((grua) => (
-                  <SelectItem key={grua.id} value={String(grua.id)}>
-                    {grua.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-4 flex gap-4">
-            <div className="flex-1">
-              <Label>Período (YYYY-MM)</Label>
-              <Input
-                type="text"
-                placeholder="2025-01"
-                value={periodoFilter}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/[^0-9-]/g, '')
-                  if (value.length <= 7) {
-                    setPeriodoFilter(value)
-                  }
-                }}
-                pattern="\d{4}-\d{2}"
-              />
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSearchTerm("")
-                setStatusFilter("all")
-                setGruaFilter("all")
-                setPeriodoFilter("")
-              }}
-            >
-              Limpar Filtros
-            </Button>
-            <Button variant="outline" onClick={carregarMedicoes}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Atualizar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "todas" | "por-grua")}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "todas" | "por-obra")}>
         <TabsList>
           <TabsTrigger value="todas">Todas as Medições</TabsTrigger>
-          <TabsTrigger value="por-grua">Agrupadas por Grua</TabsTrigger>
+          <TabsTrigger value="por-obra">Agrupadas por Obra</TabsTrigger>
         </TabsList>
 
         {/* Tab: Todas as Medições */}
@@ -352,7 +471,84 @@ export default function MedicoesPage() {
             <CardHeader>
               <CardTitle>Medições ({filteredMedicoes.length})</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Filtros */}
+              <div className="border-b pb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Filter className="w-5 h-5" />
+                  <h3 className="font-semibold">Filtros</h3>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-7 gap-3 items-end">
+                  <div className="lg:col-span-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Buscar por número, período, obra ou grua..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Status</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="finalizada">Finalizada</SelectItem>
+                      <SelectItem value="enviada">Enviada</SelectItem>
+                      <SelectItem value="cancelada">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={gruaFilter} onValueChange={setGruaFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Grua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as Gruas</SelectItem>
+                      {gruas.map((grua) => (
+                        <SelectItem key={grua.id} value={String(grua.id)}>
+                          {grua.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div>
+                    <Label className="text-xs">Período (YYYY-MM)</Label>
+                    <Input
+                      type="text"
+                      placeholder="2025-01"
+                      value={periodoFilter}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9-]/g, '')
+                        if (value.length <= 7) {
+                          setPeriodoFilter(value)
+                        }
+                      }}
+                      pattern="\d{4}-\d{2}"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("")
+                      setStatusFilter("all")
+                      setGruaFilter("all")
+                      setPeriodoFilter("")
+                    }}
+                  >
+                    Limpar
+                  </Button>
+                  <Button variant="outline" onClick={carregarMedicoes}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Atualizar
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Tabela */}
               {loading ? (
                 <div className="text-center py-8">Carregando...</div>
               ) : filteredMedicoes.length === 0 ? (
@@ -379,8 +575,8 @@ export default function MedicoesPage() {
                         <TableCell>
                           {medicao.gruas ? (
                             <div className="flex items-center gap-2">
-                              <Crane className="w-4 h-4" />
-                              <span>{medicao.gruas.name}</span>
+                              <Forklift className="w-4 h-4" />
+                              <span>{medicao.gruas.name || medicao.gruas.nome}</span>
                             </div>
                           ) : (
                             <span className="text-gray-400">-</span>
@@ -433,147 +629,339 @@ export default function MedicoesPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab: Agrupadas por Grua */}
-        <TabsContent value="por-grua" className="space-y-4">
-          {loading ? (
-            <Card>
-              <CardContent className="py-8">
-                <div className="text-center">Carregando...</div>
-              </CardContent>
-            </Card>
-          ) : medicoesPorGrua.length === 0 ? (
-            <Card>
-              <CardContent className="py-8">
-                <div className="text-center text-gray-500">Nenhuma medição encontrada</div>
-              </CardContent>
-            </Card>
-          ) : (
-            medicoesPorGrua.map((grupo) => (
-              <Card key={String(grupo.grua.id)}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Crane className="w-6 h-6 text-blue-600" />
-                      <div>
-                        <CardTitle>{grupo.grua.name}</CardTitle>
-                        <CardDescription>
-                          {grupo.grua.modelo && grupo.grua.fabricante && (
-                            `${grupo.grua.fabricante} - ${grupo.grua.modelo}`
-                          )}
-                        </CardDescription>
-                      </div>
+        {/* Tab: Agrupadas por Obra */}
+        <TabsContent value="por-obra" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Medições Agrupadas por Obra</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Filtros */}
+              <div className="border-b pb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Filter className="w-5 h-5" />
+                  <h3 className="font-semibold">Filtros</h3>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-7 gap-3 items-end">
+                  <div className="lg:col-span-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Buscar por número, período, obra ou grua..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
                     </div>
-                    <Badge variant="outline">{grupo.medicoes.length} medição(ões)</Badge>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Período</TableHead>
-                        <TableHead>Obra</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Aprovação</TableHead>
-                        <TableHead>Documentos</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {grupo.medicoes.map((medicao) => (
-                        <TableRow key={medicao.id}>
-                          <TableCell className="font-medium">{medicao.numero}</TableCell>
-                          <TableCell>{medicao.periodo}</TableCell>
-                          <TableCell>
-                            {medicao.obras ? (
-                              <div className="flex items-center gap-2">
-                                <Building2 className="w-4 h-4" />
-                                <span>{medicao.obras.nome}</span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(medicao.valor_total || 0)}</TableCell>
-                          <TableCell>{getStatusBadge(medicao.status)}</TableCell>
-                          <TableCell>{getAprovacaoBadge(medicao.status_aprovacao)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {medicao.status === 'finalizada' || medicao.status === 'enviada' ? (
-                                <>
-                                  {medicao.documentos?.some(d => d.tipo_documento === 'nf_servico') ? (
-                                    <Badge variant="default" className="text-xs">
-                                      <Receipt className="w-3 h-3 mr-1" />
-                                      NF Serviço
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-xs">
-                                      <Receipt className="w-3 h-3 mr-1" />
-                                      NF Serviço
-                                    </Badge>
-                                  )}
-                                  {medicao.documentos?.some(d => d.tipo_documento === 'nf_locacao') ? (
-                                    <Badge variant="default" className="text-xs">
-                                      <FileCheck className="w-3 h-3 mr-1" />
-                                      NF Locação
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-xs">
-                                      <FileCheck className="w-3 h-3 mr-1" />
-                                      NF Locação
-                                    </Badge>
-                                  )}
-                                  {medicao.documentos?.some(d => d.tipo_documento === 'boleto') ? (
-                                    <Badge variant="default" className="text-xs">
-                                      <FileText className="w-3 h-3 mr-1" />
-                                      Boleto
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-xs">
-                                      <FileText className="w-3 h-3 mr-1" />
-                                      Boleto
-                                    </Badge>
-                                  )}
-                                </>
-                              ) : (
-                                <span className="text-xs text-gray-400">Pendente</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  router.push(`/dashboard/medicoes/${medicao.id}`)
-                                }}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              {medicao.status === 'finalizada' && medicao.status !== 'enviada' && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedMedicao(medicao)
-                                    setIsEnviarDialogOpen(true)
-                                  }}
-                                >
-                                  <Send className="w-4 h-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Status</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="finalizada">Finalizada</SelectItem>
+                      <SelectItem value="enviada">Enviada</SelectItem>
+                      <SelectItem value="cancelada">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={gruaFilter} onValueChange={setGruaFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Grua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as Gruas</SelectItem>
+                      {gruas.map((grua) => (
+                        <SelectItem key={grua.id} value={String(grua.id)}>
+                          {grua.name}
+                        </SelectItem>
                       ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            ))
-          )}
+                    </SelectContent>
+                  </Select>
+                  <div>
+                    <Label className="text-xs">Período (YYYY-MM)</Label>
+                    <Input
+                      type="text"
+                      placeholder="2025-01"
+                      value={periodoFilter}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9-]/g, '')
+                        if (value.length <= 7) {
+                          setPeriodoFilter(value)
+                        }
+                      }}
+                      pattern="\d{4}-\d{2}"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("")
+                      setStatusFilter("all")
+                      setGruaFilter("all")
+                      setPeriodoFilter("")
+                    }}
+                  >
+                    Limpar
+                  </Button>
+                  <Button variant="outline" onClick={carregarMedicoes}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Atualizar
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Conteúdo */}
+              {loading ? (
+                <div className="text-center py-8">Carregando...</div>
+              ) : medicoesPorObra.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">Nenhuma medição encontrada</div>
+              ) : (
+                <Accordion type="single" collapsible className="space-y-3">
+              {medicoesPorObra.map((grupo) => {
+                const valorTotalObra = grupo.gruas.reduce((total, g) => 
+                  total + g.medicoes.reduce((sum, m) => sum + (m.valor_total || 0), 0), 0
+                )
+                
+                return (
+                  <AccordionItem 
+                    key={String(grupo.obra.id)} 
+                    value={String(grupo.obra.id)} 
+                    className="border rounded-xl bg-card shadow-sm overflow-hidden"
+                  >
+                    <Card className="border-0 shadow-none">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start gap-4">
+                          <AccordionTrigger className="hover:no-underline py-2 px-4 -mx-4 -mt-4 flex-1">
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-start gap-4 flex-1 min-w-0">
+                                <div className="flex-shrink-0 mt-1">
+                                  <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
+                                    <Building2 className="w-6 h-6 text-blue-600" />
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <CardTitle className="text-lg font-semibold mb-2 text-gray-900">
+                                    <Link 
+                                      href={`/dashboard/obras/${grupo.obra.id}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="hover:text-blue-600 hover:underline transition-colors"
+                                    >
+                                      {grupo.obra.nome}
+                                    </Link>
+                                  </CardTitle>
+                                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-medium text-gray-900">Total:</span>
+                                      <span className="font-semibold text-blue-600">{formatCurrency(valorTotalObra)}</span>
+                                    </div>
+                                    <span className="text-gray-300">•</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <Receipt className="w-4 h-4 text-gray-400" />
+                                      <span>{grupo.totalMedicoes} medição{grupo.totalMedicoes !== 1 ? 'ões' : ''}</span>
+                                    </div>
+                                    <span className="text-gray-300">•</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <Forklift className="w-4 h-4 text-gray-400" />
+                                      <span>{grupo.gruas.length} grua{grupo.gruas.length !== 1 ? 's' : ''}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <div className="flex items-center gap-3 flex-shrink-0 pt-2 pr-4">
+                            {grupo.obra.status && (
+                              <Badge 
+                                variant={grupo.obra.status === 'ativa' ? 'default' : 'outline'} 
+                                className="hidden sm:inline-flex"
+                              >
+                                {grupo.obra.status}
+                              </Badge>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleVerHistorico(grupo.obra)
+                              }}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Eye className="w-4 h-4 mr-1.5" />
+                              <span className="hidden sm:inline">Detalhes</span>
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <AccordionContent>
+                        <CardContent className="pt-0 px-4 pb-4">
+                          {grupo.gruas.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed">
+                              <Building2 className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                              <p className="text-base font-medium text-gray-600 mb-2">Esta obra ainda não possui medições</p>
+                              <p className="text-sm text-gray-500 mb-4">Comece adicionando medições para esta obra</p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => router.push(`/dashboard/obras/${grupo.obra.id}`)}
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                Ver Detalhes da Obra
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {grupo.gruas.map((gruaGrupo) => {
+                              const valorTotalGrua = gruaGrupo.medicoes.reduce((sum, m) => sum + (m.valor_total || 0), 0)
+                              
+                              return (
+                                <div 
+                                  key={String(gruaGrupo.grua.id)} 
+                                  className="border rounded-lg p-5 bg-gradient-to-br from-gray-50 to-white hover:shadow-md transition-shadow"
+                                >
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-4 border-b">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                      <div className="flex-shrink-0">
+                                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                                          <Forklift className="w-5 h-5 text-gray-600" />
+                                        </div>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <h4 className="font-semibold text-base text-gray-900 mb-1">{gruaGrupo.grua.name}</h4>
+                                        {gruaGrupo.grua.modelo && gruaGrupo.grua.fabricante && (
+                                          <p className="text-sm text-gray-500">
+                                            {gruaGrupo.grua.fabricante} - {gruaGrupo.grua.modelo}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 flex-shrink-0">
+                                      <Badge variant="secondary" className="font-medium">
+                                        {gruaGrupo.medicoes.length} medição{gruaGrupo.medicoes.length !== 1 ? 'ões' : ''}
+                                      </Badge>
+                                      <div className="text-right">
+                                        <p className="text-xs text-gray-500 mb-0.5">Total da Grua</p>
+                                        <p className="text-base font-bold text-blue-600">
+                                          {formatCurrency(valorTotalGrua)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow className="bg-gray-50/50">
+                                          <TableHead className="font-semibold">Número</TableHead>
+                                          <TableHead className="font-semibold">Período</TableHead>
+                                          <TableHead className="font-semibold text-right">Valor Total</TableHead>
+                                          <TableHead className="font-semibold">Status</TableHead>
+                                          <TableHead className="font-semibold">Aprovação</TableHead>
+                                          <TableHead className="font-semibold">Documentos</TableHead>
+                                          <TableHead className="font-semibold text-center">Ações</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {gruaGrupo.medicoes.map((medicao) => (
+                                          <TableRow key={medicao.id} className="hover:bg-gray-50/50">
+                                            <TableCell className="font-medium">{medicao.numero}</TableCell>
+                                            <TableCell className="text-gray-600">{medicao.periodo}</TableCell>
+                                            <TableCell className="font-semibold text-right text-blue-600">
+                                              {formatCurrency(medicao.valor_total || 0)}
+                                            </TableCell>
+                                            <TableCell>{getStatusBadge(medicao.status)}</TableCell>
+                                            <TableCell>{getAprovacaoBadge(medicao.status_aprovacao)}</TableCell>
+                                            <TableCell>
+                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                {medicao.status === 'finalizada' || medicao.status === 'enviada' ? (
+                                                  <>
+                                                    {medicao.documentos?.some(d => d.tipo_documento === 'nf_servico') ? (
+                                                      <Badge variant="default" className="text-xs px-2 py-0.5">
+                                                        <Receipt className="w-3 h-3 mr-1" />
+                                                        NF Serviço
+                                                      </Badge>
+                                                    ) : (
+                                                      <Badge variant="outline" className="text-xs px-2 py-0.5">
+                                                        <Receipt className="w-3 h-3 mr-1" />
+                                                        NF Serviço
+                                                      </Badge>
+                                                    )}
+                                                    {medicao.documentos?.some(d => d.tipo_documento === 'nf_locacao') ? (
+                                                      <Badge variant="default" className="text-xs px-2 py-0.5">
+                                                        <FileCheck className="w-3 h-3 mr-1" />
+                                                        NF Locação
+                                                      </Badge>
+                                                    ) : (
+                                                      <Badge variant="outline" className="text-xs px-2 py-0.5">
+                                                        <FileCheck className="w-3 h-3 mr-1" />
+                                                        NF Locação
+                                                      </Badge>
+                                                    )}
+                                                    {medicao.documentos?.some(d => d.tipo_documento === 'boleto') ? (
+                                                      <Badge variant="default" className="text-xs px-2 py-0.5">
+                                                        <FileText className="w-3 h-3 mr-1" />
+                                                        Boleto
+                                                      </Badge>
+                                                    ) : (
+                                                      <Badge variant="outline" className="text-xs px-2 py-0.5">
+                                                        <FileText className="w-3 h-3 mr-1" />
+                                                        Boleto
+                                                      </Badge>
+                                                    )}
+                                                  </>
+                                                ) : (
+                                                  <span className="text-xs text-gray-400 italic">Pendente</span>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                            <TableCell>
+                                              <div className="flex items-center justify-center gap-1.5">
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => {
+                                                    router.push(`/dashboard/medicoes/${medicao.id}`)
+                                                  }}
+                                                  className="h-8 w-8 p-0"
+                                                >
+                                                  <Eye className="w-4 h-4" />
+                                                </Button>
+                                                {medicao.status === 'finalizada' && medicao.status !== 'enviada' && (
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                      setSelectedMedicao(medicao)
+                                                      setIsEnviarDialogOpen(true)
+                                                    }}
+                                                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                  >
+                                                    <Send className="w-4 h-4" />
+                                                  </Button>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            </div>
+                          )}
+                        </CardContent>
+                      </AccordionContent>
+                    </Card>
+                  </AccordionItem>
+                )
+              })}
+                </Accordion>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -615,6 +1003,215 @@ export default function MedicoesPage() {
             <Button onClick={handleEnviar} disabled={enviando}>
               {enviando ? "Enviando..." : "Enviar"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Histórico de Medições */}
+      <Dialog open={isHistoricoDialogOpen} onOpenChange={setIsHistoricoDialogOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Histórico de Medições - {obraSelecionada?.nome}</DialogTitle>
+            <DialogDescription>
+              Todas as medições registradas para esta obra, ordenadas por período
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingHistorico ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">Carregando histórico...</p>
+            </div>
+          ) : historicoMedicoes.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <Receipt className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+              <p className="text-base font-medium text-gray-600">Nenhuma medição encontrada</p>
+              <p className="text-sm text-gray-500 mt-2">Esta obra ainda não possui medições registradas</p>
+            </div>
+          ) : (() => {
+            const valorTotal = historicoMedicoes.reduce((sum, m) => sum + (m.valor_total || 0), 0)
+            
+            // Agrupar medições por período
+            const medicoesPorPeriodo = historicoMedicoes.reduce((acc, medicao) => {
+              if (!acc[medicao.periodo]) {
+                acc[medicao.periodo] = []
+              }
+              acc[medicao.periodo].push(medicao)
+              return acc
+            }, {} as Record<string, MedicaoMensal[]>)
+            
+            // Ordenar períodos: primeiro mês anterior, depois mês passado, depois os outros em ordem cronológica
+            const mesPassado = getMesPassado()
+            const agora = new Date()
+            const mesAnterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
+            const mesAnteriorStr = `${mesAnterior.getFullYear()}-${String(mesAnterior.getMonth() + 1).padStart(2, '0')}`
+            
+            const todosPeriodos = Object.keys(medicoesPorPeriodo).sort()
+            const periodos = []
+            
+            // Adicionar mês anterior primeiro (se existir)
+            if (todosPeriodos.includes(mesAnteriorStr)) {
+              periodos.push(mesAnteriorStr)
+            }
+            
+            // Adicionar mês passado depois (se existir e não for o mesmo que mês anterior)
+            if (todosPeriodos.includes(mesPassado) && mesPassado !== mesAnteriorStr) {
+              periodos.push(mesPassado)
+            }
+            
+            // Adicionar os outros períodos em ordem cronológica
+            todosPeriodos.forEach(periodo => {
+              if (periodo !== mesAnteriorStr && periodo !== mesPassado) {
+                periodos.push(periodo)
+              }
+            })
+            
+            // Obter todas as gruas únicas
+            const gruasUnicas = new Set<string>()
+            historicoMedicoes.forEach(m => {
+              if (m.gruas) {
+                gruasUnicas.add(m.gruas.name || m.gruas.nome || 'Sem Grua')
+              } else {
+                gruasUnicas.add('Sem Grua')
+              }
+            })
+            const gruasArray = Array.from(gruasUnicas).sort()
+            
+            return (
+              <div className="space-y-4">
+                {/* Resumo Compacto */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                  <div>
+                    <p className="text-sm text-gray-600">Total de Medições</p>
+                    <p className="text-xl font-bold text-gray-900">{historicoMedicoes.length}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600">Valor Total</p>
+                    <p className="text-xl font-bold text-blue-600">{formatCurrency(valorTotal)}</p>
+                  </div>
+                </div>
+
+                {/* Tabela por Período */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead className="font-semibold sticky left-0 bg-gray-50 z-10">Grua</TableHead>
+                          {periodos.map((periodo) => {
+                            const isMesPassado = periodo === mesPassado
+                            return (
+                              <TableHead 
+                                key={periodo} 
+                                className={`font-semibold text-center min-w-[140px] ${isMesPassado ? 'bg-yellow-50' : ''}`}
+                              >
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="font-medium">{periodo}</span>
+                                  {isMesPassado && (
+                                    <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800 border-yellow-300">
+                                      Mês Passado
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableHead>
+                            )
+                          })}
+                          <TableHead className="font-semibold text-right sticky right-0 bg-gray-50 z-10">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {gruasArray.map((gruaNome) => {
+                          const totalGrua = historicoMedicoes
+                            .filter(m => {
+                              const nomeGrua = m.gruas?.name || m.gruas?.nome || 'Sem Grua'
+                              return nomeGrua === gruaNome
+                            })
+                            .reduce((sum, m) => sum + (m.valor_total || 0), 0)
+                          
+                          return (
+                            <TableRow key={gruaNome} className="hover:bg-gray-50/50">
+                              <TableCell className="font-medium sticky left-0 bg-white z-10">{gruaNome}</TableCell>
+                              {periodos.map((periodo) => {
+                                const medicoesDoPeriodo = medicoesPorPeriodo[periodo] || []
+                                const medicaoGrua = medicoesDoPeriodo.find(m => {
+                                  const nomeGrua = m.gruas?.name || m.gruas?.nome || 'Sem Grua'
+                                  return nomeGrua === gruaNome
+                                })
+                                
+                                return (
+                                  <TableCell key={periodo} className="text-center">
+                                    {medicaoGrua ? (
+                                      <div className="flex flex-col items-center gap-1.5 py-2">
+                                        <span className="font-semibold text-blue-600 text-sm">
+                                          {formatCurrency(medicaoGrua.valor_total || 0)}
+                                        </span>
+                                        <span className="text-xs text-gray-500 font-mono">{medicaoGrua.numero}</span>
+                                        <div className="flex gap-1 justify-center flex-wrap">
+                                          {getStatusBadge(medicaoGrua.status)}
+                                          {getAprovacaoBadge(medicaoGrua.status_aprovacao)}
+                                        </div>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => router.push(`/dashboard/medicoes/${medicaoGrua.id}`)}
+                                          className="h-7 w-7 p-0"
+                                          title="Ver detalhes"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-300">-</span>
+                                    )}
+                                  </TableCell>
+                                )
+                              })}
+                              <TableCell className="text-right font-semibold text-blue-600 sticky right-0 bg-white z-10">
+                                {formatCurrency(totalGrua)}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                        {/* Linha de Total */}
+                        <TableRow className="bg-gray-50 font-semibold border-t-2 border-gray-300">
+                          <TableCell className="sticky left-0 bg-gray-50 z-10">Total</TableCell>
+                          {periodos.map((periodo) => {
+                            const totalPeriodo = (medicoesPorPeriodo[periodo] || [])
+                              .reduce((sum, m) => sum + (m.valor_total || 0), 0)
+                            const isMesPassado = periodo === mesPassado
+                            return (
+                              <TableCell 
+                                key={periodo} 
+                                className={`text-center font-semibold text-blue-600 ${isMesPassado ? 'bg-yellow-50' : ''}`}
+                              >
+                                {formatCurrency(totalPeriodo)}
+                              </TableCell>
+                            )
+                          })}
+                          <TableCell className="text-right font-bold text-blue-600 text-lg sticky right-0 bg-gray-50 z-10">
+                            {formatCurrency(valorTotal)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsHistoricoDialogOpen(false)}>
+              Fechar
+            </Button>
+            {obraSelecionada && (
+              <Button onClick={() => {
+                setIsHistoricoDialogOpen(false)
+                router.push(`/dashboard/obras/${obraSelecionada.id}`)
+              }}>
+                Ver Obra Completa
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

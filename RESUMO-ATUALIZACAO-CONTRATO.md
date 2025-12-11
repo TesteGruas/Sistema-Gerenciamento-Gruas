@@ -101,3 +101,4 @@ O sistema entregue é **5x mais complexo** do que o inicialmente previsto no con
 ---
 
 **Documento completo:** `ATUALIZACAO-CONTRATO-ESCOPO.md`
+

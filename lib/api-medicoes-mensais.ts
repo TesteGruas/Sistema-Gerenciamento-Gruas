@@ -55,7 +55,8 @@ export interface MedicaoMensal {
   };
   gruas?: { // NOVO
     id: number;
-    nome: string;
+    name: string;
+    nome?: string; // Alias para compatibilidade
     modelo?: string;
     fabricante?: string;
     capacidade?: string;
@@ -167,6 +168,7 @@ export interface MedicaoMensalFilters {
   data_fim?: string;
   mes_referencia?: number;
   ano_referencia?: number;
+  search?: string; // Busca por texto
   page?: number;
   limit?: number;
 }
@@ -195,6 +197,7 @@ export const medicoesMensaisApi = {
     if (filters.data_fim) params.append('data_fim', filters.data_fim);
     if (filters.mes_referencia) params.append('mes_referencia', filters.mes_referencia.toString());
     if (filters.ano_referencia) params.append('ano_referencia', filters.ano_referencia.toString());
+    if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
 
@@ -267,6 +270,14 @@ export const medicoesMensaisApi = {
   },
 
   /**
+   * Listar medições de um cliente (apenas enviadas, para aprovação)
+   */
+  async listarPorCliente(cliente_id: number): Promise<{ success: boolean; data: MedicaoMensal[]; total: number }> {
+    const response = await api.get(`/medicoes-mensais/cliente/${cliente_id}`);
+    return response.data;
+  },
+
+  /**
    * Enviar medição ao cliente
    */
   async enviar(id: number, email?: string, telefone?: string): Promise<{ success: boolean; data: MedicaoMensal; message: string }> {
@@ -330,6 +341,26 @@ export const medicoesMensaisApi = {
    */
   async atualizarDocumento(medicao_id: number, documento_id: number, documento: Partial<MedicaoDocumento>): Promise<{ success: boolean; data: MedicaoDocumento; message: string }> {
     const response = await api.put(`/medicoes-mensais/${medicao_id}/documentos/${documento_id}`, documento);
+    return response.data;
+  },
+
+  /**
+   * Listar obras ativas que não possuem medição para o período atual
+   */
+  async listarObrasSemMedicao(): Promise<{ 
+    success: boolean; 
+    data: Array<{
+      id: number;
+      nome: string;
+      status: string;
+      cliente_id: number;
+      cliente: { id: number; nome: string } | null;
+    }>; 
+    periodo: string;
+    total: number;
+    message: string;
+  }> {
+    const response = await api.get('/medicoes-mensais/obras-sem-medicao');
     return response.data;
   }
 };

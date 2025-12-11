@@ -201,6 +201,14 @@ export const clientesApi = {
     return apiRequest(url, {
       method: 'DELETE',
     })
+  },
+
+  // Buscar cliente por usuario_id
+  async buscarPorUsuarioId(usuario_id: number): Promise<ClienteResponse> {
+    const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}/usuario/${usuario_id}`)
+    return apiRequest(url, {
+      method: 'GET',
+    })
   }
 }
 

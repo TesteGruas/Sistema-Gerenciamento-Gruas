@@ -12,7 +12,7 @@ import {
   ROLES_LEVELS,
   PWA_PERMISSIONS as BASE_PWA_PERMISSIONS
 } from '@/types/permissions'
-import { LucideIcon, Clock, FileText, CheckCircle, Building2, User, Settings, Bell, Receipt } from 'lucide-react'
+import { LucideIcon, Clock, FileText, CheckCircle, Building2, User, Settings, Bell, Receipt, Forklift } from 'lucide-react'
 
 // ========================================
 // TIPOS ESPECÍFICOS DO PWA
@@ -98,6 +98,20 @@ export const PWA_MENU_ITEMS: PWAMenuItem[] = [
     icon: Receipt,
     permission: 'documentos:visualizar',
     description: 'Visualize, baixe e assine seus holerites'
+  },
+  {
+    label: 'Minhas Gruas',
+    path: '/pwa/cliente/gruas',
+    icon: Forklift,
+    permission: 'obras:visualizar', // Clientes podem visualizar suas gruas
+    description: 'Visualize as gruas alocadas nas suas obras'
+  },
+  {
+    label: 'Medições',
+    path: '/pwa/cliente/medicoes',
+    icon: Receipt,
+    permission: 'obras:visualizar', // Clientes podem visualizar e aprovar medições
+    description: 'Visualize e aprove medições das suas obras'
   }
 ]
 
@@ -211,7 +225,7 @@ export function getPWAHomePage(roleName: RoleName): string {
       return '/pwa/ponto' // Operários vão direto para ponto
     
     case 'Clientes':
-      return '/pwa/documentos' // Clientes vão direto para documentos
+      return '/pwa/cliente/medicoes' // Clientes vão direto para medições
     
     default:
       return '/pwa'
@@ -236,7 +250,7 @@ export function getPWARoleDescription(roleName: RoleName): string {
       return 'Registro de ponto e visualização de documentos'
     
     case 'Clientes':
-      return 'Visualização e assinatura de documentos'
+      return 'Visualização de gruas, medições e aprovação de medições'
     
     default:
       return 'Acesso limitado'
@@ -288,6 +302,9 @@ export const PWA_FEATURES: Record<RoleName, string[]> = {
     'Notificações'
   ],
   'Clientes': [
+    'Visualização de gruas',
+    'Visualização de medições',
+    'Aprovação de medições',
     'Visualização de documentos',
     'Assinatura de documentos',
     'Notificações'

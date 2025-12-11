@@ -11,3 +11,4 @@ COMMENT ON COLUMN certificados_colaboradores.assinatura_digital IS 'Assinatura d
 COMMENT ON COLUMN certificados_colaboradores.assinado_por IS 'ID do usuário que assinou o certificado';
 COMMENT ON COLUMN certificados_colaboradores.assinado_em IS 'Data e hora da assinatura do certificado';
 
+

@@ -151,6 +151,7 @@ const medicaoMensalFiltersSchema = Joi.object({
   data_fim: Joi.date().iso().optional(),
   mes_referencia: Joi.number().integer().min(1).max(12).optional(),
   ano_referencia: Joi.number().integer().min(2000).max(2100).optional(),
+  search: Joi.string().max(100).allow('').optional(), // Busca por texto
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(1000).default(10)
 });

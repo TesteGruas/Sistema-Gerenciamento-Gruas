@@ -148,3 +148,4 @@ journalctl -u nextjs -f
 - Se o problema persistir, pode ser necessário verificar se há um proxy reverso ou CDN interferindo
 
 
+

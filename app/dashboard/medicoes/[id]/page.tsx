@@ -21,9 +21,11 @@ import {
   XCircle,
   Clock,
   Building2,
-  Crane,
-  Plus
+  Forklift,
+  Plus,
+  Share2
 } from "lucide-react"
+import { ExportButton } from "@/components/export-button"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -298,6 +300,20 @@ export default function MedicaoDetalhesPage() {
         <div className="flex items-center gap-2">
           {getStatusBadge(medicao.status)}
           {getAprovacaoBadge(medicao.status_aprovacao)}
+          <ExportButton
+            dados={[medicao]}
+            tipo="medicoes"
+            nomeArquivo={`medicao-${medicao.numero}`}
+            titulo={`Medição ${medicao.numero}`}
+            variant="outline"
+          />
+          <Button
+            variant="outline"
+            onClick={() => setIsEnviarDialogOpen(true)}
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Compartilhar
+          </Button>
           {medicao.status === 'finalizada' && medicao.status !== 'enviada' && (
             <Button
               variant="default"
@@ -336,7 +352,7 @@ export default function MedicaoDetalhesPage() {
                   <div>
                     <Label className="text-xs text-gray-500">Grua</Label>
                     <div className="flex items-center gap-2">
-                      <Crane className="w-4 h-4 text-gray-400" />
+                      <Forklift className="w-4 h-4 text-gray-400" />
                       <p>{medicao.gruas.name} {medicao.gruas.modelo && `- ${medicao.gruas.modelo}`}</p>
                     </div>
                   </div>
@@ -589,13 +605,13 @@ export default function MedicaoDetalhesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Envio */}
+      {/* Dialog de Envio/Compartilhamento */}
       <Dialog open={isEnviarDialogOpen} onOpenChange={setIsEnviarDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Enviar Medição ao Cliente</DialogTitle>
+            <DialogTitle>Compartilhar Medição</DialogTitle>
             <DialogDescription>
-              Adicione os e-mails e telefones para envio das notificações
+              Adicione os e-mails e telefones (WhatsApp) para envio das notificações
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -700,3 +716,4 @@ export default function MedicaoDetalhesPage() {
     </div>
   )
 }
+

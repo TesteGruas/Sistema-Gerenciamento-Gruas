@@ -298,6 +298,112 @@ export default function NovaMedicaoPage() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
 
+  const preencherDadosDebug = () => {
+    const now = new Date()
+    const periodo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const numero = `MED-DEBUG-${periodo}-${Date.now()}`
+    
+    // Preencher formulário principal
+    setMedicaoForm({
+      ...medicaoForm,
+      numero: numero,
+      periodo: periodo,
+      data_medicao: now.toISOString().split('T')[0],
+      valor_mensal_bruto: 15000.00,
+      valor_aditivos: 2500.00,
+      valor_custos_extras: 1200.00,
+      valor_descontos: 500.00,
+      observacoes: "Dados preenchidos automaticamente para debug e testes do sistema."
+    })
+
+    // Adicionar alguns custos mensais de exemplo se houver itens disponíveis
+    if (itens.length > 0) {
+      const custosExemplo: CustoMensalForm[] = []
+      
+      // Adicionar até 3 itens de exemplo
+      const itensParaAdicionar = itens.slice(0, 3)
+      
+      itensParaAdicionar.forEach((item, index) => {
+        // Garantir que a descrição sempre esteja preenchida
+        const descricao = item.descricao || item.codigo || `Item ${index + 1}`
+        
+        custosExemplo.push({
+          item: item.codigo || `ITEM-${index + 1}`,
+          descricao: descricao,
+          unidade: item.unidade || 'mês',
+          tipo: item.tipo || 'contrato',
+          quantidade_orcamento: (index + 1) * 2,
+          valor_unitario: 1000.00 * (index + 1),
+          valor_total: (index + 1) * 2 * 1000.00 * (index + 1)
+        })
+      })
+      
+      setCustosMensais(custosExemplo)
+      
+      // Preencher o formulário de custo mensal com o primeiro item para facilitar adicionar mais
+      const primeiroItem = itensParaAdicionar[0]
+      const descricaoPrimeiro = primeiroItem.descricao || primeiroItem.codigo || "Item 1"
+      setCustoForm({
+        item: primeiroItem.codigo || "01.01",
+        descricao: descricaoPrimeiro,
+        unidade: primeiroItem.unidade || 'mês',
+        tipo: primeiroItem.tipo || 'contrato',
+        quantidade_orcamento: 2,
+        valor_unitario: 1000.00,
+        valor_total: 2000.00
+      })
+    } else {
+      // Se não houver itens, criar custos de exemplo com valores padrão
+      const custosExemplo: CustoMensalForm[] = [
+        {
+          item: "01.01",
+          descricao: "Locação de Grua - Exemplo 1",
+          unidade: "mês",
+          tipo: "contrato",
+          quantidade_orcamento: 2,
+          valor_unitario: 1000.00,
+          valor_total: 2000.00
+        },
+        {
+          item: "01.02",
+          descricao: "Serviço de Montagem - Exemplo 2",
+          unidade: "und",
+          tipo: "aditivo",
+          quantidade_orcamento: 4,
+          valor_unitario: 2000.00,
+          valor_total: 8000.00
+        },
+        {
+          item: "01.03",
+          descricao: "Manutenção Preventiva - Exemplo 3",
+          unidade: "hora",
+          tipo: "contrato",
+          quantidade_orcamento: 6,
+          valor_unitario: 3000.00,
+          valor_total: 18000.00
+        }
+      ]
+      
+      setCustosMensais(custosExemplo)
+      
+      // Preencher o formulário de custo mensal com um exemplo
+      setCustoForm({
+        item: "01.01",
+        descricao: "Locação de Grua - Exemplo 1",
+        unidade: "mês",
+        tipo: "contrato",
+        quantidade_orcamento: 2,
+        valor_unitario: 1000.00,
+        valor_total: 2000.00
+      })
+    }
+
+    toast({
+      title: "Dados Preenchidos",
+      description: "Todos os campos foram preenchidos com valores de exemplo (exceto obra e grua)",
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -404,6 +510,15 @@ export default function NovaMedicaoPage() {
             <p className="text-gray-600">Crie uma nova medição vinculada a uma grua</p>
           </div>
         </div>
+        <Button 
+          type="button"
+          variant="outline" 
+          onClick={preencherDadosDebug}
+          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
+        >
+          <Calculator className="w-4 h-4 mr-2" />
+          Preencher Dados
+        </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
@@ -619,7 +734,7 @@ export default function NovaMedicaoPage() {
                 {/* Primeira linha: Item e Descrição */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label htmlFor="item" className="text-xs">Item *</Label>
+                    <Label htmlFor="custo_item" className="text-xs">Item *</Label>
                     <div className="flex gap-2">
                       <Popover open={itemSearchOpen} onOpenChange={setItemSearchOpen}>
                         <PopoverTrigger asChild>
@@ -805,13 +920,12 @@ export default function NovaMedicaoPage() {
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor="descricao" className="text-xs">Descrição *</Label>
+                    <Label htmlFor="custo_descricao" className="text-xs">Descrição *</Label>
                     <Input
-                      id="descricao"
+                      id="custo_descricao"
                       value={custoForm.descricao}
                       onChange={(e) => setCustoForm({ ...custoForm, descricao: e.target.value })}
                       placeholder="Locação de grua..."
-                      required
                       className="h-8 text-sm bg-white"
                     />
                   </div>
@@ -820,7 +934,7 @@ export default function NovaMedicaoPage() {
                 {/* Segunda linha: Unidade, Tipo, Qtd. Orçamento, Valor Unitário, Total Orçamento */}
                 <div className="grid grid-cols-5 gap-2">
                   <div>
-                    <Label htmlFor="unidade" className="text-xs">Unidade *</Label>
+                    <Label htmlFor="custo_unidade" className="text-xs">Unidade *</Label>
                     <Select
                       value={custoForm.unidade}
                       onValueChange={(value: any) => setCustoForm({ ...custoForm, unidade: value })}
@@ -842,7 +956,7 @@ export default function NovaMedicaoPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="tipo" className="text-xs">Tipo *</Label>
+                    <Label htmlFor="custo_tipo" className="text-xs">Tipo *</Label>
                     <Select
                       value={custoForm.tipo}
                       onValueChange={(value: any) => setCustoForm({ ...custoForm, tipo: value })}
@@ -857,9 +971,9 @@ export default function NovaMedicaoPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="quantidade_orcamento" className="text-xs">Qtd. Orç. *</Label>
+                    <Label htmlFor="custo_quantidade_orcamento" className="text-xs">Qtd. Orç. *</Label>
                     <Input
-                      id="quantidade_orcamento"
+                      id="custo_quantidade_orcamento"
                       type="number"
                       step="0.01"
                       min="0"
@@ -872,14 +986,13 @@ export default function NovaMedicaoPage() {
                         })
                       }}
                       placeholder="0.00"
-                      required
                       className="h-8 text-sm bg-white"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="valor_unitario" className="text-xs">Valor Unit. *</Label>
+                    <Label htmlFor="custo_valor_unitario" className="text-xs">Valor Unit. *</Label>
                     <Input
-                      id="valor_unitario"
+                      id="custo_valor_unitario"
                       type="number"
                       step="0.01"
                       min="0"
@@ -892,7 +1005,6 @@ export default function NovaMedicaoPage() {
                         })
                       }}
                       placeholder="0.00"
-                      required
                       className="h-8 text-sm bg-white"
                     />
                   </div>

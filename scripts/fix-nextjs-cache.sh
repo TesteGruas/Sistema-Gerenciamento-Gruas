@@ -31,3 +31,4 @@ echo "📝 Próximos passos:"
 echo "   1. Execute: npm run dev"
 echo "   2. Se o erro persistir, tente: npm run build"
 echo ""
+

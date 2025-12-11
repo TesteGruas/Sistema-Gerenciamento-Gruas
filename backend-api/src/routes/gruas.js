@@ -1885,4 +1885,101 @@ router.delete('/:id', async (req, res) => {
  *                             type: string
  */
 
+/**
+ * GET /api/gruas/cliente/:cliente_id
+ * Listar gruas de um cliente (através das obras)
+ * Se o usuário for cliente, valida que o cliente_id corresponde ao usuário
+ */
+router.get('/cliente/:cliente_id', authenticateToken, async (req, res) => {
+  try {
+    const { cliente_id } = req.params
+    const userId = req.user?.id
+
+    // Se o usuário for cliente, verificar se o cliente_id corresponde ao usuário
+    const userRole = req.user?.role?.toLowerCase() || ''
+    if (userRole.includes('cliente') || req.user?.level === 1) {
+      const { data: cliente, error: clienteError } = await supabaseAdmin
+        .from('clientes')
+        .select('id')
+        .eq('contato_usuario_id', userId)
+        .eq('id', cliente_id)
+        .single()
+
+      if (clienteError || !cliente) {
+        return res.status(403).json({
+          error: 'Acesso negado',
+          message: 'Você não tem permissão para acessar estas gruas'
+        })
+      }
+    }
+
+    // Buscar obras do cliente
+    const { data: obras, error: obrasError } = await supabaseAdmin
+      .from('obras')
+      .select('id')
+      .eq('cliente_id', cliente_id)
+      .eq('status', 'ativa')
+
+    if (obrasError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar obras do cliente',
+        message: obrasError.message
+      })
+    }
+
+    const obraIds = obras?.map(o => o.id) || []
+
+    if (obraIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        total: 0
+      })
+    }
+
+    // Buscar gruas vinculadas às obras através de grua_obras
+    const { data: gruaObras, error: gruaObrasError } = await supabaseAdmin
+      .from('grua_obras')
+      .select(`
+        grua_id,
+        gruas:grua_id (
+          id,
+          name,
+          modelo,
+          fabricante,
+          capacidade,
+          status
+        )
+      `)
+      .in('obra_id', obraIds)
+
+    if (gruaObrasError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar gruas',
+        message: gruaObrasError.message
+      })
+    }
+
+    // Extrair gruas únicas
+    const gruasUnicas = new Map()
+    gruaObras?.forEach((go: any) => {
+      if (go.gruas && !gruasUnicas.has(go.grua_id)) {
+        gruasUnicas.set(go.grua_id, go.gruas)
+      }
+    })
+
+    res.json({
+      success: true,
+      data: Array.from(gruasUnicas.values()),
+      total: gruasUnicas.size
+    })
+  } catch (error) {
+    console.error('Erro ao buscar gruas do cliente:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 export default router

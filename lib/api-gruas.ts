@@ -203,6 +203,22 @@ export const gruasApi = {
   },
 
   /**
+   * Buscar gruas de um cliente
+   */
+  listarGruasCliente: async (clienteId: number): Promise<{ success: boolean; data: Grua[]; total: number }> => {
+    const response = await api.get(`/gruas/cliente/${clienteId}`);
+    const gruasBackend = response.data.data || response.data;
+    const gruasFrontend = Array.isArray(gruasBackend)
+      ? gruasBackend.map(converterGruaBackendParaFrontend)
+      : [];
+    return {
+      success: true,
+      data: gruasFrontend,
+      total: response.data.total || gruasFrontend.length,
+    };
+  },
+
+  /**
    * Criar uma nova grua
    */
   criarGrua: async (dados: Partial<GruaBackend>): Promise<{ success: boolean; data: Grua; message: string }> => {
