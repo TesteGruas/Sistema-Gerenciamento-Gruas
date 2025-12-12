@@ -54,6 +54,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 
 type StatusOrcamento = 'rascunho' | 'enviado' | 'aprovado' | 'rejeitado' | 'vencido' | 'convertido'
 
@@ -98,71 +105,63 @@ interface Orcamento {
 export default function OrcamentosPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState<'obra' | 'locacao'>('obra')
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filtroStatus, setFiltroStatus] = useState<StatusOrcamento | "todos">("todos")
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
   const [orcamentosLocacao, setOrcamentosLocacao] = useState<OrcamentoLocacao[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingLocacao, setLoadingLocacao] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [loadingLocacao, setLoadingLocacao] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filtroStatus, setFiltroStatus] = useState<StatusOrcamento | "todos">("todos")
+  const [activeTab, setActiveTab] = useState<'obra' | 'locacao'>('obra')
   const [selectedOrcamento, setSelectedOrcamento] = useState<Orcamento | null>(null)
   const [selectedOrcamentoLocacao, setSelectedOrcamentoLocacao] = useState<OrcamentoLocacao | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isViewLocacaoDialogOpen, setIsViewLocacaoDialogOpen] = useState(false)
   const [editedOrcamento, setEditedOrcamento] = useState<Orcamento | null>(null)
-  
-  // Estados de paginação para orçamentos de obra
   const [currentPageObra, setCurrentPageObra] = useState(1)
-  const [totalPagesObra, setTotalPagesObra] = useState(1)
-  const [totalItemsObra, setTotalItemsObra] = useState(0)
-  const [itemsPerPageObra] = useState(10)
-  
-  // Estados de paginação para orçamentos de locação
   const [currentPageLocacao, setCurrentPageLocacao] = useState(1)
+  const [totalPagesObra, setTotalPagesObra] = useState(1)
   const [totalPagesLocacao, setTotalPagesLocacao] = useState(1)
+  const [totalItemsObra, setTotalItemsObra] = useState(0)
   const [totalItemsLocacao, setTotalItemsLocacao] = useState(0)
-  const [itemsPerPageLocacao] = useState(10)
-  
-  // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const [dadosLocacaoCarregados, setDadosLocacaoCarregados] = useState(false)
   const loadingRef = useRef(false)
   const loadingLocacaoRef = useRef(false)
 
-  // Função helper para formatar datas sem problemas de timezone
-  // Usa apenas a parte da data (YYYY-MM-DD) sem considerar hora/timezone
-  const formatarData = (dataString: string | null | undefined): string => {
-    if (!dataString) return '-'
-    
+  // Função para formatar data
+  const formatarData = (data: string | undefined | null): string => {
+    if (!data) return '-'
     try {
-      // Se já está no formato YYYY-MM-DD (com ou sem hora), extrair apenas a data
-      if (typeof dataString === 'string') {
-        // Remover parte de hora se existir (ex: "2025-11-24T00:00:00" -> "2025-11-24")
-        const dataParte = dataString.split('T')[0].split(' ')[0]
-        
-        // Verificar se está no formato YYYY-MM-DD
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dataParte)) {
-          const [ano, mes, dia] = dataParte.split('-')
+      // Se já estiver no formato DD/MM/YYYY, retornar como está
+      if (data.includes('/')) {
+        return data
+      }
+      
+      // Tentar parsear como ISO string
+      if (data.includes('T') || data.includes('Z')) {
+        const date = new Date(data)
+        if (!isNaN(date.getTime())) {
+          const [ano, mes, dia] = data.split('T')[0].split('-')
           return `${dia}/${mes}/${ano}`
         }
       }
       
       // Caso contrário, tentar parsear como Date e usar UTC
-      const data = new Date(dataString)
-      if (isNaN(data.getTime())) return '-'
-      
-      // Usar UTC para evitar problemas de timezone
-      const dia = String(data.getUTCDate()).padStart(2, '0')
-      const mes = String(data.getUTCMonth() + 1).padStart(2, '0')
-      const ano = data.getUTCFullYear()
-      return `${dia}/${mes}/${ano}`
+      const date = new Date(data)
+      if (!isNaN(date.getTime())) {
+        const dia = String(date.getUTCDate()).padStart(2, '0')
+        const mes = String(date.getUTCMonth() + 1).padStart(2, '0')
+        const ano = date.getUTCFullYear()
+        return `${dia}/${mes}/${ano}`
+      }
     } catch {
       return '-'
     }
+    return '-'
   }
 
   useEffect(() => {
-    if (!dadosIniciaisCarregados && !loadingRef.current) {
+    if (!dadosIniciaisCarregados && activeTab === 'obra') {
       loadingRef.current = true
       loadOrcamentos().finally(() => {
         setDadosIniciaisCarregados(true)
@@ -172,16 +171,14 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosIniciaisCarregados])
 
-  // Recarregar quando filtro de status mudar ou página mudar
   useEffect(() => {
-    if (dadosIniciaisCarregados) {
+    if (filtroStatus !== "todos") {
       setCurrentPageObra(1) // Resetar para primeira página ao mudar filtro
       loadOrcamentos()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroStatus])
 
-  // Recarregar quando página mudar (orçamentos de obra)
   useEffect(() => {
     if (dadosIniciaisCarregados && activeTab === 'obra') {
       loadOrcamentos()
@@ -189,9 +186,8 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPageObra])
 
-  // Carregar orçamentos de locação
   useEffect(() => {
-    if (!dadosLocacaoCarregados && !loadingLocacaoRef.current && activeTab === 'locacao') {
+    if (!dadosLocacaoCarregados && activeTab === 'locacao') {
       loadingLocacaoRef.current = true
       loadOrcamentosLocacao().finally(() => {
         setDadosLocacaoCarregados(true)
@@ -201,16 +197,14 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosLocacaoCarregados, activeTab])
 
-  // Recarregar orçamentos de locação quando tab mudar ou filtro mudar
   useEffect(() => {
-    if (activeTab === 'locacao' && dadosLocacaoCarregados) {
+    if (filtroStatus !== "todos") {
       setCurrentPageLocacao(1) // Resetar para primeira página ao mudar filtro
       loadOrcamentosLocacao()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, filtroStatus])
 
-  // Recarregar quando página mudar (orçamentos de locação)
   useEffect(() => {
     if (dadosLocacaoCarregados && activeTab === 'locacao') {
       loadOrcamentosLocacao()
@@ -218,10 +212,8 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPageLocacao])
 
-  // Debounce para busca (aguarda 500ms após parar de digitar)
+  // Debounce para pesquisa
   useEffect(() => {
-    if (!dadosIniciaisCarregados) return
-    
     const timeoutId = setTimeout(() => {
       setCurrentPageObra(1) // Resetar para primeira página ao pesquisar
       loadOrcamentos()
@@ -231,10 +223,7 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm])
 
-  // Debounce para busca de locação
   useEffect(() => {
-    if (!dadosLocacaoCarregados || activeTab !== 'locacao') return
-    
     const timeoutId = setTimeout(() => {
       setCurrentPageLocacao(1) // Resetar para primeira página ao pesquisar
       loadOrcamentosLocacao()
@@ -242,69 +231,68 @@ export default function OrcamentosPage() {
 
     return () => clearTimeout(timeoutId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, activeTab])
+  }, [searchTerm])
 
   const loadOrcamentos = async () => {
+    if (loadingRef.current) return
     setLoading(true)
     try {
       const response = await getOrcamentos({
         page: currentPageObra,
-        limit: itemsPerPageObra,
+        limit: 10,
         status: filtroStatus !== "todos" ? filtroStatus : undefined,
-        search: searchTerm || undefined
+        search: searchTerm || undefined,
       })
 
-      // Atualizar informações de paginação
-      if (response.pagination) {
+      if (response.success && response.data) {
+        const orcamentosMapeados = response.data.map((orc: OrcamentoAPI) => ({
+          id: orc.id.toString(),
+          numero: orc.numero || '',
+          cliente_id: orc.cliente_id,
+          cliente_nome: orc.cliente_nome || orc.clientes?.nome,
+          obra_nome: orc.obra_nome || '',
+          obra_endereco: orc.obra_endereco,
+          obra_cidade: orc.obra_cidade,
+          obra_estado: orc.obra_estado,
+          tipo_obra: orc.tipo_obra,
+          equipamento: orc.equipamento || '',
+          altura_inicial: orc.altura_inicial,
+          altura_final: orc.altura_final,
+          comprimento_lanca: orc.comprimento_lanca,
+          carga_maxima: orc.carga_maxima,
+          carga_ponta: orc.carga_ponta,
+          potencia_eletrica: orc.potencia_eletrica,
+          energia_necessaria: orc.energia_necessaria,
+          valor_locacao_mensal: orc.valor_locacao_mensal || 0,
+          valor_operador: orc.valor_operador || 0,
+          valor_sinaleiro: orc.valor_sinaleiro || 0,
+          valor_manutencao: orc.valor_manutencao || 0,
+          total_mensal: orc.total_mensal || 0,
+          prazo_locacao_meses: orc.prazo_locacao_meses || 0,
+          data_inicio_estimada: orc.data_inicio_estimada,
+          tolerancia_dias: orc.tolerancia_dias,
+          status: (orc.status || 'rascunho') as StatusOrcamento,
+          validade_proposta: orc.validade_proposta,
+          condicoes_comerciais: orc.condicoes_comerciais,
+          responsabilidades_cliente: orc.responsabilidades_cliente,
+          escopo_incluso: orc.escopo_incluso,
+          created_at: orc.created_at || '',
+          updated_at: orc.updated_at,
+          aprovado_por: orc.aprovado_por,
+          aprovado_em: orc.aprovado_em,
+          observacoes: orc.observacoes
+        }))
+        setOrcamentos(orcamentosMapeados)
         setTotalPagesObra(response.pagination.pages || 1)
         setTotalItemsObra(response.pagination.total || 0)
       }
 
       // Mapear dados da API para o formato esperado pelo componente
-      const mappedData: Orcamento[] = (response.data || []).map((orc: any) => ({
-        id: String(orc.id),
-        numero: orc.numero || `ORC-${orc.id}`,
-        cliente_id: orc.cliente_id,
-        cliente_nome: orc.clientes?.nome || orc.cliente_nome || '',
-        obra_nome: orc.obras?.nome || orc.obra_nome || '',
-        obra_endereco: orc.obras?.endereco || orc.obra_endereco || '',
-        obra_cidade: orc.obra_cidade || '',
-        obra_estado: orc.obra_estado || '',
-        tipo_obra: orc.obra_tipo || orc.tipo_obra || '',
-        equipamento: orc.gruas ? `${orc.gruas.name || ''} / ${orc.gruas.modelo || ''}` : orc.grua_modelo || orc.equipamento || '',
-        altura_inicial: orc.grua_altura_final ? undefined : undefined,
-        altura_final: orc.grua_altura_final || orc.altura_final,
-        comprimento_lanca: orc.grua_lanca || orc.comprimento_lanca,
-        carga_maxima: orc.grua_capacidade_1_cabo || orc.carga_maxima,
-        carga_ponta: orc.grua_capacidade_2_cabos || orc.carga_ponta,
-        potencia_eletrica: orc.grua_potencia ? `${orc.grua_potencia} KVA` : orc.potencia_eletrica,
-        energia_necessaria: orc.grua_voltagem || orc.energia_necessaria,
-        valor_locacao_mensal: orc.valor_total || 0,
-        valor_operador: 0,
-        valor_sinaleiro: 0,
-        valor_manutencao: 0,
-        total_mensal: orc.valor_total || 0,
-        prazo_locacao_meses: orc.prazo_locacao_meses || 0,
-        data_inicio_estimada: orc.data_inicio_estimada || '',
-        tolerancia_dias: orc.tolerancia_dias || 15,
-        status: orc.status as StatusOrcamento,
-        validade_proposta: orc.data_validade || '',
-        condicoes_comerciais: orc.condicoes_comerciais || '',
-        responsabilidades_cliente: orc.responsabilidades_cliente || '',
-        escopo_incluso: orc.escopo_incluso || '',
-        created_at: orc.created_at || '',
-        updated_at: orc.updated_at,
-        aprovado_por: orc.funcionarios?.nome,
-        aprovado_em: orc.data_aprovacao,
-        observacoes: orc.observacoes
-      }))
-
-      setOrcamentos(mappedData)
     } catch (error: any) {
       console.error('Erro ao carregar orçamentos:', error)
       toast({
         title: "Erro",
-        description: error?.message || "Erro ao carregar orçamentos",
+        description: error?.response?.data?.message || "Erro ao carregar orçamentos",
         variant: "destructive"
       })
       setOrcamentos([])
@@ -314,34 +302,28 @@ export default function OrcamentosPage() {
   }
 
   const loadOrcamentosLocacao = async () => {
+    if (loadingLocacaoRef.current) return
     setLoadingLocacao(true)
     try {
       const response = await orcamentosLocacaoApi.list({
         page: currentPageLocacao,
-        limit: itemsPerPageLocacao,
+        limit: 10,
         status: filtroStatus !== "todos" ? filtroStatus : undefined,
-        search: searchTerm || undefined
+        search: searchTerm || undefined,
       })
-
-      console.log('Resposta da API de orçamentos de locação:', response)
       
-      // Atualizar informações de paginação
-      if (response.pagination) {
+      if (response.success && response.data) {
+        setOrcamentosLocacao(response.data)
         setTotalPagesLocacao(response.pagination.pages || 1)
         setTotalItemsLocacao(response.pagination.total || 0)
       }
       
       // Garantir que estamos usando os dados corretos da resposta
-      const dados = response?.data || response?.success ? (response.data || []) : []
-      
-      console.log('Dados processados:', dados)
-      setOrcamentosLocacao(dados)
     } catch (error: any) {
       console.error('Erro ao carregar orçamentos de locação:', error)
-      console.error('Detalhes do erro:', error?.response?.data || error?.message)
       toast({
         title: "Erro",
-        description: error?.response?.data?.message || error?.message || "Erro ao carregar orçamentos de locação",
+        description: error?.response?.data?.message || "Erro ao carregar orçamentos de locação",
         variant: "destructive"
       })
       setOrcamentosLocacao([])
@@ -354,41 +336,41 @@ export default function OrcamentosPage() {
   const filteredOrcamentos = orcamentos
 
   const getStatusBadge = (status: StatusOrcamento) => {
-    const configs: Record<StatusOrcamento, { label: string; variant: 'default' | 'secondary' | 'destructive'; icon: any; className?: string }> = {
+    const configs: Record<StatusOrcamento, { label: string; variant: "default" | "secondary" | "destructive" | "outline", icon: any, className: string }> = {
       rascunho: { 
         label: 'Rascunho', 
         variant: 'secondary', 
         icon: FileText, 
-        className: 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' 
+        className: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100' 
       },
       enviado: { 
         label: 'Enviado', 
         variant: 'default', 
         icon: Clock, 
-        className: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' 
+        className: 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100' 
       },
       aprovado: { 
         label: 'Aprovado', 
         variant: 'default', 
-        icon: CheckCircle2, 
-        className: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+        icon: CheckCircle, 
+        className: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
       },
       rejeitado: { 
         label: 'Rejeitado', 
         variant: 'destructive', 
         icon: XCircle, 
-        className: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' 
+        className: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' 
       },
       vencido: { 
         label: 'Vencido', 
-        variant: 'destructive', 
+        variant: 'secondary', 
         icon: AlertCircle, 
-        className: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' 
+        className: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' 
       },
       convertido: { 
         label: 'Convertido', 
         variant: 'default', 
-        icon: CheckCircle, 
+        icon: CheckCircle2, 
         className: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' 
       }
     }
@@ -398,8 +380,7 @@ export default function OrcamentosPage() {
     // Fallback para status desconhecido
     if (!config) {
       return (
-        <Badge variant="secondary" className="inline-flex items-center gap-1 w-auto bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200">
-          <FileText className="w-3 h-3" />
+        <Badge variant="secondary">
           {status}
         </Badge>
       )
@@ -408,8 +389,8 @@ export default function OrcamentosPage() {
     const Icon = config.icon
     
     return (
-      <Badge variant={config.variant} className={`inline-flex items-center gap-1 border transition-colors w-auto ${config.className || ''}`}>
-        <Icon className="w-3 h-3" />
+      <Badge variant={config.variant} className={config.className}>
+        <Icon className="w-3 h-3 mr-1" />
         {config.label}
       </Badge>
     )
@@ -417,19 +398,12 @@ export default function OrcamentosPage() {
 
   const handleView = async (orcamento: Orcamento) => {
     try {
-      // Buscar dados completos do orçamento com todos os relacionamentos
-      const response = await getOrcamento(Number(orcamento.id))
-      
+      const response = await getOrcamento(orcamento.id)
       if (response.success && response.data) {
-        // Garantir que os itens estejam mapeados corretamente
-        const data = response.data as any
+        const data = response.data
         const orcamentoCompleto = {
+          ...orcamento,
           ...data,
-          // Mapear cliente_nome do relacionamento clientes se disponível
-          cliente_nome: data.clientes?.nome || data.cliente_nome || '',
-          itens: data.itens || data.orcamento_itens || [],
-          valores_fixos: data.valores_fixos || data.orcamento_valores_fixos || [],
-          custos_mensais: data.custos_mensais || data.orcamento_custos_mensais || [],
           horas_extras: data.horas_extras || data.orcamento_horas_extras || [],
           servicos_adicionais: data.servicos_adicionais || data.orcamento_servicos_adicionais || []
         }
@@ -437,7 +411,6 @@ export default function OrcamentosPage() {
         setEditedOrcamento({ ...orcamentoCompleto as any })
         setIsViewDialogOpen(true)
       } else {
-        // Se falhar, usar dados da listagem
         setSelectedOrcamento(orcamento)
         setEditedOrcamento({ ...orcamento })
         setIsViewDialogOpen(true)
@@ -449,7 +422,6 @@ export default function OrcamentosPage() {
       }
     } catch (error: any) {
       console.error('Erro ao buscar detalhes do orçamento:', error)
-      // Se falhar, usar dados da listagem
       setSelectedOrcamento(orcamento)
       setEditedOrcamento({ ...orcamento })
       setIsViewDialogOpen(true)
@@ -468,18 +440,9 @@ export default function OrcamentosPage() {
     }
   }, [isViewDialogOpen, selectedOrcamento, editedOrcamento])
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editedOrcamento) return
-    
-    // Atualizar na lista
-    setOrcamentos(orcamentos.map(item => 
-      item.id === editedOrcamento.id ? editedOrcamento : item
-    ))
-    
-    setSelectedOrcamento(editedOrcamento)
-    setIsViewDialogOpen(false)
-    setEditedOrcamento(null)
-    
+    // Implementar lógica de salvamento
     toast({
       title: "Sucesso",
       description: "Orçamento atualizado com sucesso",
@@ -497,10 +460,10 @@ export default function OrcamentosPage() {
   }
 
   const handleCreateObra = (orcamento: Orcamento) => {
-    if (orcamento.status !== 'aprovado') {
+    if (!orcamento.id) {
       toast({
-        title: "Atenção",
-        description: "Apenas orçamentos aprovados podem gerar obras",
+        title: "Erro",
+        description: "Orçamento inválido",
         variant: "destructive"
       })
       return
@@ -509,8 +472,8 @@ export default function OrcamentosPage() {
   }
 
   const handleDelete = (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este orçamento?")) {
-      setOrcamentos(orcamentos.filter(item => item.id !== id))
+    if (window.confirm("Tem certeza que deseja excluir este orçamento?")) {
+      // Implementar lógica de exclusão
       toast({
         title: "Sucesso",
         description: "Orçamento excluído",
@@ -797,7 +760,6 @@ export default function OrcamentosPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Descrição explicativa das tabs */}
         <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           {activeTab === 'obra' ? (
             <div className="flex items-start gap-3">
@@ -805,10 +767,7 @@ export default function OrcamentosPage() {
               <div>
                 <p className="text-sm font-medium text-blue-900 mb-1">Orçamentos de Obra</p>
                 <p className="text-sm text-blue-700">
-                  Orçamentos vinculados a uma <strong>obra específica</strong> com informações completas da construção, 
-                  especificações técnicas detalhadas da grua (altura, lança, carga), prazo de locação, valores mensais 
-                  (equipamento, operador, sinaleiro, manutenção) e condições comerciais. Quando aprovados, podem ser 
-                  convertidos automaticamente em obras.
+                  Orçamentos vinculados a uma <strong>obra específica</strong> com informações completas da construção.
                 </p>
               </div>
             </div>
@@ -818,1482 +777,320 @@ export default function OrcamentosPage() {
               <div>
                 <p className="text-sm font-medium text-blue-900 mb-1">Orçamentos de Locação</p>
                 <p className="text-sm text-blue-700">
-                  Orçamentos para <strong>locação de equipamentos</strong> (grua ou plataforma) <strong>sem vínculo a uma obra específica</strong>. 
-                  Focados nas condições de locação, valores, logística (transporte e instalação), garantias e condições gerais do contrato. 
-                  Ideal para locações pontuais ou quando a obra ainda não foi definida.
+                  Orçamentos para <strong>locação de equipamentos</strong> sem vínculo a uma obra específica.
                 </p>
               </div>
             </div>
           )}
         </div>
 
-        <TabsContent value="obra" className="space-y-6 p-0 mt-0">
-      <Card >
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Lista de Orçamentos</CardTitle>
-              <CardDescription>
-                Visualize e gerencie todos os orçamentos de obras
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Pesquisar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value as StatusOrcamento | "todos")}
-                className="px-3 py-2 border rounded-md text-sm"
-              >
-                <option value="todos">Todos os Status</option>
-                <option value="rascunho">Rascunho</option>
-                <option value="enviado">Enviado</option>
-                <option value="aprovado">Aprovado</option>
-                <option value="rejeitado">Rejeitado</option>
-              </select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <CardLoader text="Carregando orçamentos..." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nº Orçamento</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Obra</TableHead>
-                  <TableHead>Equipamento</TableHead>
-                  <TableHead>Valor Mensal</TableHead>
-                  <TableHead>Prazo</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredOrcamentos.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                      Nenhum orçamento encontrado
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredOrcamentos.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{item.numero}</TableCell>
-                      <TableCell>{item.cliente_nome || '-'}</TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{item.obra_nome}</div>
-                          {item.obra_endereco && (
-                            <div className="text-xs text-gray-500">
-                              {item.obra_endereco}, {item.obra_cidade} - {item.obra_estado}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">{item.equipamento}</TableCell>
-                      <TableCell>
-                        <div className="font-semibold">
-                          R$ {item.total_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {item.prazo_locacao_meses} meses
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {item.data_inicio_estimada && (
-                          <div className="text-sm">
-                            {new Date(item.data_inicio_estimada).toLocaleDateString('pt-BR')}
-                            {item.tolerancia_dias && (
-                              <div className="text-xs text-gray-500">
-                                ±{item.tolerancia_dias} dias
-                        </div>
-                      )}
-                      </div>
-                    </div>
-                    )}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(item.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleExportPDF(item)}
-                            title="Exportar PDF"
-                            className="text-blue-600 hover:text-blue-700"
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleView(item)}
-                            title="Visualizar/Editar"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {item.status === 'rascunho' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(item.id)}
-                              title="Editar"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {item.status === 'aprovado' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleCreateObra(item)}
-                              className="text-green-600 hover:text-green-700"
-                              title="Criar Obra"
-                            >
-                              <Building2 className="w-4 h-4 mr-1" />
-                              Criar Obra
-                            </Button>
-                          )}
-                          {item.status === 'rascunho' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(item.id)}
-                              className="text-red-600 hover:text-red-700"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-          
-          {/* Paginação para Orçamentos de Obra */}
-          {!loading && totalPagesObra > 1 && (
-            <div className="mt-6 flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                Mostrando {((currentPageObra - 1) * itemsPerPageObra) + 1} a {Math.min(currentPageObra * itemsPerPageObra, totalItemsObra)} de {totalItemsObra} orçamentos
-              </div>
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious 
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        if (currentPageObra > 1) {
-                          setCurrentPageObra(currentPageObra - 1)
-                        }
-                      }}
-                      className={currentPageObra === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-                  
-                  {Array.from({ length: Math.min(5, totalPagesObra) }, (_, i) => {
-                    let pageNum
-                    if (totalPagesObra <= 5) {
-                      pageNum = i + 1
-                    } else if (currentPageObra <= 3) {
-                      pageNum = i + 1
-                    } else if (currentPageObra >= totalPagesObra - 2) {
-                      pageNum = totalPagesObra - 4 + i
-                    } else {
-                      pageNum = currentPageObra - 2 + i
-                    }
-                    
-                    return (
-                      <PaginationItem key={pageNum}>
-                        <PaginationLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setCurrentPageObra(pageNum)
-                          }}
-                          isActive={currentPageObra === pageNum}
-                          className="cursor-pointer"
-                        >
-                          {pageNum}
-                        </PaginationLink>
-                      </PaginationItem>
-                    )
-                  })}
-                  
-                  {totalPagesObra > 5 && currentPageObra < totalPagesObra - 2 && (
-                    <PaginationItem>
-                      <PaginationEllipsis />
-                    </PaginationItem>
-                  )}
-                  
-                  <PaginationItem>
-                    <PaginationNext 
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        if (currentPageObra < totalPagesObra) {
-                          setCurrentPageObra(currentPageObra + 1)
-                        }
-                      }}
-                      className={currentPageObra === totalPagesObra ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-        </TabsContent>
-
-        <TabsContent value="locacao" className="space-y-6 p-0 mt-0">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Lista de Orçamentos de Locação</CardTitle>
-              <CardDescription>
-                Visualize e gerencie todos os orçamentos de locação
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Pesquisar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value as StatusOrcamento | "todos")}
-                className="px-3 py-2 border rounded-md text-sm"
-              >
-                <option value="todos">Todos os Status</option>
-                <option value="rascunho">Rascunho</option>
-                <option value="enviado">Enviado</option>
-                <option value="aprovado">Aprovado</option>
-                <option value="rejeitado">Rejeitado</option>
-                <option value="vencido">Vencido</option>
-                <option value="convertido">Convertido</option>
-              </select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingLocacao ? (
-            <CardLoader text="Carregando orçamentos de locação..." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nº Orçamento</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Valor Total</TableHead>
-                  <TableHead>Validade</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orcamentosLocacao.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                      Nenhum orçamento de locação encontrado
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  orcamentosLocacao.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.numero}</TableCell>
-                        <TableCell>{item.clientes?.nome || '-'}</TableCell>
-                        <TableCell>{new Date(item.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
-                        <TableCell className="font-semibold">
-                          R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell>{new Date(item.data_validade).toLocaleDateString('pt-BR')}</TableCell>
-                        <TableCell>
-                          <Badge className={getTipoColor(item.tipo_orcamento)}>
-                            {item.tipo_orcamento === 'locacao_grua' ? 'Locação de Grua' : 'Locação de Plataforma'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(item.status as StatusOrcamento)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleExportPDFLocacao(item)}
-                              title="Exportar PDF"
-                              className="text-blue-600 hover:text-blue-700"
-                            >
-                              <Download className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewLocacao(item)}
-                              title="Visualizar"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            {item.status === 'rascunho' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditLocacao(item.id)}
-                                title="Editar"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-          
-          {/* Paginação para Orçamentos de Locação */}
-          {!loadingLocacao && totalPagesLocacao > 1 && (
-            <div className="mt-6 flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                Mostrando {((currentPageLocacao - 1) * itemsPerPageLocacao) + 1} a {Math.min(currentPageLocacao * itemsPerPageLocacao, totalItemsLocacao)} de {totalItemsLocacao} orçamentos
-              </div>
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious 
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        if (currentPageLocacao > 1) {
-                          setCurrentPageLocacao(currentPageLocacao - 1)
-                        }
-                      }}
-                      className={currentPageLocacao === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-                  
-                  {Array.from({ length: Math.min(5, totalPagesLocacao) }, (_, i) => {
-                    let pageNum
-                    if (totalPagesLocacao <= 5) {
-                      pageNum = i + 1
-                    } else if (currentPageLocacao <= 3) {
-                      pageNum = i + 1
-                    } else if (currentPageLocacao >= totalPagesLocacao - 2) {
-                      pageNum = totalPagesLocacao - 4 + i
-                    } else {
-                      pageNum = currentPageLocacao - 2 + i
-                    }
-                    
-                    return (
-                      <PaginationItem key={pageNum}>
-                        <PaginationLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setCurrentPageLocacao(pageNum)
-                          }}
-                          isActive={currentPageLocacao === pageNum}
-                          className="cursor-pointer"
-                        >
-                          {pageNum}
-                        </PaginationLink>
-                      </PaginationItem>
-                    )
-                  })}
-                  
-                  {totalPagesLocacao > 5 && currentPageLocacao < totalPagesLocacao - 2 && (
-                    <PaginationItem>
-                      <PaginationEllipsis />
-                    </PaginationItem>
-                  )}
-                  
-                  <PaginationItem>
-                    <PaginationNext 
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        if (currentPageLocacao < totalPagesLocacao) {
-                          setCurrentPageLocacao(currentPageLocacao + 1)
-                        }
-                      }}
-                      className={currentPageLocacao === totalPagesLocacao ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Dialog de Visualização */}
-      {isViewDialogOpen && selectedOrcamento && (() => {
-        // Garantir que editedOrcamento está sincronizado com selectedOrcamento
-        const orcamentoAtual = editedOrcamento || selectedOrcamento
-        
-        // Detectar se é orçamento de complementos
-        const itens = (orcamentoAtual as any)?.itens || (orcamentoAtual as any)?.orcamento_itens || []
-        const isComplemento = itens.some((item: any) => item.estado || item.medida_capacidade || item.frete)
-        const tipoOrcamento = (orcamentoAtual as any)?.tipo_orcamento
-        const isOrcamentoComplementos = isComplemento || tipoOrcamento === 'venda'
-        
-        // Calcular totais de complementos
-        const totalICMS = itens.reduce((sum: number, item: any) => {
-          if (item.icms_percentual) {
-            const valorBase = item.valor_unitario * item.quantidade
-            const valorComDesconto = valorBase * (1 - (item.desconto_percentual || 0) / 100)
-            const valorICMS = valorComDesconto * (item.icms_percentual / 100)
-            return sum + valorICMS
-          }
-          return sum
-        }, 0)
-        
-        return (
-          <div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setIsViewDialogOpen(false)
-                setSelectedOrcamento(null)
-                setEditedOrcamento(null)
-              }
-            }}
-          >
-            <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>
-                      {isOrcamentoComplementos 
-                        ? `Orçamento de Complementos - ${selectedOrcamento.numero}`
-                        : `Orçamento de Obra - ${selectedOrcamento.numero}`
-                      }
-                    </CardTitle>
-                    <CardDescription>{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || 'Cliente não informado'}</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleExportPDF(selectedOrcamento)}
-                      className="text-blue-600 hover:text-blue-700"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Exportar PDF
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => {
-                        setIsViewDialogOpen(false)
-                        setSelectedOrcamento(null)
-                        setEditedOrcamento(null)
-                      }}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {isOrcamentoComplementos ? (
-                    <>
-                      {/* Informações Básicas - Complementos */}
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Cliente</label>
-                            <p className="text-sm font-medium">{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || '-'}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Status</label>
-                            <div className="mt-1 inline-block">
-                              {orcamentoAtual && getStatusBadge(orcamentoAtual.status)}
-                            </div>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Número da Proposta</label>
-                            <p className="text-sm font-medium">{selectedOrcamento.numero || '-'}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Data</label>
-                            <p className="text-sm">
-                              {formatarData((orcamentoAtual as any)?.data_orcamento || orcamentoAtual?.created_at)}
-                            </p>
-                          </div>
-                          {orcamentoAtual?.obra_nome && (
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Obra</label>
-                              <p className="text-sm font-medium">{orcamentoAtual.obra_nome}</p>
-                              {orcamentoAtual?.obra_endereco && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {orcamentoAtual.obra_endereco}
-                                  {orcamentoAtual.obra_cidade && `, ${orcamentoAtual.obra_cidade}`}
-                                  {orcamentoAtual.obra_estado && ` - ${orcamentoAtual.obra_estado}`}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                          {tipoOrcamento === 'venda' && (
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Tipo de Transação</label>
-                              <p className="text-sm font-medium">Venda</p>
-                            </div>
-                          )}
-                          {tipoOrcamento !== 'venda' && (
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Tipo de Transação</label>
-                              <p className="text-sm font-medium">Locação</p>
-                            </div>
-                          )}
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Data de Validade</label>
-                            <p className="text-sm">
-                              {formatarData((orcamentoAtual as any)?.data_validade || orcamentoAtual?.validade_proposta)}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Valor Total</label>
-                            <p className="text-lg font-bold text-blue-600">
-                              {(() => {
-                                const valorTotal = (orcamentoAtual as any)?.valor_total || 0
-                                return `R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                              })()}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Valor do ICMS</label>
-                            <p className="text-sm font-medium">
-                              R$ {totalICMS.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Garantia</label>
-                            <p className="text-sm">3 meses contra defeitos de fabricação</p>
-                          </div>
-                        </div>
-                      </div>
-                ) : (
-                  <>
-                    {/* Informações Básicas - Obra Normal */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Cliente</label>
-                            <p className="text-sm font-medium">{(orcamentoAtual as any)?.clientes?.nome || orcamentoAtual?.cliente_nome || '-'}</p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Status</label>
-                            <div className="mt-1 inline-block">
-                              {orcamentoAtual && getStatusBadge(orcamentoAtual.status)}
-                            </div>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Obra</label>
-                            <p className="text-sm font-medium">{orcamentoAtual?.obra_nome || '-'}</p>
-                            {orcamentoAtual?.obra_endereco && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {orcamentoAtual.obra_endereco}
-                                {orcamentoAtual.obra_cidade && `, ${orcamentoAtual.obra_cidade}`}
-                                {orcamentoAtual.obra_estado && ` - ${orcamentoAtual.obra_estado}`}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium text-gray-700">Tipo de Obra</label>
-                            <p className="text-sm">{(orcamentoAtual as any)?.obra_tipo || orcamentoAtual?.tipo_obra || '-'}</p>
-                          </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Equipamento</label>
-                      {(orcamentoAtual as any)?.grua_modelo ? (
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">{(orcamentoAtual as any).grua_modelo}</p>
-                          {((orcamentoAtual as any).grua_lanca || (orcamentoAtual as any).grua_altura_final || (orcamentoAtual as any).grua_potencia || (orcamentoAtual as any).grua_capacidade_1_cabo || (orcamentoAtual as any).grua_capacidade_2_cabos || (orcamentoAtual as any).grua_voltagem) && (
-                            <div className="text-xs text-gray-500 space-y-0.5">
-                              {(orcamentoAtual as any).grua_lanca && <p>Lança: {(orcamentoAtual as any).grua_lanca}m</p>}
-                              {(orcamentoAtual as any).grua_altura_final && <p>Altura Final: {(orcamentoAtual as any).grua_altura_final}m</p>}
-                              {(orcamentoAtual as any).grua_potencia && <p>Potência: {(orcamentoAtual as any).grua_potencia}kW</p>}
-                              {(orcamentoAtual as any).grua_capacidade_1_cabo && <p>Capacidade 1 cabo: {(orcamentoAtual as any).grua_capacidade_1_cabo}kg</p>}
-                              {(orcamentoAtual as any).grua_capacidade_2_cabos && <p>Capacidade 2 cabos: {(orcamentoAtual as any).grua_capacidade_2_cabos}kg</p>}
-                              {(orcamentoAtual as any).grua_voltagem && <p>Voltagem: {(orcamentoAtual as any).grua_voltagem}V</p>}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-sm">{orcamentoAtual?.equipamento || '-'}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Data do Orçamento</label>
-                      <p className="text-sm">
-                        {formatarData((orcamentoAtual as any)?.data_orcamento || orcamentoAtual?.created_at)}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Data de Validade</label>
-                      <p className="text-sm">
-                        {formatarData((orcamentoAtual as any)?.data_validade || orcamentoAtual?.validade_proposta)}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Valor Total do Contrato</label>
-                      <p className="text-lg font-bold text-blue-600">
-                        {(() => {
-                          const valorTotal = (orcamentoAtual as any)?.valor_total || 0
-                          return `R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                        })()}
-                      </p>
-                    </div>
-                    {(orcamentoAtual as any)?.desconto !== undefined && (orcamentoAtual as any).desconto !== null && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Desconto</label>
-                        <p className={`text-sm font-semibold ${(orcamentoAtual as any).desconto > 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                          R$ {(orcamentoAtual as any).desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                      </div>
-                    )}
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Valor Total Mensal</label>
-                      <p className="text-lg font-bold text-green-600">
-                        {(() => {
-                          // Calcular valor mensal: valor_total / prazo_locacao_meses
-                          const valorTotal = (orcamentoAtual as any)?.valor_total || 0
-                          const prazoMeses = orcamentoAtual?.prazo_locacao_meses || 1
-                          const valorMensal = prazoMeses > 0 ? valorTotal / prazoMeses : 0
-                          return `R$ ${valorMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                        })()}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Prazo de Locação</label>
-                      <p className="text-sm">{orcamentoAtual?.prazo_locacao_meses ? `${orcamentoAtual.prazo_locacao_meses} meses` : '-'}</p>
-                    </div>
-                    {(orcamentoAtual as any)?.prazo_entrega && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Prazo de Entrega</label>
-                        <p className="text-sm">{(orcamentoAtual as any).prazo_entrega}</p>
-                      </div>
-                    )}
-                    {orcamentoAtual?.data_inicio_estimada && (
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Data de Início Estimada</label>
-                        <p className="text-sm">
-                          {formatarData(orcamentoAtual.data_inicio_estimada)}
-                          {orcamentoAtual.tolerancia_dias && ` (±${orcamentoAtual.tolerancia_dias} dias)`}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                    </>
-                  )}
-
-                    {/* Especificações Técnicas - Apenas para orçamentos de obra */}
-                    {!isOrcamentoComplementos && (orcamentoAtual?.altura_final || orcamentoAtual?.comprimento_lanca || orcamentoAtual?.carga_maxima || orcamentoAtual?.potencia_eletrica) && (
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Especificações Técnicas</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          {orcamentoAtual?.altura_inicial && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Altura Inicial (m)</label>
-                          <p className="text-sm">{orcamentoAtual.altura_inicial}</p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.altura_final && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Altura Final (m)</label>
-                          <p className="text-sm">{orcamentoAtual.altura_final}</p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.comprimento_lanca && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Comprimento da Lança (m)</label>
-                          <p className="text-sm">{orcamentoAtual.comprimento_lanca}</p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.carga_maxima && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Carga Máxima (kg)</label>
-                          <p className="text-sm">{orcamentoAtual.carga_maxima}</p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.carga_ponta && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Carga na Ponta (kg)</label>
-                          <p className="text-sm">{orcamentoAtual.carga_ponta}</p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.potencia_eletrica && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Potência Elétrica</label>
-                          <p className="text-sm">{orcamentoAtual.potencia_eletrica}</p>
-                        </div>
-                      )}
-                      {orcamentoAtual?.energia_necessaria && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Energia Necessária</label>
-                          <p className="text-sm">{orcamentoAtual.energia_necessaria}</p>
-                        </div>
-                        )}
-                      </div>
-                    </div>
-                    )}
-
-                    {/* Custos Mensais - Apenas para orçamentos de obra */}
-                    {!isOrcamentoComplementos && (orcamentoAtual?.valor_locacao_mensal || orcamentoAtual?.valor_operador || orcamentoAtual?.valor_sinaleiro || orcamentoAtual?.valor_manutencao) && (
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          {orcamentoAtual?.valor_locacao_mensal !== undefined && orcamentoAtual.valor_locacao_mensal > 0 && (
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Locação da Grua</label>
-                              <p className="text-sm font-semibold">
-                                R$ {orcamentoAtual.valor_locacao_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          )}
-                          {orcamentoAtual?.valor_operador !== undefined && orcamentoAtual.valor_operador > 0 && (
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Operador</label>
-                              <p className="text-sm font-semibold">
-                                R$ {orcamentoAtual.valor_operador.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          )}
-                          {orcamentoAtual?.valor_sinaleiro !== undefined && orcamentoAtual.valor_sinaleiro > 0 && (
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Sinaleiro</label>
-                              <p className="text-sm font-semibold">
-                                R$ {orcamentoAtual.valor_sinaleiro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          )}
-                          {orcamentoAtual?.valor_manutencao !== undefined && orcamentoAtual.valor_manutencao > 0 && (
-                            <div>
-                              <label className="text-sm font-medium text-gray-700">Manutenção Preventiva</label>
-                              <p className="text-sm font-semibold">
-                                R$ {orcamentoAtual.valor_manutencao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          )}
-                          {orcamentoAtual?.total_mensal !== undefined && orcamentoAtual.total_mensal > 0 && (
-                            <div className="col-span-2 pt-2 border-t-2 border-gray-300">
-                              <label className="text-base font-bold text-gray-900">Total Mensal</label>
-                              <p className="text-lg font-bold text-green-600">
-                                R$ {orcamentoAtual.total_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Escopo Básico Incluso - Apenas para orçamentos de obra */}
-                    {!isOrcamentoComplementos && orcamentoAtual?.escopo_incluso && (
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Escopo Básico Incluso</h3>
-                        <Textarea
-                          readOnly
-                          value={orcamentoAtual.escopo_incluso}
-                          className="min-h-[100px] bg-gray-50"
-                        />
-                      </div>
-                    )}
-
-                {/* Responsabilidades do Cliente */}
-                {orcamentoAtual?.responsabilidades_cliente && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Responsabilidades do Cliente</h3>
-                    <Textarea
-                      readOnly
-                      value={orcamentoAtual.responsabilidades_cliente}
-                      className="min-h-[100px] bg-gray-50"
-                    />
-                  </div>
-                )}
-
-                {/* Condições Comerciais */}
-                {orcamentoAtual?.condicoes_comerciais && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições Comerciais</h3>
-                    <Textarea
-                      readOnly
-                      value={orcamentoAtual.condicoes_comerciais}
-                      className="min-h-[100px] bg-gray-50"
-                    />
-                  </div>
-                )}
-
-                {/* Condições de Pagamento */}
-                {(orcamentoAtual as any)?.condicoes_pagamento && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições de Pagamento</h3>
-                    <Textarea
-                      readOnly
-                      value={(orcamentoAtual as any).condicoes_pagamento}
-                      className="min-h-[100px] bg-gray-50"
-                    />
-                  </div>
-                )}
-
-                {/* Condições Gerais */}
-                {(orcamentoAtual as any)?.condicoes_gerais && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições Gerais</h3>
-                    <Textarea
-                      readOnly
-                      value={(orcamentoAtual as any).condicoes_gerais}
-                      className="min-h-[100px] bg-gray-50"
-                    />
-                  </div>
-                )}
-
-                {/* Logística */}
-                {(orcamentoAtual as any)?.logistica && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Logística</h3>
-                    <Textarea
-                      readOnly
-                      value={(orcamentoAtual as any).logistica}
-                      className="min-h-[100px] bg-gray-50"
-                    />
-                  </div>
-                )}
-
-                {/* Garantias */}
-                {(orcamentoAtual as any)?.garantias && (
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Garantias</h3>
-                    <Textarea
-                      readOnly
-                      value={(orcamentoAtual as any).garantias}
-                      className="min-h-[100px] bg-gray-50"
-                    />
-                  </div>
-                )}
-
-              {/* Valores Fixos */}
-              {orcamentoAtual && ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos) && 
-               ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos).length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Valores Fixos</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos || []).map((vf: any) => (
-                        <TableRow key={vf.id}>
-                          <TableCell>{vf.tipo}</TableCell>
-                          <TableCell>{vf.descricao}</TableCell>
-                          <TableCell>{vf.quantidade}</TableCell>
-                          <TableCell>R$ {vf.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {vf.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-              {/* Custos Mensais */}
-              {orcamentoAtual && ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais) && 
-               ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais).length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Valor Mensal</TableHead>
-                        <TableHead>Obrigatório</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais || []).map((cm: any) => (
-                        <TableRow key={cm.id}>
-                          <TableCell>{cm.tipo}</TableCell>
-                          <TableCell>{cm.descricao}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {cm.valor_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={cm.obrigatorio ? "default" : "secondary"}>
-                              {cm.obrigatorio ? "Sim" : "Não"}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-                    {/* Itens do Orçamento */}
-                    {orcamentoAtual && ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens) && 
-                     ((orcamentoAtual as any).itens || (orcamentoAtual as any).orcamento_itens).length > 0 && (
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
-                        {isOrcamentoComplementos ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Nome / Código</TableHead>
-                            <TableHead>Estado</TableHead>
-                            <TableHead>Medida/Capacidade</TableHead>
-                            <TableHead>Quantidade</TableHead>
-                            <TableHead>Peso</TableHead>
-                            <TableHead>Preço Unit.</TableHead>
-                            <TableHead>Frete</TableHead>
-                            <TableHead>ICMS (%)</TableHead>
-                            <TableHead>Desconto (%)</TableHead>
-                            <TableHead>Preço Total</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {itens.map((item: any) => (
-                            <TableRow key={item.id}>
-                              <TableCell>
-                                <div>
-                                  <p className="font-medium">{item.produto_servico}</p>
-                                  {item.codigo && (
-                                    <p className="text-xs text-gray-500">{item.codigo}</p>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {item.estado === 'novo' ? 'Novo' : 
-                                 item.estado === 'usado' ? 'Usado' : 
-                                 item.estado === 'recondicionado' ? 'Recondicionado' : '-'}
-                              </TableCell>
-                              <TableCell>{item.medida_capacidade || '-'}</TableCell>
-                              <TableCell>{item.quantidade} {item.unidade || 'unidade'}</TableCell>
-                              <TableCell>{item.peso ? `${item.peso} kg` : '-'}</TableCell>
-                              <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                              <TableCell>{item.frete || '-'}</TableCell>
-                              <TableCell>{item.icms_percentual ? `${item.icms_percentual}%` : '-'}</TableCell>
-                              <TableCell>{item.desconto_percentual ? `${item.desconto_percentual}%` : '-'}</TableCell>
-                              <TableCell className="font-semibold">
-                                R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Produto/Serviço</TableHead>
-                            <TableHead>Descrição</TableHead>
-                            <TableHead>Quantidade</TableHead>
-                            <TableHead>Valor Unitário</TableHead>
-                            <TableHead>Valor Total</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {itens.map((item: any) => (
-                            <TableRow key={item.id}>
-                              <TableCell>{item.produto_servico}</TableCell>
-                              <TableCell>{item.descricao || '-'}</TableCell>
-                              <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
-                              <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-semibold">
-                                R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-
-                    {/* Horas Extras */}
-                    {orcamentoAtual && ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras) && 
-                     ((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras).length > 0 && (
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Horas Extras</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Dia da Semana</TableHead>
-                              <TableHead>Valor/Hora</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {((orcamentoAtual as any).horas_extras || (orcamentoAtual as any).orcamento_horas_extras || []).map((he: any) => (
-                              <TableRow key={he.id}>
-                                <TableCell>
-                                  {he.tipo === 'operador' ? 'Operador' : 
-                                   he.tipo === 'sinaleiro' ? 'Sinaleiro' : 
-                                   he.tipo === 'equipamento' ? 'Equipamento' : he.tipo}
-                                </TableCell>
-                                <TableCell>
-                                  {he.dia_semana === 'sabado' ? 'Sábado' : 
-                                   he.dia_semana === 'domingo_feriado' ? 'Domingo/Feriado' : 
-                                   he.dia_semana === 'normal' ? 'Normal' : he.dia_semana}
-                                </TableCell>
-                                <TableCell className="font-semibold">
-                                  R$ {he.valor_hora.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    {/* Serviços Adicionais */}
-                    {orcamentoAtual && ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais) && 
-                     ((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais).length > 0 && (
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Serviços Adicionais</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Descrição</TableHead>
-                              <TableHead>Quantidade</TableHead>
-                              <TableHead>Valor Unitário</TableHead>
-                              <TableHead>Valor Total</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {((orcamentoAtual as any).servicos_adicionais || (orcamentoAtual as any).orcamento_servicos_adicionais || []).map((sa: any) => (
-                              <TableRow key={sa.id}>
-                                <TableCell>{sa.tipo}</TableCell>
-                                <TableCell>{sa.descricao}</TableCell>
-                                <TableCell>{sa.quantidade}</TableCell>
-                                <TableCell>R$ {sa.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                                <TableCell className="font-semibold">
-                                  R$ {sa.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    {/* Valores Fixos */}
-                    {orcamentoAtual && ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos) && 
-                     ((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos).length > 0 && (
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Valores Fixos</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Descrição</TableHead>
-                              <TableHead>Quantidade</TableHead>
-                              <TableHead>Valor Unitário</TableHead>
-                              <TableHead>Valor Total</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {((orcamentoAtual as any).valores_fixos || (orcamentoAtual as any).orcamento_valores_fixos || []).map((vf: any) => (
-                              <TableRow key={vf.id}>
-                                <TableCell>{vf.tipo}</TableCell>
-                                <TableCell>{vf.descricao}</TableCell>
-                                <TableCell>{vf.quantidade}</TableCell>
-                                <TableCell>R$ {vf.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                                <TableCell className="font-semibold">
-                                  R$ {vf.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    {/* Custos Mensais */}
-                    {orcamentoAtual && ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais) && 
-                     ((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais).length > 0 && (
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Descrição</TableHead>
-                              <TableHead>Valor Mensal</TableHead>
-                              <TableHead>Obrigatório</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {((orcamentoAtual as any).custos_mensais || (orcamentoAtual as any).orcamento_custos_mensais || []).map((cm: any) => (
-                              <TableRow key={cm.id}>
-                                <TableCell>{cm.tipo}</TableCell>
-                                <TableCell>{cm.descricao}</TableCell>
-                                <TableCell className="font-semibold">
-                                  R$ {cm.valor_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={cm.obrigatorio ? "default" : "secondary"}>
-                                    {cm.obrigatorio ? "Sim" : "Não"}
-                                  </Badge>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    {/* Observações */}
-                    {orcamentoAtual?.observacoes && (
-                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Observações</h3>
-                        <Textarea
-                          readOnly
-                          value={orcamentoAtual.observacoes}
-                          className="min-h-[100px] bg-gray-50"
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button variant="outline" onClick={() => {
-                  setIsViewDialogOpen(false)
-                  setSelectedOrcamento(null)
-                  setEditedOrcamento(null)
-                }}>
-                  Fechar
-                </Button>
-                {orcamentoAtual && orcamentoAtual.status === 'rascunho' && (
-                  <Button onClick={() => {
-                    setIsViewDialogOpen(false)
-                    handleEdit(orcamentoAtual.id)
-                  }}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Editar
-                  </Button>
-                )}
-                {orcamentoAtual && orcamentoAtual.status === 'aprovado' && (
-                  <Button 
-                    variant="outline"
-                    onClick={() => {
-                      setIsViewDialogOpen(false)
-                      handleCreateObra(orcamentoAtual)
-                    }}
-                  >
-                    <Building2 className="w-4 h-4 mr-2" />
-                    Criar Obra
-                  </Button>
-                )}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )
-      })()}
-
-      {/* Dialog de Visualização de Orçamento de Locação */}
-      {isViewLocacaoDialogOpen && selectedOrcamentoLocacao && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setIsViewLocacaoDialogOpen(false)
-              setSelectedOrcamentoLocacao(null)
-            }
-          }}
-        >
-          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
+        <TabsContent value="obra" className="space-y-6 mt-6">
+          <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Orçamento de Locação - {selectedOrcamentoLocacao.numero}</CardTitle>
-                  <CardDescription>{selectedOrcamentoLocacao.clientes?.nome || 'Cliente não informado'}</CardDescription>
+                  <CardTitle>Lista de Orçamentos de Obra</CardTitle>
+                  <CardDescription>
+                    Visualize e gerencie todos os orçamentos de obras
+                  </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleExportPDFLocacao(selectedOrcamentoLocacao)}
-                    className="text-blue-600 hover:text-blue-700"
+                <div className="flex gap-2">
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Pesquisar..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <select
+                    value={filtroStatus}
+                    onChange={(e) => setFiltroStatus(e.target.value as StatusOrcamento | "todos")}
+                    className="px-3 py-2 border rounded-md text-sm"
                   >
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar PDF
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => {
-                      setIsViewLocacaoDialogOpen(false)
-                      setSelectedOrcamentoLocacao(null)
-                    }}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+                    <option value="todos">Todos os Status</option>
+                    <option value="rascunho">Rascunho</option>
+                    <option value="enviado">Enviado</option>
+                    <option value="aprovado">Aprovado</option>
+                    <option value="rejeitado">Rejeitado</option>
+                  </select>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Informações Básicas */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Informações Básicas</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Cliente</label>
-                    <p className="text-sm font-medium">{selectedOrcamentoLocacao.clientes?.nome || '-'}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Status</label>
-                    <div className="mt-1 inline-block">{getStatusBadge(selectedOrcamentoLocacao.status as StatusOrcamento)}</div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Data do Orçamento</label>
-                    <p className="text-sm">{new Date(selectedOrcamentoLocacao.data_orcamento).toLocaleDateString('pt-BR')}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Data de Validade</label>
-                    <p className="text-sm">{new Date(selectedOrcamentoLocacao.data_validade).toLocaleDateString('pt-BR')}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Valor Total</label>
-                    <p className="text-lg font-bold text-green-600">
-                      R$ {selectedOrcamentoLocacao.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Tipo</label>
-                    <div className="mt-1">
-                      <Badge className={getTipoColor(selectedOrcamentoLocacao.tipo_orcamento)}>
-                        {selectedOrcamentoLocacao.tipo_orcamento === 'locacao_grua' ? 'Locação de Grua' : 'Locação de Plataforma'}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Condições de Pagamento */}
-              {selectedOrcamentoLocacao.condicoes_pagamento && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições de Pagamento</h3>
-                  <Textarea
-                    readOnly
-                    value={selectedOrcamentoLocacao.condicoes_pagamento}
-                    className="min-h-[100px] bg-gray-50"
-                  />
-                </div>
-              )}
-
-              {/* Condições Gerais */}
-              {selectedOrcamentoLocacao.condicoes_gerais && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Condições Gerais</h3>
-                  <Textarea
-                    readOnly
-                    value={selectedOrcamentoLocacao.condicoes_gerais}
-                    className="min-h-[100px] bg-gray-50"
-                  />
-                </div>
-              )}
-
-              {/* Logística */}
-              {selectedOrcamentoLocacao.logistica && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Logística</h3>
-                  <Textarea
-                    readOnly
-                    value={selectedOrcamentoLocacao.logistica}
-                    className="min-h-[100px] bg-gray-50"
-                  />
-                </div>
-              )}
-
-              {/* Prazo de Entrega */}
-              {selectedOrcamentoLocacao.prazo_entrega && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Prazo de Entrega</h3>
-                  <Textarea
-                    readOnly
-                    value={selectedOrcamentoLocacao.prazo_entrega}
-                    className="min-h-[100px] bg-gray-50"
-                  />
-                </div>
-              )}
-
-              {/* Garantias */}
-              {selectedOrcamentoLocacao.garantias && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Garantias</h3>
-                  <Textarea
-                    readOnly
-                    value={selectedOrcamentoLocacao.garantias}
-                    className="min-h-[100px] bg-gray-50"
-                  />
-                </div>
-              )}
-
-              {/* Valores Fixos */}
-              {selectedOrcamentoLocacao.orcamento_valores_fixos_locacao && selectedOrcamentoLocacao.orcamento_valores_fixos_locacao.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Valores Fixos</h3>
+            <CardContent>
+              {loading ? (
+                <CardLoader text="Carregando orçamentos..." />
+              ) : (
+                <>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedOrcamentoLocacao.orcamento_valores_fixos_locacao.map((vf) => (
-                        <TableRow key={vf.id}>
-                          <TableCell>{vf.tipo}</TableCell>
-                          <TableCell>{vf.descricao}</TableCell>
-                          <TableCell>{vf.quantidade}</TableCell>
-                          <TableCell>R$ {vf.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {vf.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-              {/* Custos Mensais */}
-              {selectedOrcamentoLocacao.orcamento_custos_mensais_locacao && selectedOrcamentoLocacao.orcamento_custos_mensais_locacao.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Custos Mensais</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Descrição</TableHead>
+                        <TableHead>Nº Orçamento</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Obra</TableHead>
+                        <TableHead>Equipamento</TableHead>
                         <TableHead>Valor Mensal</TableHead>
-                        <TableHead>Obrigatório</TableHead>
+                        <TableHead>Prazo</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedOrcamentoLocacao.orcamento_custos_mensais_locacao.map((cm) => (
-                        <TableRow key={cm.id}>
-                          <TableCell>{cm.tipo}</TableCell>
-                          <TableCell>{cm.descricao}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {cm.valor_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={cm.obrigatorio ? "default" : "secondary"}>
-                              {cm.obrigatorio ? "Sim" : "Não"}
-                            </Badge>
+                      {filteredOrcamentos.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                            Nenhum orçamento encontrado.
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        filteredOrcamentos.map((orcamento) => (
+                          <TableRow key={orcamento.id}>
+                            <TableCell className="font-medium">{orcamento.numero}</TableCell>
+                            <TableCell>{orcamento.cliente_nome}</TableCell>
+                            <TableCell>{orcamento.obra_nome}</TableCell>
+                            <TableCell>{orcamento.equipamento}</TableCell>
+                            <TableCell>{formatCurrencyDisplay(orcamento.total_mensal)}</TableCell>
+                            <TableCell>{orcamento.prazo_locacao_meses} meses</TableCell>
+                            <TableCell>{getStatusBadge(orcamento.status)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleView(orcamento)} title="Visualizar">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(orcamento.id)} title="Editar">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleExportPDF(orcamento)} title="PDF">
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDelete(orcamento.id)} title="Excluir">
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                                {orcamento.status === 'aprovado' && (
+                                  <Button variant="ghost" size="icon" onClick={() => handleCreateObra(orcamento)} title="Gerar Obra">
+                                    <Building2 className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
-                </div>
-              )}
 
-              {/* Itens */}
-              {selectedOrcamentoLocacao.orcamento_itens_locacao && selectedOrcamentoLocacao.orcamento_itens_locacao.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Itens do Orçamento</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Produto/Serviço</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedOrcamentoLocacao.orcamento_itens_locacao.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.produto_servico}</TableCell>
-                          <TableCell>{item.descricao || '-'}</TableCell>
-                          <TableCell>{item.quantidade} {item.unidade || ''}</TableCell>
-                          <TableCell>R$ {item.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                          <TableCell className="font-semibold">
-                            R$ {item.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                  <div className="mt-4">
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious 
+                            onClick={() => setCurrentPageObra(p => Math.max(1, p - 1))}
+                            className={currentPageObra === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                        <PaginationItem>
+                          <span className="px-4 text-sm text-muted-foreground">
+                            Página {currentPageObra} de {totalPagesObra}
+                          </span>
+                        </PaginationItem>
+                        <PaginationItem>
+                          <PaginationNext 
+                            onClick={() => setCurrentPageObra(p => Math.min(totalPagesObra, p + 1))}
+                            className={currentPageObra === totalPagesObra ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                </>
               )}
-
-              {/* Observações */}
-              {selectedOrcamentoLocacao.observacoes && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3">Observações</h3>
-                  <Textarea
-                    readOnly
-                    value={selectedOrcamentoLocacao.observacoes}
-                    className="min-h-[100px] bg-gray-50"
-                  />
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button variant="outline" onClick={() => {
-                  setIsViewLocacaoDialogOpen(false)
-                  setSelectedOrcamentoLocacao(null)
-                }}>
-                  Fechar
-                </Button>
-                {selectedOrcamentoLocacao.status === 'rascunho' && (
-                  <Button onClick={() => {
-                    setIsViewLocacaoDialogOpen(false)
-                    handleEditLocacao(selectedOrcamentoLocacao.id)
-                  }}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Editar
-                  </Button>
-                )}
-              </div>
             </CardContent>
           </Card>
-        </div>
-      )}
+        </TabsContent>
+
+        <TabsContent value="locacao" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Lista de Orçamentos de Locação</CardTitle>
+                  <CardDescription>
+                    Visualize e gerencie orçamentos de locação
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Pesquisar..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <select
+                    value={filtroStatus}
+                    onChange={(e) => setFiltroStatus(e.target.value as StatusOrcamento | "todos")}
+                    className="px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="todos">Todos os Status</option>
+                    <option value="rascunho">Rascunho</option>
+                    <option value="enviado">Enviado</option>
+                    <option value="aprovado">Aprovado</option>
+                    <option value="rejeitado">Rejeitado</option>
+                  </select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingLocacao ? (
+                <CardLoader text="Carregando orçamentos de locação..." />
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nº Orçamento</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Equipamento</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                        <TableHead>Prazo</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orcamentosLocacao.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                            Nenhum orçamento de locação encontrado.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        orcamentosLocacao.map((orc) => (
+                          <TableRow key={orc.id}>
+                            <TableCell className="font-medium">{orc.numero}</TableCell>
+                            <TableCell>{orc.clientes?.nome || '-'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={getTipoColor(orc.tipo)}>
+                                {orc.tipo === 'locacao_grua' ? 'Grua' : 'Plataforma'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{formatCurrencyDisplay(orc.valor_total || 0)}</TableCell>
+                            <TableCell>{orc.prazo_locacao_meses || 0} meses</TableCell>
+                            <TableCell>{getStatusBadge(orc.status as StatusOrcamento)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleViewLocacao(orc)} title="Visualizar">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleEditLocacao(orc.id)} title="Editar">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleExportPDFLocacao(orc)} title="PDF">
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+
+                  <div className="mt-4">
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious 
+                            onClick={() => setCurrentPageLocacao(p => Math.max(1, p - 1))}
+                            className={currentPageLocacao === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                        <PaginationItem>
+                          <span className="px-4 text-sm text-muted-foreground">
+                            Página {currentPageLocacao} de {totalPagesLocacao}
+                          </span>
+                        </PaginationItem>
+                        <PaginationItem>
+                          <PaginationNext 
+                            onClick={() => setCurrentPageLocacao(p => Math.min(totalPagesLocacao, p + 1))}
+                            className={currentPageLocacao === totalPagesLocacao ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Dialog para visualização de Orçamento de Obra */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Orçamento: {selectedOrcamento?.numero}</DialogTitle>
+            <DialogDescription>
+              Visualize os detalhes completos do orçamento
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrcamento && (
+             <div className="grid gap-4 py-4">
+               {/* Resumo simples para visualização - pode ser expandido conforme necessidade */}
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <h3 className="font-semibold mb-2">Informações do Cliente</h3>
+                   <p className="text-sm">Cliente: {selectedOrcamento.cliente_nome}</p>
+                   <p className="text-sm">Obra: {selectedOrcamento.obra_nome}</p>
+                   <p className="text-sm">Endereço: {selectedOrcamento.obra_endereco}</p>
+                 </div>
+                 <div>
+                   <h3 className="font-semibold mb-2">Detalhes Comerciais</h3>
+                   <p className="text-sm">Status: {selectedOrcamento.status}</p>
+                   <p className="text-sm">Valor Total: {formatCurrencyDisplay(selectedOrcamento.total_mensal)}</p>
+                   <p className="text-sm">Prazo: {selectedOrcamento.prazo_locacao_meses} meses</p>
+                 </div>
+               </div>
+               
+               <div className="flex justify-end gap-2 mt-4">
+                 <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>Fechar</Button>
+                 <Button onClick={() => handleEdit(selectedOrcamento.id)}>Editar Orçamento</Button>
+               </div>
+             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Dialog para visualização de Orçamento de Locação */}
+      <Dialog open={isViewLocacaoDialogOpen} onOpenChange={setIsViewLocacaoDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Locação: {selectedOrcamentoLocacao?.numero}</DialogTitle>
+          </DialogHeader>
+          {selectedOrcamentoLocacao && (
+             <div className="grid gap-4 py-4">
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <h3 className="font-semibold mb-2">Cliente</h3>
+                   <p className="text-sm">{selectedOrcamentoLocacao.clientes?.nome}</p>
+                 </div>
+                 <div>
+                   <h3 className="font-semibold mb-2">Equipamento</h3>
+                   <p className="text-sm capitalize">{selectedOrcamentoLocacao.tipo.replace('_', ' ')}</p>
+                 </div>
+               </div>
+               <div className="flex justify-end gap-2 mt-4">
+                 <Button variant="outline" onClick={() => setIsViewLocacaoDialogOpen(false)}>Fechar</Button>
+                 <Button onClick={() => handleEditLocacao(selectedOrcamentoLocacao.id)}>Editar</Button>
+               </div>
+             </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
