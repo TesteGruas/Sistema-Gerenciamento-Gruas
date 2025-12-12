@@ -14,6 +14,13 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import { 
   Calculator, 
   Search, 
@@ -72,6 +79,12 @@ export default function MedicoesPage() {
   const [gruaFilter, setGruaFilter] = useState<string>("all")
   const [periodoFilter, setPeriodoFilter] = useState("")
   
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const itemsPerPage = 100
+  
   // Estados de diálogos
   const [selectedMedicao, setSelectedMedicao] = useState<MedicaoMensal | null>(null)
   const [isEnviarDialogOpen, setIsEnviarDialogOpen] = useState(false)
@@ -93,7 +106,10 @@ export default function MedicoesPage() {
   const carregarMedicoes = useCallback(async () => {
     try {
       setLoading(true)
-      const filters: any = { limit: 1000 }
+      const filters: any = { 
+        limit: itemsPerPage,
+        page: currentPage
+      }
       if (gruaFilter !== "all") {
         filters.grua_id = parseInt(gruaFilter)
       }
@@ -110,6 +126,11 @@ export default function MedicoesPage() {
       const response = await medicoesMensaisApi.listar(filters)
       if (response.success) {
         setMedicoes(response.data || [])
+        // Atualizar informações de paginação
+        if (response.pagination) {
+          setTotalPages(response.pagination.pages || 1)
+          setTotalItems(response.pagination.total || 0)
+        }
       }
     } catch (error: any) {
       toast({
@@ -120,9 +141,15 @@ export default function MedicoesPage() {
     } finally {
       setLoading(false)
     }
-  }, [gruaFilter, periodoFilter, statusFilter, searchTerm, toast])
+  }, [gruaFilter, periodoFilter, statusFilter, searchTerm, currentPage, toast])
 
   // Recarregar medições quando os filtros mudarem (incluindo busca)
+  useEffect(() => {
+    // Resetar para primeira página quando filtros mudarem
+    setCurrentPage(1)
+  }, [gruaFilter, periodoFilter, statusFilter, searchTerm])
+
+  // Recarregar medições quando os filtros ou página mudarem
   useEffect(() => {
     // Debounce para busca por texto (aguardar 500ms após parar de digitar)
     const timeoutId = setTimeout(() => {
@@ -637,6 +664,36 @@ export default function MedicoesPage() {
                   </TableBody>
                 </Table>
               )}
+              
+              {/* Paginação */}
+              {!loading && filteredMedicoes.length > 0 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} medições
+                  </div>
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                      <PaginationItem>
+                        <span className="px-4 text-sm text-muted-foreground">
+                          Página {currentPage} de {totalPages}
+                        </span>
+                      </PaginationItem>
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -713,6 +770,7 @@ export default function MedicoesPage() {
                       setStatusFilter("all")
                       setGruaFilter("all")
                       setPeriodoFilter("")
+                      setCurrentPage(1)
                     }}
                   >
                     Limpar
