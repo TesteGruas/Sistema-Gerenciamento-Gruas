@@ -166,6 +166,11 @@ export function getAccessiblePWAMenuItems(roleName: RoleName | null): PWAMenuIte
   if (!roleName) return []
   
   return PWA_MENU_ITEMS.filter(item => {
+    // Clientes não devem ter acesso a Holerites, mesmo tendo documentos:visualizar
+    if (roleName === 'Clientes' && item.path === '/pwa/holerites') {
+      return false
+    }
+    
     // Permissão universal (*)
     if (item.permission === '*') return true
     

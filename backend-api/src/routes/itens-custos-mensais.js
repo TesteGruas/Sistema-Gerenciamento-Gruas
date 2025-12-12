@@ -295,3 +295,4 @@ router.delete('/:id', authenticateToken, requirePermission('obras:deletar'), asy
 
 export default router
 
+

@@ -1962,7 +1962,7 @@ router.get('/cliente/:cliente_id', authenticateToken, async (req, res) => {
 
     // Extrair gruas únicas
     const gruasUnicas = new Map()
-    gruaObras?.forEach((go: any) => {
+    gruaObras?.forEach((go) => {
       if (go.gruas && !gruasUnicas.has(go.grua_id)) {
         gruasUnicas.set(go.grua_id, go.gruas)
       }

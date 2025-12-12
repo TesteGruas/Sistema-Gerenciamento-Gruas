@@ -30,6 +30,8 @@ import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { CardLoader } from "@/components/ui/loader"
+import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
+import { useRouter } from "next/navigation"
 
 interface Holerite {
   id: string
@@ -46,6 +48,8 @@ interface Holerite {
 
 export default function PWAHoleritesPage() {
   const { toast } = useToast()
+  const router = useRouter()
+  const { isClient: isClientRole } = usePWAPermissions()
   const [holerites, setHolerites] = useState<Holerite[]>([])
   const [loading, setLoading] = useState(false) // Iniciar como false para não bloquear
   const [isOnline, setIsOnline] = useState(true)
@@ -654,6 +658,30 @@ export default function PWAHoleritesPage() {
 
   const estaRecebido = (holerite: Holerite) => {
     return !!holerite.recebido_em
+  }
+
+  // Bloquear acesso de clientes
+  if (isClientRole()) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <div>
+              <h3 className="font-semibold text-red-900">Acesso Restrito</h3>
+              <p className="text-sm text-red-700">Você não tem permissão para acessar holerites.</p>
+            </div>
+          </div>
+          <Button 
+            onClick={() => router.push('/pwa')} 
+            className="mt-4"
+            variant="outline"
+          >
+            Voltar ao Início
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -132,10 +132,66 @@ const medicaoMensalSchema = Joi.object({
 });
 
 // Schema para atualização de medição mensal
-const medicaoMensalUpdateSchema = medicaoMensalSchema.fork(
-  ['orcamento_id', 'numero', 'periodo', 'mes_referencia', 'ano_referencia'],
-  (schema) => schema.optional()
-);
+// Criado do zero para evitar herdar a validação customizada do schema de criação
+const medicaoMensalUpdateSchema = Joi.object({
+  orcamento_id: Joi.number().integer().positive().allow(null).optional(),
+  obra_id: Joi.number().integer().positive().allow(null).optional(),
+  grua_id: Joi.alternatives().try(
+    Joi.string().allow(null, ''),
+    Joi.number().integer().positive()
+  ).optional(),
+  numero: Joi.string().min(1).max(50).optional(),
+  periodo: Joi.string().pattern(/^\d{4}-\d{2}$/).optional(),
+  data_medicao: Joi.date().iso().optional(),
+  mes_referencia: Joi.number().integer().min(1).max(12).optional(),
+  ano_referencia: Joi.number().integer().min(2000).max(2100).optional(),
+  valor_mensal_bruto: Joi.number().min(0).precision(2).optional(),
+  valor_aditivos: Joi.number().min(0).precision(2).optional(),
+  valor_custos_extras: Joi.number().min(0).precision(2).optional(),
+  valor_descontos: Joi.number().min(0).precision(2).optional(),
+  status: Joi.string().valid('pendente', 'finalizada', 'cancelada', 'enviada').optional(),
+  status_aprovacao: Joi.string().valid('pendente', 'aprovada', 'rejeitada').allow(null).optional(),
+  editavel: Joi.boolean().optional(),
+  observacoes: Joi.string().max(2000).allow('').optional(),
+  custos_mensais: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().required(),
+      descricao: Joi.string().required(),
+      valor_mensal: Joi.number().min(0).precision(2).required(),
+      quantidade_meses: Joi.number().min(0).precision(2).default(1),
+      valor_total: Joi.number().min(0).precision(2).required(),
+      observacoes: Joi.string().allow('').optional()
+    })
+  ).optional(),
+  horas_extras: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().valid('operador', 'sinaleiro', 'equipamento').required(),
+      dia_semana: Joi.string().valid('sabado', 'domingo_feriado', 'normal').required(),
+      quantidade_horas: Joi.number().min(0).precision(2).required(),
+      valor_hora: Joi.number().min(0).precision(2).required(),
+      valor_total: Joi.number().min(0).precision(2).required(),
+      observacoes: Joi.string().allow('').optional()
+    })
+  ).optional(),
+  servicos_adicionais: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().required(),
+      descricao: Joi.string().required(),
+      quantidade: Joi.number().min(0).precision(2).default(1),
+      valor_unitario: Joi.number().min(0).precision(2).required(),
+      valor_total: Joi.number().min(0).precision(2).required(),
+      observacoes: Joi.string().allow('').optional()
+    })
+  ).optional(),
+  aditivos: Joi.array().items(
+    Joi.object({
+      tipo: Joi.string().valid('adicional', 'desconto').required(),
+      descricao: Joi.string().required(),
+      valor: Joi.number().precision(2).required(),
+      observacoes: Joi.string().allow('').optional()
+    })
+  ).optional()
+});
 
 // Schema para filtros de medições mensais
 const medicaoMensalFiltersSchema = Joi.object({

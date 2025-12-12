@@ -416,3 +416,4 @@ Documentação técnica completa disponível:
 
 *Esta proposta é válida por 30 dias a partir da data de emissão. Valores podem ser ajustados conforme negociação específica.*
 
+

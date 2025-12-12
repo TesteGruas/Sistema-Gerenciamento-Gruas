@@ -76,6 +76,7 @@ import { funcionariosApi } from "@/lib/api-funcionarios"
 import { clientesApi } from "@/lib/api-clientes"
 import { ValorMonetarioOculto, ValorFormatadoOculto } from "@/components/valor-oculto"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
+import { medicoesUtils } from "@/lib/medicoes-utils"
 import { getOrcamentos } from "@/lib/api-orcamentos"
 import FuncionarioSearch from "@/components/funcionario-search"
 import { sinaleirosApi, type SinaleiroBackend, type DocumentoSinaleiroBackend } from "@/lib/api-sinaleiros"
@@ -113,6 +114,10 @@ function ObraDetailsPageContent() {
   const [orcamentosObra, setOrcamentosObra] = useState<any[]>([])
   const [loadingMedicoes, setLoadingMedicoes] = useState(false)
   const [errorMedicoes, setErrorMedicoes] = useState<string | null>(null)
+  
+  // Estados para filtros de medições
+  const [filtroAno, setFiltroAno] = useState<string>("todos")
+  const [filtroMes, setFiltroMes] = useState<string>("todos")
   
   // Estados para sinaleiros
   const [sinaleiros, setSinaleiros] = useState<SinaleiroBackend[]>([])
@@ -371,7 +376,7 @@ function ObraDetailsPageContent() {
     setLoadingMedicoes(true)
     setErrorMedicoes(null)
     try {
-      // 1. Buscar orçamentos vinculados à obra (opcional)
+      // Buscar orçamentos vinculados à obra (para exibição)
       const orcamentosResponse = await getOrcamentos({ 
         page: 1, 
         limit: 100,
@@ -381,58 +386,26 @@ function ObraDetailsPageContent() {
       const orcamentos = orcamentosResponse.data || []
       setOrcamentosObra(orcamentos)
       
-      // 2. Buscar medições mensais de cada orçamento (se houver)
-      const todasMedicoes: MedicaoMensal[] = []
-      
-      for (const orcamento of orcamentos) {
-        try {
-          const medicoesResponse = await medicoesMensaisApi.listarPorOrcamento(orcamento.id)
-          if (medicoesResponse.success && medicoesResponse.data) {
-            todasMedicoes.push(...medicoesResponse.data)
-          }
-        } catch (error) {
-          console.error(`Erro ao carregar medições do orçamento ${orcamento.id}:`, error)
-        }
-      }
-      
-      // 3. Buscar medições diretamente pela obra (sem orçamento)
-      try {
-        const medicoesObraResponse = await medicoesMensaisApi.listarPorObra(parseInt(obraId))
-        if (medicoesObraResponse.success && medicoesObraResponse.data) {
-          // Adicionar apenas medições que ainda não foram adicionadas
-          medicoesObraResponse.data.forEach((medicao: MedicaoMensal) => {
-            if (!todasMedicoes.find(m => m.id === medicao.id)) {
-              todasMedicoes.push(medicao)
-            }
-          })
-        }
-      } catch (error) {
-        console.error('Erro ao carregar medições da obra:', error)
-      }
-      
-      // 4. Também buscar usando filtro obra_id para garantir que não perdemos nenhuma
-      try {
-        const medicoesFiltradasResponse = await medicoesMensaisApi.listar({ obra_id: parseInt(obraId) })
-        if (medicoesFiltradasResponse.success && medicoesFiltradasResponse.data) {
-          // Adicionar apenas medições que ainda não foram adicionadas
-          medicoesFiltradasResponse.data.forEach((medicao: MedicaoMensal) => {
-            if (!todasMedicoes.find(m => m.id === medicao.id)) {
-              todasMedicoes.push(medicao)
-            }
-          })
-        }
-      } catch (error) {
-        console.error('Erro ao carregar medições com filtro obra_id:', error)
-      }
-      
-      // Ordenar por período (mais recente primeiro)
-      todasMedicoes.sort((a, b) => {
-        if (b.periodo > a.periodo) return 1
-        if (b.periodo < a.periodo) return -1
-        return 0
+      // Usar o mesmo endpoint que a página de medições usa
+      const response = await medicoesMensaisApi.listar({ 
+        obra_id: parseInt(obraId),
+        limit: 1000 
       })
       
-      setMedicoesMensais(todasMedicoes)
+      if (response.success) {
+        const todasMedicoes = response.data || []
+        
+        // Ordenar por período (mais recente primeiro)
+        todasMedicoes.sort((a, b) => {
+          if (b.periodo > a.periodo) return 1
+          if (b.periodo < a.periodo) return -1
+          return 0
+        })
+        
+        setMedicoesMensais(todasMedicoes)
+      } else {
+        setErrorMedicoes('Erro ao carregar medições')
+      }
     } catch (error: any) {
       console.error('Erro ao carregar medições mensais:', error)
       setErrorMedicoes(error.message || 'Erro ao carregar medições mensais')
@@ -513,9 +486,20 @@ function ObraDetailsPageContent() {
       }
     } catch (error: any) {
       console.error('Erro ao criar medição:', error)
+      // Extrair mensagem do response do backend
+      let errorMessage = error.response?.data?.message || 
+                         error.response?.data?.error || 
+                         error.message || 
+                         "Erro ao criar medição"
+      
+      // Formatar período na mensagem se ainda estiver no formato YYYY-MM
+      errorMessage = errorMessage.replace(/(\d{4}-\d{2})/g, (match) => {
+        return medicoesUtils.formatPeriodo(match);
+      });
+      
       toast({
         title: "Erro",
-        description: error.response?.data?.message || error.message || "Erro ao criar medição",
+        description: errorMessage,
         variant: "destructive"
       })
     } finally {
@@ -2868,12 +2852,11 @@ function ObraDetailsPageContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-10">
+      <TabsList className="grid w-full grid-cols-9">
         <TabsTrigger value="geral">Geral</TabsTrigger>
         <TabsTrigger value="gruas">Gruas</TabsTrigger>
         <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
         <TabsTrigger value="sinaleiros">Sinaleiros</TabsTrigger>
-        <TabsTrigger value="custos">Custos</TabsTrigger>
         <TabsTrigger value="medicoes-mensais">
           Medições Mensais
         </TabsTrigger>
@@ -3859,456 +3842,6 @@ function ObraDetailsPageContent() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="custos" className="space-y-4">
-          {/* Controles de Mês */}
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  Custos Mensais
-                </CardTitle>
-                <div className="flex gap-2">
-                  <Select value={mesSelecionado} onValueChange={setMesSelecionado}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Selecionar mês" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos os meses</SelectItem>
-                      {getMesesDisponiveisDaAPI().map(mes => (
-                        <SelectItem key={mes} value={mes}>
-                          {new Date(mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleExportarCustos('geral')}
-                    disabled={custosFiltrados.length === 0}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar Geral
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleExportarCustos('mes')}
-                    disabled={custosFiltrados.length === 0 || (mesSelecionado === 'todos' || !mesSelecionado)}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar Mês
-                  </Button>
-                  <Button 
-                    variant="default"
-                    onClick={handleAbrirCustosIniciais}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Criar Custos Iniciais
-                  </Button>
-                  <Button onClick={handleAbrirNovoMes}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Novo Mês
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={() => setIsNovoCustoOpen(true)}
-                    disabled={!mesSelecionado || mesSelecionado === 'todos'}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Novo Custo
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
-
-          {/* Resumo Financeiro */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Resumo Financeiro</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <Label className="text-sm font-medium text-gray-600">Valor Total da Obra</Label>
-                  <p className="text-lg font-bold text-blue-600">
-                    <ValorMonetarioOculto valor={obra?.valorTotalObra || 0} />
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-orange-50 rounded-lg">
-                  <Label className="text-sm font-medium text-gray-600">Gastos do Mês Passado</Label>
-                  <p className="text-lg font-bold text-orange-600">
-                    <ValorMonetarioOculto valor={gastosMesPassado} />
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                  <Label className="text-sm font-medium text-gray-600">Gastos do Mês</Label>
-                  <p className="text-lg font-bold text-yellow-600">
-                    <ValorMonetarioOculto valor={gastosMesAtual} />
-                  </p>
-                </div>
-                <div className="text-center p-4 bg-red-50 rounded-lg">
-                  <Label className="text-sm font-medium text-gray-600">Saldo Restante</Label>
-                  <p className={`text-lg font-bold ${
-                    (obra?.orcamento || 0) - totalTodosCustos >= 0 
-                      ? 'text-green-600' 
-                      : 'text-red-600'
-                  }`}>
-                    <ValorMonetarioOculto valor={(obra?.orcamento || 0) - totalTodosCustos} />
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Custos Mensais */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">
-                Custos Mensais {mesSelecionado && mesSelecionado !== 'todos' && `- ${new Date(mesSelecionado + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`}
-              </CardTitle>
-              <CardDescription>
-                {custosFiltrados.length > 0 ? `${custosFiltrados.length} itens encontrados` : 'Nenhum custo encontrado para este período'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingCustos ? (
-                <CardLoader text="Carregando custos mensais..." />
-              ) : errorCustos ? (
-                <div className="text-center py-8">
-                  <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-red-700 mb-2">Erro ao carregar custos</h3>
-                  <p className="text-red-600 mb-4">{errorCustos}</p>
-                  <Button onClick={() => carregarCustosMensais(obraId)} variant="outline">
-                    Tentar novamente
-                  </Button>
-                </div>
-              ) : custosFiltrados.length > 0 ? (
-                <div className="space-y-4">
-                  {/* Tabela Desktop */}
-                  <div className="hidden lg:block overflow-x-auto border rounded-lg">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
-                          <TableHead className="w-[100px] font-semibold text-blue-900 text-center">Item</TableHead>
-                          <TableHead className="w-[120px] font-semibold text-blue-900">Descrição</TableHead>
-                          <TableHead className="w-[90px] font-semibold text-blue-900 text-center">UND</TableHead>
-                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Orçamento</TableHead>
-                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Acumulado Anterior</TableHead>
-                          <TableHead className="w-[160px] font-semibold text-blue-900 text-center">Saldo Contrato</TableHead>
-                          <TableHead className="w-[120px] font-semibold text-blue-900 text-center">Mês</TableHead>
-                          <TableHead className="w-[130px] font-semibold text-blue-900 text-center">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                    <TableBody>
-                      {custosFiltrados.map((custo, index) => (
-                        <TableRow key={custo.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
-                          <TableCell className="font-semibold text-center text-blue-700">
-                            <div className="flex flex-col items-center gap-1">
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                {custo.item}
-                              </Badge>
-                              {/* Indicador de status */}
-                              <div className="flex items-center gap-1">
-                                <div className={`w-2 h-2 rounded-full ${
-                                  custo.valor_acumulado === 0 ? 'bg-gray-400' :
-                                  custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'bg-yellow-400' :
-                                  custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'bg-blue-400' :
-                                  'bg-green-400'
-                                }`}></div>
-                                <span className="text-xs text-gray-600">
-                                  {custo.valor_acumulado === 0 ? 'Não iniciado' :
-                                   custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'Iniciado' :
-                                   custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'Em andamento' :
-                                   'Quase concluído'}
-                                </span>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium text-gray-800">
-                            {custo.descricao}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="secondary" className="text-xs">
-                              {custo.unidade}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="bg-blue-50 p-2 rounded-lg border border-blue-200">
-                              <div className="text-xs text-blue-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_orcamento)}</div>
-                              <div className="text-xs text-blue-600 mb-1">Unit: <ValorFormatadoOculto valor={custo.valor_unitario} formatar={(v) => `R$ ${formatarValor(v)}`} /></div>
-                              <div className="text-sm font-bold text-blue-800">Total: <ValorFormatadoOculto valor={custo.total_orcamento} formatar={(v) => `R$ ${formatarValor(v)}`} /></div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
-                              <div className="text-xs text-gray-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada - custo.quantidade_realizada)}</div>
-                              <div className="text-sm font-medium text-gray-800"><ValorFormatadoOculto valor={custo.valor_acumulado - custo.valor_realizado} formatar={(v) => `R$ ${formatarValor(v)}`} /></div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className={`p-2 rounded-lg border ${custo.valor_saldo >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                              <div className="text-xs mb-1">Qtd: {formatarQuantidade(custo.quantidade_saldo)}</div>
-                              <div className={`text-sm font-medium ${custo.valor_saldo >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                                <ValorFormatadoOculto valor={custo.valor_saldo} formatar={(v) => `R$ ${formatarValor(v)}`} />
-                              </div>
-                              {/* Barra de progresso */}
-                              <div className="mt-2">
-                                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                  <div 
-                                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                                      custo.valor_saldo >= 0 ? 'bg-green-500' : 'bg-red-500'
-                                    }`}
-                                    style={{ 
-                                      width: `${Math.min(100, Math.max(0, (custo.valor_acumulado / custo.total_orcamento) * 100))}%` 
-                                    }}
-                                  ></div>
-                                </div>
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {Math.round((custo.valor_acumulado / custo.total_orcamento) * 100)}% executado
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
-                              {new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex gap-1 justify-center">
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                className="h-8 w-8 p-0 hover:bg-blue-100 text-blue-600"
-                                onClick={() => handleEditarCusto(custo)}
-                                title="Editar custo"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                className="h-8 w-8 p-0 hover:bg-red-100 text-red-600"
-                                onClick={() => handleExcluirCusto(custo.id)}
-                                title="Excluir custo"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      
-                      <TableRow className="bg-gradient-to-r from-gray-100 to-gray-200 border-t-2 border-gray-300">
-                        <TableCell colSpan={3} className="font-bold text-lg text-gray-800 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <DollarSign className="w-5 h-5" />
-                            TOTAIS (R$)
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="bg-blue-100 p-2 rounded-lg border-2 border-blue-300">
-                            <div className="text-sm font-bold text-blue-900">
-                              <ValorFormatadoOculto valor={custosMensais.reduce((sum, custo) => sum + custo.total_orcamento, 0)} formatar={(v) => `R$ ${formatarValor(v)}`} />
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="bg-gray-100 p-2 rounded-lg border-2 border-gray-300">
-                            <div className="text-sm font-bold text-gray-900">
-                              <ValorFormatadoOculto valor={custosMensais.reduce((sum, custo) => sum + (custo.valor_acumulado - custo.valor_realizado), 0)} formatar={(v) => `R$ ${formatarValor(v)}`} />
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className={`p-2 rounded-lg border-2 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
-                            <div className={`text-sm font-bold ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-900' : 'text-red-900'}`}>
-                              R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0))}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell></TableCell>
-                        <TableCell></TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Cards Mobile/Tablet */}
-                <div className="lg:hidden space-y-4">
-                  {custosFiltrados.map((custo, index) => (
-                    <Card key={custo.id} className="p-4">
-                      <div className="space-y-4">
-                        {/* Header do Card */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                              {custo.item}
-                            </Badge>
-                            <div className={`w-2 h-2 rounded-full ${
-                              custo.valor_acumulado === 0 ? 'bg-gray-400' :
-                              custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'bg-yellow-400' :
-                              custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'bg-blue-400' :
-                              'bg-green-400'
-                            }`}></div>
-                            <span className="text-xs text-gray-600">
-                              {custo.valor_acumulado === 0 ? 'Não iniciado' :
-                               custo.valor_acumulado < custo.total_orcamento * 0.5 ? 'Iniciado' :
-                               custo.valor_acumulado < custo.total_orcamento * 0.9 ? 'Em andamento' :
-                               'Quase concluído'}
-                            </span>
-                          </div>
-                          <div className="flex gap-1">
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              className="h-8 w-8 p-0 hover:bg-blue-100 text-blue-600"
-                              onClick={() => handleEditarCusto(custo)}
-                              title="Editar custo"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              className="h-8 w-8 p-0 hover:bg-red-100 text-red-600"
-                              onClick={() => handleExcluirCusto(custo.id)}
-                              title="Excluir custo"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Descrição */}
-                        <div>
-                          <p className="font-medium text-gray-800">{custo.descricao}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="secondary" className="text-xs">
-                              {custo.unidade}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
-                              {new Date(custo.mes + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        {/* Valores em Grid */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                            <div className="text-xs text-blue-600 mb-1">Orçamento</div>
-                            <div className="text-xs text-blue-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_orcamento)}</div>
-                            <div className="text-xs text-blue-600 mb-1">Unit: R$ {formatarValor(custo.valor_unitario)}</div>
-                            <div className="text-sm font-bold text-blue-800">Total: R$ {formatarValor(custo.total_orcamento)}</div>
-                          </div>
-
-                          <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            <div className="text-xs text-gray-600 mb-1">Acumulado Anterior</div>
-                            <div className="text-xs text-gray-600 mb-1">Qtd: {formatarQuantidade(custo.quantidade_acumulada - custo.quantidade_realizada)}</div>
-                            <div className="text-sm font-medium text-gray-800">R$ {formatarValor(custo.valor_acumulado - custo.valor_realizado)}</div>
-                          </div>
-
-                        </div>
-
-                        {/* Saldo e Progresso */}
-                        <div className={`p-3 rounded-lg border ${custo.valor_saldo >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                          <div className="text-xs mb-1">Saldo Contrato</div>
-                          <div className="text-xs mb-1">Qtd: {formatarQuantidade(custo.quantidade_saldo)}</div>
-                          <div className={`text-sm font-medium mb-2 ${custo.valor_saldo >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                            R$ {formatarValor(custo.valor_saldo)}
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full transition-all duration-300 ${
-                                custo.valor_saldo >= 0 ? 'bg-green-500' : 'bg-red-500'
-                              }`}
-                              style={{ 
-                                width: `${Math.min(100, Math.max(0, (custo.valor_acumulado / custo.total_orcamento) * 100))}%` 
-                              }}
-                            ></div>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {Math.round((custo.valor_acumulado / custo.total_orcamento) * 100)}% executado
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-
-                  {/* Resumo Mobile */}
-                  <Card className="p-4 bg-gradient-to-r from-gray-100 to-gray-200">
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                      <DollarSign className="w-5 h-5" />
-                      <span className="font-bold text-lg text-gray-800">TOTAIS (R$)</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="bg-blue-100 p-3 rounded-lg border-2 border-blue-300">
-                        <div className="text-blue-600 font-medium mb-1">Orçamento</div>
-                        <div className="font-bold text-blue-900">
-                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.total_orcamento, 0))}
-                        </div>
-                      </div>
-                      <div className="bg-gray-100 p-3 rounded-lg border-2 border-gray-300">
-                        <div className="text-gray-600 font-medium mb-1">Acumulado Anterior</div>
-                        <div className="font-bold text-gray-900">
-                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + (custo.valor_acumulado - custo.valor_realizado), 0))}
-                        </div>
-                      </div>
-                      <div className={`p-3 rounded-lg border-2 col-span-2 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
-                        <div className={`font-medium mb-1 ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>Saldo Contrato</div>
-                        <div className={`font-bold ${custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0) >= 0 ? 'text-green-900' : 'text-red-900'}`}>
-                          R$ {formatarValor(custosMensais.reduce((sum, custo) => sum + custo.valor_saldo, 0))}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-
-                {/* Botão para duplicar custos para próximo mês */}
-                {custosFiltrados.length > 0 && (
-                  <div className="flex gap-2 pt-4 border-t">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={handleDuplicarParaProximoMes}
-                    >
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Duplicar para Próximo Mês
-                    </Button>
-                  </div>
-                )}
-              </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum custo encontrado</h3>
-                  <p className="text-gray-600 mb-4">
-                    {mesSelecionado && mesSelecionado !== 'todos'
-                      ? `Não há custos registrados para ${new Date(mesSelecionado + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
-                      : 'Esta obra ainda não possui custos mensais registrados.'
-                    }
-                  </p>
-                  <div className="flex gap-2 justify-center">
-                    <Button onClick={handleAbrirCustosIniciais} className="bg-green-600 hover:bg-green-700">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Criar Custos Iniciais
-                    </Button>
-                    <Button onClick={handleAbrirNovoMes} variant="outline">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Criar Primeiro Mês
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-        </TabsContent>
-
         <TabsContent value="documentos" className="space-y-4">
           {/* Seção: Documentos */}
           <Card>
@@ -4680,65 +4213,6 @@ function ObraDetailsPageContent() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  {orcamentosObra.length > 0 ? (
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          // Gerar medição automática para o primeiro orçamento (pode ser melhorado para selecionar)
-                          const orcamento = orcamentosObra[0]
-                          const hoje = new Date()
-                          const periodo = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
-                          
-                          const response = await medicoesMensaisApi.gerarAutomatica({
-                            orcamento_id: orcamento.id,
-                            periodo: periodo,
-                            data_medicao: hoje.toISOString().split('T')[0],
-                            aplicar_valores_orcamento: true,
-                            incluir_horas_extras: true,
-                            incluir_servicos_adicionais: true
-                          })
-                          
-                          if (response.success) {
-                            toast({
-                              title: "Sucesso",
-                              description: "Medição mensal gerada automaticamente!",
-                            })
-                            await carregarMedicoesMensais()
-                          }
-                        } catch (error: any) {
-                          console.error('Erro ao gerar medição:', error)
-                          toast({
-                            title: "Erro",
-                            description: error.response?.data?.message || "Erro ao gerar medição automática",
-                            variant: "destructive"
-                          })
-                        }
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Gerar Medição Automática
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        // Inicializar período com o mês atual
-                        const hoje = new Date()
-                        const periodo = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
-                        setMedicaoFormData({
-                          periodo: periodo,
-                          data_medicao: hoje.toISOString().split('T')[0],
-                          valor_mensal_bruto: 0,
-                          observacoes: ''
-                        })
-                        setIsCriarMedicaoOpen(true)
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Criar Medição Manual
-                    </Button>
-                  )}
                   <Button
                     variant="outline"
                     onClick={carregarMedicoesMensais}
@@ -4774,46 +4248,132 @@ function ObraDetailsPageContent() {
               ) : (
                 <div className="space-y-4">
                   {/* Resumo */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-gray-600">Total de Medições</div>
-                        <div className="text-2xl font-bold">{medicoesMensais.length}</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-gray-600">Medições Finalizadas</div>
-                        <div className="text-2xl font-bold text-green-600">
-                          {medicoesMensais.filter(m => m.status === 'finalizada').length}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-gray-600">Medições Pendentes</div>
-                        <div className="text-2xl font-bold text-yellow-600">
-                          {medicoesMensais.filter(m => m.status === 'pendente').length}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-sm text-gray-600">Total Faturado</div>
-                        <div className="text-2xl font-bold text-green-600">
-                          R$ {medicoesMensais
-                            .filter(m => m.status === 'finalizada')
-                            .reduce((sum, m) => sum + (m.valor_total || 0), 0)
-                            .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                  {(() => {
+                    // Calcular medições filtradas
+                    const medicoesFiltradas = medicoesMensais.filter((m) => {
+                      if (filtroAno && filtroAno !== 'todos' && filtroMes && filtroMes !== 'todos') {
+                        const periodoFiltro = `${filtroAno}-${filtroMes}`
+                        return m.periodo === periodoFiltro
+                      }
+                      if (filtroAno && filtroAno !== 'todos') {
+                        return m.periodo.startsWith(filtroAno)
+                      }
+                      if (filtroMes && filtroMes !== 'todos') {
+                        return m.periodo.endsWith(`-${filtroMes}`)
+                      }
+                      return true
+                    })
+
+                    // Calcular mês atual e mês passado
+                    const agora = new Date()
+                    const mesAtual = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`
+                    const mesPassado = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
+                    const mesPassadoStr = `${mesPassado.getFullYear()}-${String(mesPassado.getMonth() + 1).padStart(2, '0')}`
+
+                    const medicoesMesAtual = medicoesMensais.filter(m => m.periodo === mesAtual)
+                    const medicoesMesPassado = medicoesMensais.filter(m => m.periodo === mesPassadoStr)
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-sm text-gray-600">Total de Medições</div>
+                            <div className="text-2xl font-bold">{medicoesFiltradas.length}</div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-sm text-gray-600">Medição do Mês Passado</div>
+                            <div className="text-2xl font-bold text-blue-600">
+                              {medicoesMesPassado.length}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {medicoesMesPassado.reduce((sum, m) => sum + (m.valor_total || 0), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-sm text-gray-600">Medição do Mês Atual</div>
+                            <div className="text-2xl font-bold text-green-600">
+                              {medicoesMesAtual.length}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {medicoesMesAtual.reduce((sum, m) => sum + (m.valor_total || 0), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-sm text-gray-600">Total Faturado</div>
+                            <div className="text-2xl font-bold text-green-600">
+                              R$ {medicoesMensais
+                                .filter(m => m.status === 'finalizada')
+                                .reduce((sum, m) => sum + (m.valor_total || 0), 0)
+                                .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )
+                  })()}
 
                   {/* Lista de Medições */}
                   <Card>
                     <CardHeader>
-                      <CardTitle>Histórico de Medições</CardTitle>
+                      <div className="flex justify-between items-center">
+                        <CardTitle>Histórico de Medições</CardTitle>
+                        <div className="flex items-end gap-3">
+                          <div className="w-[140px]">
+                            <Label htmlFor="filtro-ano" className="text-xs">Ano</Label>
+                            <Select value={filtroAno} onValueChange={setFiltroAno}>
+                              <SelectTrigger id="filtro-ano" className="h-9">
+                                <SelectValue placeholder="Todos os anos" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="todos">Todos os anos</SelectItem>
+                                {Array.from({ length: 5 }, (_, i) => {
+                                  const ano = new Date().getFullYear() - i
+                                  return (
+                                    <SelectItem key={ano} value={ano.toString()}>
+                                      {ano}
+                                    </SelectItem>
+                                  )
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-[160px]">
+                            <Label htmlFor="filtro-mes" className="text-xs">Mês</Label>
+                            <Select value={filtroMes} onValueChange={setFiltroMes}>
+                              <SelectTrigger id="filtro-mes" className="h-9">
+                                <SelectValue placeholder="Todos os meses" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="todos">Todos os meses</SelectItem>
+                                {[
+                                  { value: "01", label: "Janeiro" },
+                                  { value: "02", label: "Fevereiro" },
+                                  { value: "03", label: "Março" },
+                                  { value: "04", label: "Abril" },
+                                  { value: "05", label: "Maio" },
+                                  { value: "06", label: "Junho" },
+                                  { value: "07", label: "Julho" },
+                                  { value: "08", label: "Agosto" },
+                                  { value: "09", label: "Setembro" },
+                                  { value: "10", label: "Outubro" },
+                                  { value: "11", label: "Novembro" },
+                                  { value: "12", label: "Dezembro" }
+                                ].map((mes) => (
+                                  <SelectItem key={mes.value} value={mes.value}>
+                                    {mes.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <Table>
@@ -4830,7 +4390,23 @@ function ObraDetailsPageContent() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {medicoesMensais.map((medicao) => (
+                          {(() => {
+                            // Filtrar medições baseado nos filtros
+                            const medicoesFiltradas = medicoesMensais.filter((m) => {
+                              if (filtroAno && filtroAno !== 'todos' && filtroMes && filtroMes !== 'todos') {
+                                const periodoFiltro = `${filtroAno}-${filtroMes}`
+                                return m.periodo === periodoFiltro
+                              }
+                              if (filtroAno && filtroAno !== 'todos') {
+                                return m.periodo.startsWith(filtroAno)
+                              }
+                              if (filtroMes && filtroMes !== 'todos') {
+                                return m.periodo.endsWith(`-${filtroMes}`)
+                              }
+                              return true
+                            })
+                            
+                            return medicoesFiltradas.map((medicao) => (
                             <TableRow key={medicao.id}>
                               <TableCell className="font-medium">{medicao.numero}</TableCell>
                               <TableCell>
@@ -4842,7 +4418,7 @@ function ObraDetailsPageContent() {
                               <TableCell>
                                 <div className="flex items-center gap-2">
                                   <Calendar className="w-4 h-4 text-gray-400" />
-                                  {medicao.periodo}
+                                  {medicoesUtils.formatPeriodo(medicao.periodo)}
                                 </div>
                               </TableCell>
                               <TableCell>
@@ -4886,77 +4462,20 @@ function ObraDetailsPageContent() {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                <div className="flex gap-2">
-                                  {medicao.orcamento_id && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        window.open(`/dashboard/orcamentos/${medicao.orcamento_id}`, '_blank')
-                                      }}
-                                      title="Ver orçamento"
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleGerarPDFMedicao(medicao)}
-                                    title="Gerar PDF da medição"
-                                  >
-                                    <Download className="w-4 h-4" />
-                                  </Button>
-                                  {medicao.status === 'pendente' && (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={async () => {
-                                          try {
-                                            const response = await medicoesMensaisApi.finalizar(medicao.id)
-                                            
-                                            if (response.success) {
-                                              toast({
-                                                title: "Sucesso",
-                                                description: "Medição finalizada com sucesso!",
-                                              })
-                                              await carregarMedicoesMensais()
-                                            }
-                                          } catch (error: any) {
-                                            console.error('Erro ao finalizar medição:', error)
-                                            toast({
-                                              title: "Erro",
-                                              description: error.response?.data?.message || "Erro ao finalizar medição",
-                                              variant: "destructive"
-                                            })
-                                          }
-                                        }}
-                                        title="Finalizar medição"
-                                        className="text-green-600 hover:text-green-700"
-                                      >
-                                        <CheckCircle className="w-4 h-4" />
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          // TODO: Implementar diálogo de edição
-                                          toast({
-                                            title: "Em desenvolvimento",
-                                            description: "Funcionalidade de edição será implementada em breve",
-                                          })
-                                        }}
-                                        title="Editar medição"
-                                      >
-                                        <Edit className="w-4 h-4" />
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    router.push(`/dashboard/medicoes/${medicao.id}`)
+                                  }}
+                                  title="Ver detalhes da medição"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
                               </TableCell>
                             </TableRow>
-                          ))}
+                            ))
+                          })()}
                         </TableBody>
                       </Table>
                     </CardContent>

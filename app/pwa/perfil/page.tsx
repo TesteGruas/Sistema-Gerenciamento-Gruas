@@ -100,7 +100,7 @@ function PWAPerfilPageContent() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { user, pontoHoje, documentosPendentes, horasTrabalhadas, loading } = usePWAUser()
-  const { userRole, isSupervisor: isSupervisorHook } = usePWAPermissions()
+  const { userRole, isSupervisor: isSupervisorHook, isClient: isClientRole } = usePWAPermissions()
   const { empresa, getEnderecoCompleto, getContatoCompleto, getHorarioFuncionamento } = useEmpresa()
   
   // Verificar se é admin - verificar também no localStorage como fallback
@@ -1172,55 +1172,59 @@ function PWAPerfilPageContent() {
             <p className="text-xs text-gray-500">Folhas de pagamento</p>
           </button>
 
-          <button
-            onClick={() => setActiveTab('beneficios')}
-            className={`p-4 rounded-xl border-2 transition-all text-left ${
-              activeTab === 'beneficios'
-                ? 'border-pink-600 bg-pink-50'
-                : 'border-gray-200 bg-white hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className={`p-2 rounded-lg ${
-                activeTab === 'beneficios' ? 'bg-pink-100' : 'bg-gray-100'
-              }`}>
-                <Gift className={`w-5 h-5 ${
-                  activeTab === 'beneficios' ? 'text-pink-600' : 'text-gray-600'
-                }`} />
+          {!isClientRole() && (
+            <button
+              onClick={() => setActiveTab('beneficios')}
+              className={`p-4 rounded-xl border-2 transition-all text-left ${
+                activeTab === 'beneficios'
+                  ? 'border-pink-600 bg-pink-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`p-2 rounded-lg ${
+                  activeTab === 'beneficios' ? 'bg-pink-100' : 'bg-gray-100'
+                }`}>
+                  <Gift className={`w-5 h-5 ${
+                    activeTab === 'beneficios' ? 'text-pink-600' : 'text-gray-600'
+                  }`} />
+                </div>
+                <span className={`font-semibold text-sm ${
+                  activeTab === 'beneficios' ? 'text-pink-600' : 'text-gray-900'
+                }`}>
+                  Benefícios
+                </span>
               </div>
-              <span className={`font-semibold text-sm ${
-                activeTab === 'beneficios' ? 'text-pink-600' : 'text-gray-900'
-              }`}>
-                Benefícios
-              </span>
-            </div>
-            <p className="text-xs text-gray-500">Meus benefícios</p>
-          </button>
+              <p className="text-xs text-gray-500">Meus benefícios</p>
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('certificados')}
-            className={`p-4 rounded-xl border-2 transition-all text-left ${
-              activeTab === 'certificados'
-                ? 'border-amber-600 bg-amber-50'
-                : 'border-gray-200 bg-white hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className={`p-2 rounded-lg ${
-                activeTab === 'certificados' ? 'bg-amber-100' : 'bg-gray-100'
-              }`}>
-                <Award className={`w-5 h-5 ${
-                  activeTab === 'certificados' ? 'text-amber-600' : 'text-gray-600'
-                }`} />
+          {!isClientRole() && (
+            <button
+              onClick={() => setActiveTab('certificados')}
+              className={`p-4 rounded-xl border-2 transition-all text-left ${
+                activeTab === 'certificados'
+                  ? 'border-amber-600 bg-amber-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`p-2 rounded-lg ${
+                  activeTab === 'certificados' ? 'bg-amber-100' : 'bg-gray-100'
+                }`}>
+                  <Award className={`w-5 h-5 ${
+                    activeTab === 'certificados' ? 'text-amber-600' : 'text-gray-600'
+                  }`} />
+                </div>
+                <span className={`font-semibold text-sm ${
+                  activeTab === 'certificados' ? 'text-amber-600' : 'text-gray-900'
+                }`}>
+                  Certificados
+                </span>
               </div>
-              <span className={`font-semibold text-sm ${
-                activeTab === 'certificados' ? 'text-amber-600' : 'text-gray-900'
-              }`}>
-                Certificados
-              </span>
-            </div>
-            <p className="text-xs text-gray-500">Gerenciar certificados</p>
-          </button>
+              <p className="text-xs text-gray-500">Gerenciar certificados</p>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('documentos-admissionais')}
@@ -1247,30 +1251,32 @@ function PWAPerfilPageContent() {
             <p className="text-xs text-gray-500">Documentos admissionais</p>
           </button>
 
-          <button
-            onClick={() => setActiveTab('holerites')}
-            className={`p-4 rounded-xl border-2 transition-all text-left ${
-              activeTab === 'holerites'
-                ? 'border-green-600 bg-green-50'
-                : 'border-gray-200 bg-white hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className={`p-2 rounded-lg ${
-                activeTab === 'holerites' ? 'bg-green-100' : 'bg-gray-100'
-              }`}>
-                <Receipt className={`w-5 h-5 ${
-                  activeTab === 'holerites' ? 'text-green-600' : 'text-gray-600'
-                }`} />
+          {!isClientRole() && (
+            <button
+              onClick={() => setActiveTab('holerites')}
+              className={`p-4 rounded-xl border-2 transition-all text-left ${
+                activeTab === 'holerites'
+                  ? 'border-green-600 bg-green-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`p-2 rounded-lg ${
+                  activeTab === 'holerites' ? 'bg-green-100' : 'bg-gray-100'
+                }`}>
+                  <Receipt className={`w-5 h-5 ${
+                    activeTab === 'holerites' ? 'text-green-600' : 'text-gray-600'
+                  }`} />
+                </div>
+                <span className={`font-semibold text-sm ${
+                  activeTab === 'holerites' ? 'text-green-600' : 'text-gray-900'
+                }`}>
+                  Holerites
+                </span>
               </div>
-              <span className={`font-semibold text-sm ${
-                activeTab === 'holerites' ? 'text-green-600' : 'text-gray-900'
-              }`}>
-                Holerites
-              </span>
-            </div>
-            <p className="text-xs text-gray-500">Visualizar holerites</p>
-          </button>
+              <p className="text-xs text-gray-500">Visualizar holerites</p>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1382,7 +1388,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Benefícios */}
-            {activeTab === 'beneficios' && (
+            {activeTab === 'beneficios' && !isClientRole() && (
             <div className="mt-0">
               {loadingBeneficios ? (
                 <div className="flex items-center justify-center py-8">
@@ -1433,7 +1439,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Certificados */}
-            {activeTab === 'certificados' && (
+            {activeTab === 'certificados' && !isClientRole() && (
             <div className="mt-0">
               <div className="flex justify-end mb-4">
                 <Button 
@@ -1641,7 +1647,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Holerites */}
-            {activeTab === 'holerites' && (
+            {activeTab === 'holerites' && !isClientRole() && (
             <div className="mt-0">
               <div className="text-center py-8">
                 <Receipt className="w-12 h-12 mx-auto text-gray-300 mb-4" />

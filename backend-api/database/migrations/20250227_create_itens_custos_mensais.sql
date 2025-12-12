@@ -64,3 +64,4 @@ INSERT INTO itens_custos_mensais (codigo, descricao, unidade, tipo, categoria) V
   ('01.28', 'Deslocamento ascensão', 'km', 'aditivo', 'servico')
 ON CONFLICT (codigo) DO NOTHING;
 
+

@@ -82,3 +82,4 @@ SELECT
     (SELECT COUNT(*) FROM obras_documento_assinaturas WHERE status = 'assinado' AND assinatura_base64 IS NULL) as assinadas_sem_base64;
 
 
+

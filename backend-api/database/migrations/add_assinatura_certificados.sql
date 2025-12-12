@@ -12,3 +12,4 @@ COMMENT ON COLUMN certificados_colaboradores.assinado_por IS 'ID do usuário que
 COMMENT ON COLUMN certificados_colaboradores.assinado_em IS 'Data e hora da assinatura do certificado';
 
 
+

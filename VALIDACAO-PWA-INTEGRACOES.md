@@ -257,3 +257,4 @@ O PWA está **funcionalmente integrado** com o backend, mas possui **problemas d
 **Ação Recomendada:** Corrigir URLs hardcoded antes do deploy em produção.
 
 
+

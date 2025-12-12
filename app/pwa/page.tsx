@@ -56,7 +56,7 @@ export default function PWAMainPage() {
   const pwaUserData = usePWAUser()
   
   // Hook de permissões para obter role do usuário e verificar permissões
-  const { userRole, isSupervisor, canApproveHoras } = usePWAPermissions()
+  const { userRole, isSupervisor, canApproveHoras, isClient: isClientRole } = usePWAPermissions()
   
   // Obter role também do perfil (fallback)
   const [roleFromPerfil, setRoleFromPerfil] = useState<string | null>(null)
@@ -367,7 +367,8 @@ export default function PWAMainPage() {
       bgColor: "bg-red-50",
       borderColor: "border-red-100",
       priority: true,
-      requiresObra: true // Requer obra ativa
+      requiresObra: true, // Requer obra ativa
+      hideForClient: true // Ocultar para clientes
     },
     {
       title: "Espelho",
@@ -377,7 +378,8 @@ export default function PWAMainPage() {
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "border-green-100",
-      priority: true
+      priority: true,
+      hideForClient: true // Ocultar para clientes
     },
     {
       title: "Obras",
@@ -416,7 +418,8 @@ export default function PWAMainPage() {
       href: "/pwa/holerites",
       color: "text-green-600",
       bgColor: "bg-green-50",
-      borderColor: "border-green-100"
+      borderColor: "border-green-100",
+      hideForClient: true // Ocultar para clientes
     },
     {
       title: "Benefícios",
@@ -425,7 +428,8 @@ export default function PWAMainPage() {
       href: "/pwa/perfil?tab=beneficios",
       color: "text-pink-600",
       bgColor: "bg-pink-50",
-      borderColor: "border-pink-100"
+      borderColor: "border-pink-100",
+      hideForClient: true // Ocultar para clientes
     },
     {
       title: "Certificados",
@@ -434,7 +438,8 @@ export default function PWAMainPage() {
       href: "/pwa/perfil?tab=certificados",
       color: "text-amber-600",
       bgColor: "bg-amber-50",
-      borderColor: "border-amber-100"
+      borderColor: "border-amber-100",
+      hideForClient: true // Ocultar para clientes
     },
     {
       title: "Documentos",
@@ -992,6 +997,11 @@ export default function PWAMainPage() {
         <div className="grid grid-cols-2 gap-3">
           {quickActions
             .filter(action => {
+              // Filtrar ações que devem ser ocultadas para clientes
+              if (action.hideForClient && isClientRole()) {
+                return false
+              }
+              
               // Filtrar Ponto e Espelho - apenas Operários e Sinaleiros podem bater ponto
               if (action.title === "Ponto" || action.title === "Espelho") {
                 // Obter cargo do user_metadata (mais confiável que perfil)

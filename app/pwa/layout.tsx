@@ -77,7 +77,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     hasPermission,
     canViewNotifications,
     userRole,
-    loading: permissionsLoading
+    loading: permissionsLoading,
+    isClient: isClientRole
   } = usePWAPermissions()
   
   // Hook para obter documentos pendentes
@@ -502,8 +503,30 @@ function PWALayoutContent({ children }: PWALayoutProps) {
 
   const isSupervisorUser = verificarSeSupervisor()
   
-  // Se for supervisor, usar Aprovações e Obras no lugar de Ponto e Espelho
-  const essentialNavItems = isSupervisorUser ? [
+  // Se for cliente, usar apenas Documentos, Home e Perfil (sem Ponto e Espelho)
+  const isClientUser = isClientRole()
+  
+  // Se for cliente, usar apenas Documentos, Home e Perfil
+  const essentialNavItems = isClientUser ? [
+    // Documentos
+    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
+      name: 'Docs',
+      href: '/pwa/documentos',
+      icon: FileText,
+      label: 'Documentos',
+      description: 'Documentos'
+    },
+    // Home (no meio)
+    {
+      name: 'Home',
+      href: '/pwa',
+      icon: Home,
+      label: 'Home',
+      description: 'Página inicial'
+    },
+    // Perfil - SEMPRE presente
+    perfilItem
+  ] : isSupervisorUser ? [
     // Aprovações - para supervisores
     allNavigationItems.find(item => item.href === '/pwa/aprovacoes') || {
       name: 'Aprovações',

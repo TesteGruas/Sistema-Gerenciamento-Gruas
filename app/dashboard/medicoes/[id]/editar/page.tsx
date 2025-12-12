@@ -1,33 +1,29 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
   ArrowLeft, 
-  Plus, 
+  Save,
+  Plus,
   Trash2,
   Calculator,
-  Save,
   Check,
-  ChevronsUpDown,
-  Building2
+  ChevronsUpDown
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { gruasApi } from "@/lib/api-gruas"
-import { obrasApi } from "@/lib/api-obras"
-import { gruaObraApi } from "@/lib/api-grua-obra"
+import { medicoesMensaisApi, MedicaoMensal, MedicaoMensalUpdate, MedicaoCustoMensal } from "@/lib/api-medicoes-mensais"
 import { itensCustosMensaisApi, ItemCustoMensal } from "@/lib/api-itens-custos-mensais"
-import { medicoesMensaisApi, MedicaoMensalCreate } from "@/lib/api-medicoes-mensais"
 import { medicoesUtils } from "@/lib/medicoes-utils"
 
 interface CustoMensalForm {
@@ -40,36 +36,19 @@ interface CustoMensalForm {
   valor_total: number
 }
 
-interface Grua {
-  id: string | number
-  name: string
-  modelo?: string
-  fabricante?: string
-}
-
-interface Obra {
-  id: number
-  nome: string
-  cliente_id?: number
-  status?: string
-}
-
-export default function NovaMedicaoPage() {
+export default function EditarMedicaoPage() {
   const router = useRouter()
+  const params = useParams()
   const { toast } = useToast()
   
-  const [obras, setObras] = useState<Obra[]>([])
-  const [gruas, setGruas] = useState<Grua[]>([])
-  const [loadingObras, setLoadingObras] = useState(false)
-  const [loadingGruas, setLoadingGruas] = useState(false)
+  const [medicao, setMedicao] = useState<MedicaoMensal | null>(null)
+  const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
-  const [obraSearchOpen, setObraSearchOpen] = useState(false)
   
   // Estados para itens de custos mensais
   const [itens, setItens] = useState<ItemCustoMensal[]>([])
   const [loadingItens, setLoadingItens] = useState(false)
   const [itemSearchOpen, setItemSearchOpen] = useState(false)
-  const [itemSearchValue, setItemSearchValue] = useState("")
   const [novoItemDialogOpen, setNovoItemDialogOpen] = useState(false)
   const [salvandoItem, setSalvandoItem] = useState(false)
   const [novoItemForm, setNovoItemForm] = useState({
@@ -80,13 +59,9 @@ export default function NovaMedicaoPage() {
     categoria: "" as "" | "funcionario" | "horas_extras" | "servico" | "produto"
   })
   
-  // Formulário principal da medição
-  const [medicaoForm, setMedicaoForm] = useState({
-    obra_id: "",
-    grua_id: "",
-    numero: "",
-    periodo: "",
-    data_medicao: new Date().toISOString().split('T')[0],
+  // Formulário de edição
+  const [editForm, setEditForm] = useState({
+    data_medicao: "",
     valor_mensal_bruto: 0,
     valor_aditivos: 0,
     valor_custos_extras: 0,
@@ -109,75 +84,65 @@ export default function NovaMedicaoPage() {
   })
 
   useEffect(() => {
-    carregarObras()
-    carregarItens()
-    // Definir período padrão (mês atual)
-    const now = new Date()
-    const periodo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    setMedicaoForm(prev => ({ ...prev, periodo }))
-  }, [])
-
-  useEffect(() => {
-    if (medicaoForm.obra_id) {
-      carregarGruasDaObra(parseInt(medicaoForm.obra_id))
-    } else {
-      setGruas([])
-      setMedicaoForm(prev => ({ ...prev, grua_id: "" }))
+    if (params.id) {
+      carregarMedicao(Number(params.id))
+      carregarItens()
     }
-  }, [medicaoForm.obra_id])
+  }, [params.id])
 
-  const carregarObras = async () => {
+  const carregarMedicao = async (id: number) => {
     try {
-      setLoadingObras(true)
-      const response = await obrasApi.listarObras({ limit: 1000 })
-      if (response.success) {
-        setObras(response.data || [])
+      setLoading(true)
+      const response = await medicoesMensaisApi.obter(id)
+      if (response.success && response.data) {
+        setMedicao(response.data)
+        setEditForm({
+          data_medicao: response.data.data_medicao ? response.data.data_medicao.split('T')[0] : new Date().toISOString().split('T')[0],
+          valor_mensal_bruto: response.data.valor_mensal_bruto || 0,
+          valor_aditivos: response.data.valor_aditivos || 0,
+          valor_custos_extras: response.data.valor_custos_extras || 0,
+          valor_descontos: response.data.valor_descontos || 0,
+          observacoes: response.data.observacoes || ""
+        })
+        
+        // Carregar custos mensais existentes
+        if (response.data.custos_mensais && response.data.custos_mensais.length > 0) {
+          const custosFormatados: CustoMensalForm[] = response.data.custos_mensais.map((custo: MedicaoCustoMensal) => {
+            // Extrair item e descrição da descrição completa (formato: "ITEM - Descrição")
+            const partes = custo.descricao.split(' - ')
+            const item = partes[0] || ''
+            const descricao = partes.slice(1).join(' - ') || custo.descricao
+            
+            return {
+              item: item,
+              descricao: descricao,
+              unidade: 'mês' as const, // Padrão, pode ser extraído das observações se necessário
+              tipo: (custo.tipo as 'contrato' | 'aditivo') || 'contrato',
+              quantidade_orcamento: custo.quantidade_meses || 0,
+              valor_unitario: custo.valor_mensal || 0,
+              valor_total: custo.valor_total || 0
+            }
+          })
+          setCustosMensais(custosFormatados)
+        }
       } else {
         toast({
           title: "Erro",
-          description: response.error || "Erro ao carregar obras",
+          description: "Medição não encontrada",
           variant: "destructive"
         })
+        router.push("/dashboard/medicoes")
       }
     } catch (error: any) {
-      console.error("Erro ao carregar obras:", error)
+      console.error("Erro ao carregar medição:", error)
       toast({
         title: "Erro",
-        description: error.message || "Erro ao carregar obras",
+        description: error.message || "Erro ao carregar medição",
         variant: "destructive"
       })
+      router.push("/dashboard/medicoes")
     } finally {
-      setLoadingObras(false)
-    }
-  }
-
-  const carregarGruasDaObra = async (obraId: number) => {
-    try {
-      setLoadingGruas(true)
-      const response = await gruaObraApi.buscarGruasPorObra(obraId)
-      if (response.success && response.data) {
-        // Extrair as gruas do relacionamento
-        const gruasDaObra = response.data
-          .filter((relacao: any) => relacao.grua)
-          .map((relacao: any) => ({
-            id: relacao.grua.id,
-            name: relacao.grua.name || relacao.grua.modelo || relacao.grua_id,
-            modelo: relacao.grua.modelo,
-            fabricante: relacao.grua.fabricante
-          }))
-        setGruas(gruasDaObra)
-      } else {
-        setGruas([])
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar gruas da obra",
-        variant: "destructive"
-      })
-      setGruas([])
-    } finally {
-      setLoadingGruas(false)
+      setLoading(false)
     }
   }
 
@@ -218,10 +183,8 @@ export default function NovaMedicaoPage() {
         categoria: novoItemForm.categoria || undefined
       })
 
-      // Atualizar lista de itens
       await carregarItens()
 
-      // Selecionar o item recém-criado no formulário
       setCustoForm({
         ...custoForm,
         item: itemCriado.codigo,
@@ -230,7 +193,6 @@ export default function NovaMedicaoPage() {
         tipo: itemCriado.tipo
       })
 
-      // Fechar dialog e limpar formulário
       setNovoItemDialogOpen(false)
       setNovoItemForm({
         codigo: "",
@@ -279,7 +241,6 @@ export default function NovaMedicaoPage() {
 
     setCustosMensais([...custosMensais, novoCusto])
     
-    // Limpar formulário
     setCustoForm({
       item: "",
       descricao: "",
@@ -295,203 +256,49 @@ export default function NovaMedicaoPage() {
     setCustosMensais(custosMensais.filter((_, i) => i !== index))
   }
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-  }
-
-  const preencherDadosDebug = () => {
-    const now = new Date()
-    const periodo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    const numero = `MED-DEBUG-${periodo}-${Date.now()}`
-    
-    // Preencher formulário principal
-    setMedicaoForm({
-      ...medicaoForm,
-      numero: numero,
-      periodo: periodo,
-      data_medicao: now.toISOString().split('T')[0],
-      valor_mensal_bruto: 15000.00,
-      valor_aditivos: 2500.00,
-      valor_custos_extras: 1200.00,
-      valor_descontos: 500.00,
-      observacoes: "Dados preenchidos automaticamente para debug e testes do sistema."
-    })
-
-    // Adicionar alguns custos mensais de exemplo se houver itens disponíveis
-    if (itens.length > 0) {
-      const custosExemplo: CustoMensalForm[] = []
-      
-      // Adicionar até 3 itens de exemplo
-      const itensParaAdicionar = itens.slice(0, 3)
-      
-      itensParaAdicionar.forEach((item, index) => {
-        // Garantir que a descrição sempre esteja preenchida
-        const descricao = item.descricao || item.codigo || `Item ${index + 1}`
-        
-        custosExemplo.push({
-          item: item.codigo || `ITEM-${index + 1}`,
-          descricao: descricao,
-          unidade: item.unidade || 'mês',
-          tipo: item.tipo || 'contrato',
-          quantidade_orcamento: (index + 1) * 2,
-          valor_unitario: 1000.00 * (index + 1),
-          valor_total: (index + 1) * 2 * 1000.00 * (index + 1)
-        })
-      })
-      
-      setCustosMensais(custosExemplo)
-      
-      // Preencher o formulário de custo mensal com o primeiro item para facilitar adicionar mais
-      const primeiroItem = itensParaAdicionar[0]
-      const descricaoPrimeiro = primeiroItem.descricao || primeiroItem.codigo || "Item 1"
-      setCustoForm({
-        item: primeiroItem.codigo || "01.01",
-        descricao: descricaoPrimeiro,
-        unidade: primeiroItem.unidade || 'mês',
-        tipo: primeiroItem.tipo || 'contrato',
-        quantidade_orcamento: 2,
-        valor_unitario: 1000.00,
-        valor_total: 2000.00
-      })
-    } else {
-      // Se não houver itens, criar custos de exemplo com valores padrão
-      const custosExemplo: CustoMensalForm[] = [
-        {
-          item: "01.01",
-          descricao: "Locação de Grua - Exemplo 1",
-          unidade: "mês",
-          tipo: "contrato",
-          quantidade_orcamento: 2,
-          valor_unitario: 1000.00,
-          valor_total: 2000.00
-        },
-        {
-          item: "01.02",
-          descricao: "Serviço de Montagem - Exemplo 2",
-          unidade: "und",
-          tipo: "aditivo",
-          quantidade_orcamento: 4,
-          valor_unitario: 2000.00,
-          valor_total: 8000.00
-        },
-        {
-          item: "01.03",
-          descricao: "Manutenção Preventiva - Exemplo 3",
-          unidade: "hora",
-          tipo: "contrato",
-          quantidade_orcamento: 6,
-          valor_unitario: 3000.00,
-          valor_total: 18000.00
-        }
-      ]
-      
-      setCustosMensais(custosExemplo)
-      
-      // Preencher o formulário de custo mensal com um exemplo
-      setCustoForm({
-        item: "01.01",
-        descricao: "Locação de Grua - Exemplo 1",
-        unidade: "mês",
-        tipo: "contrato",
-        quantidade_orcamento: 2,
-        valor_unitario: 1000.00,
-        valor_total: 2000.00
-      })
-    }
-
-    toast({
-      title: "Dados Preenchidos",
-      description: "Todos os campos foram preenchidos com valores de exemplo (exceto obra e grua)",
-    })
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!medicaoForm.obra_id) {
-      toast({
-        title: "Erro",
-        description: "Selecione uma obra",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (!medicaoForm.grua_id) {
-      toast({
-        title: "Erro",
-        description: "Selecione uma grua",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (!medicaoForm.periodo || !medicaoForm.data_medicao) {
-      toast({
-        title: "Erro",
-        description: "Preencha período e data da medição",
-        variant: "destructive"
-      })
-      return
-    }
+    
+    if (!medicao) return
 
     try {
       setSalvando(true)
-
-      // Extrair mês e ano do período
-      const [ano, mes] = medicaoForm.periodo.split('-')
       
-      // Gerar número da medição se não fornecido
-      const numero = medicaoForm.numero || `MED-${medicaoForm.periodo}-${Date.now()}`
-
       // Converter custos mensais para o formato da API
       const custosMensaisApi = custosMensais.map(custo => ({
         tipo: custo.tipo,
         descricao: `${custo.item} - ${custo.descricao}`,
         valor_mensal: custo.valor_unitario,
         quantidade_meses: custo.quantidade_orcamento,
-        valor_total: calcularTotalOrcamento(),
-        observacoes: `Unidade: ${custo.unidade} | Quantidade Realizada: ${custo.quantidade_realizada} | Quantidade Acumulada: ${custo.quantidade_acumulada} | Valor Acumulado: ${formatCurrency(custo.valor_acumulado)}`
+        valor_total: custo.valor_total,
+        observacoes: `Unidade: ${custo.unidade}`
       }))
 
-      // Calcular valor total
-      const valorTotal = medicaoForm.valor_mensal_bruto + 
-                        medicaoForm.valor_aditivos + 
-                        medicaoForm.valor_custos_extras - 
-                        medicaoForm.valor_descontos
-
-      const medicaoData: MedicaoMensalCreate = {
-        obra_id: parseInt(medicaoForm.obra_id),
-        grua_id: medicaoForm.grua_id as any,
-        numero,
-        periodo: medicaoForm.periodo,
-        data_medicao: medicaoForm.data_medicao,
-        mes_referencia: parseInt(mes),
-        ano_referencia: parseInt(ano),
-        valor_mensal_bruto: medicaoForm.valor_mensal_bruto,
-        valor_aditivos: medicaoForm.valor_aditivos,
-        valor_custos_extras: medicaoForm.valor_custos_extras,
-        valor_descontos: medicaoForm.valor_descontos,
-        status: "pendente",
-        observacoes: medicaoForm.observacoes,
+      const updateData: MedicaoMensalUpdate = {
+        data_medicao: editForm.data_medicao || undefined,
+        valor_mensal_bruto: editForm.valor_mensal_bruto,
+        valor_aditivos: editForm.valor_aditivos,
+        valor_custos_extras: editForm.valor_custos_extras,
+        valor_descontos: editForm.valor_descontos,
+        observacoes: editForm.observacoes.trim() || undefined,
         custos_mensais: custosMensaisApi.length > 0 ? custosMensaisApi : undefined
       }
 
-      const response = await medicoesMensaisApi.criar(medicaoData)
+      const response = await medicoesMensaisApi.atualizar(medicao.id, updateData)
       
       if (response.success) {
         toast({
           title: "Sucesso",
-          description: "Medição criada com sucesso"
+          description: "Medição atualizada com sucesso"
         })
-        router.push('/dashboard/medicoes')
+        router.push(`/dashboard/medicoes/${medicao.id}`)
       }
     } catch (error: any) {
       // Extrair mensagem do response do backend
       let errorMessage = error.response?.data?.message || 
                          error.response?.data?.error || 
                          error.message || 
-                         "Erro ao criar medição"
+                         "Erro ao atualizar medição"
       
       // Formatar período na mensagem se ainda estiver no formato YYYY-MM
       errorMessage = errorMessage.replace(/(\d{4}-\d{2})/g, (match) => {
@@ -508,221 +315,151 @@ export default function NovaMedicaoPage() {
     }
   }
 
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Carregando medição...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!medicao) {
+    return null
+  }
+
+  const valorTotal = editForm.valor_mensal_bruto + 
+                    editForm.valor_aditivos + 
+                    editForm.valor_custos_extras - 
+                    editForm.valor_descontos
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => router.back()}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Nova Medição</h1>
-            <p className="text-gray-600">Crie uma nova medição vinculada a uma grua</p>
-          </div>
-        </div>
-        <Button 
-          type="button"
-          variant="outline" 
-          onClick={preencherDadosDebug}
-          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-        >
-          <Calculator className="w-4 h-4 mr-2" />
-          Preencher Dados
+      <div className="flex items-center gap-4">
+        <Button variant="outline" onClick={() => router.back()}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Voltar
         </Button>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Editar Medição</h1>
+          <p className="text-gray-600">
+            {medicao.numero} - Período {medicoesUtils.formatPeriodo(medicao.periodo)}
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Informações Básicas da Medição */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Informações Básicas</CardTitle>
+            <CardTitle className="text-base">Informações da Medição</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-600">
               <div>
-                <Label htmlFor="obra_id" className="text-xs">Obra *</Label>
-                <Popover open={obraSearchOpen} onOpenChange={setObraSearchOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={obraSearchOpen}
-                      className="w-full justify-between h-8 text-sm bg-white"
-                      disabled={loadingObras}
-                    >
-                      {medicaoForm.obra_id
-                        ? obras.find((obra) => String(obra.id) === medicaoForm.obra_id)?.nome
-                        : loadingObras ? "Carregando obras..." : "Selecione uma obra"}
-                      <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Buscar obra..." />
-                      <CommandList>
-                        <CommandEmpty>Nenhuma obra encontrada.</CommandEmpty>
-                        <CommandGroup>
-                          {obras.map((obra) => (
-                              <CommandItem
-                                key={obra.id}
-                                value={obra.nome}
-                                onSelect={() => {
-                                  setMedicaoForm({ ...medicaoForm, obra_id: String(obra.id), grua_id: "" })
-                                  setObraSearchOpen(false)
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    medicaoForm.obra_id === String(obra.id) ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <Building2 className="mr-2 h-4 w-4" />
-                                {obra.nome}
-                              </CommandItem>
-                            ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <span className="font-medium">Número:</span> {medicao.numero}
               </div>
               <div>
-                <Label htmlFor="grua_id" className="text-xs">Grua *</Label>
-                <Select
-                  value={medicaoForm.grua_id}
-                  onValueChange={(value) => setMedicaoForm({ ...medicaoForm, grua_id: value })}
-                  required
-                  disabled={!medicaoForm.obra_id || loadingGruas}
-                >
-                  <SelectTrigger className="bg-white h-8 text-sm">
-                    <SelectValue 
-                      placeholder={
-                        !medicaoForm.obra_id 
-                          ? "Selecione uma obra primeiro" 
-                          : loadingGruas 
-                          ? "Carregando gruas..." 
-                          : gruas.length === 0
-                          ? "Nenhuma grua encontrada"
-                          : "Selecione uma grua"
-                      } 
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {gruas.map((grua) => (
-                      <SelectItem key={grua.id} value={String(grua.id)}>
-                        {grua.name} {grua.modelo && `- ${grua.modelo}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <span className="font-medium">Período:</span> {medicoesUtils.formatPeriodo(medicao.periodo)}
               </div>
+              {medicao.obras && (
+                <div>
+                  <span className="font-medium">Obra:</span> {medicao.obras.nome}
+                </div>
+              )}
+              {medicao.gruas && (
+                <div>
+                  <span className="font-medium">Grua:</span> {medicao.gruas.name || medicao.gruas.nome}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-7 gap-2">
+            <div>
+              <Label htmlFor="data_medicao">Data da Medição</Label>
+              <Input
+                id="data_medicao"
+                type="date"
+                value={editForm.data_medicao}
+                onChange={(e) => setEditForm({ ...editForm, data_medicao: e.target.value })}
+                className="bg-white"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Valores */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Valores</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <Label htmlFor="numero" className="text-xs">Número</Label>
-                <Input
-                  id="numero"
-                  value={medicaoForm.numero}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, numero: e.target.value })}
-                  placeholder="Auto-gerado se vazio"
-                  className="bg-white h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label htmlFor="periodo" className="text-xs">Período (YYYY-MM) *</Label>
-                <Input
-                  id="periodo"
-                  type="text"
-                  placeholder="2025-01"
-                  value={medicaoForm.periodo}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9-]/g, '')
-                    if (value.length <= 7) {
-                      setMedicaoForm({ ...medicaoForm, periodo: value })
-                    }
-                  }}
-                  pattern="\d{4}-\d{2}"
-                  required
-                  className="bg-white h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label htmlFor="data_medicao" className="text-xs">Data da Medição *</Label>
-                <Input
-                  id="data_medicao"
-                  type="date"
-                  value={medicaoForm.data_medicao}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, data_medicao: e.target.value })}
-                  required
-                  className="bg-white h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label htmlFor="valor_mensal_bruto" className="text-xs">Valor Mensal Bruto (R$)</Label>
+                <Label htmlFor="valor_mensal_bruto">Valor Mensal Bruto (R$)</Label>
                 <Input
                   id="valor_mensal_bruto"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={medicaoForm.valor_mensal_bruto === 0 ? '' : medicaoForm.valor_mensal_bruto}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_mensal_bruto: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
+                  value={editForm.valor_mensal_bruto === 0 ? '' : editForm.valor_mensal_bruto}
+                  onChange={(e) => setEditForm({ ...editForm, valor_mensal_bruto: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
-                  className="bg-white h-8 text-sm"
+                  className="bg-white"
                 />
               </div>
               <div>
-                <Label htmlFor="valor_aditivos" className="text-xs">Valor Aditivos (R$)</Label>
+                <Label htmlFor="valor_aditivos">Valor Aditivos (R$)</Label>
                 <Input
                   id="valor_aditivos"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={medicaoForm.valor_aditivos === 0 ? '' : medicaoForm.valor_aditivos}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_aditivos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
+                  value={editForm.valor_aditivos === 0 ? '' : editForm.valor_aditivos}
+                  onChange={(e) => setEditForm({ ...editForm, valor_aditivos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
-                  className="bg-white h-8 text-sm"
+                  className="bg-white"
                 />
               </div>
               <div>
-                <Label htmlFor="valor_custos_extras" className="text-xs">Custos Extras (R$)</Label>
+                <Label htmlFor="valor_custos_extras">Custos Extras (R$)</Label>
                 <Input
                   id="valor_custos_extras"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={medicaoForm.valor_custos_extras === 0 ? '' : medicaoForm.valor_custos_extras}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_custos_extras: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
+                  value={editForm.valor_custos_extras === 0 ? '' : editForm.valor_custos_extras}
+                  onChange={(e) => setEditForm({ ...editForm, valor_custos_extras: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
-                  className="bg-white h-8 text-sm"
+                  className="bg-white"
                 />
               </div>
               <div>
-                <Label htmlFor="valor_descontos" className="text-xs">Descontos (R$)</Label>
+                <Label htmlFor="valor_descontos">Descontos (R$)</Label>
                 <Input
                   id="valor_descontos"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={medicaoForm.valor_descontos === 0 ? '' : medicaoForm.valor_descontos}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_descontos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
+                  value={editForm.valor_descontos === 0 ? '' : editForm.valor_descontos}
+                  onChange={(e) => setEditForm({ ...editForm, valor_descontos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
-                  className="bg-white h-8 text-sm"
+                  className="bg-white"
                 />
               </div>
             </div>
-            <div>
-              <Label htmlFor="observacoes" className="text-xs">Observações</Label>
-              <Textarea
-                id="observacoes"
-                value={medicaoForm.observacoes}
-                onChange={(e) => setMedicaoForm({ ...medicaoForm, observacoes: e.target.value })}
-                placeholder="Observações sobre a medição..."
-                rows={2}
-                className="bg-white text-sm"
-              />
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Valor Total:</span>
+                <span className="text-lg font-bold text-blue-600">
+                  {formatCurrency(valorTotal)}
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1075,6 +812,23 @@ export default function NovaMedicaoPage() {
           </CardContent>
         </Card>
 
+        {/* Observações */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Observações</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              id="observacoes"
+              value={editForm.observacoes}
+              onChange={(e) => setEditForm({ ...editForm, observacoes: e.target.value })}
+              placeholder="Observações sobre a medição..."
+              rows={4}
+              className="bg-white"
+            />
+          </CardContent>
+        </Card>
+
         {/* Botões de Ação */}
         <div className="flex justify-end gap-4">
           <Button type="button" variant="outline" onClick={() => router.back()}>
@@ -1089,7 +843,7 @@ export default function NovaMedicaoPage() {
             ) : (
               <>
                 <Save className="w-4 h-4 mr-2" />
-                Criar Medição
+                Salvar Alterações
               </>
             )}
           </Button>
@@ -1098,3 +852,4 @@ export default function NovaMedicaoPage() {
     </div>
   )
 }
+

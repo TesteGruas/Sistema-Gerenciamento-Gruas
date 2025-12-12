@@ -23,7 +23,8 @@ import {
   Building2,
   Forklift,
   Plus,
-  Share2
+  Share2,
+  Edit
 } from "lucide-react"
 import { ExportButton } from "@/components/export-button"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
@@ -300,6 +301,13 @@ export default function MedicaoDetalhesPage() {
         <div className="flex items-center gap-2">
           {getStatusBadge(medicao.status)}
           {getAprovacaoBadge(medicao.status_aprovacao)}
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/dashboard/medicoes/${medicao.id}/editar`)}
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Editar
+          </Button>
           <ExportButton
             dados={[medicao]}
             tipo="medicoes"
@@ -716,4 +724,5 @@ export default function MedicaoDetalhesPage() {
     </div>
   )
 }
+
 

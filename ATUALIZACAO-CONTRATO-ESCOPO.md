@@ -387,3 +387,4 @@ O escopo do projeto **evoluiu significativamente** desde a assinatura do contrat
 **Versão:** 1.0  
 **Status:** Proposta para Negociação
 
+

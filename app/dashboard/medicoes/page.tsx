@@ -13,7 +13,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { 
   Calculator, 
@@ -32,10 +31,11 @@ import {
   Receipt,
   FileCheck,
   RefreshCw,
-  Upload
+  Upload,
+  Edit
 } from "lucide-react"
 import { ExportButton } from "@/components/export-button"
-import { medicoesMensaisApi, MedicaoMensal, MedicaoMensalCreate, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
+import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
 import { gruasApi } from "@/lib/api-gruas"
 import { obrasApi } from "@/lib/api-obras"
 import { getOrcamentos } from "@/lib/api-orcamentos"
@@ -184,6 +184,10 @@ export default function MedicoesPage() {
     } finally {
       setEnviando(false)
     }
+  }
+
+  const handleEditar = (medicao: MedicaoMensal) => {
+    router.push(`/dashboard/medicoes/${medicao.id}/editar`)
   }
 
   const handleVerHistorico = async (obra: Obra) => {
@@ -603,21 +607,29 @@ export default function MedicoesPage() {
                               onClick={() => {
                                 router.push(`/dashboard/medicoes/${medicao.id}`)
                               }}
+                              title="Ver detalhes"
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            {medicao.status === 'finalizada' && medicao.status !== 'enviada' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedMedicao(medicao)
-                                  setIsEnviarDialogOpen(true)
-                                }}
-                              >
-                                <Send className="w-4 h-4" />
-                              </Button>
-                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditar(medicao)}
+                              title="Editar medição"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedMedicao(medicao)
+                                setIsEnviarDialogOpen(true)
+                              }}
+                              title={medicao.status === 'enviada' ? 'Reenviar medição' : 'Enviar medição'}
+                            >
+                              <Send className="w-4 h-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -924,22 +936,31 @@ export default function MedicoesPage() {
                                                     router.push(`/dashboard/medicoes/${medicao.id}`)
                                                   }}
                                                   className="h-8 w-8 p-0"
+                                                  title="Ver detalhes"
                                                 >
                                                   <Eye className="w-4 h-4" />
                                                 </Button>
-                                                {medicao.status === 'finalizada' && medicao.status !== 'enviada' && (
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => {
-                                                      setSelectedMedicao(medicao)
-                                                      setIsEnviarDialogOpen(true)
-                                                    }}
-                                                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                  >
-                                                    <Send className="w-4 h-4" />
-                                                  </Button>
-                                                )}
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => handleEditar(medicao)}
+                                                  className="h-8 w-8 p-0"
+                                                  title="Editar medição"
+                                                >
+                                                  <Edit className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => {
+                                                    setSelectedMedicao(medicao)
+                                                    setIsEnviarDialogOpen(true)
+                                                  }}
+                                                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                  title={medicao.status === 'enviada' ? 'Reenviar medição' : 'Enviar medição'}
+                                                >
+                                                  <Send className="w-4 h-4" />
+                                                </Button>
                                               </div>
                                             </TableCell>
                                           </TableRow>
@@ -1150,15 +1171,38 @@ export default function MedicoesPage() {
                                           {getStatusBadge(medicaoGrua.status)}
                                           {getAprovacaoBadge(medicaoGrua.status_aprovacao)}
                                         </div>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => router.push(`/dashboard/medicoes/${medicaoGrua.id}`)}
-                                          className="h-7 w-7 p-0"
-                                          title="Ver detalhes"
-                                        >
-                                          <Eye className="w-3.5 h-3.5" />
-                                        </Button>
+                                        <div className="flex gap-1 justify-center">
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => router.push(`/dashboard/medicoes/${medicaoGrua.id}`)}
+                                            className="h-7 w-7 p-0"
+                                            title="Ver detalhes"
+                                          >
+                                            <Eye className="w-3.5 h-3.5" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleEditar(medicaoGrua)}
+                                            className="h-7 w-7 p-0"
+                                            title="Editar medição"
+                                          >
+                                            <Edit className="w-3.5 h-3.5" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedMedicao(medicaoGrua)
+                                              setIsEnviarDialogOpen(true)
+                                            }}
+                                            className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                            title={medicaoGrua.status === 'enviada' ? 'Reenviar medição' : 'Enviar medição'}
+                                          >
+                                            <Send className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </div>
                                       </div>
                                     ) : (
                                       <span className="text-gray-300">-</span>

@@ -11,6 +11,25 @@ import {
 
 const router = express.Router();
 
+// Função helper para formatar período (YYYY-MM) para "Mês Ano" (ex: "2025-12" -> "Dezembro 2025")
+const formatarPeriodo = (periodo) => {
+  if (!periodo) return periodo;
+  try {
+    const [ano, mes] = periodo.split('-');
+    const meses = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    const mesIndex = parseInt(mes) - 1;
+    if (mesIndex >= 0 && mesIndex < 12) {
+      return `${meses[mesIndex]} ${ano}`;
+    }
+    return periodo;
+  } catch {
+    return periodo;
+  }
+};
+
 // Configuração do multer para upload de arquivos
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -421,9 +440,10 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
     }
 
     if (medicaoExistente) {
+      const periodoFormatado = formatarPeriodo(medicaoData.periodo);
       return res.status(400).json({
         error: 'Medição já existe',
-        message: `Já existe uma medição para o período ${medicaoData.periodo}`,
+        message: `Já existe uma medição para o período ${periodoFormatado}`,
         data: { medicao_id: medicaoExistente.id }
       });
     }
@@ -546,9 +566,10 @@ router.post('/gerar-automatica', authenticateToken, requirePermission('obras:edi
       .single();
 
     if (medicaoExistente) {
+      const periodoFormatado = formatarPeriodo(periodo);
       return res.status(400).json({
         error: 'Medição já existe',
-        message: `Já existe uma medição para o período ${periodo} deste orçamento`,
+        message: `Já existe uma medição para o período ${periodoFormatado} deste orçamento`,
         data: { medicao_id: medicaoExistente.id }
       });
     }
@@ -705,10 +726,10 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       ...medicaoData 
     } = value;
 
-    // Verificar se a medição pode ser editada
+    // Verificar se a medição existe
     const { data: medicaoAtual, error: checkError } = await supabaseAdmin
       .from('medicoes_mensais')
-      .select('id, editavel, status')
+      .select('id')
       .eq('id', id)
       .single();
 
@@ -716,13 +737,6 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       return res.status(404).json({
         error: 'Medição não encontrada',
         message: checkError.message
-      });
-    }
-
-    if (medicaoAtual.editavel === false || medicaoAtual.status === 'enviada') {
-      return res.status(400).json({
-        error: 'Medição não pode ser editada',
-        message: 'Esta medição foi enviada ao cliente e não pode mais ser editada'
       });
     }
 
