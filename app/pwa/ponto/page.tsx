@@ -59,6 +59,9 @@ export default function PWAPontoPage() {
   const [horasExtras, setHorasExtras] = useState<number>(0)
   const [showConfirmacaoDialog, setShowConfirmacaoDialog] = useState(false)
   const [tipoRegistroConfirmacao, setTipoRegistroConfirmacao] = useState<string | null>(null)
+  const [showFeriadoDialog, setShowFeriadoDialog] = useState(false)
+  const [isFeriado, setIsFeriado] = useState<boolean | null>(null)
+  const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -282,8 +285,36 @@ export default function PWAPontoPage() {
   }
 
   const registrarPonto = async (tipo: string) => {
-    // Mostrar modal de confirmação primeiro
+    // Se for entrada e ainda não perguntou sobre feriado, perguntar primeiro
+    if (tipo === 'entrada' && !registrosHoje.entrada && isFeriado === null) {
+      setTipoRegistroConfirmacao(tipo)
+      setShowFeriadoDialog(true)
+      return
+    }
+    
+    // Mostrar modal de confirmação
     setTipoRegistroConfirmacao(tipo)
+    setShowConfirmacaoDialog(true)
+  }
+
+  const confirmarFeriado = () => {
+    setShowFeriadoDialog(false)
+    // Se não é feriado, continuar com o fluxo normal
+    if (!isFeriado) {
+      setShowConfirmacaoDialog(true)
+      return
+    }
+    // Se é feriado mas não selecionou o tipo, mostrar erro
+    if (isFeriado && !tipoFeriado) {
+      toast({
+        title: "Tipo de feriado obrigatório",
+        description: "Por favor, selecione se é feriado nacional, estadual ou local.",
+        variant: "destructive"
+      })
+      setShowFeriadoDialog(true)
+      return
+    }
+    // Continuar com confirmação
     setShowConfirmacaoDialog(true)
   }
 
@@ -371,6 +402,14 @@ export default function PWAPontoPage() {
         data: hoje,
         [campoTipo]: horaAtual,
         localizacao: location ? `${location.lat}, ${location.lng}` : undefined
+      }
+
+      // Adicionar informações de feriado se for entrada
+      if (tipo === 'entrada' && isFeriado !== null) {
+        dadosRegistro.is_feriado = isFeriado
+        if (isFeriado && tipoFeriado) {
+          dadosRegistro.feriado_tipo = tipoFeriado
+        }
       }
 
       // Se offline, adicionar à fila de sincronização
@@ -896,6 +935,94 @@ export default function PWAPontoPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Diálogo de Pergunta sobre Feriado */}
+      <Dialog open={showFeriadoDialog} onOpenChange={setShowFeriadoDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Informação sobre o Dia
+            </DialogTitle>
+            <DialogDescription>
+              Hoje é feriado?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 pt-2">
+            <div className="flex gap-3">
+              <Button
+                onClick={() => setIsFeriado(false)}
+                variant={isFeriado === false ? "default" : "outline"}
+                className={`flex-1 ${isFeriado === false ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+              >
+                Não
+              </Button>
+              <Button
+                onClick={() => setIsFeriado(true)}
+                variant={isFeriado === true ? "default" : "outline"}
+                className={`flex-1 ${isFeriado === true ? 'bg-blue-600 hover:bg-blue-700' : ''}`}
+              >
+                Sim
+              </Button>
+            </div>
+
+            {isFeriado === true && (
+              <div className="space-y-3 pt-2 border-t">
+                <p className="text-sm font-medium">Tipo de feriado:</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    onClick={() => setTipoFeriado('nacional')}
+                    variant={tipoFeriado === 'nacional' ? "default" : "outline"}
+                    size="sm"
+                    className={tipoFeriado === 'nacional' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                  >
+                    Nacional
+                  </Button>
+                  <Button
+                    onClick={() => setTipoFeriado('estadual')}
+                    variant={tipoFeriado === 'estadual' ? "default" : "outline"}
+                    size="sm"
+                    className={tipoFeriado === 'estadual' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                  >
+                    Estadual
+                  </Button>
+                  <Button
+                    onClick={() => setTipoFeriado('local')}
+                    variant={tipoFeriado === 'local' ? "default" : "outline"}
+                    size="sm"
+                    className={tipoFeriado === 'local' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                  >
+                    Local
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={() => {
+                  setShowFeriadoDialog(false)
+                  setIsFeriado(null)
+                  setTipoFeriado(null)
+                  setTipoRegistroConfirmacao(null)
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmarFeriado}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+                disabled={isFeriado === null || (isFeriado === true && !tipoFeriado)}
+              >
+                Continuar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo de Confirmação de Registro */}
       <Dialog open={showConfirmacaoDialog} onOpenChange={setShowConfirmacaoDialog}>

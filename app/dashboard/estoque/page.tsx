@@ -80,6 +80,8 @@ export default function EstoquePage() {
     status: "Ativo" as "Ativo" | "Inativo",
     quantidade_inicial: 0,
     quantidade_reservada_inicial: 0,
+    classificacao_tipo: "" as "" | "componente" | "item" | "ativo" | "complemento",
+    subcategoria_ativo: "" as "" | "grua" | "equipamento_grua" | "ferramenta" | "ar_condicionado" | "camera" | "auto" | "pc",
   })
 
   // Formulário para movimentação
@@ -827,7 +829,9 @@ export default function EstoquePage() {
           estoque_maximo: formData.estoque_maximo,
           localizacao: formData.localizacao,
           status: formData.status,
-        })
+          classificacao_tipo: formData.classificacao_tipo || undefined,
+          subcategoria_ativo: formData.classificacao_tipo === "ativo" ? formData.subcategoria_ativo || undefined : undefined,
+        } as any)
         
         // Se houver quantidade inicial, criar movimentação de entrada
         if (formData.quantidade_inicial > 0 && produtoResponse.data?.id) {
@@ -898,6 +902,8 @@ export default function EstoquePage() {
       status: "Ativo",
       quantidade_inicial: 0,
       quantidade_reservada_inicial: 0,
+      classificacao_tipo: "",
+      subcategoria_ativo: "",
     })
     setEditingItem(null)
   }
@@ -967,6 +973,8 @@ export default function EstoquePage() {
       status: item.status,
       quantidade_inicial: 0,
       quantidade_reservada_inicial: 0,
+      classificacao_tipo: (item as any).classificacao_tipo || "",
+      subcategoria_ativo: (item as any).subcategoria_ativo || "",
     })
     setIsDialogOpen(true)
   }
@@ -1269,6 +1277,53 @@ export default function EstoquePage() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                {/* Classificação do Item */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="classificacao_tipo">Classificação *</Label>
+                    <Select
+                      value={formData.classificacao_tipo}
+                      onValueChange={(value) => setFormData({ ...formData, classificacao_tipo: value as any, subcategoria_ativo: value !== "ativo" ? "" : formData.subcategoria_ativo })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a classificação" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="componente">Componente (Partes do ativo)</SelectItem>
+                        <SelectItem value="item">Item (Consumíveis)</SelectItem>
+                        <SelectItem value="ativo">Ativo (Imobilizados)</SelectItem>
+                        <SelectItem value="complemento">Complemento (Peças que compõem ativos)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500">
+                      Componentes: Partes do ativo | Itens: Consumíveis | Ativos: Imobilizados | Complementos: Peças dos ativos
+                    </p>
+                  </div>
+
+                  {formData.classificacao_tipo === "ativo" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="subcategoria_ativo">Subcategoria do Ativo *</Label>
+                      <Select
+                        value={formData.subcategoria_ativo}
+                        onValueChange={(value) => setFormData({ ...formData, subcategoria_ativo: value as any })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a subcategoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="grua">Grua</SelectItem>
+                          <SelectItem value="equipamento_grua">Equipamento (Complemento de Grua)</SelectItem>
+                          <SelectItem value="ferramenta">Ferramenta</SelectItem>
+                          <SelectItem value="ar_condicionado">Ar Condicionado</SelectItem>
+                          <SelectItem value="camera">Câmera</SelectItem>
+                          <SelectItem value="auto">Auto</SelectItem>
+                          <SelectItem value="pc">PC</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

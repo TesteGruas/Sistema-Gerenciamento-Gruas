@@ -1050,6 +1050,148 @@ router.post('/registros/calcular', async (req, res) => {
  *       500:
  *         description: Erro interno do servidor
  */
+/**
+ * @swagger
+ * /api/ponto-eletronico/resumo-horas-extras:
+ *   get:
+ *     summary: Obtém resumo de horas extras por dia da semana
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: funcionario_id
+ *         schema:
+ *           type: integer
+ *         description: ID do funcionário
+ *       - in: query
+ *         name: mes
+ *         schema:
+ *           type: integer
+ *         description: Mês (1-12)
+ *       - in: query
+ *         name: ano
+ *         schema:
+ *           type: integer
+ *         description: Ano (ex: 2025)
+ *     responses:
+ *       200:
+ *         description: Resumo de horas extras por dia da semana
+ */
+router.get('/resumo-horas-extras', async (req, res) => {
+  try {
+    const { funcionario_id, mes, ano } = req.query;
+
+    if (!funcionario_id || !mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        message: 'funcionario_id, mes e ano são obrigatórios'
+      });
+    }
+
+    // Calcular data inicial e final do mês
+    const dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(parseInt(ano), parseInt(mes), 0).getDate();
+    const dataFim = `${ano}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+
+    // Buscar registros do mês
+    const { data: registros, error } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('data, horas_extras, tipo_dia, is_feriado')
+      .eq('funcionario_id', funcionario_id)
+      .gte('data', dataInicio)
+      .lte('data', dataFim)
+      .not('horas_extras', 'is', null)
+      .gt('horas_extras', 0);
+
+    if (error) {
+      throw error;
+    }
+
+    // Agrupar por dia da semana e tipo de dia
+    const resumo = {
+      segunda: { horas_extras: 0, registros: 0, acrescimo: 0, total_com_acrescimo: 0 },
+      terca: { horas_extras: 0, registros: 0, acrescimo: 0, total_com_acrescimo: 0 },
+      quarta: { horas_extras: 0, registros: 0, acrescimo: 0, total_com_acrescimo: 0 },
+      quinta: { horas_extras: 0, registros: 0, acrescimo: 0, total_com_acrescimo: 0 },
+      sexta: { horas_extras: 0, registros: 0, acrescimo: 0, total_com_acrescimo: 0 },
+      sabado: { horas_extras: 0, registros: 0, acrescimo: 0.6, total_com_acrescimo: 0 }, // 60% de acréscimo
+      domingo: { horas_extras: 0, registros: 0, acrescimo: 1.0, total_com_acrescimo: 0 }, // 100% de acréscimo
+      feriado: { horas_extras: 0, registros: 0, acrescimo: 1.0, total_com_acrescimo: 0 } // 100% de acréscimo
+    };
+
+    registros?.forEach((registro) => {
+      const data = new Date(registro.data);
+      const diaSemana = data.getDay(); // 0 = domingo, 6 = sábado
+      const horasExtras = parseFloat(registro.horas_extras) || 0;
+
+      let chave = '';
+      let acrescimo = 0;
+
+      if (registro.is_feriado || registro.tipo_dia?.includes('feriado')) {
+        chave = 'feriado';
+        acrescimo = 1.0; // 100%
+      } else if (diaSemana === 0) {
+        chave = 'domingo';
+        acrescimo = 1.0; // 100%
+      } else if (diaSemana === 6) {
+        chave = 'sabado';
+        acrescimo = 0.6; // 60%
+      } else if (diaSemana === 1) {
+        chave = 'segunda';
+        acrescimo = 0; // 0%
+      } else if (diaSemana === 2) {
+        chave = 'terca';
+        acrescimo = 0; // 0%
+      } else if (diaSemana === 3) {
+        chave = 'quarta';
+        acrescimo = 0; // 0%
+      } else if (diaSemana === 4) {
+        chave = 'quinta';
+        acrescimo = 0; // 0%
+      } else if (diaSemana === 5) {
+        chave = 'sexta';
+        acrescimo = 0; // 0%
+      }
+
+      if (chave && resumo[chave]) {
+        resumo[chave].horas_extras += horasExtras;
+        resumo[chave].registros += 1;
+        resumo[chave].acrescimo = acrescimo;
+        resumo[chave].total_com_acrescimo = resumo[chave].horas_extras * (1 + acrescimo);
+      }
+    });
+
+    // Calcular totais
+    const totalHorasExtras = Object.values(resumo).reduce((acc, item) => acc + item.horas_extras, 0);
+    const totalComAcrescimos = Object.values(resumo).reduce((acc, item) => acc + item.total_com_acrescimo, 0);
+
+    res.json({
+      success: true,
+      data: {
+        resumo,
+        totais: {
+          horas_extras: totalHorasExtras,
+          total_com_acrescimos: totalComAcrescimos
+        },
+        periodo: {
+          mes: parseInt(mes),
+          ano: parseInt(ano),
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao calcular resumo de horas extras:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao calcular resumo de horas extras',
+      error: error.message
+    });
+  }
+});
+
 router.get('/registros/validar', async (req, res) => {
   try {
     const { funcionario_id, data_inicio, data_fim } = req.query;
@@ -1395,7 +1537,11 @@ router.post('/registros', async (req, res) => {
       volta_almoco,
       saida,
       observacoes,
-      localizacao
+      localizacao,
+      tipo_dia,
+      is_feriado,
+      feriado_tipo,
+      observacoes_feriado
     } = req.body;
 
     // Validações
@@ -1731,14 +1877,20 @@ router.post('/registros', async (req, res) => {
       const saidaFinal = saida || existingRecord.saida;
       const saidaAlmocoFinal = saida_almoco || existingRecord.saida_almoco;
       const voltaAlmocoFinal = volta_almoco || existingRecord.volta_almoco;
+      const tipoDiaFinal = tipo_dia || existingRecord.tipo_dia || 'normal';
 
       const horasTrabalhadas = calcularHorasTrabalhadas(entradaFinal, saidaFinal, saidaAlmocoFinal, voltaAlmocoFinal);
-      const horasExtras = calcularHorasExtras(horasTrabalhadas);
+      const horasExtras = calcularHorasExtras(entradaFinal, saidaFinal, tipoDiaFinal, horasTrabalhadas, saidaAlmocoFinal, voltaAlmocoFinal);
       const status = determinarStatus(entradaFinal, saidaFinal, horasExtras);
 
       dadosAtualizacao.horas_trabalhadas = horasTrabalhadas;
       dadosAtualizacao.horas_extras = horasExtras;
       dadosAtualizacao.status = status;
+      
+      // Atualizar campos de feriado se fornecidos
+      if (tipo_dia !== undefined) dadosAtualizacao.tipo_dia = tipo_dia;
+      if (is_feriado !== undefined) dadosAtualizacao.is_feriado = is_feriado;
+      if (observacoes_feriado !== undefined) dadosAtualizacao.observacoes_feriado = observacoes_feriado;
 
       // Atualizar registro existente
       const { data: registro, error } = await supabaseAdmin
@@ -1813,9 +1965,78 @@ router.post('/registros', async (req, res) => {
     }
 
     // Se não existe registro, criar um novo
-    // Calcular horas trabalhadas e extras
+    // Determinar tipo de dia se não foi fornecido
+    let tipoDiaFinal = tipo_dia;
+    let feriadoId = null;
+    let isFeriadoFinal = is_feriado || false;
+
+    if (!tipoDiaFinal) {
+      // Buscar estado do funcionário (se disponível) para verificar feriados estaduais/locais
+      const { data: obraFuncionario } = await supabaseAdmin
+        .from('obras')
+        .select('estado')
+        .eq('id', funcionario?.obra_atual_id)
+        .single();
+      
+      const estadoFuncionario = obraFuncionario?.estado || null;
+
+      // Verificar se é feriado
+      if (isFeriadoFinal && feriado_tipo) {
+        // Buscar feriado na tabela
+        let queryFeriado = supabaseAdmin
+          .from('feriados_nacionais')
+          .select('id, tipo')
+          .eq('data', data)
+          .eq('ativo', true);
+        
+        if (feriado_tipo === 'nacional') {
+          queryFeriado = queryFeriado.eq('tipo', 'nacional').is('estado', null);
+        } else if (feriado_tipo === 'estadual' && estadoFuncionario) {
+          queryFeriado = queryFeriado.eq('tipo', 'estadual').eq('estado', estadoFuncionario);
+        } else if (feriado_tipo === 'local' && estadoFuncionario) {
+          queryFeriado = queryFeriado.eq('tipo', 'local').eq('estado', estadoFuncionario);
+        }
+
+        const { data: feriado } = await queryFeriado.single();
+        if (feriado) {
+          feriadoId = feriado.id;
+          tipoDiaFinal = `feriado_${feriado_tipo}`;
+        }
+      }
+
+      // Se ainda não determinou, verificar dia da semana
+      if (!tipoDiaFinal) {
+        const dataObj = new Date(data);
+        const diaSemana = dataObj.getDay(); // 0 = domingo, 6 = sábado
+        
+        if (diaSemana === 0) {
+          tipoDiaFinal = 'domingo';
+        } else if (diaSemana === 6) {
+          tipoDiaFinal = 'sabado';
+        } else {
+          // Verificar se é feriado nacional automaticamente
+          const { data: feriadoNacional } = await supabaseAdmin
+            .from('feriados_nacionais')
+            .select('id')
+            .eq('data', data)
+            .eq('tipo', 'nacional')
+            .eq('ativo', true)
+            .single();
+          
+          if (feriadoNacional) {
+            tipoDiaFinal = 'feriado_nacional';
+            feriadoId = feriadoNacional.id;
+            isFeriadoFinal = true;
+          } else {
+            tipoDiaFinal = 'normal';
+          }
+        }
+      }
+    }
+
+    // Calcular horas trabalhadas e extras com tipo de dia
     const horasTrabalhadas = calcularHorasTrabalhadas(entrada, saida, saida_almoco, volta_almoco);
-    const horasExtras = calcularHorasExtras(horasTrabalhadas);
+    const horasExtras = calcularHorasExtras(entrada, saida, tipoDiaFinal, horasTrabalhadas, saida_almoco, volta_almoco);
     const status = determinarStatus(entrada, saida, horasExtras);
 
     // Criar registro
@@ -1832,6 +2053,10 @@ router.post('/registros', async (req, res) => {
       status,
       observacoes,
       localizacao,
+      tipo_dia: tipoDiaFinal,
+      feriado_id: feriadoId,
+      is_feriado: isFeriadoFinal,
+      observacoes_feriado: observacoes_feriado || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -4512,6 +4737,190 @@ router.post('/registros/:id/aprovar-assinatura', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/registros/{id}/assinar:
+ *   post:
+ *     summary: Assina qualquer registro de ponto (com ou sem horas extras) com assinatura digital
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do registro de ponto
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - supervisor_id
+ *               - assinatura_digital
+ *             properties:
+ *               supervisor_id:
+ *                 type: integer
+ *                 description: ID do supervisor que está assinando
+ *               assinatura_digital:
+ *                 type: string
+ *                 description: Assinatura digital em base64
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações opcionais
+ *     responses:
+ *       200:
+ *         description: Registro assinado com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Registro não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/registros/:id/assinar', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { supervisor_id, assinatura_digital, observacoes } = req.body;
+
+    if (!supervisor_id || !assinatura_digital) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do supervisor e assinatura digital são obrigatórios'
+      });
+    }
+
+    // Buscar registro
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, obra_atual_id)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (errorBusca) {
+      if (errorBusca.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          message: 'Registro não encontrado'
+        });
+      }
+      console.error('Erro ao buscar registro:', errorBusca);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
+      });
+    }
+
+    // Verificar se o supervisor existe
+    const { data: supervisor, error: supervisorError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, cargo')
+      .eq('id', supervisor_id)
+      .eq('status', 'Ativo')
+      .single();
+
+    if (supervisorError || !supervisor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Supervisor não encontrado ou inativo'
+      });
+    }
+
+    // Salvar assinatura digital no storage
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `assinatura_ponto_${id}_${supervisor_id}_${timestamp}.png`;
+    
+    // Converter base64 para buffer
+    const base64Data = assinatura_digital.replace(/^data:image\/png;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Upload para Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('assinaturas-digitais')
+      .upload(fileName, buffer, {
+        contentType: 'image/png',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Erro ao fazer upload da assinatura:', uploadError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar assinatura digital'
+      });
+    }
+
+    // Determinar novo status baseado no registro
+    // Se já estava aprovado, mantém aprovado. Se não, atualiza para aprovado
+    const novoStatus = registro.status === 'Aprovado' ? 'Aprovado' : 'Aprovado';
+
+    // Atualizar registro com assinatura
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update({
+        status: novoStatus,
+        aprovado_por: supervisor_id,
+        data_aprovacao: new Date().toISOString(),
+        observacoes: observacoes || registro.observacoes,
+        assinatura_digital_path: uploadData.path,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno),
+        aprovador:funcionarios!registros_ponto_aprovado_por_fkey(nome, cargo)
+      `)
+      .single();
+
+    if (errorUpdate) {
+      console.error('Erro ao assinar registro:', errorUpdate);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao assinar registro'
+      });
+    }
+
+    // Criar notificação para o funcionário
+    const { error: notifError } = await supabaseAdmin
+      .from('notificacoes')
+      .insert({
+        usuario_id: registro.funcionario_id,
+        tipo: 'success',
+        titulo: 'Registro de Ponto Assinado',
+        mensagem: `Seu registro de ponto de ${registro.data} foi assinado por ${supervisor.nome}`,
+        link: `/dashboard/ponto`,
+        lida: false,
+        created_at: new Date().toISOString()
+      });
+
+    if (notifError) {
+      console.error('Erro ao criar notificação:', notifError);
+      // Não falhar a operação por causa da notificação
+    }
+
+    res.json({
+      success: true,
+      data: registroAtualizado,
+      message: 'Registro de ponto assinado com sucesso'
+    });
+
+  } catch (error) {
+    console.error('Erro na rota de assinatura de registro:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
     });
   }
 });

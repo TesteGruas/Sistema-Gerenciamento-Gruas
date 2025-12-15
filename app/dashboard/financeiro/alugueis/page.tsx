@@ -17,6 +17,8 @@ import {
   Trash2,
   Calendar,
   List,
+  Upload,
+  FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -88,6 +90,11 @@ export default function AlugueisIntegradoPage() {
   const [diaVencimento, setDiaVencimento] = useState('5')
   const [descontoFolha, setDescontoFolha] = useState(true)
   const [porcentagemDesconto, setPorcentagemDesconto] = useState('')
+  const [tipoSinal, setTipoSinal] = useState<'caucao' | 'fiador' | 'outros' | ''>('')
+  const [valorDeposito, setValorDeposito] = useState('')
+  const [periodoMulta, setPeriodoMulta] = useState('')
+  const [contratoArquivo, setContratoArquivo] = useState<File | null>(null)
+  const [contratoArquivoUrl, setContratoArquivoUrl] = useState('')
   const [observacoes, setObservacoes] = useState('')
 
   const carregar = async () => {
@@ -201,6 +208,10 @@ export default function AlugueisIntegradoPage() {
           diaVencimento: parseInt(diaVencimento),
           descontoFolha,
           porcentagemDesconto: porcentagemDesconto ? parseFloat(porcentagemDesconto) : undefined,
+          tipoSinal: tipoSinal || undefined,
+          valorDeposito: valorDeposito ? parseFloat(valorDeposito) : undefined,
+          periodoMulta: periodoMulta ? parseInt(periodoMulta) : undefined,
+          contratoArquivo: contratoArquivoUrl || undefined,
         },
         status: 'ativo',
         observacoes: observacoes || undefined,
@@ -232,6 +243,11 @@ export default function AlugueisIntegradoPage() {
       setDiaVencimento('5')
       setDescontoFolha(true)
       setPorcentagemDesconto('')
+      setTipoSinal('')
+      setValorDeposito('')
+      setPeriodoMulta('')
+      setContratoArquivo(null)
+      setContratoArquivoUrl('')
       setObservacoes('')
       setOpenNovoAluguel(false)
       setActiveTab('alugueis')
@@ -519,7 +535,7 @@ export default function AlugueisIntegradoPage() {
                   Preencha os dados para criar um novo aluguel de residência
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleCriarAluguel} className="space-y-6 mt-4">
+              <form onSubmit={handleCriarAluguel} className="space-y-4 mt-4">
                 <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Home className="h-4 w-4" />
@@ -661,6 +677,76 @@ export default function AlugueisIntegradoPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Novos campos: Tipo de Sinal, Valor do Depósito, Período da Multa */}
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                    <div className="space-y-2">
+                      <Label htmlFor="tipoSinal">Tipo de Sinal</Label>
+                      <Select value={tipoSinal} onValueChange={(value) => setTipoSinal(value as any)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o tipo de sinal" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="caucao">Caução</SelectItem>
+                          <SelectItem value="fiador">Fiador</SelectItem>
+                          <SelectItem value="outros">Outros</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="valorDeposito">Valor do Depósito (R$)</Label>
+                      <Input
+                        id="valorDeposito"
+                        type="number"
+                        step="0.01"
+                        value={valorDeposito}
+                        onChange={(e) => setValorDeposito(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="periodoMulta">Período da Multa (dias)</Label>
+                      <Input
+                        id="periodoMulta"
+                        type="number"
+                        value={periodoMulta}
+                        onChange={(e) => setPeriodoMulta(e.target.value)}
+                        placeholder="Se tiver multa"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="contratoArquivo">Contrato</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="contratoArquivo"
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              setContratoArquivo(file)
+                              // Por enquanto, apenas salvar o nome do arquivo
+                              // Em produção, você deve fazer upload para um servidor de arquivos
+                              setContratoArquivoUrl(file.name)
+                            }
+                          }}
+                          className="cursor-pointer"
+                        />
+                        {contratoArquivoUrl && (
+                          <div className="flex items-center gap-1 text-sm text-green-600">
+                            <FileText className="w-4 h-4" />
+                            <span>{contratoArquivoUrl}</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Formatos aceitos: PDF, DOC, DOCX
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -850,6 +936,41 @@ export default function AlugueisIntegradoPage() {
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Vencimento</p>
                             <p className="font-semibold">Dia {aluguel.contrato.diaVencimento}</p>
+                          </div>
+                        </div>
+
+                        {/* Informações de Contrato */}
+                        <div className="mt-4 pt-4 border-t">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Data de Início</p>
+                              <p className="font-semibold text-sm">
+                                {aluguel.contrato.dataInicio ? new Date(aluguel.contrato.dataInicio).toLocaleDateString('pt-BR') : '-'}
+                              </p>
+                            </div>
+                            {(aluguel as any).data_aniversario_contrato && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Aniversário (1 ano)</p>
+                                <p className="font-semibold text-sm">
+                                  {new Date((aluguel as any).data_aniversario_contrato).toLocaleDateString('pt-BR')}
+                                </p>
+                              </div>
+                            )}
+                            {(aluguel as any).dias_ate_aniversario !== null && (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Dias até Aniversário</p>
+                                <p className={`font-semibold text-sm ${
+                                  (aluguel as any).proximo_aniversario ? 'text-orange-600' : 'text-gray-700'
+                                }`}>
+                                  {(aluguel as any).dias_ate_aniversario} dias
+                                  {(aluguel as any).proximo_aniversario && (
+                                    <Badge className="ml-2 bg-orange-100 text-orange-800 text-xs">
+                                      Próximo
+                                    </Badge>
+                                  )}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
 

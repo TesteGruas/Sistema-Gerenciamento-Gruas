@@ -31,6 +31,11 @@ export interface RegistroPonto {
   data_aprovacao?: string;
   observacoes?: string;
   justificativa_alteracao?: string;
+  // Novos campos de tipo de dia e feriado
+  tipo_dia?: 'normal' | 'sabado' | 'domingo' | 'feriado_nacional' | 'feriado_estadual' | 'feriado_local';
+  is_feriado?: boolean;
+  feriado_id?: number;
+  observacoes_feriado?: string;
 }
 
 export interface RegistroPontoPayload {
@@ -156,6 +161,26 @@ export const apiRegistrosPonto = {
   ): Promise<RegistroPonto> {
     const response = await api.put(`ponto-eletronico/registros/${id}`, payload);
     return response.data.data || response.data;
+  },
+
+  /**
+   * Assina um registro de ponto com assinatura digital (para supervisor)
+   * Funciona para registros com ou sem horas extras
+   */
+  async assinar(
+    id: string | number,
+    payload: {
+      supervisor_id: number | string;
+      assinatura_digital: string;
+      observacoes?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    data: RegistroPonto;
+    message: string;
+  }> {
+    const response = await api.post(`ponto-eletronico/registros/${id}/assinar`, payload);
+    return response.data;
   },
 
   async deletar(id: string | number): Promise<void> {
@@ -592,6 +617,42 @@ export const apiRelatorios = {
     }
     
     return response.data.data || response.data;
+  },
+
+  /**
+   * Obtém resumo de horas extras por dia da semana
+   */
+  async resumoHorasExtras(params: {
+    funcionario_id: number | string;
+    mes: number;
+    ano: number;
+  }): Promise<{
+    success: boolean;
+    data: {
+      resumo: {
+        segunda: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+        terca: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+        quarta: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+        quinta: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+        sexta: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+        sabado: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+        domingo: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+        feriado: { horas_extras: number; registros: number; acrescimo: number; total_com_acrescimo: number };
+      };
+      totais: {
+        horas_extras: number;
+        total_com_acrescimos: number;
+      };
+      periodo: {
+        mes: number;
+        ano: number;
+        data_inicio: string;
+        data_fim: string;
+      };
+    };
+  }> {
+    const response = await api.get('ponto-eletronico/resumo-horas-extras', { params });
+    return response.data;
   }
 };
 

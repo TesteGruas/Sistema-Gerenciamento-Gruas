@@ -194,3 +194,38 @@ export const atualizarStatusAssinatura = async (
   return response.data;
 };
 
+/**
+ * Busca resumo mensal de assinaturas do encarregado
+ */
+export const getResumoMensalAssinaturas = async (params: {
+  mes: number;
+  ano: number;
+}): Promise<{
+  success: boolean;
+  data: {
+    total_assinaturas: number;
+    periodo: {
+      mes: number;
+      ano: number;
+      data_inicio: string;
+      data_fim: string;
+    };
+    assinaturas: Array<{
+      id: number;
+      data_assinatura: string;
+      documento: {
+        id: number;
+        nome: string;
+        tipo: string;
+        obra_id?: number;
+        obra?: {
+          nome: string;
+        };
+      };
+    }>;
+  };
+}> => {
+  const response = await api.get('/assinaturas/resumo-mensal', { params });
+  return response.data;
+};
+

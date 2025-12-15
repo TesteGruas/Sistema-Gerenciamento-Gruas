@@ -40,6 +40,7 @@ import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
 import { obrasApi } from "@/lib/api-obras"
 import api from "@/lib/api"
 import { isAdmin } from "@/lib/user-utils"
+import { getResumoMensalAssinaturas } from "@/lib/api-assinaturas"
 
 export default function AssinaturaPage() {
   const { toast } = useToast()
@@ -60,6 +61,12 @@ export default function AssinaturaPage() {
   const [obras, setObras] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Estados para resumo mensal de assinaturas
+  const [mesResumoAssinaturas, setMesResumoAssinaturas] = useState(new Date().getMonth() + 1)
+  const [anoResumoAssinaturas, setAnoResumoAssinaturas] = useState(new Date().getFullYear())
+  const [resumoAssinaturas, setResumoAssinaturas] = useState<any>(null)
+  const [loadingResumoAssinaturas, setLoadingResumoAssinaturas] = useState(false)
 
   // Função para carregar documentos do backend
   const carregarDocumentos = async () => {
@@ -94,6 +101,27 @@ export default function AssinaturaPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Função para carregar resumo mensal de assinaturas
+  const carregarResumoAssinaturas = async () => {
+    try {
+      setLoadingResumoAssinaturas(true)
+      const resumo = await getResumoMensalAssinaturas({
+        mes: mesResumoAssinaturas,
+        ano: anoResumoAssinaturas
+      })
+      setResumoAssinaturas(resumo.data)
+    } catch (error: any) {
+      console.error('Erro ao carregar resumo de assinaturas:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar o resumo de assinaturas",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingResumoAssinaturas(false)
     }
   }
 
@@ -421,6 +449,128 @@ export default function AssinaturaPage() {
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Resumo Mensal de Assinaturas */}
+      {currentUser && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Resumo de Assinaturas do Mês</CardTitle>
+                <CardDescription>Visualize todas as assinaturas realizadas no mês</CardDescription>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="mes-resumo-assinaturas">Mês:</Label>
+                <Select value={mesResumoAssinaturas.toString()} onValueChange={(value) => setMesResumoAssinaturas(parseInt(value))}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Janeiro</SelectItem>
+                    <SelectItem value="2">Fevereiro</SelectItem>
+                    <SelectItem value="3">Março</SelectItem>
+                    <SelectItem value="4">Abril</SelectItem>
+                    <SelectItem value="5">Maio</SelectItem>
+                    <SelectItem value="6">Junho</SelectItem>
+                    <SelectItem value="7">Julho</SelectItem>
+                    <SelectItem value="8">Agosto</SelectItem>
+                    <SelectItem value="9">Setembro</SelectItem>
+                    <SelectItem value="10">Outubro</SelectItem>
+                    <SelectItem value="11">Novembro</SelectItem>
+                    <SelectItem value="12">Dezembro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="ano-resumo-assinaturas">Ano:</Label>
+                <Select value={anoResumoAssinaturas.toString()} onValueChange={(value) => setAnoResumoAssinaturas(parseInt(value))}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2023">2023</SelectItem>
+                    <SelectItem value="2024">2024</SelectItem>
+                    <SelectItem value="2025">2025</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={carregarResumoAssinaturas} variant="outline" size="sm" disabled={loadingResumoAssinaturas}>
+                <Calendar className="w-4 h-4 mr-2" />
+                {loadingResumoAssinaturas ? "Carregando..." : "Carregar Resumo"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingResumoAssinaturas ? (
+              <div className="flex items-center justify-center h-32">
+                <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : resumoAssinaturas ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total de Assinaturas</p>
+                      <p className="text-3xl font-bold text-blue-600">{resumoAssinaturas.total_assinaturas}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">Período</p>
+                      <p className="text-sm font-medium">
+                        {new Date(resumoAssinaturas.periodo.data_inicio).toLocaleDateString('pt-BR')} - {new Date(resumoAssinaturas.periodo.data_fim).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {resumoAssinaturas.assinaturas && resumoAssinaturas.assinaturas.length > 0 ? (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-gray-700">Lista de Assinaturas</h4>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Documento</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Obra</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {resumoAssinaturas.assinaturas.map((assinatura: any) => (
+                          <TableRow key={assinatura.id}>
+                            <TableCell>
+                              {new Date(assinatura.data_assinatura).toLocaleDateString('pt-BR')}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {assinatura.documento?.nome || 'Documento não encontrado'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{assinatura.documento?.tipo || '-'}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              {assinatura.documento?.obra?.nome || '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>Nenhuma assinatura encontrada para este período</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                Selecione um mês e ano e clique em "Carregar Resumo" para visualizar suas assinaturas
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

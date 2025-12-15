@@ -42,13 +42,76 @@ function calcularHorasTrabalhadas(entrada, saida, saidaAlmoco, voltaAlmoco) {
 }
 
 /**
- * Calcula as horas extras baseado nas horas trabalhadas
- * @param {number} horasTrabalhadas - Total de horas trabalhadas
- * @param {number} jornadaPadrao - Jornada padrão em horas (padrão: 8)
+ * Calcula as horas extras baseado nas horas trabalhadas e tipo de dia
+ * @param {string} entrada - Horário de entrada (HH:MM)
+ * @param {string} saida - Horário de saída (HH:MM)
+ * @param {string} tipoDia - Tipo do dia: 'normal', 'sabado', 'domingo', 'feriado_nacional', 'feriado_estadual', 'feriado_local'
+ * @param {number} horasTrabalhadas - Total de horas trabalhadas (opcional, será calculado se não fornecido)
+ * @param {string} saidaAlmoco - Horário de saída para almoço (opcional)
+ * @param {string} voltaAlmoco - Horário de volta do almoço (opcional)
  * @returns {number} Horas extras
  */
-function calcularHorasExtras(horasTrabalhadas, jornadaPadrao = 8) {
-  return Math.max(0, horasTrabalhadas - jornadaPadrao);
+function calcularHorasExtras(entrada, saida, tipoDia = 'normal', horasTrabalhadas = null, saidaAlmoco = null, voltaAlmoco = null) {
+  if (!entrada || !saida) {
+    return 0;
+  }
+
+  // Se horas trabalhadas não foi fornecido, calcular
+  if (horasTrabalhadas === null) {
+    horasTrabalhadas = calcularHorasTrabalhadas(entrada, saida, saidaAlmoco, voltaAlmoco);
+  }
+
+  // Determinar jornada padrão baseado no tipo de dia e horário de entrada
+  let jornadaPadrao = 8; // Padrão antigo (mantido para compatibilidade)
+  let horarioFimPadrao = '17:00'; // Horário padrão de fim
+
+  // Se for dia normal (segunda a quinta), jornada é 07:00 às 17:00 (10 horas)
+  // Se for sexta-feira, jornada é 07:00 às 16:00 (9 horas)
+  if (tipoDia === 'normal') {
+    const entradaMinutos = timeToMinutes(entrada);
+    const entradaEsperada = timeToMinutes('07:00');
+    
+    // Se entrou próximo de 07:00, considerar jornada completa
+    if (Math.abs(entradaMinutos - entradaEsperada) <= 30) {
+      // Verificar dia da semana pela data (se disponível) ou assumir padrão
+      // Por padrão, assumimos segunda-quinta (10h) ou sexta (9h)
+      // Como não temos a data aqui, vamos usar uma lógica baseada no horário de saída
+      const saidaMinutos = timeToMinutes(saida);
+      const saidaPadraoSegQui = timeToMinutes('17:00');
+      const saidaPadraoSex = timeToMinutes('16:00');
+      
+      // Se saiu próximo de 16:00, é sexta-feira (9h)
+      if (Math.abs(saidaMinutos - saidaPadraoSex) <= 30) {
+        jornadaPadrao = 9;
+        horarioFimPadrao = '16:00';
+      } else {
+        // Caso contrário, assume segunda-quinta (10h)
+        jornadaPadrao = 10;
+        horarioFimPadrao = '17:00';
+      }
+    }
+  } else if (tipoDia === 'sabado' || tipoDia === 'domingo' || tipoDia === 'feriado_nacional' || tipoDia === 'feriado_estadual' || tipoDia === 'feriado_local') {
+    // Finais de semana e feriados: qualquer hora trabalhada é extra
+    jornadaPadrao = 0;
+  }
+
+  // Calcular horas extras baseado na jornada padrão
+  const horasExtras = Math.max(0, horasTrabalhadas - jornadaPadrao);
+  
+  // Se for dia normal e passou do horário padrão de fim, calcular horas extras adicionais
+  if (tipoDia === 'normal' && horarioFimPadrao) {
+    const saidaMinutos = timeToMinutes(saida);
+    const fimPadraoMinutos = timeToMinutes(horarioFimPadrao);
+    
+    if (saidaMinutos > fimPadraoMinutos) {
+      // Horas extras = tempo trabalhado além do horário padrão
+      const minutosExtras = saidaMinutos - fimPadraoMinutos;
+      const horasExtrasAlemFim = minutosExtras / 60;
+      return Math.max(horasExtras, horasExtrasAlemFim);
+    }
+  }
+
+  return horasExtras;
 }
 
 /**

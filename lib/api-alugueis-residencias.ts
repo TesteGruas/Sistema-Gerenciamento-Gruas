@@ -62,6 +62,10 @@ export interface AluguelResidencia {
     diaVencimento: number
     descontoFolha: boolean
     porcentagemDesconto?: number
+    tipoSinal?: 'caucao' | 'fiador' | 'outros'
+    valorDeposito?: number
+    periodoMulta?: number
+    contratoArquivo?: string
   }
   pagamentos: {
     mes: string
@@ -73,6 +77,11 @@ export interface AluguelResidencia {
   observacoes?: string
   createdAt: string
   updatedAt: string
+  // Novos campos de datas
+  data_inicio_contrato?: string
+  data_aniversario_contrato?: string
+  dias_ate_aniversario?: number | null
+  proximo_aniversario?: boolean
 }
 
 export interface Residencia {
@@ -122,7 +131,11 @@ function transformarAluguelBackendParaFrontend(aluguelBackend: any): AluguelResi
       valorMensal: parseFloat(aluguelBackend.valor_mensal || 0),
       diaVencimento: aluguelBackend.dia_vencimento,
       descontoFolha: aluguelBackend.desconto_folha || false,
-      porcentagemDesconto: aluguelBackend.porcentagem_desconto ? parseFloat(aluguelBackend.porcentagem_desconto) : undefined
+      porcentagemDesconto: aluguelBackend.porcentagem_desconto ? parseFloat(aluguelBackend.porcentagem_desconto) : undefined,
+      tipoSinal: aluguelBackend.tipo_sinal || undefined,
+      valorDeposito: aluguelBackend.valor_deposito ? parseFloat(aluguelBackend.valor_deposito) : undefined,
+      periodoMulta: aluguelBackend.periodo_multa || undefined,
+      contratoArquivo: aluguelBackend.contrato_arquivo || undefined
     },
     pagamentos: (aluguelBackend.pagamentos || []).map((p: any) => ({
       mes: p.mes,
@@ -204,6 +217,10 @@ export const AlugueisAPI = {
         dia_vencimento: aluguel.contrato.diaVencimento,
         desconto_folha: aluguel.contrato.descontoFolha,
         porcentagem_desconto: aluguel.contrato.porcentagemDesconto || null,
+        tipo_sinal: aluguel.contrato.tipoSinal || null,
+        valor_deposito: aluguel.contrato.valorDeposito || null,
+        periodo_multa: aluguel.contrato.periodoMulta || null,
+        contrato_arquivo: aluguel.contrato.contratoArquivo || null,
         observacoes: aluguel.observacoes || null
       }
 
@@ -238,6 +255,10 @@ export const AlugueisAPI = {
       if (dados.contrato?.porcentagemDesconto !== undefined) {
         payload.porcentagem_desconto = dados.contrato.porcentagemDesconto || null
       }
+      if (dados.contrato?.tipoSinal !== undefined) payload.tipo_sinal = dados.contrato.tipoSinal || null
+      if (dados.contrato?.valorDeposito !== undefined) payload.valor_deposito = dados.contrato.valorDeposito || null
+      if (dados.contrato?.periodoMulta !== undefined) payload.periodo_multa = dados.contrato.periodoMulta || null
+      if (dados.contrato?.contratoArquivo !== undefined) payload.contrato_arquivo = dados.contrato.contratoArquivo || null
       if (dados.status) payload.status = dados.status
       if (dados.observacoes !== undefined) payload.observacoes = dados.observacoes || null
 

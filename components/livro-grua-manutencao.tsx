@@ -117,7 +117,7 @@ export function LivroGruaManutencao({
     return acc
   }, {} as Record<string, ChecklistItem[]>)
 
-  const [checklist, setChecklist] = useState<Record<string, boolean>>({})
+  const [checklist, setChecklist] = useState<Record<string, 'ok' | 'manutencao' | null>>({})
   
   const [formData, setFormData] = useState<Manutencao>({
     grua_id: gruaId,
@@ -171,10 +171,10 @@ export function LivroGruaManutencao({
     })
   }
 
-  const toggleChecklistItem = (key: string) => {
+  const toggleChecklistItem = (key: string, status: 'ok' | 'manutencao' | null) => {
     const newChecklist = {
       ...checklist,
-      [key]: !checklist[key]
+      [key]: checklist[key] === status ? null : status
     }
     setChecklist(newChecklist)
     setFormData({
@@ -346,24 +346,42 @@ export function LivroGruaManutencao({
                   {secao}
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {itens.map((item) => (
-                    <div
-                      key={item.key}
-                      className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50 transition-colors"
-                    >
-                      <Checkbox
-                        id={item.key}
-                        checked={checklist[item.key] || false}
-                        onCheckedChange={() => toggleChecklistItem(item.key)}
-                      />
-                      <Label
-                        htmlFor={item.key}
-                        className="text-sm font-medium leading-none cursor-pointer flex-1"
+                  {itens.map((item) => {
+                    const statusAtual = checklist[item.key] || null
+                    return (
+                      <div
+                        key={item.key}
+                        className="flex items-center justify-between p-3 rounded-md border hover:bg-gray-50 transition-colors"
                       >
-                        {item.label}
-                      </Label>
-                    </div>
-                  ))}
+                        <Label
+                          htmlFor={item.key}
+                          className="text-sm font-medium leading-none cursor-pointer flex-1"
+                        >
+                          {item.label}
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant={statusAtual === 'ok' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => toggleChecklistItem(item.key, 'ok')}
+                            className={statusAtual === 'ok' ? 'bg-green-600 hover:bg-green-700' : ''}
+                          >
+                            OK
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={statusAtual === 'manutencao' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => toggleChecklistItem(item.key, 'manutencao')}
+                            className={statusAtual === 'manutencao' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
+                          >
+                            MANUTENÇÃO
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}

@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image, Upload, Eye } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
+import { SignaturePad } from "@/components/signature-pad"
 import { AuthService } from "@/app/lib/auth"
 import { 
   apiFuncionarios, 
@@ -97,6 +98,13 @@ export default function PontoPage() {
   const [tipoAcao, setTipoAcao] = useState<'aprovar' | 'rejeitar'>('aprovar')
   const [observacoesModal, setObservacoesModal] = useState('')
   const [justificativaModal, setJustificativaModal] = useState('')
+
+  // Estados para assinatura de registros (supervisor)
+  const [isAssinaturaOpen, setIsAssinaturaOpen] = useState(false)
+  const [registroParaAssinatura, setRegistroParaAssinatura] = useState<RegistroPonto | null>(null)
+  const [assinaturaDigital, setAssinaturaDigital] = useState('')
+  const [isAssinando, setIsAssinando] = useState(false)
+  const [usuarioAtual, setUsuarioAtual] = useState<{ id: number; nome: string; role?: string } | null>(null)
   
   // Estados para edição de registros
   const [isEditarOpen, setIsEditarOpen] = useState(false)
@@ -147,6 +155,11 @@ export default function PontoPage() {
   const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [todosFuncionarios, setTodosFuncionarios] = useState<any[]>([])
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false)
+
+  // Estados para resumo de horas extras por dia
+  const [funcionarioResumoHoras, setFuncionarioResumoHoras] = useState<Funcionario | null>(null)
+  const [resumoHorasExtras, setResumoHorasExtras] = useState<any>(null)
+  const [loadingResumoHoras, setLoadingResumoHoras] = useState(false)
   const [searchFuncionario, setSearchFuncionario] = useState("")
 
   // 1. Cria uma versão do termo de busca que atualiza com menos prioridade que a digitação
@@ -343,6 +356,13 @@ export default function PontoPage() {
       // Obter ID do usuário atual via AuthService
       const currentUser = await AuthService.getCurrentUser()
       const usuarioId = currentUser.id
+      
+      // Salvar informações do usuário atual para uso em assinaturas
+      setUsuarioAtual({
+        id: currentUser.id,
+        nome: currentUser.nome || currentUser.email || 'Usuário',
+        role: currentUser.role
+      })
       
       // Carregar funcionários com verificação de admin e outros dados em paralelo
       // Recalcular apenas na primeira carga para melhor performance
@@ -668,6 +688,36 @@ export default function PontoPage() {
       })
     } finally {
       setLoadingRelatorioMensal(false)
+    }
+  }
+
+  const carregarResumoHorasExtras = async () => {
+    if (!funcionarioResumoHoras) {
+      toast({
+        title: "Funcionário necessário",
+        description: "Selecione um funcionário para ver o resumo",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setLoadingResumoHoras(true)
+      const resumo = await apiRelatorios.resumoHorasExtras({
+        funcionario_id: funcionarioResumoHoras.id,
+        mes: mesRelatorio,
+        ano: anoRelatorio
+      })
+      setResumoHorasExtras(resumo.data)
+    } catch (error) {
+      console.error('Erro ao carregar resumo de horas extras:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar o resumo de horas extras",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingResumoHoras(false)
     }
   }
 
@@ -1443,6 +1493,55 @@ export default function PontoPage() {
     setIsAprovacaoOpen(true)
   }
 
+  // Função para abrir diálogo de assinatura (supervisor)
+  const abrirAssinatura = (registro: RegistroPonto) => {
+    setRegistroParaAssinatura(registro)
+    setAssinaturaDigital('')
+    setIsAssinaturaOpen(true)
+  }
+
+  // Função para assinar registro
+  const assinarRegistro = async () => {
+    if (!registroParaAssinatura || !assinaturaDigital || !usuarioAtual) {
+      toast({
+        title: "Erro",
+        description: "Dados incompletos para assinatura",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsAssinando(true)
+    try {
+      const response = await apiRegistrosPonto.assinar(registroParaAssinatura.id!, {
+        supervisor_id: usuarioAtual.id,
+        assinatura_digital: assinaturaDigital,
+        observacoes: `Registro assinado por ${usuarioAtual.nome}`
+      })
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: response.message || "Registro assinado com sucesso"
+        })
+        setIsAssinaturaOpen(false)
+        setAssinaturaDigital('')
+        setRegistroParaAssinatura(null)
+        // Recarregar dados
+        await carregarDados()
+      }
+    } catch (error: any) {
+      console.error('Erro ao assinar registro:', error)
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || "Erro ao assinar registro",
+        variant: "destructive"
+      })
+    } finally {
+      setIsAssinando(false)
+    }
+  }
+
   const fecharAprovacao = () => {
     setIsAprovacaoOpen(false)
     setRegistroParaAprovacao(null)
@@ -2075,6 +2174,7 @@ export default function PontoPage() {
                     <TableRow>
                       <TableHead>Funcionário</TableHead>
                       <TableHead>Data</TableHead>
+                      <TableHead>Tipo Dia</TableHead>
                       <TableHead>Entrada</TableHead>
                       <TableHead>Saída</TableHead>
                       <TableHead>Horas Trabalhadas</TableHead>
@@ -2087,7 +2187,7 @@ export default function PontoPage() {
                   <TableBody>
                     {loadingTabela ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="h-32">
+                        <TableCell colSpan={10} className="h-32">
                           <TableLoading />
                         </TableCell>
                       </TableRow>
@@ -2134,6 +2234,29 @@ export default function PontoPage() {
                           </div>
                         </TableCell>
                         <TableCell>{utilsPonto.formatarData(registro.data)}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const tipoDia = (registro as any).tipo_dia || 'normal'
+                            const isFeriado = (registro as any).is_feriado || false
+                            
+                            const tipoDiaMap: Record<string, { label: string; color: string }> = {
+                              'normal': { label: 'Normal', color: 'bg-gray-100 text-gray-800' },
+                              'sabado': { label: 'Sábado', color: 'bg-blue-100 text-blue-800' },
+                              'domingo': { label: 'Domingo', color: 'bg-purple-100 text-purple-800' },
+                              'feriado_nacional': { label: 'Feriado Nacional', color: 'bg-red-100 text-red-800' },
+                              'feriado_estadual': { label: 'Feriado Estadual', color: 'bg-orange-100 text-orange-800' },
+                              'feriado_local': { label: 'Feriado Local', color: 'bg-yellow-100 text-yellow-800' }
+                            }
+                            
+                            const tipo = tipoDiaMap[tipoDia] || tipoDiaMap['normal']
+                            
+                            return (
+                              <Badge className={tipo.color}>
+                                {tipo.label}
+                              </Badge>
+                            )
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <ToggleEntrada registro={registro} />
                         </TableCell>
@@ -2204,7 +2327,29 @@ export default function PontoPage() {
                           <div className="flex gap-2">
                             {(() => {
                               const statusInfo = getRegistroStatusInfo(registro)
-                              return statusInfo.acoes
+                              const acoes = [...statusInfo.acoes]
+                              
+                              // Adicionar botão de assinatura para supervisores (se não estiver já assinado)
+                              const isSupervisor = usuarioAtual?.role === 'supervisor' || usuarioAtual?.role === 'admin'
+                              const jaAssinado = registro.aprovado_por && registro.data_aprovacao
+                              
+                              if (isSupervisor && !jaAssinado) {
+                                acoes.push(
+                                  <Button
+                                    key="assinar"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => abrirAssinatura(registro)}
+                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
+                                    title="Assinar registro de ponto"
+                                  >
+                                    <FileText className="w-4 h-4 mr-1" />
+                                    Assinar
+                                  </Button>
+                                )
+                              }
+                              
+                              return acoes
                             })()}
                           </div>
                         </TableCell>
@@ -2923,6 +3068,132 @@ export default function PontoPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Resumo de Horas Extras por Dia da Semana */}
+                <Card className="mt-6">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Resumo de Horas Extras por Dia da Semana</CardTitle>
+                        <CardDescription>Visualize o resumo detalhado de horas extras agrupadas por dia da semana</CardDescription>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="funcionario-resumo">Funcionário:</Label>
+                        <Select 
+                          value={funcionarioResumoHoras?.id?.toString() || ""} 
+                          onValueChange={(value) => {
+                            const func = data.funcionarios.find(f => f.id.toString() === value)
+                            setFuncionarioResumoHoras(func || null)
+                          }}
+                        >
+                          <SelectTrigger className="w-64">
+                            <SelectValue placeholder="Selecione um funcionário" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {data.funcionarios.map((func) => (
+                              <SelectItem key={func.id} value={func.id.toString()}>
+                                {func.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button onClick={carregarResumoHorasExtras} variant="outline" size="sm" disabled={!funcionarioResumoHoras || loadingResumoHoras}>
+                        <Clock className="w-4 h-4 mr-2" />
+                        {loadingResumoHoras ? "Carregando..." : "Carregar Resumo"}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingResumoHoras ? (
+                      <div className="flex items-center justify-center h-64">
+                        <Loading />
+                      </div>
+                    ) : resumoHorasExtras ? (
+                      <div className="space-y-4">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Dia</TableHead>
+                              <TableHead className="text-center">Horas Extras</TableHead>
+                              <TableHead className="text-center">Acréscimo</TableHead>
+                              <TableHead className="text-center">Total com Acréscimo</TableHead>
+                              <TableHead className="text-center">Registros</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {Object.entries(resumoHorasExtras.resumo).map(([dia, dados]: [string, any]) => {
+                              if (dados.horas_extras === 0 && dados.registros === 0) return null
+                              
+                              const formatarHora = (horas: number) => {
+                                const h = Math.floor(horas)
+                                const m = Math.round((horas - h) * 60)
+                                return m > 0 ? `${h}:${m.toString().padStart(2, '0')}` : `${h}:00`
+                              }
+
+                              const formatarPercentual = (acrescimo: number) => {
+                                return `${(acrescimo * 100).toFixed(0)}%`
+                              }
+
+                              const nomesDias: Record<string, string> = {
+                                segunda: 'Segunda-feira',
+                                terca: 'Terça-feira',
+                                quarta: 'Quarta-feira',
+                                quinta: 'Quinta-feira',
+                                sexta: 'Sexta-feira',
+                                sabado: 'Sábado',
+                                domingo: 'Domingo',
+                                feriado: 'Feriado'
+                              }
+
+                              return (
+                                <TableRow key={dia}>
+                                  <TableCell className="font-medium">{nomesDias[dia] || dia}</TableCell>
+                                  <TableCell className="text-center">{formatarHora(dados.horas_extras)}</TableCell>
+                                  <TableCell className="text-center">{formatarPercentual(dados.acrescimo)}</TableCell>
+                                  <TableCell className="text-center font-semibold">{formatarHora(dados.total_com_acrescimo)}</TableCell>
+                                  <TableCell className="text-center">{dados.registros}</TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-600">Total de Horas Extras</p>
+                              <p className="font-semibold text-lg">
+                                {(() => {
+                                  const total = resumoHorasExtras.totais.horas_extras
+                                  const h = Math.floor(total)
+                                  const m = Math.round((total - h) * 60)
+                                  return m > 0 ? `${h}:${m.toString().padStart(2, '0')}` : `${h}:00`
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">Total com Acréscimos</p>
+                              <p className="font-semibold text-lg text-blue-600">
+                                {(() => {
+                                  const total = resumoHorasExtras.totais.total_com_acrescimos
+                                  const h = Math.floor(total)
+                                  const m = Math.round((total - h) * 60)
+                                  return m > 0 ? `${h}:${m.toString().padStart(2, '0')}` : `${h}:00`
+                                })()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        Selecione um funcionário e clique em "Carregar Resumo" para visualizar o resumo de horas extras
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>
@@ -3583,6 +3854,101 @@ export default function PontoPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Assinatura Digital para Supervisor */}
+      <Dialog open={isAssinaturaOpen} onOpenChange={setIsAssinaturaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Assinar Registro de Ponto
+            </DialogTitle>
+            <DialogDescription>
+              Assine digitalmente o registro de ponto do funcionário
+            </DialogDescription>
+          </DialogHeader>
+
+          {registroParaAssinatura && (
+            <div className="space-y-4">
+              {/* Informações do Registro */}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-gray-600">Funcionário:</span>
+                    <p className="font-medium">{registroParaAssinatura.funcionario?.nome || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Data:</span>
+                    <p className="font-medium">{utilsPonto.formatarData(registroParaAssinatura.data)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Horas Trabalhadas:</span>
+                    <p className="font-medium">{registroParaAssinatura.horas_trabalhadas || 0}h</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Horas Extras:</span>
+                    <p className="font-medium text-orange-600">
+                      {registroParaAssinatura.horas_extras ? `+${registroParaAssinatura.horas_extras}h` : '0h'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Componente de Assinatura */}
+              <div className="space-y-2">
+                <Label>Assinatura Digital *</Label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <SignaturePad
+                    title=""
+                    description=""
+                    onSave={setAssinaturaDigital}
+                    onCancel={() => setAssinaturaDigital('')}
+                  />
+                </div>
+                {assinaturaDigital && (
+                  <p className="text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle className="w-4 h-4" />
+                    Assinatura realizada
+                  </p>
+                )}
+              </div>
+
+              {/* Botões */}
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsAssinaturaOpen(false)
+                    setAssinaturaDigital('')
+                    setRegistroParaAssinatura(null)
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={assinarRegistro}
+                  disabled={!assinaturaDigital || isAssinando}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isAssinando ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Assinando...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Assinar Registro
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       </div>

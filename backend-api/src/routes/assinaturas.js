@@ -111,6 +111,73 @@ router.get('/pendentes', authenticateToken, async (req, res) => {
 })
 
 /**
+ * GET /api/assinaturas/resumo-mensal
+ * Buscar resumo de assinaturas do encarregado no mês
+ */
+router.get('/resumo-mensal', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { mes, ano } = req.query
+
+    if (!mes || !ano) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês e ano são obrigatórios'
+      })
+    }
+
+    // Calcular data inicial e final do mês
+    const dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01`
+    const ultimoDia = new Date(parseInt(ano), parseInt(mes), 0).getDate()
+    const dataFim = `${ano}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`
+
+    // Buscar assinaturas do usuário no período
+    const { data: assinaturas, error } = await supabaseAdmin
+      .from('obras_documento_assinaturas')
+      .select(`
+        *,
+        documento:obras_documentos(
+          id,
+          nome,
+          tipo,
+          obra_id,
+          obra:obras(nome)
+        )
+      `)
+      .eq('user_id', userId)
+      .gte('data_assinatura', dataInicio)
+      .lte('data_assinatura', dataFim)
+      .eq('status', 'assinada')
+      .order('data_assinatura', { ascending: false })
+
+    if (error) {
+      throw error
+    }
+
+    res.json({
+      success: true,
+      data: {
+        total_assinaturas: assinaturas?.length || 0,
+        periodo: {
+          mes: parseInt(mes),
+          ano: parseInt(ano),
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        },
+        assinaturas: assinaturas || []
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao buscar resumo de assinaturas:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao buscar resumo de assinaturas',
+      error: error.message
+    })
+  }
+})
+
+/**
  * GET /api/assinaturas/documentos
  * Buscar todos os documentos do usuário (pendentes, assinados, rejeitados)
  */

@@ -44,6 +44,10 @@ const aluguelSchema = Joi.object({
     then: Joi.optional(),
     otherwise: Joi.allow(null).optional()
   }),
+  tipo_sinal: Joi.string().valid('caucao', 'fiador', 'outros').allow(null, '').optional(),
+  valor_deposito: Joi.number().min(0).allow(null).optional(),
+  periodo_multa: Joi.number().integer().min(0).allow(null).optional(),
+  contrato_arquivo: Joi.string().allow(null, '').optional(),
   observacoes: Joi.string().allow('', null).optional()
 })
 
@@ -313,7 +317,7 @@ router.get('/', async (req, res) => {
 
     if (error) throw error
 
-    // Buscar pagamentos para cada aluguel
+    // Buscar pagamentos para cada aluguel e calcular datas
     const alugueisComPagamentos = await Promise.all(
       (data || []).map(async (aluguel) => {
         const { data: pagamentos } = await supabaseAdmin
@@ -322,9 +326,31 @@ router.get('/', async (req, res) => {
           .eq('aluguel_id', aluguel.id)
           .order('mes', { ascending: false })
 
+        // Calcular data de aniversário (1 ano após data_inicio)
+        let dataAniversario = null
+        if (aluguel.data_inicio) {
+          const dataInicio = new Date(aluguel.data_inicio)
+          dataAniversario = new Date(dataInicio)
+          dataAniversario.setFullYear(dataInicio.getFullYear() + 1)
+        }
+
+        // Calcular dias até aniversário
+        let diasAteAniversario = null
+        if (dataAniversario) {
+          const hoje = new Date()
+          hoje.setHours(0, 0, 0, 0)
+          dataAniversario.setHours(0, 0, 0, 0)
+          const diffTime = dataAniversario.getTime() - hoje.getTime()
+          diasAteAniversario = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        }
+
         return {
           ...aluguel,
-          pagamentos: pagamentos || []
+          pagamentos: pagamentos || [],
+          data_inicio_contrato: aluguel.data_inicio,
+          data_aniversario_contrato: dataAniversario ? dataAniversario.toISOString().split('T')[0] : null,
+          dias_ate_aniversario: diasAteAniversario,
+          proximo_aniversario: diasAteAniversario !== null && diasAteAniversario <= 30 && diasAteAniversario >= 0
         }
       })
     )
