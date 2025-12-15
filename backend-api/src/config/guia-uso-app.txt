@@ -418,3 +418,4 @@ Se precisar de ajuda:
 IMPORTANTE: Este guia é uma referência completa sobre como usar o Sistema de Gerenciamento de Gruas. Use essas informações para orientar os usuários sobre todas as funcionalidades disponíveis.
 
 
+

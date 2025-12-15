@@ -29,6 +29,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useEmpresa } from "@/hooks/use-empresa"
 import { useAuth } from "@/hooks/use-auth"
+import { useDebugMode } from "@/hooks/use-debug-mode"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -102,6 +103,7 @@ export default function NovoOrcamentoPage() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { user } = useAuth()
+  const { debugMode } = useDebugMode()
   const orcamentoId = searchParams.get('id')
   const tipo = searchParams.get('tipo') || 'locacao' // 'obra' ou 'locacao'
   const isObra = tipo === 'obra'
@@ -1987,8 +1989,8 @@ export default function NovoOrcamentoPage() {
       </Tabs>
 
       <div className="flex justify-end gap-2 sticky bottom-0 bg-white p-4 border-t -mx-6 px-6">
-        {/* Botão de Debug - apenas para admin@admin.com */}
-        {isAdminUser && (
+        {/* Botão de Debug - apenas para admin com debug mode ativado */}
+        {isAdminUser && debugMode && (
           <Button 
             variant="outline" 
             onClick={handleDebugFill}

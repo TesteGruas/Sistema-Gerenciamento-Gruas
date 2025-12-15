@@ -162,3 +162,4 @@ Se você não vê o botão de ponto, verifique se seu cargo é Operário ou Sina
 **Status:** ✅ **IMPLEMENTADO E PRONTO PARA USO**
 
 
+

@@ -24,7 +24,8 @@ import {
   Home,
   Building2,
   ChevronDown,
-  CheckCircle
+  CheckCircle,
+  Calculator
 } from "lucide-react"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
@@ -506,7 +507,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   // Se for cliente, usar apenas Documentos, Home e Perfil (sem Ponto e Espelho)
   const isClientUser = isClientRole()
   
-  // Se for cliente, usar apenas Documentos, Home e Perfil
+  // Se for cliente, usar Documentos, Medições, Home e Perfil
   const essentialNavItems = isClientUser ? [
     // Documentos
     allNavigationItems.find(item => item.href === '/pwa/documentos') || {
@@ -515,6 +516,14 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       icon: FileText,
       label: 'Documentos',
       description: 'Documentos'
+    },
+    // Medições
+    allNavigationItems.find(item => item.href === '/pwa/cliente/medicoes') || {
+      name: 'Medições',
+      href: '/pwa/cliente/medicoes',
+      icon: Calculator,
+      label: 'Medições',
+      description: 'Medições das obras'
     },
     // Home (no meio)
     {
@@ -917,7 +926,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
 
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb overflow-visible">
-              <div className="grid h-16 relative grid-cols-5">
+              <div className={`grid h-16 relative ${filteredNavigationItems.length === 4 ? 'grid-cols-4' : 'grid-cols-5'} place-items-center`}>
                 {filteredNavigationItems.length > 0 ? (
                   filteredNavigationItems
                     .filter(item => item && item.icon) // Filtrar itens sem ícone
@@ -931,14 +940,14 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                         <button
                           key={item.name || item.href || index}
                           onClick={() => handleNavigation(item.href)}
-                          className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-200 overflow-visible ${
+                          className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-200 overflow-visible w-full h-full ${
                             isActive 
                               ? "text-[#871b0b]" 
                               : "text-gray-500 active:bg-gray-100"
                           }`}
                         >
                           
-                          <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`} style={{ zIndex: isActive ? 10 : 1 }}>
+                          <div className={`relative flex items-center justify-center ${isActive ? 'scale-110' : ''} transition-transform duration-200`} style={{ zIndex: isActive ? 10 : 1 }}>
                             <Icon className={`w-6 h-6 relative ${isActive ? 'stroke-[2.5]' : ''} ${isActive ? 'text-[#871b0b]' : ''}`} />
                             {/* Badge de notificações não lidas */}
                             {item.href === '/pwa/notificacoes' && notificacoesNaoLidas > 0 && (

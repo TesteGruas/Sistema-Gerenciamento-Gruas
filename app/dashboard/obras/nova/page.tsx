@@ -49,6 +49,7 @@ import { sinaleirosApi } from "@/lib/api-sinaleiros"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useDebugMode } from "@/hooks/use-debug-mode"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -150,6 +151,7 @@ const parseDecimal = (value: string) => {
 export default function NovaObraPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { debugMode } = useDebugMode()
   
   // Estados para integração com backend
   const [loading, setLoading] = useState(false)
@@ -2371,16 +2373,18 @@ export default function NovaObraPage() {
             Cancelar
           </Button>
           <div className="flex gap-2">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={preencherDadosTeste}
-              disabled={creating}
-              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Preencher Dados de Teste
-            </Button>
+            {debugMode && (
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={preencherDadosTeste}
+                disabled={creating}
+                className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Preencher Dados de Teste
+              </Button>
+            )}
             <Button 
               type="button" 
               variant="outline" 

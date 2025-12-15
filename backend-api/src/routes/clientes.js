@@ -646,16 +646,27 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
  * GET /api/clientes/usuario/:usuario_id
  * Buscar cliente por usuario_id
  * Se o usuário for cliente, só pode buscar seu próprio cliente
+ * 
+ * O usuario_id pode ser:
+ * - UUID do Supabase Auth
+ * - ID numérico da tabela usuarios
+ * - Email do usuário
  */
 router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
   try {
     const { usuario_id } = req.params
     const userId = req.user?.id
+    const userEmail = req.user?.email
 
     // Se o usuário for cliente, só pode buscar seu próprio cliente
     const userRole = req.user?.role?.toLowerCase() || ''
     if (userRole.includes('cliente') || req.user?.level === 1) {
-      if (parseInt(usuario_id) !== userId) {
+      // Comparar UUIDs, IDs numéricos ou emails
+      const isSameUser = usuario_id === userId || 
+                        usuario_id === req.user?.id?.toString() ||
+                        (userEmail && (usuario_id === userEmail || usuario_id.toLowerCase() === userEmail.toLowerCase()))
+      
+      if (!isSameUser) {
         return res.status(403).json({
           error: 'Acesso negado',
           message: 'Você não tem permissão para acessar este cliente'
@@ -663,13 +674,69 @@ router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
       }
     }
 
+    // Buscar o ID numérico do usuário na tabela usuarios
+    let usuarioIdNumerico = null
+
+    // Se for um número, tentar usar diretamente
+    if (!isNaN(usuario_id) && !usuario_id.includes('-')) {
+      usuarioIdNumerico = parseInt(usuario_id)
+    } else {
+      // É UUID ou email, buscar na tabela usuarios pelo email
+      // Usar o email do usuário autenticado se disponível, senão usar o usuario_id como email
+      const emailParaBuscar = userEmail || (usuario_id.includes('@') ? usuario_id : null)
+      
+      if (emailParaBuscar) {
+        const { data: usuario, error: usuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('email', emailParaBuscar)
+          .single()
+
+        if (usuario && !usuarioError) {
+          usuarioIdNumerico = usuario.id
+        }
+      }
+    }
+
+    // Se ainda não encontrou, tentar buscar pelo ID do usuário autenticado
+    if (!usuarioIdNumerico && req.user?.id) {
+      // Buscar usuário na tabela usuarios pelo email do usuário autenticado
+      if (userEmail) {
+        const { data: usuario, error: usuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('email', userEmail)
+          .single()
+
+        if (usuario && !usuarioError) {
+          usuarioIdNumerico = usuario.id
+        }
+      }
+    }
+
+    if (!usuarioIdNumerico) {
+      return res.status(404).json({
+        error: 'Usuário não encontrado',
+        message: 'Não foi possível encontrar o usuário na tabela usuarios. Verifique se o usuário está cadastrado corretamente.'
+      })
+    }
+
+    // Buscar cliente pelo ID numérico do usuário
     const { data: cliente, error } = await supabaseAdmin
       .from('clientes')
       .select('*')
-      .eq('contato_usuario_id', usuario_id)
+      .eq('contato_usuario_id', usuarioIdNumerico)
       .single()
 
     if (error || !cliente) {
+      // Se não encontrou, verificar se o erro é porque não existe registro
+      if (error?.code === 'PGRST116') {
+        return res.status(404).json({
+          error: 'Cliente não encontrado',
+          message: 'Nenhum cliente encontrado para este usuário. Verifique se o cliente está vinculado ao usuário.'
+        })
+      }
+      
       return res.status(404).json({
         error: 'Cliente não encontrado',
         message: 'Nenhum cliente encontrado para este usuário'

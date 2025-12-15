@@ -127,6 +127,7 @@ import complementosRoutes from './routes/complementos.js'
 import alugueisResidenciasRoutes from './routes/alugueis-residencias.js'
 import avatarRoutes from './routes/avatar.js'
 import chatIaRoutes from './routes/chat-ia.js'
+import configuracoesRoutes from './routes/configuracoes.js'
 
 // Importar jobs
 import { iniciarJobVerificacaoAprovacoes } from './jobs/verificar-aprovacoes.js'
@@ -297,12 +298,16 @@ app.use(compression({
   }
 }))
 
-// Rate limiting (permissivo)
+// Rate limiting (permissivo) - Excluindo rotas de configurações
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
   message: {
     error: 'Muitas tentativas. Tente novamente em 15 minutos.'
+  },
+  skip: (req) => {
+    // Excluir rotas de configurações do rate limit
+    return req.path.startsWith('/api/configuracoes')
   }
 })
 app.use(limiter)
@@ -432,6 +437,7 @@ app.use('/api/gruas-mensais', gruasMensaisRoutes)
 app.use('/api/checklist-devolucao', checklistDevolucaoRoutes)
 app.use('/api/notificacoes', notificacoesRoutes)
 app.use('/api/email-config', emailConfigRoutes)
+app.use('/api/configuracoes', configuracoesRoutes)
 app.use('/api/contas-receber', contasReceberRoutes)
 app.use('/api/contas-pagar', contasPagarRoutes)
 app.use('/api/rentabilidade', rentabilidadeRoutes)

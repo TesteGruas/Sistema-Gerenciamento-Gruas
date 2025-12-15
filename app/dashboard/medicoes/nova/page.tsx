@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { useDebugMode } from "@/hooks/use-debug-mode"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -57,6 +58,7 @@ interface Obra {
 export default function NovaMedicaoPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { debugMode } = useDebugMode()
   
   const [obras, setObras] = useState<Obra[]>([])
   const [gruas, setGruas] = useState<Grua[]>([])
@@ -522,15 +524,17 @@ export default function NovaMedicaoPage() {
             <p className="text-gray-600">Crie uma nova medição vinculada a uma grua</p>
           </div>
         </div>
-        <Button 
-          type="button"
-          variant="outline" 
-          onClick={preencherDadosDebug}
-          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-        >
-          <Calculator className="w-4 h-4 mr-2" />
-          Preencher Dados
-        </Button>
+        {debugMode && (
+          <Button 
+            type="button"
+            variant="outline" 
+            onClick={preencherDadosDebug}
+            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
+          >
+            <Calculator className="w-4 h-4 mr-2" />
+            Preencher Dados
+          </Button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">

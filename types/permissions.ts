@@ -435,7 +435,7 @@ export const ROLE_NAME_MAPPING: Record<string, RoleName> = {
   'Operador': 'Operários',
   'Operario': 'Operários',
   'Cliente': 'Clientes',
-  'Visualizador': 'Operários', // Visualizador foi removido, vira Operário
+  'Visualizador': 'Clientes', // Visualizador tem as mesmas permissões que Cliente
   // Lowercase variants
   'admin': 'Admin',
   'administrador': 'Admin',
@@ -449,7 +449,7 @@ export const ROLE_NAME_MAPPING: Record<string, RoleName> = {
   'operario': 'Operários',
   'clientes': 'Clientes',
   'cliente': 'Clientes',
-  'visualizador': 'Operários'
+  'visualizador': 'Clientes' // Visualizador tem as mesmas permissões que Cliente
 }
 
 /**

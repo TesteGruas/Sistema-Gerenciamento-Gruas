@@ -473,14 +473,15 @@ export const ROLE_NAME_MAPPING = {
   'Operador': 'Operários',
   'Operario': 'Operários',
   'Cliente': 'Clientes',
-  'Visualizador': 'Operários', // Visualizador foi removido, vira Operário
+  'Visualizador': 'Clientes', // Visualizador tem as mesmas permissões que Cliente
   // Lowercase variants
   'admin': 'Admin',
   'gestores': 'Gestores',
   'supervisores': 'Supervisores',
   'operarios': 'Operários',
   'operários': 'Operários',
-  'clientes': 'Clientes'
+  'clientes': 'Clientes',
+  'visualizador': 'Clientes' // Visualizador tem as mesmas permissões que Cliente
 }
 
 /**

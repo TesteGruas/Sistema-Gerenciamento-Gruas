@@ -27,6 +27,7 @@ import { ExportButton } from "@/components/export-button"
 import { ProtectedRoute } from "@/components/protected-route"
 import { obrasApi } from "@/lib/api-obras"
 import { gruasApi } from "@/lib/api-gruas"
+import { DebugButton } from "@/components/debug-button"
 
 export default function EstoquePage() {
   const { toast } = useToast()
@@ -776,6 +777,23 @@ export default function EstoquePage() {
     )
   }
 
+  const preencherDadosDebugEstoque = () => {
+    setFormData({
+      nome: "Cabo de Aço 12mm",
+      descricao: "Cabo de aço galvanizado 12mm, resistência 8 toneladas",
+      categoria_id: categorias.length > 0 ? categorias[0].id : 0,
+      codigo_barras: "7891234567890",
+      unidade_medida: "metro",
+      valor_unitario: 45.50,
+      estoque_minimo: 100,
+      estoque_maximo: 500,
+      localizacao: "Galpão A - Prateleira 3",
+      status: "Ativo",
+      quantidade_inicial: 250,
+      quantidade_reservada_inicial: 0
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -1220,6 +1238,9 @@ export default function EstoquePage() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="flex justify-end">
+                  <DebugButton onClick={preencherDadosDebugEstoque} disabled={loading} />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="nome">Nome do Item</Label>

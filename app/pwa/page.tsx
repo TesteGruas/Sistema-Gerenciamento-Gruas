@@ -28,7 +28,8 @@ import {
   Award,
   FileCheck,
   MapPin,
-  Loader2
+  Loader2,
+  Calculator
 } from "lucide-react"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { useToast } from "@/hooks/use-toast"
@@ -389,6 +390,16 @@ export default function PWAMainPage() {
       color: "text-purple-600",
       bgColor: "bg-purple-50",
       borderColor: "border-purple-100",
+      requiresObra: true // Requer obra ativa
+    },
+    {
+      title: "Medições",
+      description: "Medições das obras",
+      icon: Calculator,
+      href: "/pwa/cliente/medicoes",
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-100",
       requiresObra: true // Requer obra ativa
     },
     {
@@ -894,8 +905,30 @@ export default function PWAMainPage() {
             </p>
           </div>
 
-          {/* Mini stats */}
+          {/* Mini stats - Ocultar para clientes */}
           {(() => {
+            // Verificar se é cliente
+            const isClient = (() => {
+              if (isClientRole()) return true
+              try {
+                const userDataStr = localStorage.getItem('user_data')
+                if (userDataStr) {
+                  const userData = JSON.parse(userDataStr)
+                  const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
+                  if (tipo === 'cliente') return true
+                }
+              } catch (error) {
+                // Ignorar erro
+              }
+              if (userRole === 'Clientes' || userRole === 'cliente') return true
+              return false
+            })()
+            
+            // Se for cliente, não renderizar o bloco
+            if (isClient) {
+              return null
+            }
+            
             // Verificação inline para garantir que funcione
             let cargoCheck: string | null = null
             if (typeof window !== 'undefined') {
@@ -946,59 +979,108 @@ export default function PWAMainPage() {
         </div>
       </div>
 
-      {/* Status Rápido */}
-      <div className={`grid gap-3 ${isSupervisorUser ? 'grid-cols-1' : 'grid-cols-3'}`}>
-        {!isSupervisorUser && (
-          <>
-            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-              <div className="flex flex-col items-center text-center">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
-                  pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
-                }`}>
-                  <CheckCircle className={`w-6 h-6 ${
-                    pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
-                  }`} />
+      {/* Status Rápido - Ocultar para clientes */}
+      {(() => {
+        // Verificar se é cliente
+        const isClient = (() => {
+          if (isClientRole()) return true
+          try {
+            const userDataStr = localStorage.getItem('user_data')
+            if (userDataStr) {
+              const userData = JSON.parse(userDataStr)
+              const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
+              if (tipo === 'cliente') return true
+            }
+          } catch (error) {
+            // Ignorar erro
+          }
+          if (userRole === 'Clientes' || userRole === 'cliente') return true
+          return false
+        })()
+        
+        // Se for cliente, não renderizar o bloco
+        if (isClient) {
+          return null
+        }
+        
+        return (
+          <div className={`grid gap-3 ${isSupervisorUser ? 'grid-cols-1' : 'grid-cols-3'}`}>
+            {!isSupervisorUser && (
+              <>
+                <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+                  <div className="flex flex-col items-center text-center">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
+                      pwaUserData.pontoHoje?.entrada ? 'bg-green-100' : 'bg-gray-100'
+                    }`}>
+                      <CheckCircle className={`w-6 h-6 ${
+                        pwaUserData.pontoHoje?.entrada ? 'text-green-600' : 'text-gray-400'
+                      }`} />
+                    </div>
+                    <p className="text-base font-bold text-gray-900">
+                      {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
+                    </p>
+                    <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
+                  </div>
                 </div>
-                <p className="text-base font-bold text-gray-900">
-                  {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-                </p>
-                <p className="text-[10px] text-gray-500 font-medium">Entrada</p>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
-              <div className="flex flex-col items-center text-center">
-                <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
-                  <Clock className="w-6 h-6 text-[#871b0b]" />
+                
+                <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center mb-2 shadow-md">
+                      <Clock className="w-6 h-6 text-[#871b0b]" />
+                    </div>
+                    <p className="text-base font-bold text-gray-900">
+                      {pwaUserData.pontoHoje?.saida
+                        ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
+                        : pwaUserData.pontoHoje?.volta_almoco
+                        ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
+                        : pwaUserData.pontoHoje?.saida_almoco
+                        ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
+                        : '--:--'}
+                    </p>
+                    <p className="text-[10px] text-gray-500 font-medium">
+                      {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
+                       pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
+                       pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
+                       'Saída'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-base font-bold text-gray-900">
-                  {pwaUserData.pontoHoje?.saida
-                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
-                    : pwaUserData.pontoHoje?.volta_almoco
-                    ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
-                    : pwaUserData.pontoHoje?.saida_almoco
-                    ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
-                    : '--:--'}
-                </p>
-                <p className="text-[10px] text-gray-500 font-medium">
-                  {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
-                   pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
-                   pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
-                   'Saída'}
-                </p>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Ações Rápidas - Filtradas por permissões */}
       <div>
         <div className="grid grid-cols-2 gap-3">
           {quickActions
             .filter(action => {
+              // Verificar se é cliente (múltiplas fontes)
+              const isClient = (() => {
+                // 1. Verificar pelo hook
+                if (isClientRole()) return true
+                
+                // 2. Verificar user_metadata.tipo diretamente
+                try {
+                  const userDataStr = localStorage.getItem('user_data')
+                  if (userDataStr) {
+                    const userData = JSON.parse(userDataStr)
+                    const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
+                    if (tipo === 'cliente') return true
+                  }
+                } catch (error) {
+                  // Ignorar erro
+                }
+                
+                // 3. Verificar role
+                if (userRole === 'Clientes' || userRole === 'cliente') return true
+                
+                return false
+              })()
+              
               // Filtrar ações que devem ser ocultadas para clientes
-              if (action.hideForClient && isClientRole()) {
+              if (action.hideForClient && isClient) {
                 return false
               }
               

@@ -65,3 +65,4 @@ INSERT INTO itens_custos_mensais (codigo, descricao, unidade, tipo, categoria) V
 ON CONFLICT (codigo) DO NOTHING;
 
 
+

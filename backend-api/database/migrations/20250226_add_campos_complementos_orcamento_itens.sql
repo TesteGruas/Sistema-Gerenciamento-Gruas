@@ -54,3 +54,4 @@ COMMENT ON COLUMN orcamento_itens.icms_percentual IS 'Percentual de ICMS aplicad
 COMMENT ON COLUMN orcamento_itens.desconto_percentual IS 'Percentual de desconto aplicado ao item (usado principalmente para itens usados ou recondicionados)';
 
 
+

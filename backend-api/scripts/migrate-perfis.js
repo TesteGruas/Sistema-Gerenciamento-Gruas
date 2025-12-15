@@ -31,7 +31,7 @@ const PERFIL_MAPPING = {
   'Supervisor': 'Supervisores',
   'Operador': 'Operários',
   'Cliente': 'Clientes',
-  'Visualizador': 'Operários' // Visualizador será migrado para Operários
+  'Visualizador': 'Clientes' // Visualizador tem as mesmas permissões que Cliente
 }
 
 /**

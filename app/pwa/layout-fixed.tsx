@@ -351,7 +351,7 @@ export default function PWALayout({ children }: PWALayoutProps) {
 
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb">
-              <div className="grid grid-cols-5 h-16">
+              <div className="grid grid-cols-5 h-16 place-items-center">
                 {filteredNavigationItems.length > 0 ? (
                   filteredNavigationItems.slice(0, 5).map((item) => {
                     const Icon = item.icon
@@ -360,13 +360,13 @@ export default function PWALayout({ children }: PWALayoutProps) {
                       <button
                         key={item.name}
                         onClick={() => router.push(item.href)}
-                        className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+                        className={`flex flex-col items-center justify-center gap-1 transition-all duration-200 w-full h-full ${
                           isActive 
                             ? "text-blue-600" 
                             : "text-gray-500 active:bg-gray-100"
                         }`}
                       >
-                        <div className={`relative ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
+                        <div className={`relative flex items-center justify-center ${isActive ? 'scale-110' : ''} transition-transform duration-200`}>
                           <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
                           {isActive && (
                             <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full animate-pulse" />

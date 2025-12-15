@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { useAuth } from './use-auth'
 import { usePWAUser } from './use-pwa-user'
 import type { RoleName, Permission } from '@/types/permissions'
@@ -33,7 +33,35 @@ export const usePWAPermissions = () => {
   const user = pwaUser?.user || authUser?.user
   const loading = pwaUser?.loading ?? authUser?.isLoading ?? true
   
-  const userRole = user?.role as RoleName | null
+  // Estado para armazenar o tipo do usuário
+  const [userTipo, setUserTipo] = useState<string | null>(null)
+  
+  // Verificar user_metadata.tipo quando os dados mudarem
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const userDataStr = localStorage.getItem('user_data')
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr)
+        const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
+        setUserTipo(tipo || null)
+      }
+    } catch (error) {
+      setUserTipo(null)
+    }
+  }, [user])
+  
+  // Determinar role: verificar user_metadata.tipo primeiro, depois role do perfil
+  const userRole = useMemo(() => {
+    // Se user_metadata.tipo === 'cliente', mapear para 'Clientes'
+    if (userTipo === 'cliente') {
+      return 'Clientes' as RoleName
+    }
+    
+    // Caso contrário, usar o role do user
+    return (user?.role as RoleName) || null
+  }, [user?.role, userTipo])
 
   // ========================================
   // PERMISSÕES

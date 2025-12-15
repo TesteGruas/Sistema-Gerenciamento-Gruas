@@ -38,6 +38,7 @@ import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { ProtectedRoute } from "@/components/protected-route"
+import { DebugButton } from "@/components/debug-button"
 
 // Interface para o formato da grua usado no componente
 interface GruaFrontend extends GruaBackend {
@@ -874,6 +875,40 @@ export default function GruasPage() {
     }
   }
 
+  const preencherDadosDebugGrua = () => {
+    setGruaFormData({
+      name: 'Grua Torre GT-500',
+      model: 'GT-500',
+      fabricante: 'Liebherr',
+      capacity: '5000',
+      status: 'disponivel',
+      tipo: 'Grua Torre',
+      lanca: '30',
+      altura_final: '95',
+      ano: '2020',
+      tipo_base: 'Chumbador',
+      capacidade_1_cabo: '2000',
+      capacidade_2_cabos: '1300',
+      potencia_instalada: '42',
+      voltagem: '380V',
+      velocidade_rotacao: '0.8',
+      velocidade_elevacao: '60',
+      observacoes: 'Grua em excelente estado de conservação. Última manutenção preventiva realizada há 2 meses.',
+      createdAt: new Date().toISOString(),
+      capacidade_ponta: '2000',
+      altura_trabalho: '95',
+      localizacao: 'Depósito Central',
+      horas_operacao: '0',
+      valor_locacao: '15000',
+      valor_real: '15000',
+      valor_operacao: '8000',
+      valor_sinaleiro: '6000',
+      valor_manutencao: '2000',
+      ultima_manutencao: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      proxima_manutencao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    })
+  }
+
   const handleCreateGrua = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -1497,6 +1532,9 @@ export default function GruasPage() {
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateGrua} className="space-y-4">
+            <div className="flex justify-end">
+              <DebugButton onClick={preencherDadosDebugGrua} disabled={creating} />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="name">Nome da Grua *</Label>

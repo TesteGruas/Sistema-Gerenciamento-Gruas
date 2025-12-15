@@ -37,6 +37,7 @@ import {
 } from "lucide-react"
 import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
+import { DebugButton } from "@/components/debug-button"
 
 export default function ClientesPage() {
   const router = useRouter()
@@ -1005,8 +1006,31 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
   isEdit: boolean;
   isSubmitting: boolean;
 }) {
+  const preencherDadosDebug = () => {
+    setFormData({
+      nome: 'Construtora ABC Ltda',
+      email: 'contato@construtoraabc.com.br',
+      telefone: '(11) 98765-4321',
+      cnpj: '12.345.678/0001-90',
+      endereco: 'Rua das Construções, 123',
+      cidade: 'São Paulo',
+      estado: 'SP',
+      cep: '01310-100',
+      contato: 'João Silva',
+      contato_email: 'joao.silva@construtoraabc.com.br',
+      contato_cpf: '123.456.789-00',
+      contato_telefone: '(11) 91234-5678',
+      status: 'ativo',
+      criar_usuario: true,
+      usuario_senha: ''
+    })
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      <div className="flex justify-end">
+        <DebugButton onClick={preencherDadosDebug} disabled={isSubmitting} />
+      </div>
       {/* Informações Básicas */}
       <div className="space-y-4">
         <h3 className="text-lg font-medium">Informações Básicas</h3>
