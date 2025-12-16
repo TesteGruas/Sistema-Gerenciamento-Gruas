@@ -121,8 +121,20 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
     if (grua_id) query = query.eq('grua_id', grua_id); // NOVO
     if (periodo) query = query.eq('periodo', periodo);
     if (status) query = query.eq('status', status);
-    if (data_inicio) query = query.gte('data_medicao', data_inicio);
-    if (data_fim) query = query.lte('data_medicao', data_fim);
+    if (data_inicio) {
+      // Converter Date para string ISO (YYYY-MM-DD) se necessário
+      const dataInicioStr = data_inicio instanceof Date 
+        ? data_inicio.toISOString().split('T')[0] 
+        : data_inicio;
+      query = query.gte('data_medicao', dataInicioStr);
+    }
+    if (data_fim) {
+      // Converter Date para string ISO (YYYY-MM-DD) se necessário
+      const dataFimStr = data_fim instanceof Date 
+        ? data_fim.toISOString().split('T')[0] 
+        : data_fim;
+      query = query.lte('data_medicao', dataFimStr);
+    }
     if (mes_referencia) query = query.eq('mes_referencia', mes_referencia);
     if (ano_referencia) query = query.eq('ano_referencia', ano_referencia);
     

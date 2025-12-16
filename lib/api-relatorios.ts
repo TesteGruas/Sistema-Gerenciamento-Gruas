@@ -358,5 +358,198 @@ export const apiRelatorios = {
     }
 
     return await response.json();
+  },
+
+  // Relatório de boletos
+  async boletos(params: {
+    data_inicio?: string;
+    data_fim?: string;
+    status?: string;
+    obra_id?: number;
+    cliente_id?: number;
+    page?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; data: any[]; pagination: any }> {
+    const queryParams = new URLSearchParams();
+    if (params.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+    if (params.data_fim) queryParams.append('data_fim', params.data_fim);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.obra_id) queryParams.append('obra_id', params.obra_id.toString());
+    if (params.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    queryParams.append('include_medicoes', 'true');
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/boletos?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de medições
+  async medicoes(params: {
+    data_inicio?: string;
+    data_fim?: string;
+    obra_id?: number;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; data: any[]; total?: number }> {
+    const queryParams = new URLSearchParams();
+    if (params.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+    if (params.data_fim) queryParams.append('data_fim', params.data_fim);
+    if (params.obra_id) queryParams.append('obra_id', params.obra_id.toString());
+    if (params.status) queryParams.append('status', params.status);
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/medicoes-mensais?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de orçamentos
+  async orcamentos(params: {
+    data_inicio?: string;
+    data_fim?: string;
+    status?: string;
+    obra_id?: number;
+    cliente_id?: number;
+    page?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; data: any[]; pagination?: any }> {
+    const queryParams = new URLSearchParams();
+    if (params.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+    if (params.data_fim) queryParams.append('data_fim', params.data_fim);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.obra_id) queryParams.append('obra_id', params.obra_id.toString());
+    if (params.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/orcamentos?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de obras
+  async obras(params?: {
+    status?: string;
+    cliente_id?: number;
+    page?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; data: any[]; pagination?: any }> {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.cliente_id) queryParams.append('cliente_id', params.cliente_id.toString());
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/obras?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de estoque
+  async estoque(params?: {
+    categoria_id?: number;
+    status?: string;
+    tipo_item?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; data: any[]; pagination?: any }> {
+    const queryParams = new URLSearchParams();
+    if (params?.categoria_id) queryParams.append('categoria_id', params.categoria_id.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.tipo_item) queryParams.append('tipo_item', params.tipo_item);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/estoque?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  },
+
+  // Relatório de complementos
+  async complementos(params?: {
+    tipo?: string;
+    ativo?: boolean;
+    page?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; data: any[]; pagination?: any }> {
+    const queryParams = new URLSearchParams();
+    if (params?.tipo) queryParams.append('tipo', params.tipo);
+    if (params?.ativo !== undefined) queryParams.append('ativo', params.ativo.toString());
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/complementos?${queryParams}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
   }
 };

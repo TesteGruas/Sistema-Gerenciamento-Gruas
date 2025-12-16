@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -70,10 +70,40 @@ export default function RelatoriosPage() {
   const [relatorioFinanceiro, setRelatorioFinanceiro] = useState<RelatorioFinanceiro | null>(null)
   const [relatorioManutencao, setRelatorioManutencao] = useState<RelatorioManutencao | null>(null)
   
+  // Estados para novos relatórios
+  const [relatorioImpostos, setRelatorioImpostos] = useState<any>(null)
+  const [relatorioBoletos, setRelatorioBoletos] = useState<any[]>([])
+  const [relatorioMedicoes, setRelatorioMedicoes] = useState<any[]>([])
+  const [relatorioOrcamentos, setRelatorioOrcamentos] = useState<any[]>([])
+  const [relatorioObras, setRelatorioObras] = useState<any[]>([])
+  const [relatorioEstoque, setRelatorioEstoque] = useState<any[]>([])
+  const [relatorioComplementos, setRelatorioComplementos] = useState<any[]>([])
+  
   // Estados para paginação
   const [paginaUtilizacao, setPaginaUtilizacao] = useState(1)
   const [paginaFinanceiro, setPaginaFinanceiro] = useState(1)
+  const [paginaBoletos, setPaginaBoletos] = useState(1)
+  const [paginaMedicoes, setPaginaMedicoes] = useState(1)
+  const [paginaOrcamentos, setPaginaOrcamentos] = useState(1)
+  const [paginaObras, setPaginaObras] = useState(1)
+  const [paginaEstoque, setPaginaEstoque] = useState(1)
+  const [paginaComplementos, setPaginaComplementos] = useState(1)
   const [limitePorPagina, setLimitePorPagina] = useState(10)
+  
+  // Estados de loading para cada relatório
+  const [loadingImpostos, setLoadingImpostos] = useState(false)
+  const [loadingBoletos, setLoadingBoletos] = useState(false)
+  const [loadingMedicoes, setLoadingMedicoes] = useState(false)
+  const [loadingOrcamentos, setLoadingOrcamentos] = useState(false)
+  const [loadingObras, setLoadingObras] = useState(false)
+  const [loadingEstoque, setLoadingEstoque] = useState(false)
+  const [loadingComplementos, setLoadingComplementos] = useState(false)
+  
+  // Estado para controlar a aba ativa
+  const [activeTab, setActiveTab] = useState("geral")
+  
+  // Ref para controlar se já carregou cada relatório (evitar recarregar desnecessariamente)
+  const loadedTabsRef = useRef<Set<string>>(new Set(["geral"]))
 
   // Estados para Performance de Gruas
   const [loadingPerformance, setLoadingPerformance] = useState(false)
@@ -94,6 +124,42 @@ export default function RelatoriosPage() {
     carregarGruasEObras()
     carregarDadosPerformance()
   }, [])
+
+  // Carregar relatórios automaticamente quando a aba mudar
+  useEffect(() => {
+    if (!loadedTabsRef.current.has(activeTab)) {
+      switch (activeTab) {
+        case "financeiro":
+          carregarRelatorioFinanceiro(1)
+          break
+        case "impostos":
+          carregarRelatorioImpostos()
+          break
+        case "boletos":
+          carregarRelatorioBoletos(1)
+          break
+        case "medicoes":
+          carregarRelatorioMedicoes(1)
+          break
+        case "orcamentos":
+          carregarRelatorioOrcamentos(1)
+          break
+        case "obras":
+          carregarRelatorioObras(1)
+          break
+        case "estoque":
+          carregarRelatorioEstoque(1)
+          break
+        case "complemento":
+          carregarRelatorioComplementos(1)
+          break
+        case "documentos":
+          carregarRelatorioManutencao()
+          break
+      }
+      loadedTabsRef.current.add(activeTab)
+    }
+  }, [activeTab])
 
   // Carregar gruas e obras para filtros
   const carregarGruasEObras = async () => {
@@ -249,9 +315,13 @@ export default function RelatoriosPage() {
         dataInicio = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000)
     }
 
+    // Garantir que as datas sejam objetos Date válidos antes de formatar
+    const dataInicioDate = dataInicio instanceof Date ? dataInicio : new Date(dataInicio)
+    const dataFimDate = dataFim instanceof Date ? dataFim : new Date(dataFim)
+
     return {
-      dataInicio: format(dataInicio, 'yyyy-MM-dd'),
-      dataFim: format(dataFim, 'yyyy-MM-dd')
+      dataInicio: format(dataInicioDate, 'yyyy-MM-dd'),
+      dataFim: format(dataFimDate, 'yyyy-MM-dd')
     }
   }
 
@@ -305,6 +375,163 @@ export default function RelatoriosPage() {
     } catch (error: any) {
       console.error('Erro ao carregar relatório de manutenção:', error)
       setError(error.message)
+    }
+  }
+
+  const carregarRelatorioImpostos = async () => {
+    try {
+      setLoadingImpostos(true)
+      const hoje = new Date()
+      const response = await apiRelatorios.impostos({
+        mes: hoje.getMonth() + 1,
+        ano: hoje.getFullYear()
+      })
+      setRelatorioImpostos(response.data)
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de impostos:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de impostos",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingImpostos(false)
+    }
+  }
+
+  const carregarRelatorioBoletos = async (pagina: number = paginaBoletos) => {
+    try {
+      setLoadingBoletos(true)
+      const { dataInicio, dataFim } = calcularDatasPeriodo()
+      const response = await apiRelatorios.boletos({
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        page: pagina,
+        limit: limitePorPagina
+      })
+      setRelatorioBoletos(response.data || [])
+      setPaginaBoletos(pagina)
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de boletos:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de boletos",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingBoletos(false)
+    }
+  }
+
+  const carregarRelatorioMedicoes = async (pagina: number = paginaMedicoes) => {
+    try {
+      setLoadingMedicoes(true)
+      const { dataInicio, dataFim } = calcularDatasPeriodo()
+      const response = await apiRelatorios.medicoes({
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        page: pagina,
+        limit: limitePorPagina
+      })
+      setRelatorioMedicoes(response.data || [])
+      setPaginaMedicoes(pagina)
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de medições:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de medições",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingMedicoes(false)
+    }
+  }
+
+  const carregarRelatorioOrcamentos = async (pagina: number = paginaOrcamentos) => {
+    try {
+      setLoadingOrcamentos(true)
+      const { dataInicio, dataFim } = calcularDatasPeriodo()
+      const response = await apiRelatorios.orcamentos({
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        page: pagina,
+        limit: limitePorPagina
+      })
+      setRelatorioOrcamentos(response.data || [])
+      setPaginaOrcamentos(pagina)
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de orçamentos:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de orçamentos",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingOrcamentos(false)
+    }
+  }
+
+  const carregarRelatorioObras = async (pagina: number = paginaObras) => {
+    try {
+      setLoadingObras(true)
+      const response = await apiRelatorios.obras({
+        page: pagina,
+        limit: limitePorPagina
+      })
+      setRelatorioObras(response.data || [])
+      setPaginaObras(pagina)
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de obras:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de obras",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingObras(false)
+    }
+  }
+
+  const carregarRelatorioEstoque = async (pagina: number = paginaEstoque) => {
+    try {
+      setLoadingEstoque(true)
+      const response = await apiRelatorios.estoque({
+        page: pagina,
+        limit: limitePorPagina
+      })
+      setRelatorioEstoque(response.data || [])
+      setPaginaEstoque(pagina)
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de estoque:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de estoque",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingEstoque(false)
+    }
+  }
+
+  const carregarRelatorioComplementos = async (pagina: number = paginaComplementos) => {
+    try {
+      setLoadingComplementos(true)
+      const response = await apiRelatorios.complementos({
+        ativo: true,
+        page: pagina,
+        limit: limitePorPagina
+      })
+      setRelatorioComplementos(response.data || [])
+      setPaginaComplementos(pagina)
+    } catch (error: any) {
+      console.error('Erro ao carregar relatório de complementos:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar relatório de complementos",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingComplementos(false)
     }
   }
 
@@ -543,12 +770,19 @@ export default function RelatoriosPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="geral" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="geral">Geral</TabsTrigger>
-          <TabsTrigger value="gruas">Gruas</TabsTrigger>
-          <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
-          <TabsTrigger value="documentos">Manutenção</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="flex flex-wrap w-full gap-1 p-1 h-auto">
+          <TabsTrigger value="geral" className="flex-1 min-w-[80px]">Geral</TabsTrigger>
+          <TabsTrigger value="gruas" className="flex-1 min-w-[80px]">Gruas</TabsTrigger>
+          <TabsTrigger value="financeiro" className="flex-1 min-w-[80px]">Financeiro</TabsTrigger>
+          <TabsTrigger value="impostos" className="flex-1 min-w-[80px]">Impostos</TabsTrigger>
+          <TabsTrigger value="boletos" className="flex-1 min-w-[80px]">Boletos</TabsTrigger>
+          <TabsTrigger value="medicoes" className="flex-1 min-w-[80px]">Medições</TabsTrigger>
+          <TabsTrigger value="orcamentos" className="flex-1 min-w-[80px]">Orçamentos</TabsTrigger>
+          <TabsTrigger value="obras" className="flex-1 min-w-[80px]">Obras</TabsTrigger>
+          <TabsTrigger value="estoque" className="flex-1 min-w-[80px]">Estoque</TabsTrigger>
+          <TabsTrigger value="complemento" className="flex-1 min-w-[80px]">Complemento</TabsTrigger>
+          <TabsTrigger value="documentos" className="flex-1 min-w-[80px]">Manutenção</TabsTrigger>
         </TabsList>
 
         <TabsContent value="geral" className="space-y-6">
@@ -918,18 +1152,19 @@ export default function RelatoriosPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-4 mb-6">
-                <Button onClick={() => carregarRelatorioFinanceiro(1)} disabled={loading}>
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Carregar Relatório
-                </Button>
+              <div className="flex gap-4 mb-6 justify-end">
                 <Button variant="outline" onClick={() => handleExport('financeiro')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
               </div>
               
-              {relatorioFinanceiro ? (
+              {loading ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório financeiro...</p>
+                </div>
+              ) : relatorioFinanceiro ? (
                 <div className="space-y-6">
                   {/* Resumo do relatório financeiro */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1125,7 +1360,758 @@ export default function RelatoriosPage() {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <DollarSign className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Clique em "Carregar Relatório" para ver a análise financeira</p>
+                  <p>Nenhum dado disponível para o período selecionado</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Impostos */}
+        <TabsContent value="impostos" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Relatório de Impostos
+              </CardTitle>
+              <CardDescription>
+                Análise de impostos por competência
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-6 justify-end">
+                <Button variant="outline" onClick={() => handleExport('impostos')}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div>
+              
+              {loadingImpostos ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de impostos...</p>
+                </div>
+              ) : relatorioImpostos ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">R$ {relatorioImpostos.total_impostos?.toLocaleString('pt-BR') || '0'}</p>
+                          <p className="text-sm text-gray-600">Total de Impostos</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">R$ {relatorioImpostos.total_pago?.toLocaleString('pt-BR') || '0'}</p>
+                          <p className="text-sm text-gray-600">Total Pago</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-red-600">R$ {relatorioImpostos.total_pendente?.toLocaleString('pt-BR') || '0'}</p>
+                          <p className="text-sm text-gray-600">Total Pendente</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  {relatorioImpostos.impostos_por_tipo && relatorioImpostos.impostos_por_tipo.length > 0 && (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <RechartsBarChart data={relatorioImpostos.impostos_por_tipo}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="tipo" />
+                        <YAxis />
+                        <RechartsTooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
+                        <Legend />
+                        <Bar dataKey="valor_total" fill="#3b82f6" name="Total" />
+                        <Bar dataKey="valor_pago" fill="#10b981" name="Pago" />
+                        <Bar dataKey="valor_pendente" fill="#ef4444" name="Pendente" />
+                      </RechartsBarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum dado disponível para o período selecionado</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Boletos */}
+        <TabsContent value="boletos" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Relatório de Boletos
+              </CardTitle>
+              <CardDescription>
+                Análise de boletos por período
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-6 justify-end">
+                <Button variant="outline" onClick={() => handleExport('boletos')}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div>
+              
+              {loadingBoletos ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de boletos...</p>
+                </div>
+              ) : relatorioBoletos.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{relatorioBoletos.length}</p>
+                          <p className="text-sm text-gray-600">Total de Boletos</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            {relatorioBoletos.filter((b: any) => b.status === 'pago').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Pagos</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-yellow-600">
+                            {relatorioBoletos.filter((b: any) => b.status === 'pendente').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Pendentes</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">
+                            R$ {relatorioBoletos.reduce((sum: number, b: any) => sum + (parseFloat(b.valor) || 0), 0).toLocaleString('pt-BR')}
+                          </p>
+                          <p className="text-sm text-gray-600">Valor Total</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Obra</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioBoletos.map((boleto: any, index: number) => (
+                        <TableRow key={boleto.id || index}>
+                          <TableCell className="font-medium">{boleto.numero_boleto || 'N/A'}</TableCell>
+                          <TableCell>{boleto.descricao || 'N/A'}</TableCell>
+                          <TableCell className="text-green-600 font-medium">R$ {parseFloat(boleto.valor || 0).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>{boleto.data_vencimento ? new Date(boleto.data_vencimento).toLocaleDateString('pt-BR') : 'N/A'}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              boleto.status === 'pago' ? 'bg-green-100 text-green-800' :
+                              boleto.status === 'pendente' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }>
+                              {boleto.status || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{boleto.obras?.nome || boleto.medicoes?.obras?.nome || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum dado disponível para o período selecionado</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Medições */}
+        <TabsContent value="medicoes" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Relatório de Medições
+              </CardTitle>
+              <CardDescription>
+                Análise de medições mensais por período
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-6 justify-end">
+                <Button variant="outline" onClick={() => handleExport('medicoes')}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div>
+              
+              {loadingMedicoes ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de medições...</p>
+                </div>
+              ) : relatorioMedicoes.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{relatorioMedicoes.length}</p>
+                          <p className="text-sm text-gray-600">Total de Medições</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            R$ {relatorioMedicoes.reduce((sum: number, m: any) => sum + (parseFloat(m.valor_total) || 0), 0).toLocaleString('pt-BR')}
+                          </p>
+                          <p className="text-sm text-gray-600">Valor Total</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-purple-600">
+                            {new Set(relatorioMedicoes.map((m: any) => m.obra_id)).size}
+                          </p>
+                          <p className="text-sm text-gray-600">Obras Únicas</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Período</TableHead>
+                        <TableHead>Obra</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioMedicoes.map((medicao: any, index: number) => (
+                        <TableRow key={medicao.id || index}>
+                          <TableCell className="font-medium">{medicao.numero || `MED-${medicao.id}`}</TableCell>
+                          <TableCell>{medicao.periodo || 'N/A'}</TableCell>
+                          <TableCell>{medicao.obras?.nome || 'N/A'}</TableCell>
+                          <TableCell className="text-green-600 font-medium">R$ {parseFloat(medicao.valor_total || 0).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              medicao.status === 'aprovado' ? 'bg-green-100 text-green-800' :
+                              medicao.status === 'pendente' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                            }>
+                              {medicao.status || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{medicao.created_at ? new Date(medicao.created_at).toLocaleDateString('pt-BR') : 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum dado disponível para o período selecionado</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Orçamentos */}
+        <TabsContent value="orcamentos" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Relatório de Orçamentos
+              </CardTitle>
+              <CardDescription>
+                Análise de orçamentos por período
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-6 justify-end">
+                <Button variant="outline" onClick={() => handleExport('orcamentos')}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div>
+              
+              {loadingOrcamentos ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de orçamentos...</p>
+                </div>
+              ) : relatorioOrcamentos.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{relatorioOrcamentos.length}</p>
+                          <p className="text-sm text-gray-600">Total de Orçamentos</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            {relatorioOrcamentos.filter((o: any) => o.status === 'aprovado').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Aprovados</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-yellow-600">
+                            {relatorioOrcamentos.filter((o: any) => o.status === 'pendente').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Pendentes</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">
+                            R$ {relatorioOrcamentos.reduce((sum: number, o: any) => sum + (parseFloat(o.valor_total) || 0), 0).toLocaleString('pt-BR')}
+                          </p>
+                          <p className="text-sm text-gray-600">Valor Total</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Obra</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioOrcamentos.map((orcamento: any, index: number) => (
+                        <TableRow key={orcamento.id || index}>
+                          <TableCell className="font-medium">{orcamento.numero || `ORC-${orcamento.id}`}</TableCell>
+                          <TableCell>{orcamento.clientes?.nome || 'N/A'}</TableCell>
+                          <TableCell>{orcamento.obras?.nome || 'N/A'}</TableCell>
+                          <TableCell className="text-green-600 font-medium">R$ {parseFloat(orcamento.valor_total || 0).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              orcamento.status === 'aprovado' ? 'bg-green-100 text-green-800' :
+                              orcamento.status === 'pendente' ? 'bg-yellow-100 text-yellow-800' :
+                              orcamento.status === 'rejeitado' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }>
+                              {orcamento.status || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{orcamento.created_at ? new Date(orcamento.created_at).toLocaleDateString('pt-BR') : 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum dado disponível para o período selecionado</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Obras */}
+        <TabsContent value="obras" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="w-5 h-5" />
+                Relatório de Obras
+              </CardTitle>
+              <CardDescription>
+                Análise de obras e seus status
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-6 justify-end">
+                <Button variant="outline" onClick={() => handleExport('obras')}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div>
+              
+              {loadingObras ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de obras...</p>
+                </div>
+              ) : relatorioObras.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{relatorioObras.length}</p>
+                          <p className="text-sm text-gray-600">Total de Obras</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            {relatorioObras.filter((o: any) => o.status === 'ativa').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Ativas</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-yellow-600">
+                            {relatorioObras.filter((o: any) => o.status === 'pausada').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Pausadas</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-gray-600">
+                            {relatorioObras.filter((o: any) => o.status === 'finalizada').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Finalizadas</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Endereço</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data Início</TableHead>
+                        <TableHead>Gruas</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioObras.map((obra: any, index: number) => (
+                        <TableRow key={obra.id || index}>
+                          <TableCell className="font-medium">{obra.nome || 'N/A'}</TableCell>
+                          <TableCell>{obra.clientes?.nome || 'N/A'}</TableCell>
+                          <TableCell>{obra.endereco || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              obra.status === 'ativa' ? 'bg-green-100 text-green-800' :
+                              obra.status === 'pausada' ? 'bg-yellow-100 text-yellow-800' :
+                              obra.status === 'finalizada' ? 'bg-gray-100 text-gray-800' :
+                              'bg-blue-100 text-blue-800'
+                            }>
+                              {obra.status || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{obra.data_inicio ? new Date(obra.data_inicio).toLocaleDateString('pt-BR') : 'N/A'}</TableCell>
+                          <TableCell>{obra.gruas_obra?.length || 0}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum dado disponível</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Estoque */}
+        <TabsContent value="estoque" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Relatório de Estoque
+              </CardTitle>
+              <CardDescription>
+                Análise de produtos e componentes em estoque
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-6 justify-end">
+                <Button variant="outline" onClick={() => handleExport('estoque')}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div>
+              
+              {loadingEstoque ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de estoque...</p>
+                </div>
+              ) : relatorioEstoque.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{relatorioEstoque.length}</p>
+                          <p className="text-sm text-gray-600">Total de Itens</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            {relatorioEstoque.reduce((sum: number, item: any) => {
+                              const estoque = item.estoque?.[0] || item.estoque;
+                              return sum + (parseFloat(estoque?.quantidade_atual || estoque?.quantidade_disponivel || 0));
+                            }, 0)}
+                          </p>
+                          <p className="text-sm text-gray-600">Quantidade Total</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-purple-600">
+                            R$ {relatorioEstoque.reduce((sum: number, item: any) => {
+                              const estoque = item.estoque?.[0] || item.estoque;
+                              return sum + (parseFloat(estoque?.valor_total || 0));
+                            }, 0).toLocaleString('pt-BR')}
+                          </p>
+                          <p className="text-sm text-gray-600">Valor Total</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-orange-600">
+                            {new Set(relatorioEstoque.map((item: any) => item.categorias?.id || item.categoria_id)).size}
+                          </p>
+                          <p className="text-sm text-gray-600">Categorias</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Quantidade</TableHead>
+                        <TableHead>Valor Unitário</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioEstoque.map((item: any, index: number) => {
+                        const estoque = item.estoque?.[0] || item.estoque || {};
+                        return (
+                          <TableRow key={item.id || index}>
+                            <TableCell className="font-medium">{item.nome || item.name || 'N/A'}</TableCell>
+                            <TableCell>{item.categorias?.nome || item.categoria || 'N/A'}</TableCell>
+                            <TableCell>{estoque.quantidade_atual || estoque.quantidade_disponivel || 0}</TableCell>
+                            <TableCell>R$ {parseFloat(item.preco || item.valor_unitario || 0).toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-green-600 font-medium">R$ {parseFloat(estoque.valor_total || 0).toLocaleString('pt-BR')}</TableCell>
+                            <TableCell>
+                              <Badge className={
+                                item.status === 'Ativo' || item.ativo ? 'bg-green-100 text-green-800' :
+                                'bg-gray-100 text-gray-800'
+                              }>
+                                {item.status || (item.ativo ? 'Ativo' : 'Inativo')}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum dado disponível</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Relatório de Complementos */}
+        <TabsContent value="complemento" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Relatório de Complementos
+              </CardTitle>
+              <CardDescription>
+                Análise de complementos do catálogo
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4 mb-6 justify-end">
+                <Button variant="outline" onClick={() => handleExport('complementos')}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exportar
+                </Button>
+              </div>
+              
+              {loadingComplementos ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de complementos...</p>
+                </div>
+              ) : relatorioComplementos.length > 0 ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">{relatorioComplementos.length}</p>
+                          <p className="text-sm text-gray-600">Total de Complementos</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-green-600">
+                            {relatorioComplementos.filter((c: any) => c.tipo === 'acessorio').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Acessórios</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-purple-600">
+                            {relatorioComplementos.filter((c: any) => c.tipo === 'servico').length}
+                          </p>
+                          <p className="text-sm text-gray-600">Serviços</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-blue-600">
+                            R$ {relatorioComplementos.reduce((sum: number, c: any) => sum + (parseFloat(c.preco || c.valor || 0) || 0), 0).toLocaleString('pt-BR')}
+                          </p>
+                          <p className="text-sm text-gray-600">Valor Total</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>SKU</TableHead>
+                        <TableHead>Preço</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Descrição</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relatorioComplementos.map((complemento: any, index: number) => (
+                        <TableRow key={complemento.id || index}>
+                          <TableCell className="font-medium">{complemento.nome || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              complemento.tipo === 'acessorio' ? 'bg-blue-100 text-blue-800' :
+                              'bg-purple-100 text-purple-800'
+                            }>
+                              {complemento.tipo || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{complemento.sku || 'N/A'}</TableCell>
+                          <TableCell className="text-green-600 font-medium">R$ {parseFloat(complemento.preco || complemento.valor || 0).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>
+                            <Badge className={
+                              complemento.ativo ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }>
+                              {complemento.ativo ? 'Ativo' : 'Inativo'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-xs truncate">{complemento.descricao || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum dado disponível</p>
                 </div>
               )}
             </CardContent>
@@ -1145,18 +2131,19 @@ export default function RelatoriosPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-4 mb-6">
-                <Button onClick={carregarRelatorioManutencao} disabled={loading}>
-                  <Wrench className="w-4 h-4 mr-2" />
-                  Carregar Relatório
-                </Button>
+              <div className="flex gap-4 mb-6 justify-end">
                 <Button variant="outline" onClick={() => handleExport('manutencao')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
               </div>
               
-              {relatorioManutencao ? (
+              {loading ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Carregando relatório de manutenção...</p>
+                </div>
+              ) : relatorioManutencao ? (
                 <div className="space-y-6">
                   {/* Resumo do relatório de manutenção */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1332,7 +2319,7 @@ export default function RelatoriosPage() {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <Wrench className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Clique em "Carregar Relatório" para ver a análise de manutenções</p>
+                  <p>Nenhum dado disponível</p>
                 </div>
               )}
             </CardContent>
