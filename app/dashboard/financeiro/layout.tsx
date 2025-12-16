@@ -13,7 +13,10 @@ import {
   BarChart3,
   Menu,
   X,
-  Home
+  Home,
+  FileCheck,
+  ReceiptText,
+  CreditCard
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -33,6 +36,21 @@ const financeiroNavItems = [
     title: "Medições",
     href: "/dashboard/financeiro/medicoes",
     icon: Calculator,
+  },
+  {
+    title: "Notas Fiscais",
+    href: "/dashboard/financeiro/notas-fiscais",
+    icon: FileCheck,
+  },
+  {
+    title: "Impostos",
+    href: "/dashboard/financeiro/impostos",
+    icon: ReceiptText,
+  },
+  {
+    title: "Boletos",
+    href: "/dashboard/financeiro/boletos",
+    icon: CreditCard,
   },
   {
     title: "Receitas",

@@ -1,6 +1,33 @@
 import express from 'express';
-import { supabase } from '../config/supabase.js';
+import multer from 'multer';
+import { supabase, supabaseAdmin } from '../config/supabase.js';
 import Joi from 'joi';
+
+// Configuração do multer para upload de arquivos
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB por arquivo
+  },
+  fileFilter: (req, file, cb) => {
+    // Tipos de arquivo permitidos para notas fiscais
+    const allowedTypes = [
+      'application/pdf',
+      'application/xml',
+      'text/xml',
+      'image/jpeg',
+      'image/jpg',
+      'image/png'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de arquivo não permitido. Use PDF ou XML.'), false);
+    }
+  }
+});
 
 const router = express.Router();
 
@@ -17,6 +44,9 @@ const notaFiscalSchema = Joi.object({
   fornecedor_id: Joi.number().integer().positive().optional(),
   venda_id: Joi.number().integer().positive().optional(),
   compra_id: Joi.number().integer().positive().optional(),
+  medicao_id: Joi.number().integer().positive().optional(),
+  locacao_id: Joi.number().integer().positive().optional(),
+  tipo_nota: Joi.string().valid('locacao', 'circulacao_equipamentos', 'outros_equipamentos', 'medicao', 'fornecedor').optional(),
   observacoes: Joi.string().optional()
 });
 
@@ -738,57 +768,91 @@ router.delete('/:id', async (req, res) => {
  *       500:
  *         description: Erro interno do servidor
  */
-router.post('/:id/upload', async (req, res) => {
+router.post('/:id/upload', upload.single('arquivo'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { nome_arquivo, tamanho_arquivo, tipo_arquivo } = req.body;
+    const file = req.file;
 
-    if (!nome_arquivo || !tamanho_arquivo || !tipo_arquivo) {
+    if (!file) {
       return res.status(400).json({
         success: false,
-        message: 'Dados do arquivo são obrigatórios'
+        message: 'Nenhum arquivo enviado'
       });
     }
 
-    const { data, error } = await supabase
+    // Verificar se a nota fiscal existe
+    const { data: notaFiscal, error: notaError } = await supabase
       .from('notas_fiscais')
-      .update({
-        nome_arquivo,
-        tamanho_arquivo: parseInt(tamanho_arquivo),
-        tipo_arquivo
-      })
+      .select('id')
       .eq('id', id)
-      .select()
       .single();
 
-    if (error) throw error;
-
-    if (!data) {
+    if (notaError || !notaFiscal) {
       return res.status(404).json({
         success: false,
         message: 'Nota fiscal não encontrada'
       });
     }
 
-    // Aqui você implementaria o upload real do arquivo
-    // Por exemplo, usando Supabase Storage:
-    /*
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('notas-fiscais')
-      .upload(`${id}/${nome_arquivo}`, arquivo);
+    // Gerar nome único para o arquivo
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
+    const extension = file.originalname.split('.').pop();
+    const fileName = `nf_${id}_${timestamp}_${randomString}.${extension}`;
+    const filePath = `notas-fiscais/${id}/${fileName}`;
+
+    // Upload para o Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
 
     if (uploadError) {
+      console.error('Erro no upload:', uploadError);
       return res.status(500).json({
         success: false,
-        message: 'Erro ao fazer upload do arquivo'
+        message: 'Erro ao fazer upload do arquivo',
+        error: uploadError.message
       });
     }
-    */
+
+    // Obter URL pública do arquivo
+    const { data: urlData } = supabaseAdmin.storage
+      .from('arquivos-obras')
+      .getPublicUrl(filePath);
+
+    const arquivoUrl = urlData?.publicUrl || `${process.env.SUPABASE_URL}/storage/v1/object/public/arquivos-obras/${filePath}`;
+
+    // Determinar tipo de arquivo
+    let tipoArquivo = 'pdf';
+    if (file.mimetype.includes('xml')) {
+      tipoArquivo = 'xml';
+    } else if (file.mimetype.startsWith('image/')) {
+      tipoArquivo = 'imagem';
+    }
+
+    // Atualizar nota fiscal com informações do arquivo
+    const { data: updatedNota, error: updateError } = await supabase
+      .from('notas_fiscais')
+      .update({
+        nome_arquivo: file.originalname,
+        tamanho_arquivo: file.size,
+        tipo_arquivo: tipoArquivo,
+        arquivo_nf: arquivoUrl
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
 
     res.json({
       success: true,
-      data,
-      message: 'Arquivo vinculado com sucesso'
+      data: updatedNota,
+      message: 'Arquivo enviado com sucesso'
     });
   } catch (error) {
     console.error('Erro ao fazer upload do arquivo:', error);
@@ -827,17 +891,16 @@ router.get('/:id/download', async (req, res) => {
       });
     }
 
-    // Aqui você implementaria a lógica de download do arquivo
-    // Por enquanto, retornamos as informações do arquivo
+    // Retornar URL do arquivo para download
     res.json({
       success: true,
       data: {
         nome_arquivo: data.nome_arquivo,
-        caminho: data.arquivo_nf
+        url: data.arquivo_nf
       }
     });
   } catch (error) {
-    console.error('Erro ao fazer download do arquivo:', error);
+    console.error('Erro ao obter arquivo:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',

@@ -102,6 +102,7 @@ import notificacoesRoutes from './routes/notificacoes.js'
 import emailConfigRoutes from './routes/email-config.js'
 import contasReceberRoutes from './routes/contas-receber.js'
 import contasPagarRoutes from './routes/contas-pagar.js'
+import boletosRoutes from './routes/boletos.js'
 import rentabilidadeRoutes from './routes/rentabilidade.js'
 import projecoesRoutes from './routes/projecoes.js'
 import exportarRelatoriosRoutes from './routes/exportar-relatorios.js'
@@ -440,6 +441,7 @@ app.use('/api/email-config', emailConfigRoutes)
 app.use('/api/configuracoes', configuracoesRoutes)
 app.use('/api/contas-receber', contasReceberRoutes)
 app.use('/api/contas-pagar', contasPagarRoutes)
+app.use('/api/boletos', boletosRoutes)
 app.use('/api/rentabilidade', rentabilidadeRoutes)
 app.use('/api/projecoes', projecoesRoutes)
 app.use('/api/exportar-relatorios', exportarRelatoriosRoutes)

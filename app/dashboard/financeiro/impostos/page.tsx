@@ -257,7 +257,7 @@ export default function ImpostosPage() {
               <CardTitle>Pagamentos de Impostos</CardTitle>
               <CardDescription>Gestão de pagamentos de impostos</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               <div className="space-y-4">
                 <div className="flex gap-4">
                   <div className="flex-1">
@@ -380,7 +380,7 @@ export default function ImpostosPage() {
               <CardTitle>Relatório de Impostos</CardTitle>
               <CardDescription>Relatório mensal de impostos pagos e pendentes</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>

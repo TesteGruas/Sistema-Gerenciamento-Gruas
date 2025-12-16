@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import {
   LineChart,
   Line,
@@ -43,15 +50,18 @@ import {
   XCircle,
   Clock,
   TrendingUp,
-  BarChart3 as BarChartIcon
+  BarChart3 as BarChartIcon,
+  Forklift,
+  Send
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { medicoesApi, Medicao, MedicaoCreate } from "@/lib/api-medicoes"
-import { medicoesUtils } from "@/lib/medicoes-utils"
-import { locacoesApi, Locacao } from "@/lib/api-locacoes"
+import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
+import { gruasApi } from "@/lib/api-gruas"
 import { receitasApi } from "@/lib/api-receitas"
 import { custosApi } from "@/lib/api-custos"
 import { obrasApi } from "@/lib/api-obras"
+import { format } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
 // Cores para gráficos
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
@@ -60,10 +70,18 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 import type { Receita, ReceitaCreate } from "@/lib/api-receitas"
 import type { Custo, CustoCreate } from "@/lib/api-custos"
 
-// Interface para obras simplificada
-interface ObraSimples {
+interface Grua {
+  id: string | number
+  name: string
+  modelo?: string
+  fabricante?: string
+}
+
+interface Obra {
   id: number
   nome: string
+  cliente_id?: number
+  status?: string
 }
 
 export default function MedicoesPage() {
@@ -72,21 +90,23 @@ export default function MedicoesPage() {
   const [activeTab, setActiveTab] = useState('medicoes')
   
   // Estados para medições
-  const [medicoes, setMedicoes] = useState<Medicao[]>([])
+  const [medicoes, setMedicoes] = useState<MedicaoMensal[]>([])
+  const [gruas, setGruas] = useState<Grua[]>([])
+  const [obras, setObras] = useState<Obra[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [editingMedicao, setEditingMedicao] = useState<Medicao | null>(null)
-  const [viewingMedicao, setViewingMedicao] = useState<Medicao | null>(null)
+  const [loadingGruas, setLoadingGruas] = useState(false)
+  
+  // Filtros
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [gruaFilter, setGruaFilter] = useState("all")
   const [filterPeriodo, setFilterPeriodo] = useState("")
-  const [filterLocacao, setFilterLocacao] = useState("all")
-  const [locacaoFilter, setLocacaoFilter] = useState("")
   
-  // Estados para locações
-  const [locacoes, setLocacoes] = useState<Locacao[]>([])
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const itemsPerPage = 100
   
   // Estados para receitas
   const [receitas, setReceitas] = useState<Receita[]>([])
@@ -95,21 +115,13 @@ export default function MedicoesPage() {
   // Estados para custos
   const [custos, setCustos] = useState<Custo[]>([])
   const [isCreateCustoDialogOpen, setIsCreateCustoDialogOpen] = useState(false)
-
-  // Estados para obras
-  const [obras, setObras] = useState<ObraSimples[]>([])
-
-  // Formulários
-  const [medicaoForm, setMedicaoForm] = useState({
-    numero: '',
-    locacao_id: '',
-    periodo: '',
-    data_medicao: new Date().toISOString().split('T')[0],
-    valor_base: 0,
-    valor_aditivos: 0,
-    valor_total: 0,
-    observacoes: ''
-  })
+  
+  // Estados de diálogos
+  const [selectedMedicao, setSelectedMedicao] = useState<MedicaoMensal | null>(null)
+  const [isEnviarDialogOpen, setIsEnviarDialogOpen] = useState(false)
+  const [emailEnvio, setEmailEnvio] = useState("")
+  const [telefoneEnvio, setTelefoneEnvio] = useState("")
+  const [enviando, setEnviando] = useState(false)
 
   const [receitaForm, setReceitaForm] = useState({
     obra_id: '',
@@ -130,33 +142,95 @@ export default function MedicoesPage() {
     observacoes: ''
   })
 
-  // Carregar dados
   useEffect(() => {
-    carregarDados()
-    // Inicializar formulário com valores padrão
-    setMedicaoForm({
-      numero: medicoesUtils.generateNumeroMedicao(),
-      locacao_id: '',
-      periodo: medicoesUtils.getPeriodoAtual(),
-      data_medicao: new Date().toISOString().split('T')[0],
-      valor_base: 0,
-      valor_aditivos: 0,
-      valor_total: 0,
-      observacoes: ''
-    })
+    carregarGruas()
+    carregarObras()
   }, [])
+
+  const carregarGruas = async () => {
+    try {
+      setLoadingGruas(true)
+      const response = await gruasApi.listarGruas({ limit: 1000 })
+      if (response.success) {
+        setGruas(response.data || [])
+      }
+    } catch (error: any) {
+      console.error("Erro ao carregar gruas:", error)
+    } finally {
+      setLoadingGruas(false)
+    }
+  }
+
+  const carregarObras = async () => {
+    try {
+      const response = await obrasApi.listarObras({ limit: 1000 })
+      if (response.success) {
+        setObras(response.data || [])
+      }
+    } catch (error: any) {
+      console.error("Erro ao carregar obras:", error)
+    }
+  }
+
+  const carregarMedicoes = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const filters: any = { 
+        limit: itemsPerPage,
+        page: currentPage
+      }
+      if (gruaFilter !== "all") {
+        filters.grua_id = parseInt(gruaFilter)
+      }
+      if (filterPeriodo) {
+        filters.periodo = filterPeriodo
+      }
+      if (filterStatus !== "all") {
+        filters.status = filterStatus
+      }
+      if (searchTerm && searchTerm.trim()) {
+        filters.search = searchTerm.trim()
+      }
+      
+      const response = await medicoesMensaisApi.listar(filters)
+      if (response.success) {
+        setMedicoes(response.data || [])
+        // Atualizar informações de paginação
+        if (response.pagination) {
+          setTotalPages(response.pagination.pages || 1)
+          setTotalItems(response.pagination.total || 0)
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar medições",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [gruaFilter, filterPeriodo, filterStatus, searchTerm, currentPage, toast])
+
+  // Recarregar medições quando os filtros mudarem (incluindo busca)
+  useEffect(() => {
+    // Resetar para primeira página quando filtros mudarem
+    setCurrentPage(1)
+  }, [gruaFilter, filterPeriodo, filterStatus, searchTerm])
+
+  // Recarregar medições quando os filtros ou página mudarem
+  useEffect(() => {
+    // Debounce para busca por texto (aguardar 500ms após parar de digitar)
+    const timeoutId = setTimeout(() => {
+      carregarMedicoes()
+    }, searchTerm ? 500 : 0)
+    
+    return () => clearTimeout(timeoutId)
+  }, [carregarMedicoes, searchTerm])
 
   const carregarDados = async () => {
     try {
-      setIsLoading(true)
-      
-      // Carregar medições
-      const medicoesData = await medicoesApi.list()
-      setMedicoes(medicoesData.medicoes || [])
-      
-      // Carregar locações
-      const locacoesData = await locacoesApi.list({ limit: 100 })
-      setLocacoes(locacoesData.data || [])
+      await carregarMedicoes()
       
       // Carregar receitas
       const receitasData = await receitasApi.list({ limit: 100 })
@@ -165,11 +239,6 @@ export default function MedicoesPage() {
       // Carregar custos
       const custosData = await custosApi.list({ limit: 100 })
       setCustos(custosData.custos || [])
-
-      // Carregar obras para os selects
-      const obrasData = await obrasApi.listarObras({ limit: 100 })
-      setObras(obrasData.data || [])
-      
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
       toast({
@@ -177,157 +246,87 @@ export default function MedicoesPage() {
         description: "Erro ao carregar dados",
         variant: "destructive"
       })
+    }
+  }
+
+  // Os filtros são aplicados via API, então filteredMedicoes é igual a medicoes
+  const filteredMedicoes = useMemo(() => {
+    return medicoes
+  }, [medicoes])
+
+  const handleEditar = (medicao: MedicaoMensal) => {
+    router.push(`/dashboard/medicoes/${medicao.id}/editar`)
+  }
+
+  const handleEnviar = async () => {
+    if (!selectedMedicao) return
+
+    try {
+      setEnviando(true)
+      const response = await medicoesMensaisApi.enviar(selectedMedicao.id, emailEnvio || undefined, telefoneEnvio || undefined)
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Medição enviada ao cliente com sucesso"
+        })
+        setIsEnviarDialogOpen(false)
+        setEmailEnvio("")
+        setTelefoneEnvio("")
+        await carregarMedicoes()
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao enviar medição",
+        variant: "destructive"
+      })
     } finally {
-      setIsLoading(false)
+      setEnviando(false)
     }
   }
 
-  // Filtrar locações para o select
-  const locacoesFiltradas = locacoes.filter(locacao => {
-    if (!locacaoFilter) return true
-    const searchTerm = locacaoFilter.toLowerCase()
-    return (
-      locacao.numero?.toLowerCase().includes(searchTerm) ||
-      locacao.cliente_nome?.toLowerCase().includes(searchTerm) ||
-      locacao.equipamento_id?.toLowerCase().includes(searchTerm)
-    )
-  })
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  }
 
-  // Filtrar medições
-  const filteredMedicoes = (medicoes || []).filter(medicao => {
-    const matchesSearch = (medicao.numero || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (medicao.locacoes?.clientes?.nome || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === 'all' || medicao.status === filterStatus
-    const matchesPeriodo = !filterPeriodo || medicao.periodo === filterPeriodo
-    const matchesLocacao = filterLocacao === 'all' || medicao.locacao_id?.toString() === filterLocacao
-    return matchesSearch && matchesStatus && matchesPeriodo && matchesLocacao
-  })
-
-  // Handlers
-  const handleCreateMedicao = async () => {
+  const formatDate = (dateString: string) => {
     try {
-      const medicaoData: MedicaoCreate = {
-        numero: medicaoForm.numero,
-        locacao_id: parseInt(medicaoForm.locacao_id),
-        periodo: medicaoForm.periodo,
-        data_medicao: medicaoForm.data_medicao,
-        valor_base: medicaoForm.valor_base,
-        valor_aditivos: medicaoForm.valor_aditivos,
-        valor_total: medicaoForm.valor_total,
-        observacoes: medicaoForm.observacoes.trim() || undefined
-      }
-
-      const novaMedicao = await medicoesApi.create(medicaoData)
-      setMedicoes([novaMedicao, ...(medicoes || [])])
-      setIsCreateDialogOpen(false)
-      resetMedicaoForm()
-
-      toast({
-        title: "Sucesso",
-        description: "Medição criada com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao criar medição:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao criar medição",
-        variant: "destructive"
-      })
+      return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR })
+    } catch {
+      return dateString
     }
   }
 
-  const handleViewMedicao = (medicao: Medicao) => {
-    setViewingMedicao(medicao)
-    setIsViewDialogOpen(true)
-  }
-
-  const handleEditMedicao = (medicao: Medicao) => {
-    setEditingMedicao(medicao)
-    setMedicaoForm({
-      numero: medicao.numero,
-      locacao_id: medicao.locacao_id.toString(),
-      periodo: medicao.periodo,
-      data_medicao: medicao.data_medicao,
-      valor_base: medicao.valor_base,
-      valor_aditivos: medicao.valor_aditivos,
-      valor_total: medicao.valor_total,
-      observacoes: medicao.observacoes || ''
-    })
-    setIsEditDialogOpen(true)
-  }
-
-  const handleUpdateMedicao = async () => {
-    if (!editingMedicao) return
-
-    try {
-      const medicaoData = {
-        numero: medicaoForm.numero,
-        locacao_id: parseInt(medicaoForm.locacao_id),
-        periodo: medicaoForm.periodo,
-        data_medicao: medicaoForm.data_medicao,
-        valor_base: medicaoForm.valor_base,
-        valor_aditivos: medicaoForm.valor_aditivos,
-        valor_total: medicaoForm.valor_total,
-        observacoes: medicaoForm.observacoes.trim() || undefined
-      }
-
-      const medicaoAtualizada = await medicoesApi.update(editingMedicao.id.toString(), medicaoData)
-      
-      setMedicoes(medicoes.map(m => m.id === editingMedicao.id ? medicaoAtualizada : m))
-      setIsEditDialogOpen(false)
-      setEditingMedicao(null)
-      resetMedicaoForm()
-
-      toast({
-        title: "Sucesso",
-        description: "Medição atualizada com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao atualizar medição:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao atualizar medição",
-        variant: "destructive"
-      })
+  const getStatusBadge = (status: string) => {
+    const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+      pendente: { label: "Pendente", variant: "outline" },
+      finalizada: { label: "Finalizada", variant: "default" },
+      enviada: { label: "Enviada", variant: "secondary" },
+      cancelada: { label: "Cancelada", variant: "destructive" }
     }
+    const statusInfo = statusMap[status] || statusMap.pendente
+    return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
-  const handleDeleteMedicao = async (medicao: Medicao) => {
-    try {
-      await medicoesApi.delete(medicao.id.toString())
-      setMedicoes(medicoes.filter(m => m.id !== medicao.id))
-
-      toast({
-        title: "Sucesso",
-        description: "Medição deletada com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao deletar medição:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao deletar medição",
-        variant: "destructive"
-      })
+  const getAprovacaoBadge = (statusAprovacao?: string | null) => {
+    if (!statusAprovacao) return null
+    const aprovacaoMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
+      pendente: { label: "Aguardando Aprovação", variant: "secondary" },
+      aprovada: { label: "Aprovada", variant: "default" },
+      rejeitada: { label: "Rejeitada", variant: "destructive" }
     }
+    const aprovacaoInfo = aprovacaoMap[statusAprovacao] || aprovacaoMap.pendente
+    return <Badge variant={aprovacaoInfo.variant}>{aprovacaoInfo.label}</Badge>
   }
 
-  const handleFinalizarMedicao = async (medicao: Medicao) => {
-    try {
-      const medicaoFinalizada = await medicoesApi.finalizar(medicao.id.toString())
-      setMedicoes(medicoes.map(m => m.id === medicao.id ? medicaoFinalizada : m))
-
-      toast({
-        title: "Sucesso",
-        description: "Medição finalizada com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao finalizar medição:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao finalizar medição",
-        variant: "destructive"
-      })
+  const getStatusColor = (status: string) => {
+    const statusMap: Record<string, string> = {
+      pendente: "bg-yellow-500",
+      finalizada: "bg-green-500",
+      enviada: "bg-blue-500",
+      cancelada: "bg-red-500"
     }
+    return statusMap[status] || "bg-gray-500"
   }
 
   const handleCreateReceita = async () => {
@@ -391,19 +390,6 @@ export default function MedicoesPage() {
     }
   }
 
-  const resetMedicaoForm = () => {
-    setMedicaoForm({
-      numero: medicoesUtils.generateNumeroMedicao(),
-      locacao_id: '',
-      periodo: medicoesUtils.getPeriodoAtual(),
-      data_medicao: new Date().toISOString().split('T')[0],
-      valor_base: 0,
-      valor_aditivos: 0,
-      valor_total: 0,
-      observacoes: ''
-    })
-    setLocacaoFilter('')
-  }
 
   const resetReceitaForm = () => {
     setReceitaForm({
@@ -428,19 +414,6 @@ export default function MedicoesPage() {
     })
   }
 
-  const getStatusColor = (status: string) => {
-    return medicoesUtils.getStatusColor(status)
-  }
-
-  const getStatusIcon = (status: string) => {
-    const iconType = medicoesUtils.getStatusIcon(status)
-    switch (iconType) {
-      case 'check-circle': return <CheckCircle className="w-4 h-4" />
-      case 'clock': return <Clock className="w-4 h-4" />
-      case 'x-circle': return <XCircle className="w-4 h-4" />
-      default: return <Clock className="w-4 h-4" />
-    }
-  }
 
   if (isLoading) {
     return (
@@ -461,7 +434,7 @@ export default function MedicoesPage() {
         </div>
         <div className="flex gap-2">
           {activeTab === 'medicoes' && (
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Button onClick={() => router.push('/dashboard/medicoes/nova')}>
               <Plus className="w-4 h-4 mr-2" />
               Nova Medição
             </Button>
@@ -589,61 +562,73 @@ export default function MedicoesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div>
-                  <Label htmlFor="search">Buscar</Label>
-                  <Input
-                    id="search"
-                    placeholder="Buscar por número ou cliente..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+              <div className="grid grid-cols-1 lg:grid-cols-7 gap-3 items-end">
+                <div className="lg:col-span-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Buscar por número, período, obra ou grua..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Status</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="finalizada">Finalizada</SelectItem>
+                    <SelectItem value="enviada">Enviada</SelectItem>
+                    <SelectItem value="cancelada">Cancelada</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={gruaFilter} onValueChange={setGruaFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Grua" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as Gruas</SelectItem>
+                    {gruas.map((grua) => (
+                      <SelectItem key={grua.id} value={String(grua.id)}>
+                        {grua.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <div>
-                  <Label htmlFor="status">Status</Label>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os status</SelectItem>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="finalizada">Finalizada</SelectItem>
-                      <SelectItem value="cancelada">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="periodo">Período</Label>
+                  <Label className="font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs">Período (YYYY-MM)</Label>
                   <Input
-                    id="periodo"
-                    type="month"
+                    type="text"
+                    placeholder="2025-01"
                     value={filterPeriodo}
-                    onChange={(e) => setFilterPeriodo(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9-]/g, '')
+                      if (value.length <= 7) {
+                        setFilterPeriodo(value)
+                      }
+                    }}
+                    pattern="\d{4}-\d{2}"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="locacao">Locação</Label>
-                  <Select value={filterLocacao} onValueChange={setFilterLocacao}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas as locações</SelectItem>
-                      {locacoes.map(locacao => (
-                        <SelectItem key={locacao.id} value={locacao.id.toString()}>
-                          {locacao.numero} - {locacao.cliente_nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-end">
-                  <Button variant="outline" onClick={carregarDados}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Atualizar
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm("")
+                    setFilterStatus("all")
+                    setGruaFilter("all")
+                    setFilterPeriodo("")
+                  }}
+                >
+                  Limpar
+                </Button>
+                <Button variant="outline" onClick={carregarMedicoes}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Atualizar
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -655,124 +640,121 @@ export default function MedicoesPage() {
               <CardDescription>Lista de todas as medições registradas</CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredMedicoes.length === 0 ? (
-                <div className="text-center py-8">
-                  <Calculator className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-500">Nenhuma medição encontrada</p>
-                </div>
+              {isLoading ? (
+                <div className="text-center py-8">Carregando...</div>
+              ) : filteredMedicoes.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">Nenhuma medição encontrada</div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Número</TableHead>
-                      <TableHead>Locacao</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Período</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor Total</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredMedicoes.map((medicao) => (
-                      <TableRow key={medicao.id}>
-                        <TableCell className="font-medium">{medicao.numero}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-gray-400" />
-                            {medicao.locacoes?.numero || 'N/A'}
-                          </div>
-                        </TableCell>
-                        <TableCell>{medicao.locacoes?.clientes?.nome || 'N/A'}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            {medicoesUtils.formatPeriodo(medicao.periodo)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {medicoesUtils.formatDate(medicao.data_medicao)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="w-4 h-4 text-green-600" />
-                            {medicoesUtils.formatCurrency(medicao.valor_total)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(medicao.status)}>
-                            <div className="flex items-center gap-1">
-                              {getStatusIcon(medicao.status)}
-                              {medicoesUtils.getStatusLabel(medicao.status)}
-                            </div>
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => handleViewMedicao(medicao)}
-                              title="Visualizar medição"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => handleEditMedicao(medicao)}
-                              title="Editar medição"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            {medicao.status === 'pendente' && (
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
-                                className="text-green-600 hover:text-green-700"
-                                onClick={() => handleFinalizarMedicao(medicao)}
-                                title="Finalizar medição"
-                              >
-                                <CheckCircle className="w-4 h-4" />
-                              </Button>
-                            )}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  className="text-red-600 hover:text-red-700"
-                                  title="Deletar medição"
-                                >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Tem certeza que deseja deletar a medição <strong>{medicao.numero}</strong>?
-                                    Esta ação não pode ser desfeita.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteMedicao(medicao)}
-                                    className="bg-red-600 hover:bg-red-700"
-                                  >
-                                    Deletar
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Período</TableHead>
+                        <TableHead>Grua</TableHead>
+                        <TableHead>Obra</TableHead>
+                        <TableHead>Valor Total</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Aprovação</TableHead>
+                        <TableHead>Ações</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredMedicoes.map((medicao) => (
+                        <TableRow key={medicao.id}>
+                          <TableCell className="font-medium">{medicao.numero}</TableCell>
+                          <TableCell>{medicao.periodo}</TableCell>
+                          <TableCell>
+                            {medicao.gruas ? (
+                              <div className="flex items-center gap-2">
+                                <Forklift className="w-4 h-4" />
+                                <span>{medicao.gruas.name || medicao.gruas.nome}</span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {medicao.obras ? (
+                              <div className="flex items-center gap-2">
+                                <Building2 className="w-4 h-4" />
+                                <span>{medicao.obras.nome}</span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-semibold">{formatCurrency(medicao.valor_total || 0)}</TableCell>
+                          <TableCell>{getStatusBadge(medicao.status)}</TableCell>
+                          <TableCell>{getAprovacaoBadge(medicao.status_aprovacao)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  router.push(`/dashboard/medicoes/${medicao.id}`)
+                                }}
+                                title="Ver detalhes"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditar(medicao)}
+                                title="Editar medição"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedMedicao(medicao)
+                                  setIsEnviarDialogOpen(true)
+                                }}
+                                title={medicao.status === 'enviada' ? 'Reenviar medição' : 'Enviar medição'}
+                              >
+                                <Send className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Paginação */}
+                  {!isLoading && filteredMedicoes.length > 0 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm text-gray-600">
+                        Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} medições
+                      </div>
+                      <Pagination>
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious 
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                              className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                            />
+                          </PaginationItem>
+                          <PaginationItem>
+                            <span className="px-4 text-sm text-muted-foreground">
+                              Página {currentPage} de {totalPages}
+                            </span>
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationNext 
+                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                              className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -915,423 +897,44 @@ export default function MedicoesPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog de Criação de Medição */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-2xl">
+      {/* Dialog de Envio */}
+      <Dialog open={isEnviarDialogOpen} onOpenChange={setIsEnviarDialogOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova Medição</DialogTitle>
+            <DialogTitle>Enviar Medição ao Cliente</DialogTitle>
             <DialogDescription>
-              Registre uma nova medição no sistema
+              Informe o e-mail e telefone para envio das notificações
             </DialogDescription>
           </DialogHeader>
-          
-          <form onSubmit={(e) => { e.preventDefault(); handleCreateMedicao(); }} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="numero">Número da Medição *</Label>
-                <Input
-                  id="numero"
-                  value={medicaoForm.numero}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, numero: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="periodo">Período *</Label>
-                <Input
-                  id="periodo"
-                  type="month"
-                  value={medicaoForm.periodo}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, periodo: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-              <div>
-              <Label htmlFor="locacao_id">Locação *</Label>
-              <div className="space-y-2">
-                <Input
-                  placeholder="Buscar locação por número, cliente ou equipamento..."
-                  value={locacaoFilter}
-                  onChange={(e) => setLocacaoFilter(e.target.value)}
-                  className="text-sm"
-                />
-                <Select 
-                  value={medicaoForm.locacao_id} 
-                  onValueChange={(value) => setMedicaoForm({ ...medicaoForm, locacao_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a locação" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {!locacoes || locacoes.length === 0 ? (
-                      <div className="p-2 text-sm text-gray-500 text-center">
-                        Carregando locações...
-                      </div>
-                    ) : locacoesFiltradas.length > 0 ? (
-                      locacoesFiltradas.map(locacao => (
-                        <SelectItem key={locacao.id} value={locacao.id.toString()}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{locacao.numero || 'Locação sem número'}</span>
-                            <span className="text-xs text-gray-500">
-                              {locacao.cliente_nome} - {locacao.equipamento_id}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <div className="p-2 text-sm text-gray-500 text-center">
-                        Nenhuma locação encontrada
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="valor_base">Valor Base (R$) *</Label>
-                <Input
-                  id="valor_base"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_base}
-                  onChange={(e) => {
-                    const valorBase = parseFloat(e.target.value) || 0
-                    setMedicaoForm({ 
-                      ...medicaoForm, 
-                      valor_base: valorBase,
-                      valor_total: valorBase + medicaoForm.valor_aditivos
-                    })
-                  }}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="valor_aditivos">Valor Aditivos (R$)</Label>
-                <Input
-                  id="valor_aditivos"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_aditivos}
-                  onChange={(e) => {
-                    const valorAditivos = parseFloat(e.target.value) || 0
-                    setMedicaoForm({ 
-                      ...medicaoForm, 
-                      valor_aditivos: valorAditivos,
-                      valor_total: medicaoForm.valor_base + valorAditivos
-                    })
-                  }}
-                />
-              </div>
-              <div>
-                <Label htmlFor="valor_total">Valor Total (R$) *</Label>
-                <Input
-                  id="valor_total"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_total}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_total: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-            </div>
-
+          <div className="space-y-4">
             <div>
-              <Label htmlFor="data_medicao">Data da Medição *</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input
-                id="data_medicao"
-                type="date"
-                value={medicaoForm.data_medicao}
-                onChange={(e) => setMedicaoForm({ ...medicaoForm, data_medicao: e.target.value })}
-                required
+                id="email"
+                type="email"
+                value={emailEnvio}
+                onChange={(e) => setEmailEnvio(e.target.value)}
+                placeholder="email@exemplo.com"
               />
             </div>
-
             <div>
-              <Label htmlFor="observacoes">Observações</Label>
-              <Textarea
-                id="observacoes"
-                value={medicaoForm.observacoes}
-                onChange={(e) => setMedicaoForm({ ...medicaoForm, observacoes: e.target.value })}
-                rows={3}
+              <Label htmlFor="telefone">Telefone (WhatsApp)</Label>
+              <Input
+                id="telefone"
+                value={telefoneEnvio}
+                onChange={(e) => setTelefoneEnvio(e.target.value)}
+                placeholder="5511999999999"
               />
             </div>
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">
-                Criar Medição
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de Visualização de Medição */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Detalhes da Medição</DialogTitle>
-            <DialogDescription>
-              Informações completas da medição
-            </DialogDescription>
-          </DialogHeader>
-          
-          {viewingMedicao && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Número</Label>
-                  <p className="text-lg font-semibold">{viewingMedicao.numero}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Status</Label>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(viewingMedicao.status)}>
-                      <div className="flex items-center gap-1">
-                        {getStatusIcon(viewingMedicao.status)}
-                        {medicoesUtils.getStatusLabel(viewingMedicao.status)}
-                      </div>
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Período</Label>
-                  <p className="text-lg">{medicoesUtils.formatPeriodo(viewingMedicao.periodo)}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Data da Medição</Label>
-                  <p className="text-lg">{medicoesUtils.formatDate(viewingMedicao.data_medicao)}</p>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium text-gray-500">Locação</Label>
-                <p className="text-lg font-semibold">
-                  {viewingMedicao.locacoes?.numero || 'N/A'} - {viewingMedicao.locacoes?.clientes?.nome || 'N/A'}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Equipamento: {viewingMedicao.locacoes?.equipamento_id || 'N/A'}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Valor Base</Label>
-                  <p className="text-lg font-semibold text-blue-600">
-                    {medicoesUtils.formatCurrency(viewingMedicao.valor_base)}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Valor Aditivos</Label>
-                  <p className="text-lg font-semibold text-orange-600">
-                    {medicoesUtils.formatCurrency(viewingMedicao.valor_aditivos)}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Valor Total</Label>
-                  <p className="text-lg font-semibold text-green-600">
-                    {medicoesUtils.formatCurrency(viewingMedicao.valor_total)}
-                  </p>
-                </div>
-              </div>
-
-              {viewingMedicao.observacoes && (
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Observações</Label>
-                  <p className="text-sm bg-gray-50 p-3 rounded-md">{viewingMedicao.observacoes}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4 text-sm text-gray-500">
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Criado em</Label>
-                  <p>{medicoesUtils.formatDate(viewingMedicao.created_at)}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-500">Atualizado em</Label>
-                  <p>{medicoesUtils.formatDate(viewingMedicao.updated_at)}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Fechar
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIsEnviarDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleEnviar} disabled={enviando}>
+              {enviando ? "Enviando..." : "Enviar"}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de Edição de Medição */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Editar Medição</DialogTitle>
-            <DialogDescription>
-              Atualize as informações da medição
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={(e) => { e.preventDefault(); handleUpdateMedicao(); }} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit_numero">Número da Medição *</Label>
-                <Input
-                  id="edit_numero"
-                  value={medicaoForm.numero}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, numero: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit_periodo">Período *</Label>
-                <Input
-                  id="edit_periodo"
-                  type="month"
-                  value={medicaoForm.periodo}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, periodo: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit_locacao_id">Locação *</Label>
-              <div className="space-y-2">
-                <Input
-                  placeholder="Buscar locação por número, cliente ou equipamento..."
-                  value={locacaoFilter}
-                  onChange={(e) => setLocacaoFilter(e.target.value)}
-                  className="text-sm"
-                />
-                <Select 
-                  value={medicaoForm.locacao_id} 
-                  onValueChange={(value) => setMedicaoForm({ ...medicaoForm, locacao_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a locação" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {!locacoes || locacoes.length === 0 ? (
-                      <div className="p-2 text-sm text-gray-500 text-center">
-                        Carregando locações...
-                      </div>
-                    ) : locacoesFiltradas.length > 0 ? (
-                      locacoesFiltradas.map(locacao => (
-                        <SelectItem key={locacao.id} value={locacao.id.toString()}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{locacao.numero || 'Locação sem número'}</span>
-                            <span className="text-xs text-gray-500">
-                              {locacao.cliente_nome} - {locacao.equipamento_id}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <div className="p-2 text-sm text-gray-500 text-center">
-                        Nenhuma locação encontrada
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="edit_valor_base">Valor Base (R$) *</Label>
-                <Input
-                  id="edit_valor_base"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_base}
-                  onChange={(e) => {
-                    const valorBase = parseFloat(e.target.value) || 0
-                    setMedicaoForm({ 
-                      ...medicaoForm, 
-                      valor_base: valorBase,
-                      valor_total: valorBase + medicaoForm.valor_aditivos
-                    })
-                  }}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit_valor_aditivos">Valor Aditivos (R$)</Label>
-                <Input
-                  id="edit_valor_aditivos"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_aditivos}
-                  onChange={(e) => {
-                    const valorAditivos = parseFloat(e.target.value) || 0
-                    setMedicaoForm({ 
-                      ...medicaoForm, 
-                      valor_aditivos: valorAditivos,
-                      valor_total: medicaoForm.valor_base + valorAditivos
-                    })
-                  }}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit_valor_total">Valor Total (R$) *</Label>
-                <Input
-                  id="edit_valor_total"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_total}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_total: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit_data_medicao">Data da Medição *</Label>
-              <Input
-                id="edit_data_medicao"
-                type="date"
-                value={medicaoForm.data_medicao}
-                onChange={(e) => setMedicaoForm({ ...medicaoForm, data_medicao: e.target.value })}
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="edit_observacoes">Observações</Label>
-              <Textarea
-                id="edit_observacoes"
-                value={medicaoForm.observacoes}
-                onChange={(e) => setMedicaoForm({ ...medicaoForm, observacoes: e.target.value })}
-                rows={3}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">
-                Atualizar Medição
-              </Button>
-            </div>
-          </form>
         </DialogContent>
       </Dialog>
 
