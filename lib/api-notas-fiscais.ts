@@ -135,6 +135,18 @@ export const notasFiscaisApi = {
   async downloadFile(id: number) {
     const response = await api.get(`/notas-fiscais/${id}/download`)
     return response.data
+  },
+
+  async importarXML(file: File) {
+    const formData = new FormData()
+    formData.append('arquivo', file)
+    
+    const response = await api.post('/notas-fiscais/importar-xml', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
   }
 }
 

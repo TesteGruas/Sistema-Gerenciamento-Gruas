@@ -97,6 +97,9 @@ export default function NotasFiscaisPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [formFile, setFormFile] = useState<File | null>(null)
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
@@ -390,6 +393,45 @@ export default function NotasFiscaisPage() {
     }
   }
 
+  const handleImportXML = async () => {
+    if (!importFile) return
+
+    try {
+      setImporting(true)
+      const response = await notasFiscaisApi.importarXML(importFile)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: response.message || "Nota fiscal importada com sucesso",
+        })
+        
+        // Mostrar avisos se houver
+        if (response.avisos && response.avisos.length > 0) {
+          response.avisos.forEach((aviso: string) => {
+            toast({
+              title: "Aviso",
+              description: aviso,
+              variant: "default"
+            })
+          })
+        }
+        
+        setIsImportDialogOpen(false)
+        setImportFile(null)
+        await carregarNotasFiscais()
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || error.message || "Erro ao importar XML",
+        variant: "destructive"
+      })
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const resetForm = () => {
     setFormData({
       numero_nf: '',
@@ -459,6 +501,13 @@ export default function NotasFiscaisPage() {
           <p className="text-gray-600">Gerenciamento de notas fiscais de entrada e saída</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => setIsImportDialogOpen(true)}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar XML
+          </Button>
           <Button 
             variant="outline" 
             onClick={() => {
@@ -1454,6 +1503,89 @@ export default function NotasFiscaisPage() {
               disabled={!uploadFile || uploading}
             >
               {uploading ? 'Enviando...' : 'Enviar Arquivo'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Importação XML */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importar Nota Fiscal (XML)</DialogTitle>
+            <DialogDescription>
+              Envie o arquivo XML da NFe para importar automaticamente
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="xml-file">Arquivo XML da NFe *</Label>
+              <Input
+                id="xml-file"
+                type="file"
+                accept=".xml,.XML"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    // Validar tamanho (10MB)
+                    if (file.size > 10 * 1024 * 1024) {
+                      toast({
+                        title: "Erro",
+                        description: "Arquivo muito grande. Tamanho máximo: 10MB",
+                        variant: "destructive"
+                      })
+                      e.target.value = ''
+                      return
+                    }
+                    // Validar tipo
+                    if (!file.name.toLowerCase().endsWith('.xml')) {
+                      toast({
+                        title: "Erro",
+                        description: "Arquivo deve ser um XML válido",
+                        variant: "destructive"
+                      })
+                      e.target.value = ''
+                      return
+                    }
+                    setImportFile(file)
+                  } else {
+                    setImportFile(null)
+                  }
+                }}
+              />
+              {importFile && (
+                <p className="text-sm text-gray-600 mt-2 flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Arquivo selecionado: {importFile.name} ({(importFile.size / 1024).toFixed(2)} KB)
+                </p>
+              )}
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-sm text-blue-800">
+                <strong>Informações:</strong> O sistema irá extrair automaticamente os dados do XML e criar a nota fiscal. 
+                Clientes e fornecedores serão vinculados automaticamente se encontrados pelo CNPJ.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsImportDialogOpen(false)
+                setImportFile(null)
+              }}
+              disabled={importing}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleImportXML}
+              disabled={!importFile || importing}
+            >
+              {importing ? 'Importando...' : 'Importar XML'}
             </Button>
           </DialogFooter>
         </DialogContent>

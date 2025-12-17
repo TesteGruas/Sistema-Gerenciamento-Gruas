@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { supabase, supabaseAdmin } from '../config/supabase.js';
 import Joi from 'joi';
+import { XMLParser } from 'fast-xml-parser';
 
 // Configuração do multer para upload de arquivos
 const storage = multer.memoryStorage();
@@ -901,6 +902,449 @@ router.get('/:id/download', async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao obter arquivo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+// Funções auxiliares para importação de XML
+/**
+ * Remove caracteres não numéricos do CNPJ
+ */
+const limparCNPJ = (cnpj) => {
+  if (!cnpj) return null;
+  return cnpj.replace(/\D/g, '');
+};
+
+/**
+ * Busca cliente por CNPJ
+ */
+const buscarClientePorCNPJ = async (cnpj) => {
+  try {
+    const cnpjLimpo = limparCNPJ(cnpj);
+    if (!cnpjLimpo || cnpjLimpo.length < 11) return null;
+
+    const { data, error } = await supabaseAdmin
+      .from('clientes')
+      .select('id, nome, cnpj')
+      .or(`cnpj.eq.${cnpjLimpo},cnpj.ilike.%${cnpjLimpo}%`)
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Erro ao buscar cliente:', error);
+      return null;
+    }
+
+    return data || null;
+  } catch (error) {
+    console.error('Erro ao buscar cliente por CNPJ:', error);
+    return null;
+  }
+};
+
+/**
+ * Busca fornecedor por CNPJ
+ */
+const buscarFornecedorPorCNPJ = async (cnpj) => {
+  try {
+    const cnpjLimpo = limparCNPJ(cnpj);
+    if (!cnpjLimpo || cnpjLimpo.length < 11) return null;
+
+    const { data, error } = await supabaseAdmin
+      .from('fornecedores')
+      .select('id, nome, cnpj')
+      .or(`cnpj.eq.${cnpjLimpo},cnpj.ilike.%${cnpjLimpo}%`)
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Erro ao buscar fornecedor:', error);
+      return null;
+    }
+
+    return data || null;
+  } catch (error) {
+    console.error('Erro ao buscar fornecedor por CNPJ:', error);
+    return null;
+  }
+};
+
+/**
+ * Determina o tipo de nota baseado no CFOP e natureza da operação
+ */
+const determinarTipoNota = (cfop, natOp) => {
+  if (!cfop && !natOp) return 'fornecedor';
+
+  const natOpLower = (natOp || '').toLowerCase();
+  const cfopStr = String(cfop || '');
+
+  // Verificar natureza da operação
+  if (natOpLower.includes('locação') || natOpLower.includes('locacao')) {
+    return 'locacao';
+  }
+  if (natOpLower.includes('medição') || natOpLower.includes('medicao')) {
+    return 'medicao';
+  }
+  if (natOpLower.includes('circulação') || natOpLower.includes('circulacao')) {
+    return 'circulacao_equipamentos';
+  }
+
+  // Verificar CFOP
+  if (cfopStr.startsWith('5')) {
+    // CFOP 5xxx geralmente são saídas (locação, circulação)
+    if (cfopStr === '5908' || cfopStr === '5909') {
+      return 'locacao';
+    }
+    return 'locacao'; // Padrão para CFOP 5xxx
+  }
+  if (cfopStr.startsWith('6')) {
+    // CFOP 6xxx são entradas
+    return 'fornecedor';
+  }
+
+  return 'fornecedor'; // Padrão
+};
+
+/**
+ * Converte data ISO para formato YYYY-MM-DD
+ */
+const formatarData = (dataISO) => {
+  if (!dataISO) return null;
+  try {
+    const data = new Date(dataISO);
+    if (isNaN(data.getTime())) return null;
+    return data.toISOString().split('T')[0];
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Parse do XML da NFe
+ */
+const parseXMLNFe = (xmlBuffer) => {
+  try {
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      textNodeName: '#text',
+      parseAttributeValue: true,
+      trimValues: true,
+      parseTrueNumberOnly: false,
+      arrayMode: false
+    });
+
+    const xmlString = xmlBuffer.toString('utf-8');
+    const jsonObj = parser.parse(xmlString);
+
+    // Acessar a estrutura da NFe (pode variar dependendo do namespace)
+    const nfeProc = jsonObj.nfeProc || jsonObj['nfeProc'] || jsonObj;
+    const nfe = nfeProc.NFe || nfeProc['NFe'] || nfeProc;
+    const infNFe = nfe.infNFe || nfe['infNFe'] || nfe;
+
+    if (!infNFe) {
+      throw new Error('Estrutura XML inválida: não foi possível encontrar infNFe');
+    }
+
+    // Extrair dados do ide (identificação)
+    const ide = infNFe.ide || {};
+    const numeroNF = ide.nNF || ide['nNF'] || '';
+    const serie = ide.serie || ide['serie'] || '';
+    const dhEmi = ide.dhEmi || ide['dhEmi'] || '';
+    const dhSaiEnt = ide.dhSaiEnt || ide['dhSaiEnt'] || '';
+    const tpNF = ide.tpNF || ide['tpNF'] || '1'; // 1 = Saída, 0 = Entrada
+    const natOp = ide.natOp || ide['natOp'] || '';
+
+    // Extrair dados do emitente
+    const emit = infNFe.emit || {};
+    const cnpjEmitente = emit.CNPJ || emit['CNPJ'] || '';
+    const nomeEmitente = emit.xNome || emit['xNome'] || '';
+
+    // Extrair dados do destinatário
+    const dest = infNFe.dest || {};
+    const cnpjDestinatario = dest.CNPJ || dest['CNPJ'] || '';
+    const nomeDestinatario = dest.xNome || dest['xNome'] || '';
+
+    // Extrair dados dos produtos (primeiro item)
+    const det = infNFe.det || {};
+    const detArray = Array.isArray(det) ? det : [det];
+    const primeiroItem = detArray[0] || {};
+    const prod = primeiroItem.prod || {};
+    const cfop = prod.CFOP || prod['CFOP'] || '';
+
+    // Extrair totais
+    const total = infNFe.total || {};
+    const icmsTot = total.ICMSTot || total['ICMSTot'] || {};
+    const valorTotal = parseFloat(icmsTot.vNF || icmsTot['vNF'] || '0');
+
+    // Extrair informações adicionais
+    const infAdic = infNFe.infAdic || {};
+    const infCpl = infAdic.infCpl || infAdic['infCpl'] || '';
+
+    // Extrair protocolo
+    const protNFe = nfeProc.protNFe || nfeProc['protNFe'] || {};
+    const infProt = protNFe.infProt || protNFe['infProt'] || {};
+    const chNFe = infProt.chNFe || infProt['chNFe'] || '';
+    const cStat = infProt.cStat || infProt['cStat'] || '';
+    const xMotivo = infProt.xMotivo || infProt['xMotivo'] || '';
+
+    // Validar se a NFe está autorizada
+    if (cStat !== '100') {
+      throw new Error(`NFe não autorizada. Status: ${cStat} - ${xMotivo}`);
+    }
+
+    // Determinar tipo (entrada ou saída)
+    const tipo = tpNF === '0' ? 'entrada' : 'saida';
+
+    // Determinar tipo de nota
+    const tipoNota = determinarTipoNota(cfop, natOp);
+
+    // Montar observações
+    let observacoes = '';
+    if (natOp) {
+      observacoes += `Natureza da operação: ${natOp}\n`;
+    }
+    if (infCpl) {
+      observacoes += infCpl;
+    }
+    if (chNFe) {
+      observacoes += `\nChave de acesso: ${chNFe}`;
+    }
+
+    return {
+      numero_nf: String(numeroNF),
+      serie: String(serie || ''),
+      data_emissao: formatarData(dhEmi),
+      data_vencimento: formatarData(dhSaiEnt),
+      valor_total: valorTotal,
+      tipo: tipo,
+      tipo_nota: tipoNota,
+      observacoes: observacoes.trim(),
+      // Dados para busca
+      cnpj_emitente: cnpjEmitente,
+      nome_emitente: nomeEmitente,
+      cnpj_destinatario: cnpjDestinatario,
+      nome_destinatario: nomeDestinatario,
+      // Dados adicionais
+      chave_acesso: chNFe,
+      cfop: cfop,
+      natureza_operacao: natOp
+    };
+  } catch (error) {
+    console.error('Erro ao fazer parse do XML:', error);
+    throw new Error(`Erro ao processar XML: ${error.message}`);
+  }
+};
+
+/**
+ * @swagger
+ * /api/notas-fiscais/importar-xml:
+ *   post:
+ *     summary: Importar nota fiscal a partir de XML
+ *     tags: [Notas Fiscais]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - arquivo
+ *             properties:
+ *               arquivo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo XML da NFe
+ *     responses:
+ *       200:
+ *         description: Nota fiscal importada com sucesso
+ *       400:
+ *         description: Dados inválidos ou XML inválido
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
+  try {
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum arquivo XML enviado'
+      });
+    }
+
+    // Validar se é XML
+    if (!file.mimetype.includes('xml') && !file.originalname.toLowerCase().endsWith('.xml')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Arquivo deve ser um XML válido'
+      });
+    }
+
+    // Fazer parse do XML
+    let dadosNFe;
+    try {
+      dadosNFe = parseXMLNFe(file.buffer);
+    } catch (parseError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Erro ao processar XML',
+        error: parseError.message
+      });
+    }
+
+    // Buscar cliente ou fornecedor
+    let cliente_id = null;
+    let fornecedor_id = null;
+    const avisos = [];
+
+    if (dadosNFe.tipo === 'saida') {
+      // Para notas de saída, buscar cliente pelo CNPJ do destinatário
+      if (dadosNFe.cnpj_destinatario) {
+        const cliente = await buscarClientePorCNPJ(dadosNFe.cnpj_destinatario);
+        if (cliente) {
+          cliente_id = cliente.id;
+        } else {
+          avisos.push(`Cliente não encontrado: ${dadosNFe.nome_destinatario} (CNPJ: ${dadosNFe.cnpj_destinatario}). Você pode vincular manualmente após a importação.`);
+        }
+      }
+    } else {
+      // Para notas de entrada, buscar fornecedor pelo CNPJ do emitente
+      if (dadosNFe.cnpj_emitente) {
+        const fornecedor = await buscarFornecedorPorCNPJ(dadosNFe.cnpj_emitente);
+        if (fornecedor) {
+          fornecedor_id = fornecedor.id;
+        } else {
+          avisos.push(`Fornecedor não encontrado: ${dadosNFe.nome_emitente} (CNPJ: ${dadosNFe.cnpj_emitente}). Você pode vincular manualmente após a importação.`);
+        }
+      }
+    }
+
+    // Verificar se já existe nota fiscal com mesmo número e série
+    const { data: notaExistente } = await supabaseAdmin
+      .from('notas_fiscais')
+      .select('id, numero_nf, serie')
+      .eq('numero_nf', dadosNFe.numero_nf)
+      .eq('serie', dadosNFe.serie || '')
+      .single();
+
+    if (notaExistente) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nota fiscal já existe no sistema',
+        data: {
+          id: notaExistente.id,
+          numero_nf: notaExistente.numero_nf,
+          serie: notaExistente.serie
+        }
+      });
+    }
+
+    // Criar nota fiscal
+    const notaFiscalData = {
+      numero_nf: dadosNFe.numero_nf,
+      serie: dadosNFe.serie || null,
+      data_emissao: dadosNFe.data_emissao,
+      data_vencimento: dadosNFe.data_vencimento || null,
+      valor_total: dadosNFe.valor_total,
+      tipo: dadosNFe.tipo,
+      status: 'pendente',
+      tipo_nota: dadosNFe.tipo_nota,
+      cliente_id: cliente_id,
+      fornecedor_id: fornecedor_id,
+      observacoes: dadosNFe.observacoes || null
+    };
+
+    // Validar dados
+    const { error: validationError, value: validatedData } = notaFiscalSchema.validate(notaFiscalData);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        error: validationError.details[0].message
+      });
+    }
+
+    // Inserir nota fiscal
+    const { data: notaCriada, error: insertError } = await supabaseAdmin
+      .from('notas_fiscais')
+      .insert(validatedData)
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Erro ao criar nota fiscal:', insertError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao criar nota fiscal',
+        error: insertError.message
+      });
+    }
+
+    // Fazer upload do XML como arquivo anexo
+    try {
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(2, 15);
+      const fileName = `nf_${notaCriada.id}_${timestamp}_${randomString}.xml`;
+      const filePath = `notas-fiscais/${notaCriada.id}/${fileName}`;
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('arquivos-obras')
+        .upload(filePath, file.buffer, {
+          contentType: 'application/xml',
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (!uploadError) {
+        const { data: urlData } = supabaseAdmin.storage
+          .from('arquivos-obras')
+          .getPublicUrl(filePath);
+
+        const arquivoUrl = urlData?.publicUrl || `${process.env.SUPABASE_URL}/storage/v1/object/public/arquivos-obras/${filePath}`;
+
+        // Atualizar nota fiscal com informações do arquivo
+        await supabaseAdmin
+          .from('notas_fiscais')
+          .update({
+            nome_arquivo: file.originalname,
+            tamanho_arquivo: file.size,
+            tipo_arquivo: 'xml',
+            arquivo_nf: arquivoUrl
+          })
+          .eq('id', notaCriada.id);
+      }
+    } catch (uploadError) {
+      console.error('Erro ao fazer upload do XML:', uploadError);
+      avisos.push('Nota fiscal criada, mas houve erro ao anexar o arquivo XML.');
+    }
+
+    // Buscar dados completos da nota criada
+    const { data: notaCompleta } = await supabaseAdmin
+      .from('notas_fiscais')
+      .select(`
+        *,
+        clientes(id, nome, cnpj),
+        fornecedores(id, nome, cnpj)
+      `)
+      .eq('id', notaCriada.id)
+      .single();
+
+    res.json({
+      success: true,
+      data: notaCompleta,
+      message: 'Nota fiscal importada com sucesso',
+      avisos: avisos.length > 0 ? avisos : undefined
+    });
+  } catch (error) {
+    console.error('Erro ao importar XML:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
