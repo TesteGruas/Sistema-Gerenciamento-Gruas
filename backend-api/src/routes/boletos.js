@@ -47,6 +47,8 @@ const boletoSchema = Joi.object({
   banco: Joi.string().max(100).optional(),
   agencia: Joi.string().max(20).optional(),
   conta: Joi.string().max(20).optional(),
+  tipo: Joi.string().valid('receber', 'pagar').default('receber'),
+  banco_origem_id: Joi.number().integer().positive().optional(),
   observacoes: Joi.string().optional()
 });
 
@@ -63,7 +65,8 @@ router.get('/', authenticateToken, async (req, res) => {
       .select(`
         *,
         clientes(id, nome, cnpj),
-        obras(id, nome)
+        obras(id, nome),
+        contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
       `)
       .order('data_vencimento', { ascending: false });
 
@@ -72,6 +75,7 @@ router.get('/', authenticateToken, async (req, res) => {
     if (obra_id) query = query.eq('obra_id', obra_id);
     if (medicao_id) query = query.eq('medicao_id', medicao_id);
     if (status) query = query.eq('status', status);
+    // Nota: filtro de tipo será aplicado após combinar com boletos de medições
     if (search) {
       query = query.or(`numero_boleto.ilike.%${search}%,descricao.ilike.%${search}%`);
     }
@@ -107,17 +111,27 @@ router.get('/', authenticateToken, async (req, res) => {
             numero,
             periodo,
             obra_id,
-            obras(id, nome, cliente_id),
-            clientes:obras!medicoes_mensais_obra_id_fkey(id, nome, cnpj)
+            obras:obra_id(
+              id,
+              nome,
+              cliente_id,
+              clientes:cliente_id(id, nome, cnpj)
+            )
           )
         `)
         .eq('tipo_documento', 'boleto');
 
+      if (docError) {
+        console.error('Erro ao buscar boletos de medições:', docError);
+      }
+
       if (!docError && documentos) {
+        console.log(`Encontrados ${documentos.length} boletos de medições`);
         boletosMedicoes = documentos.map(doc => {
           const medicao = doc.medicoes_mensais;
-          const obra = medicao?.obras || (medicao?.obra_id ? [{ id: medicao.obra_id }] : null);
-          const cliente = obra?.[0]?.clientes || (medicao?.clientes || null);
+          // A obra pode vir como objeto ou array dependendo da query do Supabase
+          const obra = medicao?.obras ? (Array.isArray(medicao.obras) ? medicao.obras[0] : medicao.obras) : null;
+          const cliente = obra?.clientes ? (Array.isArray(obra.clientes) ? obra.clientes[0] : obra.clientes) : null;
           
           return {
             id: `medicao_${doc.id}`,
@@ -129,6 +143,7 @@ router.get('/', authenticateToken, async (req, res) => {
             data_vencimento: doc.data_vencimento || doc.created_at,
             data_pagamento: doc.status === 'pago' ? doc.updated_at : null,
             status: doc.status === 'pago' ? 'pago' : doc.status === 'cancelado' ? 'cancelado' : 'pendente',
+            tipo: 'receber', // Boletos de medições são sempre "a receber"
             arquivo_boleto: doc.caminho_arquivo,
             observacoes: doc.observacoes,
             created_at: doc.created_at,
@@ -140,23 +155,51 @@ router.get('/', authenticateToken, async (req, res) => {
               periodo: medicao.periodo
             } : null,
             clientes: cliente,
-            obras: obra?.[0]
+            obras: obra ? {
+              id: obra.id,
+              nome: obra.nome
+            } : null
           };
         });
+      } else if (!documentos || documentos.length === 0) {
+        console.log('Nenhum boleto de medição encontrado');
       }
     }
 
     // Combinar boletos da tabela boletos com boletos de medições
-    const allBoletos = [...(data || []), ...boletosMedicoes];
+    let allBoletos = [...(data || []), ...boletosMedicoes];
+    
+    console.log(`Total de boletos combinados: ${allBoletos.length} (${data?.length || 0} da tabela boletos + ${boletosMedicoes.length} de medições)`);
+    
+    // Aplicar filtro de tipo após combinar (para incluir boletos de medições)
+    if (req.query.tipo) {
+      const antesFiltro = allBoletos.length;
+      allBoletos = allBoletos.filter(b => {
+        // Boletos de medições são sempre 'receber', então incluir se o filtro for 'receber'
+        if (b.origem === 'medicao') {
+          return req.query.tipo === 'receber';
+        }
+        return b.tipo === req.query.tipo;
+      });
+      console.log(`Após filtro de tipo '${req.query.tipo}': ${allBoletos.length} boletos (era ${antesFiltro})`);
+    }
+
+    // Aplicar paginação após todos os filtros
+    const totalBoletos = allBoletos.length;
+    const startIndex = (parseInt(page) - 1) * parseInt(limit);
+    const endIndex = startIndex + parseInt(limit);
+    const boletosPaginados = allBoletos.slice(startIndex, endIndex);
+
+    console.log(`Retornando ${boletosPaginados.length} boletos (página ${page}, total: ${totalBoletos})`);
 
     res.json({
       success: true,
-      data: allBoletos,
+      data: boletosPaginados,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: (count || 0) + boletosMedicoes.length,
-        pages: Math.ceil(((count || 0) + boletosMedicoes.length) / limit)
+        total: totalBoletos,
+        pages: Math.ceil(totalBoletos / parseInt(limit))
       }
     });
   } catch (error) {
@@ -215,6 +258,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         data_vencimento: data.data_vencimento || data.created_at,
         data_pagamento: data.status === 'pago' ? data.updated_at : null,
         status: data.status === 'pago' ? 'pago' : data.status === 'cancelado' ? 'cancelado' : 'pendente',
+        tipo: 'receber', // Boletos de medições são sempre "a receber"
         arquivo_boleto: data.caminho_arquivo,
         observacoes: data.observacoes,
         created_at: data.created_at,
@@ -238,7 +282,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
         *,
         clientes(id, nome, cnpj),
         obras(id, nome),
-        medicoes_mensais(id, numero, periodo)
+        medicoes_mensais(id, numero, periodo),
+        contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
       `)
       .eq('id', id)
       .single();
@@ -292,7 +337,8 @@ router.post('/', authenticateToken, async (req, res) => {
         *,
         clientes(id, nome, cnpj),
         obras(id, nome),
-        medicoes_mensais(id, numero, periodo)
+        medicoes_mensais(id, numero, periodo),
+        contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
       `)
       .single();
 
@@ -338,7 +384,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
         *,
         clientes(id, nome, cnpj),
         obras(id, nome),
-        medicoes_mensais(id, numero, periodo)
+        medicoes_mensais(id, numero, periodo),
+        contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
       `)
       .single();
 
@@ -448,7 +495,8 @@ router.post('/:id/pagar', authenticateToken, async (req, res) => {
         *,
         clientes(id, nome, cnpj),
         obras(id, nome),
-        medicoes_mensais(id, numero, periodo)
+        medicoes_mensais(id, numero, periodo),
+        contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
       `)
       .single();
 
@@ -549,7 +597,8 @@ router.post('/:id/upload', authenticateToken, upload.single('arquivo'), async (r
         *,
         clientes(id, nome, cnpj),
         obras(id, nome),
-        medicoes_mensais(id, numero, periodo)
+        medicoes_mensais(id, numero, periodo),
+        contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
       `)
       .single();
 

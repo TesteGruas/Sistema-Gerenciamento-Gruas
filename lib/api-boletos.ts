@@ -13,6 +13,7 @@ export interface Boleto {
   data_vencimento: string
   data_pagamento?: string
   status: 'pendente' | 'pago' | 'vencido' | 'cancelado'
+  tipo?: 'receber' | 'pagar'
   forma_pagamento?: string
   codigo_barras?: string
   linha_digitavel?: string
@@ -20,6 +21,7 @@ export interface Boleto {
   banco?: string
   agencia?: string
   conta?: string
+  banco_origem_id?: number
   arquivo_boleto?: string
   observacoes?: string
   created_at: string
@@ -39,6 +41,13 @@ export interface Boleto {
     numero: string
     periodo: string
   }
+  contas_bancarias?: {
+    id: number
+    banco: string
+    agencia: string
+    conta: string
+    tipo_conta: string
+  }
 }
 
 export interface BoletoCreate {
@@ -50,6 +59,7 @@ export interface BoletoCreate {
   valor: number
   data_emissao: string
   data_vencimento: string
+  tipo?: 'receber' | 'pagar'
   forma_pagamento?: string
   codigo_barras?: string
   linha_digitavel?: string
@@ -57,6 +67,7 @@ export interface BoletoCreate {
   banco?: string
   agencia?: string
   conta?: string
+  banco_origem_id?: number
   observacoes?: string
 }
 
@@ -66,6 +77,7 @@ export const boletosApi = {
     obra_id?: number
     medicao_id?: number
     status?: string
+    tipo?: 'receber' | 'pagar'
     search?: string
     page?: number
     limit?: number
@@ -77,6 +89,7 @@ export const boletosApi = {
     if (params?.obra_id) searchParams.append('obra_id', params.obra_id.toString())
     if (params?.medicao_id) searchParams.append('medicao_id', params.medicao_id.toString())
     if (params?.status) searchParams.append('status', params.status)
+    if (params?.tipo) searchParams.append('tipo', params.tipo)
     if (params?.search) searchParams.append('search', params.search)
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())

@@ -45,6 +45,7 @@ import {
 import { boletosApi, Boleto, BoletoCreate } from "@/lib/api-boletos"
 import { clientesApi } from "@/lib/api-clientes"
 import { obrasApi } from "@/lib/api-obras"
+import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -63,7 +64,7 @@ interface Obra {
 export default function BoletosPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState<'todos' | 'medicoes' | 'independentes'>('todos')
+  const [activeTab, setActiveTab] = useState<'receber' | 'pagar' | 'todos' | 'medicoes' | 'independentes'>('receber')
   
   // Estados
   const [boletos, setBoletos] = useState<Boleto[]>([])
@@ -72,6 +73,7 @@ export default function BoletosPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [isCreateBancoDialogOpen, setIsCreateBancoDialogOpen] = useState(false)
   const [editingBoleto, setEditingBoleto] = useState<Boleto | null>(null)
   const [viewingBoleto, setViewingBoleto] = useState<Boleto | null>(null)
   const [uploadingBoleto, setUploadingBoleto] = useState<Boleto | null>(null)
@@ -92,6 +94,17 @@ export default function BoletosPage() {
   // Dados para formulários
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [obras, setObras] = useState<Obra[]>([])
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([])
+  
+  // Formulário de banco
+  const [bancoFormData, setBancoFormData] = useState({
+    banco: '',
+    agencia: '',
+    conta: '',
+    tipo_conta: 'corrente' as 'corrente' | 'poupanca' | 'investimento',
+    saldo_atual: 0,
+    status: 'ativa' as 'ativa' | 'inativa' | 'bloqueada'
+  })
   
   // Formulário
   const [formData, setFormData] = useState<BoletoCreate>({
@@ -103,7 +116,9 @@ export default function BoletosPage() {
     valor: 0,
     data_emissao: new Date().toISOString().split('T')[0],
     data_vencimento: '',
+    tipo: 'receber',
     forma_pagamento: '',
+    banco_origem_id: undefined,
     observacoes: ''
   })
 
@@ -128,6 +143,23 @@ export default function BoletosPage() {
       if (obrasResponse.success) {
         setObras(obrasResponse.data || [])
       }
+      
+      // Carregar contas bancárias
+      try {
+        const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const contasResponse = await fetch(`${apiUrl}/api/contas-bancarias`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        const contasData = await contasResponse.json()
+        if (contasData.success) {
+          setContasBancarias(contasData.data || [])
+        }
+      } catch (error) {
+        console.error('Erro ao carregar contas bancárias:', error)
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     }
@@ -136,8 +168,18 @@ export default function BoletosPage() {
   const carregarBoletos = useCallback(async () => {
     try {
       setLoading(true)
+      
+      // Determinar tipo baseado na aba ativa
+      let tipo: 'receber' | 'pagar' | undefined = undefined
+      if (activeTab === 'receber') {
+        tipo = 'receber'
+      } else if (activeTab === 'pagar') {
+        tipo = 'pagar'
+      }
+      
       const response = await boletosApi.list({
         status: statusFilter !== 'all' ? statusFilter : undefined,
+        tipo: tipo,
         search: searchTerm || undefined,
         page: currentPage,
         limit: itemsPerPage,
@@ -147,7 +189,7 @@ export default function BoletosPage() {
       if (response.success) {
         let boletosFiltrados = response.data || []
         
-        // Filtrar por aba
+        // Filtrar por aba (mantendo compatibilidade com abas antigas)
         if (activeTab === 'medicoes') {
           boletosFiltrados = boletosFiltrados.filter(b => b.medicao_id || (b as any).origem === 'medicao')
         } else if (activeTab === 'independentes') {
@@ -291,7 +333,9 @@ export default function BoletosPage() {
       valor: boleto.valor,
       data_emissao: boleto.data_emissao,
       data_vencimento: boleto.data_vencimento,
+      tipo: boleto.tipo || 'receber',
       forma_pagamento: boleto.forma_pagamento || '',
+      banco_origem_id: boleto.banco_origem_id,
       observacoes: boleto.observacoes || ''
     })
     setIsEditDialogOpen(true)
@@ -388,10 +432,62 @@ export default function BoletosPage() {
       valor: 0,
       data_emissao: new Date().toISOString().split('T')[0],
       data_vencimento: '',
+      tipo: activeTab === 'pagar' ? 'pagar' : 'receber',
       forma_pagamento: '',
+      banco_origem_id: undefined,
       observacoes: ''
     })
     setFormFile(null)
+  }
+  
+  const handleCreateBanco = async () => {
+    try {
+      // Usar a API diretamente do backend (contas-bancarias)
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${apiUrl}/api/contas-bancarias`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          banco: bancoFormData.banco,
+          agencia: bancoFormData.agencia,
+          conta: bancoFormData.conta,
+          tipo_conta: bancoFormData.tipo_conta,
+          saldo_atual: bancoFormData.saldo_atual,
+          status: bancoFormData.status
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast({
+          title: "Sucesso",
+          description: "Banco criado com sucesso"
+        })
+        setIsCreateBancoDialogOpen(false)
+        setBancoFormData({
+          banco: '',
+          agencia: '',
+          conta: '',
+          tipo_conta: 'corrente',
+          saldo_atual: 0,
+          status: 'ativa'
+        })
+        await carregarDados()
+      } else {
+        throw new Error(data.message || 'Erro ao criar banco')
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar banco",
+        variant: "destructive"
+      })
+    }
   }
 
   const formatCurrency = (value: number) => {
@@ -432,22 +528,33 @@ export default function BoletosPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Boletos</h1>
-          <p className="text-gray-600">Gerenciamento de boletos a receber (de medições e independentes)</p>
+          <p className="text-gray-600">Gerenciamento de boletos a receber e a pagar</p>
         </div>
-        <Button 
-          onClick={() => {
-            resetForm()
-            setIsCreateDialogOpen(true)
-          }}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Boleto
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => setIsCreateBancoDialogOpen(true)}
+          >
+            <Building2 className="w-4 h-4 mr-2" />
+            Novo Banco
+          </Button>
+          <Button 
+            onClick={() => {
+              resetForm()
+              setIsCreateDialogOpen(true)
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Boleto
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
         <TabsList>
+          <TabsTrigger value="receber">Boletos a Receber</TabsTrigger>
+          <TabsTrigger value="pagar">Boletos a Pagar</TabsTrigger>
           <TabsTrigger value="todos">Todos os Boletos</TabsTrigger>
           <TabsTrigger value="medicoes">Boletos de Medições</TabsTrigger>
           <TabsTrigger value="independentes">Boletos Independentes</TabsTrigger>
@@ -457,12 +564,16 @@ export default function BoletosPage() {
           <Card>
             <CardHeader>
               <CardTitle>
-                {activeTab === 'medicoes' ? 'Boletos de Medições' : 
+                {activeTab === 'receber' ? 'Boletos a Receber' :
+                 activeTab === 'pagar' ? 'Boletos a Pagar' :
+                 activeTab === 'medicoes' ? 'Boletos de Medições' : 
                  activeTab === 'independentes' ? 'Boletos Independentes' : 
                  'Todos os Boletos'}
               </CardTitle>
               <CardDescription>
-                {activeTab === 'medicoes' ? 'Boletos vinculados às medições mensais' :
+                {activeTab === 'receber' ? 'Boletos que devem ser recebidos' :
+                 activeTab === 'pagar' ? 'Boletos que devem ser pagos' :
+                 activeTab === 'medicoes' ? 'Boletos vinculados às medições mensais' :
                  activeTab === 'independentes' ? 'Boletos criados independentemente de medições' :
                  'Todos os boletos do sistema'}
               </CardDescription>
@@ -519,6 +630,7 @@ export default function BoletosPage() {
                         <TableHead>Descrição</TableHead>
                         <TableHead>Cliente</TableHead>
                         <TableHead>Origem</TableHead>
+                        <TableHead>Banco</TableHead>
                         <TableHead>Emissão</TableHead>
                         <TableHead>Vencimento</TableHead>
                         <TableHead>Valor</TableHead>
@@ -555,6 +667,16 @@ export default function BoletosPage() {
                                 </div>
                               ) : (
                                 <Badge variant="outline">Independente</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {boleto.contas_bancarias ? (
+                                <div className="flex items-center gap-2">
+                                  <CreditCard className="w-4 h-4 text-gray-400" />
+                                  <span className="text-sm">{boleto.contas_bancarias.banco}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
                               )}
                             </TableCell>
                             <TableCell>{formatDate(boleto.data_emissao)}</TableCell>
@@ -703,7 +825,7 @@ export default function BoletosPage() {
         }
       }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+            <DialogHeader>
             <DialogTitle>
               {isEditDialogOpen ? 'Editar Boleto' : 'Novo Boleto'}
             </DialogTitle>
@@ -715,6 +837,21 @@ export default function BoletosPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <Label htmlFor="tipo">Tipo *</Label>
+                <Select 
+                  value={formData.tipo || 'receber'} 
+                  onValueChange={(value) => setFormData({ ...formData, tipo: value as 'receber' | 'pagar' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="receber">A Receber</SelectItem>
+                    <SelectItem value="pagar">A Pagar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label htmlFor="numero_boleto">Número do Boleto *</Label>
                 <Input
                   id="numero_boleto"
@@ -723,18 +860,19 @@ export default function BoletosPage() {
                   required
                 />
               </div>
-              <div>
-                <Label htmlFor="valor">Valor (R$) *</Label>
-                <Input
-                  id="valor"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.valor}
-                  onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="valor">Valor (R$) *</Label>
+              <Input
+                id="valor"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.valor}
+                onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
+                required
+              />
             </div>
 
             <div>
@@ -811,14 +949,46 @@ export default function BoletosPage() {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
-              <Input
-                id="forma_pagamento"
-                value={formData.forma_pagamento}
-                onChange={(e) => setFormData({ ...formData, forma_pagamento: e.target.value })}
-                placeholder="Ex: Boleto bancário, PIX, etc."
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="banco_origem_id">Banco de Origem</Label>
+                <div className="flex gap-2">
+                  <Select 
+                    value={formData.banco_origem_id?.toString() || 'none'} 
+                    onValueChange={(value) => setFormData({ ...formData, banco_origem_id: value && value !== 'none' ? parseInt(value) : undefined })}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Selecione o banco (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum banco</SelectItem>
+                      {contasBancarias.map(conta => (
+                        <SelectItem key={conta.id} value={conta.id.toString()}>
+                          {conta.banco} - Ag: {conta.agencia} - Conta: {conta.conta}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsCreateBancoDialogOpen(true)}
+                    title="Criar novo banco"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
+                <Input
+                  id="forma_pagamento"
+                  value={formData.forma_pagamento}
+                  onChange={(e) => setFormData({ ...formData, forma_pagamento: e.target.value })}
+                  placeholder="Ex: Boleto bancário, PIX, etc."
+                />
+              </div>
             </div>
 
             <div>
@@ -965,6 +1135,25 @@ export default function BoletosPage() {
                 </div>
               )}
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Tipo</Label>
+                  <p className="text-lg">
+                    <Badge variant={viewingBoleto.tipo === 'pagar' ? 'destructive' : 'default'}>
+                      {viewingBoleto.tipo === 'pagar' ? 'A Pagar' : 'A Receber'}
+                    </Badge>
+                  </p>
+                </div>
+                {viewingBoleto.contas_bancarias && (
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Banco de Origem</Label>
+                    <p className="text-lg">
+                      {viewingBoleto.contas_bancarias.banco} - Ag: {viewingBoleto.contas_bancarias.agencia} - Conta: {viewingBoleto.contas_bancarias.conta}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Data de Emissão</Label>
@@ -1096,6 +1285,91 @@ export default function BoletosPage() {
               disabled={!uploadFile || uploading}
             >
               {uploading ? 'Enviando...' : 'Enviar Arquivo'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Criar Banco */}
+      <Dialog open={isCreateBancoDialogOpen} onOpenChange={setIsCreateBancoDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Novo Banco</DialogTitle>
+            <DialogDescription>
+              Cadastre uma nova conta bancária
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="banco_nome">Nome do Banco *</Label>
+              <Input
+                id="banco_nome"
+                value={bancoFormData.banco}
+                onChange={(e) => setBancoFormData({ ...bancoFormData, banco: e.target.value })}
+                placeholder="Ex: Banco do Brasil, Itaú, etc."
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="banco_agencia">Agência *</Label>
+                <Input
+                  id="banco_agencia"
+                  value={bancoFormData.agencia}
+                  onChange={(e) => setBancoFormData({ ...bancoFormData, agencia: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="banco_conta">Conta *</Label>
+                <Input
+                  id="banco_conta"
+                  value={bancoFormData.conta}
+                  onChange={(e) => setBancoFormData({ ...bancoFormData, conta: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="banco_tipo">Tipo de Conta *</Label>
+                <Select 
+                  value={bancoFormData.tipo_conta} 
+                  onValueChange={(value) => setBancoFormData({ ...bancoFormData, tipo_conta: value as 'corrente' | 'poupanca' | 'investimento' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="corrente">Conta Corrente</SelectItem>
+                    <SelectItem value="poupanca">Poupança</SelectItem>
+                    <SelectItem value="investimento">Investimento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="banco_saldo">Saldo Inicial (R$)</Label>
+                <Input
+                  id="banco_saldo"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={bancoFormData.saldo_atual}
+                  onChange={(e) => setBancoFormData({ ...bancoFormData, saldo_atual: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateBancoDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateBanco}>
+              Criar Banco
             </Button>
           </DialogFooter>
         </DialogContent>
