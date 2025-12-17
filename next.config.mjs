@@ -49,6 +49,13 @@ const nextConfig = {
   },
 
   // ==================================
+  // 🔧 TURBOPACK CONFIGURATION (Next.js 16+)
+  // ==================================
+  turbopack: {
+    // Configuração vazia para usar webpack customizado
+  },
+
+  // ==================================
   // 🔧 WEBPACK CUSTOMIZATION
   // ==================================
   webpack: (config, { dev, isServer }) => {
@@ -257,9 +264,7 @@ const nextConfig = {
   // ==================================
   
   // Ignorar erros durante build (REMOVER EM PRODUÇÃO)
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // eslint config removido - usar next lint diretamente
   typescript: {
     ignoreBuildErrors: true,
   },
