@@ -1,7 +1,16 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Output standalone apenas em produção
   ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' } : {}),
+  
+  // Resolver aviso de múltiplos lockfiles
+  outputFileTracingRoot: __dirname,
   // ==================================
   // ⚡ OTIMIZAÇÕES DE PERFORMANCE
   // ==================================
