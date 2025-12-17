@@ -1787,4 +1787,255 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
   }
 });
 
+// ==================== ITENS DA NOTA FISCAL ====================
+
+// Schema de validação para item de nota fiscal
+const notaFiscalItemSchema = Joi.object({
+  nota_fiscal_id: Joi.number().integer().positive().required(),
+  codigo_produto: Joi.string().max(100).allow(null, '').optional(),
+  descricao: Joi.string().required(),
+  ncm_sh: Joi.string().max(10).allow(null, '').optional(),
+  cfop: Joi.string().max(10).allow(null, '').optional(),
+  unidade: Joi.string().max(10).required(),
+  quantidade: Joi.number().min(0).required(),
+  preco_unitario: Joi.number().min(0).required(),
+  preco_total: Joi.number().min(0).required(),
+  csosn: Joi.string().max(10).allow(null, '').optional(),
+  base_calculo_icms: Joi.number().min(0).allow(null).optional(),
+  percentual_icms: Joi.number().min(0).max(100).allow(null).optional(),
+  valor_icms: Joi.number().min(0).allow(null).optional(),
+  percentual_ipi: Joi.number().min(0).max(100).allow(null).optional(),
+  valor_ipi: Joi.number().min(0).allow(null).optional(),
+  ordem: Joi.number().integer().min(1).optional()
+});
+
+/**
+ * @swagger
+ * /api/notas-fiscais/{id}/itens:
+ *   get:
+ *     summary: Lista todos os itens de uma nota fiscal
+ *     tags: [Notas Fiscais]
+ */
+router.get('/:id/itens', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .select('*')
+      .eq('nota_fiscal_id', id)
+      .order('id', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Erro ao listar itens da nota fiscal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notas-fiscais/{id}/itens:
+ *   post:
+ *     summary: Adiciona um item a uma nota fiscal
+ *     tags: [Notas Fiscais]
+ */
+router.post('/:id/itens', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const itemData = {
+      ...req.body,
+      nota_fiscal_id: parseInt(id)
+    };
+
+    const { error: validationError, value } = notaFiscalItemSchema.validate(itemData);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        error: validationError.details[0].message
+      });
+    }
+
+    // Calcular preco_total se não fornecido
+    if (!value.preco_total) {
+      value.preco_total = value.quantidade * value.preco_unitario;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .insert([value])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Atualizar valor total da nota fiscal
+    const { data: itens } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .select('valor_total')
+      .eq('nota_fiscal_id', id);
+
+    const valorTotal = itens?.reduce((sum, item) => sum + parseFloat(item.preco_total || 0), 0) || 0;
+
+    await supabaseAdmin
+      .from('notas_fiscais')
+      .update({ valor_total: valorTotal })
+      .eq('id', id);
+
+    res.status(201).json({
+      success: true,
+      data,
+      message: 'Item adicionado com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao adicionar item à nota fiscal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notas-fiscais/itens/{itemId}:
+ *   put:
+ *     summary: Atualiza um item de nota fiscal
+ *     tags: [Notas Fiscais]
+ */
+router.put('/itens/:itemId', async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const updateData = { ...req.body };
+    delete updateData.nota_fiscal_id; // Não permitir alterar a nota fiscal
+
+    const { error: validationError, value } = notaFiscalItemSchema.fork(['nota_fiscal_id'], (schema) => schema.optional()).validate(updateData);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        error: validationError.details[0].message
+      });
+    }
+
+    // Calcular preco_total se não fornecido
+    if (value.quantidade && value.preco_unitario && !value.preco_total) {
+      value.preco_total = value.quantidade * value.preco_unitario;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .update(value)
+      .eq('id', itemId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Buscar nota_fiscal_id para atualizar valor total
+    const { data: item } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .select('nota_fiscal_id')
+      .eq('id', itemId)
+      .single();
+
+    if (item) {
+      const { data: itens } = await supabaseAdmin
+        .from('notas_fiscais_itens')
+        .select('valor_total')
+        .eq('nota_fiscal_id', item.nota_fiscal_id);
+
+      const valorTotal = itens?.reduce((sum, item) => sum + parseFloat(item.preco_total || 0), 0) || 0;
+
+      await supabaseAdmin
+        .from('notas_fiscais')
+        .update({ valor_total: valorTotal })
+        .eq('id', item.nota_fiscal_id);
+    }
+
+    res.json({
+      success: true,
+      data,
+      message: 'Item atualizado com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar item da nota fiscal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notas-fiscais/itens/{itemId}:
+ *   delete:
+ *     summary: Remove um item de nota fiscal
+ *     tags: [Notas Fiscais]
+ */
+router.delete('/itens/:itemId', async (req, res) => {
+  try {
+    const { itemId } = req.params;
+
+    // Buscar nota_fiscal_id antes de deletar
+    const { data: item } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .select('nota_fiscal_id')
+      .eq('id', itemId)
+      .single();
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item não encontrado'
+      });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .delete()
+      .eq('id', itemId);
+
+    if (error) throw error;
+
+    // Atualizar valor total da nota fiscal
+    const { data: itens } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .select('valor_total')
+      .eq('nota_fiscal_id', item.nota_fiscal_id);
+
+    const valorTotal = itens?.reduce((sum, item) => sum + parseFloat(item.preco_total || 0), 0) || 0;
+
+    await supabaseAdmin
+      .from('notas_fiscais')
+      .update({ valor_total: valorTotal })
+      .eq('id', item.nota_fiscal_id);
+
+    res.json({
+      success: true,
+      message: 'Item removido com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao remover item da nota fiscal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
 export default router;

@@ -151,6 +151,27 @@ export const notasFiscaisApi = {
       }
     })
     return response.data
+  },
+
+  // Itens da nota fiscal
+  async listarItens(notaFiscalId: number) {
+    const response = await api.get(`/notas-fiscais/${notaFiscalId}/itens`)
+    return response.data
+  },
+
+  async adicionarItem(notaFiscalId: number, item: any) {
+    const response = await api.post(`/notas-fiscais/${notaFiscalId}/itens`, item)
+    return response.data
+  },
+
+  async atualizarItem(itemId: number, item: any) {
+    const response = await api.put(`/notas-fiscais/itens/${itemId}`, item)
+    return response.data
+  },
+
+  async deletarItem(itemId: number) {
+    const response = await api.delete(`/notas-fiscais/itens/${itemId}`)
+    return response.data
   }
 }
 

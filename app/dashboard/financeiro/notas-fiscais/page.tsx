@@ -46,7 +46,8 @@ import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-f
 import { clientesApi } from "@/lib/api-clientes"
 import { fornecedoresApi } from "@/lib/api-fornecedores"
 import { medicoesMensaisApi } from "@/lib/api-medicoes-mensais"
-import { locacoesApi } from "@/lib/api-locacoes"
+import { locacoesApi, Locacao as LocacaoFull } from "@/lib/api-locacoes"
+import { gruasApi } from "@/lib/api-gruas"
 import { apiCompras } from "@/lib/api-compras"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -72,6 +73,9 @@ interface Medicao {
 interface Locacao {
   id: number
   numero: string
+  equipamento_id?: string
+  tipo_equipamento?: 'grua' | 'plataforma'
+  status?: string
 }
 
 interface Compra {
@@ -132,6 +136,36 @@ export default function NotasFiscaisPage() {
     observacoes: ''
   })
 
+  // Itens da nota fiscal
+  interface NotaFiscalItem {
+    id?: number
+    codigo_produto?: string
+    descricao: string
+    ncm_sh?: string
+    cfop?: string
+    unidade: string
+    quantidade: number
+    preco_unitario: number
+    preco_total: number
+    csosn?: string
+    base_calculo_icms?: number
+    percentual_icms?: number
+    valor_icms?: number
+    percentual_ipi?: number
+    valor_ipi?: number
+  }
+
+  const [itens, setItens] = useState<NotaFiscalItem[]>([])
+  const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<NotaFiscalItem | null>(null)
+  const [itemFormData, setItemFormData] = useState<NotaFiscalItem>({
+    descricao: '',
+    unidade: 'UN',
+    quantidade: 1,
+    preco_unitario: 0,
+    preco_total: 0
+  })
+
   useEffect(() => {
     carregarDados()
   }, [])
@@ -139,6 +173,76 @@ export default function NotasFiscaisPage() {
   useEffect(() => {
     carregarNotasFiscais()
   }, [activeTab, currentPage, statusFilter, searchTerm])
+
+  // Estado para armazenar informações da grua carregada
+  const [gruaInfo, setGruaInfo] = useState<{id: string, modelo?: string, fabricante?: string} | null>(null)
+
+  // Buscar grua automaticamente quando tipo for locação e cliente for selecionado
+  useEffect(() => {
+    const buscarGruaAutomatica = async () => {
+      if (
+        formData.tipo_nota === 'nf_locacao' && 
+        formData.cliente_id && 
+        activeTab === 'saida'
+      ) {
+        try {
+          // Buscar locações ativas do cliente
+          const response = await locacoesApi.list({
+            cliente_id: formData.cliente_id,
+            status: 'ativa',
+            limit: 10
+          })
+
+          // A resposta pode vir em response.data ou response.data.data
+          const locacoesData = response.data?.data || response.data || []
+          
+          if (locacoesData.length > 0) {
+            // Pegar a primeira locação ativa
+            const locacaoAtiva = locacoesData[0]
+            
+            // Atualizar o campo locacao_id (para relacionamento no backend)
+            setFormData(prev => ({
+              ...prev,
+              locacao_id: locacaoAtiva.id
+            }))
+
+            // Se a locação tiver equipamento_id (grua), buscar informações da grua
+            if (locacaoAtiva.equipamento_id && locacaoAtiva.tipo_equipamento === 'grua') {
+              try {
+                const gruaResponse = await gruasApi.obterGrua(locacaoAtiva.equipamento_id)
+                
+                if (gruaResponse.success && gruaResponse.data) {
+                  setGruaInfo({
+                    id: locacaoAtiva.equipamento_id,
+                    modelo: gruaResponse.data.modelo || gruaResponse.data.model,
+                    fabricante: gruaResponse.data.fabricante
+                  })
+
+                  toast({
+                    title: "Grua encontrada",
+                    description: `Grua ${gruaResponse.data.modelo || gruaResponse.data.model || locacaoAtiva.equipamento_id} carregada automaticamente da locação ${locacaoAtiva.numero}`,
+                  })
+                }
+              } catch (gruaError) {
+                console.error('Erro ao buscar informações da grua:', gruaError)
+                // Mesmo sem buscar detalhes, armazenar o ID
+                setGruaInfo({
+                  id: locacaoAtiva.equipamento_id
+                })
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar grua automática:', error)
+        }
+      } else {
+        // Limpar informações da grua quando não for mais locação
+        setGruaInfo(null)
+      }
+    }
+
+    buscarGruaAutomatica()
+  }, [formData.tipo_nota, formData.cliente_id, activeTab, toast])
 
   const carregarDados = async () => {
     try {
@@ -242,14 +346,34 @@ export default function NotasFiscaisPage() {
         tipo: activeTab
       })
       
-      if (response.success) {
-        // Se houver arquivo, fazer upload após criar
-        if (formFile && response.data?.id) {
+      if (response.success && response.data?.id) {
+        const notaId = response.data.id
+
+        // Salvar itens se houver
+        if (itens.length > 0) {
           try {
-            await notasFiscaisApi.uploadFile(response.data.id, formFile)
+            for (const item of itens) {
+              await notasFiscaisApi.adicionarItem(notaId, {
+                ...item,
+                nota_fiscal_id: notaId
+              })
+            }
+          } catch (itensError: any) {
+            toast({
+              title: "Aviso",
+              description: "Nota fiscal criada, mas houve erro ao salvar os itens: " + (itensError.message || "Erro desconhecido"),
+              variant: "destructive"
+            })
+          }
+        }
+
+        // Se houver arquivo, fazer upload após criar
+        if (formFile) {
+          try {
+            await notasFiscaisApi.uploadFile(notaId, formFile)
             toast({
               title: "Sucesso",
-              description: "Nota fiscal criada e arquivo enviado com sucesso"
+              description: "Nota fiscal criada, itens salvos e arquivo enviado com sucesso"
             })
           } catch (uploadError: any) {
             toast({
@@ -261,7 +385,7 @@ export default function NotasFiscaisPage() {
         } else {
           toast({
             title: "Sucesso",
-            description: "Nota fiscal criada com sucesso"
+            description: itens.length > 0 ? "Nota fiscal criada e itens salvos com sucesso" : "Nota fiscal criada com sucesso"
           })
         }
         setIsCreateDialogOpen(false)
@@ -312,6 +436,46 @@ export default function NotasFiscaisPage() {
       const response = await notasFiscaisApi.update(editingNota.id, formData)
       
       if (response.success) {
+        // Atualizar itens
+        try {
+          // Buscar itens existentes
+          const itensExistentesResponse = await notasFiscaisApi.listarItens(editingNota.id)
+          const itensExistentes = itensExistentesResponse.success ? itensExistentesResponse.data || [] : []
+          const itensExistentesIds = itensExistentes.map((item: any) => item.id)
+          const itensNovosIds = itens.filter(item => item.id).map(item => item.id!)
+
+          // Deletar itens removidos
+          for (const itemExistente of itensExistentes) {
+            if (!itensNovosIds.includes(itemExistente.id)) {
+              await notasFiscaisApi.deletarItem(itemExistente.id)
+            }
+          }
+
+          // Adicionar ou atualizar itens
+          for (const item of itens) {
+            if (item.id) {
+              // Atualizar item existente
+              await notasFiscaisApi.atualizarItem(item.id, {
+                ...item,
+                nota_fiscal_id: editingNota.id
+              })
+            } else {
+              // Adicionar novo item
+              await notasFiscaisApi.adicionarItem(editingNota.id, {
+                ...item,
+                nota_fiscal_id: editingNota.id
+              })
+            }
+          }
+        } catch (itensError: any) {
+          console.error('Erro ao atualizar itens:', itensError)
+          toast({
+            title: "Aviso",
+            description: "Nota fiscal atualizada, mas houve erro ao atualizar os itens: " + (itensError.message || "Erro desconhecido"),
+            variant: "destructive"
+          })
+        }
+
         // Se houver arquivo, fazer upload após atualizar
         if (formFile) {
           try {
@@ -330,7 +494,7 @@ export default function NotasFiscaisPage() {
         } else {
           toast({
             title: "Sucesso",
-            description: "Nota fiscal atualizada com sucesso"
+            description: itens.length > 0 ? "Nota fiscal e itens atualizados com sucesso" : "Nota fiscal atualizada com sucesso"
           })
         }
         setIsEditDialogOpen(false)
@@ -367,7 +531,7 @@ export default function NotasFiscaisPage() {
     }
   }
 
-  const handleEdit = (nota: NotaFiscal) => {
+  const handleEdit = async (nota: NotaFiscal) => {
     setEditingNota(nota)
     setFormData({
       numero_nf: nota.numero_nf,
@@ -385,6 +549,34 @@ export default function NotasFiscaisPage() {
       tipo_nota: nota.tipo_nota,
       observacoes: nota.observacoes || ''
     })
+    
+    // Carregar itens da nota fiscal
+    try {
+      const itensResponse = await notasFiscaisApi.listarItens(nota.id)
+      if (itensResponse.success && itensResponse.data) {
+        setItens(itensResponse.data.map((item: any) => ({
+          id: item.id,
+          codigo_produto: item.codigo_produto,
+          descricao: item.descricao,
+          ncm_sh: item.ncm_sh,
+          cfop: item.cfop,
+          unidade: item.unidade,
+          quantidade: parseFloat(item.quantidade),
+          preco_unitario: parseFloat(item.preco_unitario),
+          preco_total: parseFloat(item.preco_total),
+          csosn: item.csosn,
+          base_calculo_icms: item.base_calculo_icms ? parseFloat(item.base_calculo_icms) : undefined,
+          percentual_icms: item.percentual_icms ? parseFloat(item.percentual_icms) : undefined,
+          valor_icms: item.valor_icms ? parseFloat(item.valor_icms) : undefined,
+          percentual_ipi: item.percentual_ipi ? parseFloat(item.percentual_ipi) : undefined,
+          valor_ipi: item.valor_ipi ? parseFloat(item.valor_ipi) : undefined
+        })))
+      }
+    } catch (error) {
+      console.error('Erro ao carregar itens:', error)
+      setItens([])
+    }
+    
     setIsEditDialogOpen(true)
   }
 
@@ -501,6 +693,8 @@ export default function NotasFiscaisPage() {
       observacoes: ''
     })
     setFormFile(null)
+    setItens([])
+    setGruaInfo(null)
   }
 
   const formatCurrency = (value: number) => {
@@ -1146,24 +1340,22 @@ export default function NotasFiscaisPage() {
                         </Select>
                       </div>
                     )}
-                    {(formData.tipo_nota === 'nf_locacao' || formData.tipo_nota === 'locacao') && (
+                    {formData.tipo_nota === 'nf_locacao' && gruaInfo && (
                       <div>
-                        <Label htmlFor="locacao_id">Locação</Label>
-                        <Select 
-                          value={formData.locacao_id?.toString() || ''} 
-                          onValueChange={(value) => setFormData({ ...formData, locacao_id: parseInt(value) })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione a locação" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {locacoes.map(locacao => (
-                              <SelectItem key={locacao.id} value={locacao.id.toString()}>
-                                {locacao.numero}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Label>Grua (Carregada Automaticamente)</Label>
+                        <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                          <span className="font-medium">
+                            {gruaInfo.modelo && gruaInfo.fabricante 
+                              ? `${gruaInfo.fabricante} - ${gruaInfo.modelo}`
+                              : gruaInfo.modelo 
+                              ? gruaInfo.modelo
+                              : `Grua ID: ${gruaInfo.id}`
+                            }
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Grua carregada automaticamente da locação ativa do cliente
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1264,6 +1456,110 @@ export default function NotasFiscaisPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Seção de Itens/Produtos/Serviços */}
+            <div className="space-y-4 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-semibold">Itens da Nota Fiscal</Label>
+                  <p className="text-sm text-muted-foreground">Adicione produtos ou serviços desta nota fiscal</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setItemFormData({
+                      descricao: '',
+                      unidade: 'UN',
+                      quantidade: 1,
+                      preco_unitario: 0,
+                      preco_total: 0
+                    })
+                    setEditingItem(null)
+                    setIsItemDialogOpen(true)
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Item
+                </Button>
+              </div>
+
+              {itens.length > 0 ? (
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[50px]">#</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead className="w-[80px]">Unidade</TableHead>
+                        <TableHead className="w-[100px]">Quantidade</TableHead>
+                        <TableHead className="w-[120px]">Valor Unit.</TableHead>
+                        <TableHead className="w-[120px]">Valor Total</TableHead>
+                        <TableHead className="w-[100px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {itens.map((item, index) => (
+                        <TableRow key={item.id || index}>
+                          <TableCell>{index + 1}</TableCell>
+                          <TableCell className="font-medium">{item.descricao}</TableCell>
+                          <TableCell>{item.unidade}</TableCell>
+                          <TableCell>{item.quantidade.toFixed(3)}</TableCell>
+                          <TableCell>R$ {item.preco_unitario.toFixed(2)}</TableCell>
+                          <TableCell className="font-semibold">R$ {item.preco_total.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setItemFormData(item)
+                                  setEditingItem(item)
+                                  setIsItemDialogOpen(true)
+                                }}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setItens(itens.filter((_, i) => i !== index))
+                                  // Recalcular valor total
+                                  const novoTotal = itens
+                                    .filter((_, i) => i !== index)
+                                    .reduce((sum, item) => sum + item.preco_total, 0)
+                                  setFormData({ ...formData, valor_total: novoTotal })
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="p-4 border-t bg-muted/50">
+                    <div className="flex justify-end">
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">Total dos Itens:</p>
+                        <p className="text-lg font-bold">R$ {itens.reduce((sum, item) => sum + item.preco_total, 0).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="border rounded-lg p-8 text-center text-muted-foreground">
+                  <Receipt className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum item adicionado</p>
+                  <p className="text-sm">Clique em "Adicionar Item" para começar</p>
+                </div>
+              )}
             </div>
 
             <div>
@@ -1647,6 +1943,263 @@ export default function NotasFiscaisPage() {
               disabled={!importFile || importing}
             >
               {importing ? 'Importando...' : 'Importar XML'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Item da Nota Fiscal */}
+      <Dialog open={isItemDialogOpen} onOpenChange={setIsItemDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? 'Editar Item' : 'Adicionar Item'}</DialogTitle>
+            <DialogDescription>
+              Preencha os dados do produto ou serviço
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="item_codigo_produto">Código do Produto</Label>
+                <Input
+                  id="item_codigo_produto"
+                  value={itemFormData.codigo_produto || ''}
+                  onChange={(e) => setItemFormData({ ...itemFormData, codigo_produto: e.target.value })}
+                  placeholder="Código interno ou CFOP"
+                />
+              </div>
+              <div>
+                <Label htmlFor="item_ncm_sh">NCM/SH</Label>
+                <Input
+                  id="item_ncm_sh"
+                  value={itemFormData.ncm_sh || ''}
+                  onChange={(e) => setItemFormData({ ...itemFormData, ncm_sh: e.target.value })}
+                  placeholder="Ex: 8425.20.00"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="item_descricao">Descrição *</Label>
+              <Textarea
+                id="item_descricao"
+                value={itemFormData.descricao}
+                onChange={(e) => setItemFormData({ ...itemFormData, descricao: e.target.value })}
+                rows={2}
+                required
+                placeholder="Descrição completa do produto ou serviço"
+              />
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+              <div>
+                <Label htmlFor="item_unidade">Unidade *</Label>
+                <Select
+                  value={itemFormData.unidade}
+                  onValueChange={(value) => setItemFormData({ ...itemFormData, unidade: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UN">UN</SelectItem>
+                    <SelectItem value="KG">KG</SelectItem>
+                    <SelectItem value="M">M</SelectItem>
+                    <SelectItem value="M2">M²</SelectItem>
+                    <SelectItem value="M3">M³</SelectItem>
+                    <SelectItem value="LT">LT</SelectItem>
+                    <SelectItem value="PC">PC</SelectItem>
+                    <SelectItem value="CX">CX</SelectItem>
+                    <SelectItem value="HR">HR</SelectItem>
+                    <SelectItem value="DIA">DIA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="item_quantidade">Quantidade *</Label>
+                <Input
+                  id="item_quantidade"
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={itemFormData.quantidade}
+                  onChange={(e) => {
+                    const qtd = parseFloat(e.target.value) || 0
+                    const total = qtd * itemFormData.preco_unitario
+                    setItemFormData({ ...itemFormData, quantidade: qtd, preco_total: total })
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="item_preco_unitario">Valor Unitário (R$) *</Label>
+                <Input
+                  id="item_preco_unitario"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={itemFormData.preco_unitario}
+                  onChange={(e) => {
+                    const unit = parseFloat(e.target.value) || 0
+                    const total = itemFormData.quantidade * unit
+                    setItemFormData({ ...itemFormData, preco_unitario: unit, preco_total: total })
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="item_preco_total">Valor Total (R$)</Label>
+                <Input
+                  id="item_preco_total"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={itemFormData.preco_total.toFixed(2)}
+                  readOnly
+                  className="bg-muted"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="item_cfop">CFOP</Label>
+                <Input
+                  id="item_cfop"
+                  value={itemFormData.cfop || ''}
+                  onChange={(e) => setItemFormData({ ...itemFormData, cfop: e.target.value })}
+                  placeholder="Ex: 5102"
+                />
+              </div>
+              <div>
+                <Label htmlFor="item_csosn">CSOSN</Label>
+                <Input
+                  id="item_csosn"
+                  value={itemFormData.csosn || ''}
+                  onChange={(e) => setItemFormData({ ...itemFormData, csosn: e.target.value })}
+                  placeholder="Ex: 101"
+                />
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="text-sm font-semibold mb-2 block">Impostos (Opcional)</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="item_base_calculo_icms">Base Cálculo ICMS (R$)</Label>
+                  <Input
+                    id="item_base_calculo_icms"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.base_calculo_icms || ''}
+                    onChange={(e) => setItemFormData({ ...itemFormData, base_calculo_icms: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_percentual_icms">% ICMS</Label>
+                  <Input
+                    id="item_percentual_icms"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={itemFormData.percentual_icms || ''}
+                    onChange={(e) => setItemFormData({ ...itemFormData, percentual_icms: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_valor_icms">Valor ICMS (R$)</Label>
+                  <Input
+                    id="item_valor_icms"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.valor_icms || ''}
+                    onChange={(e) => setItemFormData({ ...itemFormData, valor_icms: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_percentual_ipi">% IPI</Label>
+                  <Input
+                    id="item_percentual_ipi"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={itemFormData.percentual_ipi || ''}
+                    onChange={(e) => setItemFormData({ ...itemFormData, percentual_ipi: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_valor_ipi">Valor IPI (R$)</Label>
+                  <Input
+                    id="item_valor_ipi"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.valor_ipi || ''}
+                    onChange={(e) => setItemFormData({ ...itemFormData, valor_ipi: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsItemDialogOpen(false)
+              setEditingItem(null)
+              setItemFormData({
+                descricao: '',
+                unidade: 'UN',
+                quantidade: 1,
+                preco_unitario: 0,
+                preco_total: 0
+              })
+            }}>
+              Cancelar
+            </Button>
+            <Button onClick={() => {
+              if (!itemFormData.descricao || !itemFormData.unidade || !itemFormData.quantidade || !itemFormData.preco_unitario) {
+                toast({
+                  title: "Erro",
+                  description: "Preencha todos os campos obrigatórios",
+                  variant: "destructive"
+                })
+                return
+              }
+
+              if (editingItem) {
+                // Editar item existente
+                const index = itens.findIndex(item => item === editingItem)
+                const novosItens = [...itens]
+                novosItens[index] = itemFormData
+                setItens(novosItens)
+              } else {
+                // Adicionar novo item
+                setItens([...itens, itemFormData])
+              }
+
+              // Recalcular valor total
+              const novosItens = editingItem 
+                ? itens.map((item, i) => item === editingItem ? itemFormData : item)
+                : [...itens, itemFormData]
+              const novoTotal = novosItens.reduce((sum, item) => sum + item.preco_total, 0)
+              setFormData({ ...formData, valor_total: novoTotal })
+
+              setIsItemDialogOpen(false)
+              setEditingItem(null)
+              setItemFormData({
+                descricao: '',
+                unidade: 'UN',
+                quantidade: 1,
+                preco_unitario: 0,
+                preco_total: 0
+              })
+            }}>
+              {editingItem ? 'Atualizar' : 'Adicionar'} Item
             </Button>
           </DialogFooter>
         </DialogContent>
