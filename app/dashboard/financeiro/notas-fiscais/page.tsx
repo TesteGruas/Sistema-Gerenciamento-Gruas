@@ -128,7 +128,7 @@ export default function NotasFiscaisPage() {
     valor_total: 0,
     tipo: 'saida',
     status: 'pendente',
-    tipo_nota: 'locacao',
+    tipo_nota: 'nf_servico',
     observacoes: ''
   })
 
@@ -209,6 +209,34 @@ export default function NotasFiscaisPage() {
 
   const handleCreate = async () => {
     try {
+      // Validações obrigatórias
+      if (activeTab === 'saida' && !formData.cliente_id) {
+        toast({
+          title: "Erro",
+          description: "Cliente é obrigatório para notas fiscais de saída",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (activeTab === 'entrada' && !formData.fornecedor_id) {
+        toast({
+          title: "Erro",
+          description: "Fornecedor é obrigatório para notas fiscais de entrada",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (!formData.numero_nf || !formData.data_emissao || !formData.valor_total) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios (Número NF, Data de Emissão, Valor Total)",
+          variant: "destructive"
+        })
+        return
+      }
+
       const response = await notasFiscaisApi.create({
         ...formData,
         tipo: activeTab
@@ -253,6 +281,34 @@ export default function NotasFiscaisPage() {
     if (!editingNota) return
     
     try {
+      // Validações obrigatórias
+      if (formData.tipo === 'saida' && !formData.cliente_id) {
+        toast({
+          title: "Erro",
+          description: "Cliente é obrigatório para notas fiscais de saída",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (formData.tipo === 'entrada' && !formData.fornecedor_id) {
+        toast({
+          title: "Erro",
+          description: "Fornecedor é obrigatório para notas fiscais de entrada",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (!formData.numero_nf || !formData.data_emissao || !formData.valor_total) {
+        toast({
+          title: "Erro",
+          description: "Preencha todos os campos obrigatórios (Número NF, Data de Emissão, Valor Total)",
+          variant: "destructive"
+        })
+        return
+      }
+
       const response = await notasFiscaisApi.update(editingNota.id, formData)
       
       if (response.success) {
@@ -441,7 +497,7 @@ export default function NotasFiscaisPage() {
       valor_total: 0,
       tipo: activeTab,
       status: 'pendente',
-      tipo_nota: activeTab === 'saida' ? 'locacao' : 'fornecedor',
+      tipo_nota: activeTab === 'saida' ? 'nf_locacao' : 'nf_servico',
       observacoes: ''
     })
     setFormFile(null)
@@ -472,11 +528,16 @@ export default function NotasFiscaisPage() {
 
   const getTipoNotaLabel = (tipo?: string) => {
     const tipos: Record<string, string> = {
-      locacao: 'Locação',
-      circulacao_equipamentos: 'Circulação de Equipamentos',
-      outros_equipamentos: 'Outros Equipamentos',
-      medicao: 'Medição',
-      fornecedor: 'Fornecedor'
+      nf_servico: 'NFs (Serviço)',
+      nf_locacao: 'NF Locação',
+      fatura: 'Fatura',
+      nfe_eletronica: 'NFe (Eletrônica)',
+      // Compatibilidade com valores antigos
+      locacao: 'NF Locação',
+      circulacao_equipamentos: 'NFs (Serviço)',
+      outros_equipamentos: 'NFs (Serviço)',
+      medicao: 'NFs (Serviço)',
+      fornecedor: 'NFs (Serviço)'
     }
     return tipos[tipo || ''] || tipo || '-'
   }
@@ -585,10 +646,10 @@ export default function NotasFiscaisPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos os Tipos</SelectItem>
-                      <SelectItem value="locacao">Locação</SelectItem>
-                      <SelectItem value="circulacao_equipamentos">Circulação de Equipamentos</SelectItem>
-                      <SelectItem value="outros_equipamentos">Outros Equipamentos</SelectItem>
-                      <SelectItem value="medicao">Medição</SelectItem>
+                      <SelectItem value="nf_servico">NFs (Serviço)</SelectItem>
+                      <SelectItem value="nf_locacao">NF Locação</SelectItem>
+                      <SelectItem value="fatura">Fatura</SelectItem>
+                      <SelectItem value="nfe_eletronica">NFe (Eletrônica)</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" onClick={carregarNotasFiscais}>
@@ -1029,17 +1090,17 @@ export default function NotasFiscaisPage() {
                   <div>
                     <Label htmlFor="tipo_nota">Tipo de Nota *</Label>
                     <Select 
-                      value={formData.tipo_nota || 'locacao'} 
+                      value={formData.tipo_nota || 'nf_servico'} 
                       onValueChange={(value) => setFormData({ ...formData, tipo_nota: value as any })}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="locacao">Locação</SelectItem>
-                        <SelectItem value="circulacao_equipamentos">Circulação de Equipamentos</SelectItem>
-                        <SelectItem value="outros_equipamentos">Outros Equipamentos</SelectItem>
-                        <SelectItem value="medicao">Medição</SelectItem>
+                        <SelectItem value="nf_servico">NFs (Serviço)</SelectItem>
+                        <SelectItem value="nf_locacao">NF Locação</SelectItem>
+                        <SelectItem value="fatura">Fatura</SelectItem>
+                        <SelectItem value="nfe_eletronica">NFe (Eletrônica)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1063,9 +1124,9 @@ export default function NotasFiscaisPage() {
                   </div>
                 </div>
 
-                {(formData.tipo_nota === 'medicao' || formData.tipo_nota === 'locacao') && (
+                {(formData.tipo_nota === 'nf_servico' || formData.tipo_nota === 'nf_locacao' || formData.tipo_nota === 'medicao' || formData.tipo_nota === 'locacao') && (
                   <div className="grid grid-cols-2 gap-4">
-                    {formData.tipo_nota === 'medicao' && (
+                    {(formData.tipo_nota === 'nf_servico' || formData.tipo_nota === 'medicao') && (
                       <div>
                         <Label htmlFor="medicao_id">Medição</Label>
                         <Select 
@@ -1085,7 +1146,7 @@ export default function NotasFiscaisPage() {
                         </Select>
                       </div>
                     )}
-                    {formData.tipo_nota === 'locacao' && (
+                    {(formData.tipo_nota === 'nf_locacao' || formData.tipo_nota === 'locacao') && (
                       <div>
                         <Label htmlFor="locacao_id">Locação</Label>
                         <Select 

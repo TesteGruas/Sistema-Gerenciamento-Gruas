@@ -35,20 +35,103 @@ const router = express.Router();
 // Schema de validação para nota fiscal
 const notaFiscalSchema = Joi.object({
   numero_nf: Joi.string().min(1).max(50).required(),
-  serie: Joi.string().max(10).optional(),
-  data_emissao: Joi.date().required(),
-  data_vencimento: Joi.date().optional(),
+  serie: Joi.string().max(10).allow('', null).optional(),
+  data_emissao: Joi.alternatives().try(Joi.date(), Joi.string()).required(),
+  data_vencimento: Joi.alternatives().try(Joi.date(), Joi.string(), Joi.valid(null, '')).allow(null, '').optional(),
   valor_total: Joi.number().min(0).required(),
   tipo: Joi.string().valid('entrada', 'saida').required(),
   status: Joi.string().valid('pendente', 'paga', 'vencida', 'cancelada').default('pendente'),
-  cliente_id: Joi.number().integer().positive().optional(),
-  fornecedor_id: Joi.number().integer().positive().optional(),
-  venda_id: Joi.number().integer().positive().optional(),
-  compra_id: Joi.number().integer().positive().optional(),
-  medicao_id: Joi.number().integer().positive().optional(),
-  locacao_id: Joi.number().integer().positive().optional(),
-  tipo_nota: Joi.string().valid('locacao', 'circulacao_equipamentos', 'outros_equipamentos', 'medicao', 'fornecedor').optional(),
-  observacoes: Joi.string().optional()
+  cliente_id: Joi.number().integer().positive().allow(null).optional(),
+  fornecedor_id: Joi.number().integer().positive().allow(null).optional(),
+  venda_id: Joi.number().integer().positive().allow(null).optional(),
+  compra_id: Joi.number().integer().positive().allow(null).optional(),
+  medicao_id: Joi.number().integer().positive().allow(null).optional(),
+  locacao_id: Joi.number().integer().positive().allow(null).optional(),
+  tipo_nota: Joi.string().valid('nf_servico', 'nf_locacao', 'fatura', 'nfe_eletronica').allow(null, '').optional(),
+  eletronica: Joi.boolean().allow(null).optional(),
+  chave_acesso: Joi.string().max(44).allow(null, '').optional(),
+  // Dados do Emitente/Destinatário
+  emitente_inscricao_estadual: Joi.string().max(20).allow(null, '').optional(),
+  destinatario_inscricao_estadual: Joi.string().max(20).allow(null, '').optional(),
+  // Dados da Nota
+  natureza_operacao: Joi.string().max(255).allow(null, '').optional(),
+  protocolo_autorizacao: Joi.string().max(50).allow(null, '').optional(),
+  data_saida: Joi.date().allow(null).optional(),
+  hora_saida: Joi.string().allow(null, '').optional(), // Formato HH:MM:SS
+  // Cálculo do Imposto
+  base_calculo_icms: Joi.number().min(0).allow(null).optional(),
+  valor_icms: Joi.number().min(0).allow(null).optional(),
+  base_calculo_icms_st: Joi.number().min(0).allow(null).optional(),
+  valor_icms_st: Joi.number().min(0).allow(null).optional(),
+  valor_fcp_st: Joi.number().min(0).allow(null).optional(),
+  valor_frete: Joi.number().min(0).allow(null).optional(),
+  valor_seguro: Joi.number().min(0).allow(null).optional(),
+  valor_desconto: Joi.number().min(0).allow(null).optional(),
+  outras_despesas_acessorias: Joi.number().min(0).allow(null).optional(),
+  valor_ipi: Joi.number().min(0).allow(null).optional(),
+  // Transportador
+  tipo_frete: Joi.string().max(50).allow(null, '').optional(),
+  // ISSQN
+  inscricao_municipal: Joi.string().max(20).allow(null, '').optional(),
+  valor_total_servicos: Joi.number().min(0).allow(null).optional(),
+  base_calculo_issqn: Joi.number().min(0).allow(null).optional(),
+  valor_issqn: Joi.number().min(0).allow(null).optional(),
+  // Dados Adicionais
+  info_tributos: Joi.string().allow(null, '').optional(),
+  observacoes: Joi.string().allow(null, '').optional(),
+  // ============================================
+  // CAMPOS ESPECÍFICOS DE NFS-e (Nota Fiscal de Serviço Eletrônica)
+  // ============================================
+  // Dados do Prestador
+  prestador_inscricao_municipal: Joi.string().max(20).allow(null, '').optional(),
+  prestador_email: Joi.string().email().max(255).allow(null, '').optional(),
+  prestador_telefone: Joi.string().max(20).allow(null, '').optional(),
+  // Dados do Tomador
+  tomador_inscricao_municipal: Joi.string().max(20).allow(null, '').optional(),
+  tomador_nif: Joi.string().max(50).allow(null, '').optional(),
+  tomador_email: Joi.string().email().max(255).allow(null, '').optional(),
+  tomador_telefone: Joi.string().max(20).allow(null, '').optional(),
+  // Dados da NFS-e
+  codigo_verificacao: Joi.string().max(20).allow(null, '').optional(),
+  rps_numero: Joi.string().max(20).allow(null, '').optional(),
+  rps_serie: Joi.string().max(10).allow(null, '').optional(),
+  rps_tipo: Joi.string().max(10).allow(null, '').optional(),
+  nfse_substituida: Joi.string().max(20).allow(null, '').optional(),
+  // Atividade Econômica
+  atividade_economica_codigo: Joi.string().max(20).allow(null, '').optional(),
+  atividade_economica_descricao: Joi.string().allow(null, '').optional(),
+  // Discriminação do Serviço
+  discriminacao_servico: Joi.string().allow(null, '').optional(),
+  codigo_obra: Joi.string().max(50).allow(null, '').optional(),
+  obra_endereco: Joi.string().allow(null, '').optional(),
+  // Tributos Federais
+  valor_pis: Joi.number().min(0).allow(null).optional(),
+  valor_cofins: Joi.number().min(0).allow(null).optional(),
+  valor_inss: Joi.number().min(0).allow(null).optional(),
+  valor_ir: Joi.number().min(0).allow(null).optional(),
+  valor_csll: Joi.number().min(0).allow(null).optional(),
+  percentual_tributos_federais: Joi.number().min(0).max(100).allow(null).optional(),
+  percentual_tributos_estaduais: Joi.number().min(0).max(100).allow(null).optional(),
+  percentual_tributos_municipais: Joi.number().min(0).max(100).allow(null).optional(),
+  // Identificação Prestação de Serviços
+  codigo_art: Joi.string().max(50).allow(null, '').optional(),
+  exigibilidade_issqn: Joi.string().max(50).allow(null, '').optional(),
+  regime_especial_tributacao: Joi.string().max(50).allow(null, '').optional(),
+  simples_nacional: Joi.boolean().allow(null).optional(),
+  incentivador_fiscal: Joi.boolean().allow(null).optional(),
+  competencia: Joi.string().max(7).allow(null, '').optional(), // MM/AAAA
+  municipio_prestacao: Joi.string().max(255).allow(null, '').optional(),
+  municipio_incidencia: Joi.string().max(255).allow(null, '').optional(),
+  issqn_reter: Joi.boolean().allow(null).optional(),
+  // Detalhamento de Valores
+  valor_servico: Joi.number().min(0).allow(null).optional(),
+  desconto_incondicionado: Joi.number().min(0).allow(null).optional(),
+  desconto_condicionado: Joi.number().min(0).allow(null).optional(),
+  retencoes_federais: Joi.number().min(0).allow(null).optional(),
+  outras_retencoes: Joi.number().min(0).allow(null).optional(),
+  deducoes_previstas_lei: Joi.number().min(0).allow(null).optional(),
+  aliquota_issqn: Joi.number().min(0).max(100).allow(null).optional(),
+  valor_liquido: Joi.number().min(0).allow(null).optional()
 });
 
 /**
@@ -975,51 +1058,279 @@ const buscarFornecedorPorCNPJ = async (cnpj) => {
 
 /**
  * Determina o tipo de nota baseado no CFOP e natureza da operação
+ * Retorna: nf_servico, nf_locacao, fatura, nfe_eletronica
  */
 const determinarTipoNota = (cfop, natOp) => {
-  if (!cfop && !natOp) return 'fornecedor';
+  if (!cfop && !natOp) return 'nf_servico';
 
   const natOpLower = (natOp || '').toLowerCase();
   const cfopStr = String(cfop || '');
 
   // Verificar natureza da operação
   if (natOpLower.includes('locação') || natOpLower.includes('locacao')) {
-    return 'locacao';
+    return 'nf_locacao';
   }
   if (natOpLower.includes('medição') || natOpLower.includes('medicao')) {
-    return 'medicao';
+    return 'nf_servico';
   }
   if (natOpLower.includes('circulação') || natOpLower.includes('circulacao')) {
-    return 'circulacao_equipamentos';
+    return 'nf_servico';
+  }
+  if (natOpLower.includes('fatura')) {
+    return 'fatura';
   }
 
   // Verificar CFOP
   if (cfopStr.startsWith('5')) {
     // CFOP 5xxx geralmente são saídas (locação, circulação)
     if (cfopStr === '5908' || cfopStr === '5909') {
-      return 'locacao';
+      return 'nf_locacao';
     }
-    return 'locacao'; // Padrão para CFOP 5xxx
+    return 'nf_servico'; // Padrão para CFOP 5xxx
   }
   if (cfopStr.startsWith('6')) {
     // CFOP 6xxx são entradas
-    return 'fornecedor';
+    return 'nf_servico';
   }
 
-  return 'fornecedor'; // Padrão
+  return 'nf_servico'; // Padrão
 };
 
 /**
- * Converte data ISO para formato YYYY-MM-DD
+ * Converte data ISO para formato YYYY-MM-DD (string) ou null
  */
 const formatarData = (dataISO) => {
-  if (!dataISO) return null;
+  if (!dataISO || dataISO === '' || dataISO === 'null') return null;
   try {
     const data = new Date(dataISO);
     if (isNaN(data.getTime())) return null;
-    return data.toISOString().split('T')[0];
+    return data.toISOString().split('T')[0]; // Retorna string YYYY-MM-DD
   } catch {
     return null;
+  }
+};
+
+/**
+ * Detecta o tipo de XML (NFe ou NFS-e)
+ */
+const detectarTipoXML = (xmlString) => {
+  if (xmlString.includes('CompNfse') || xmlString.includes('Nfse') || xmlString.includes('InfNfse')) {
+    return 'nfse';
+  }
+  if (xmlString.includes('nfeProc') || xmlString.includes('NFe') || xmlString.includes('infNFe')) {
+    return 'nfe';
+  }
+  return null;
+};
+
+/**
+ * Parse do XML da NFS-e (Nota Fiscal de Serviço Eletrônica)
+ */
+const parseXMLNFSe = (xmlBuffer) => {
+  try {
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      textNodeName: '#text',
+      parseAttributeValue: true,
+      trimValues: true,
+      parseTrueNumberOnly: false,
+      arrayMode: false
+    });
+
+    const xmlString = xmlBuffer.toString('utf-8');
+    const jsonObj = parser.parse(xmlString);
+
+    // Acessar a estrutura da NFS-e
+    const compNfse = jsonObj['ns2:CompNfse'] || jsonObj.CompNfse || jsonObj;
+    const nfse = compNfse['ns2:Nfse'] || compNfse.Nfse || compNfse;
+    const infNfse = nfse['ns2:InfNfse'] || nfse.InfNfse || nfse;
+
+    if (!infNfse) {
+      throw new Error('Estrutura XML inválida: não foi possível encontrar InfNfse');
+    }
+
+    // Extrair dados básicos da NFS-e
+    const numero = infNfse['ns2:Numero'] || infNfse.Numero || '';
+    const codigoVerificacao = infNfse['ns2:CodigoVerificacao'] || infNfse.CodigoVerificacao || '';
+    const dataEmissao = infNfse['ns2:DataEmissao'] || infNfse.DataEmissao || '';
+
+    // Extrair valores
+    const valoresNfse = infNfse['ns2:ValoresNfse'] || infNfse.ValoresNfse || {};
+    const baseCalculo = parseFloat(valoresNfse['ns2:BaseCalculo'] || valoresNfse.BaseCalculo || '0');
+    const aliquota = parseFloat(valoresNfse['ns2:Aliquota'] || valoresNfse.Aliquota || '0');
+    const valorIss = parseFloat(valoresNfse['ns2:ValorIss'] || valoresNfse.ValorIss || '0');
+    const valorLiquido = parseFloat(valoresNfse['ns2:ValorLiquidoNfse'] || valoresNfse.ValorLiquidoNfse || '0');
+
+    // Extrair prestador
+    const prestador = infNfse['ns2:PrestadorServico'] || infNfse.PrestadorServico || {};
+    const prestadorRazaoSocial = prestador['ns2:RazaoSocial'] || prestador.RazaoSocial || '';
+    const prestadorContato = prestador['ns2:Contato'] || prestador.Contato || {};
+    const prestadorEmail = prestadorContato['ns2:Email'] || prestadorContato.Email || '';
+    const prestadorTelefone = prestadorContato['ns2:Telefone'] || prestadorContato.Telefone || '';
+
+    // Extrair declaração de prestação de serviço
+    const declaracao = infNfse['ns2:DeclaracaoPrestacaoServico'] || infNfse.DeclaracaoPrestacaoServico || {};
+    const infDeclaracao = declaracao['ns2:InfDeclaracaoPrestacaoServico'] || declaracao.InfDeclaracaoPrestacaoServico || {};
+    
+    // Prestador na declaração
+    const prestadorDecl = infDeclaracao['ns2:Prestador'] || infDeclaracao.Prestador || {};
+    const prestadorCpfCnpj = prestadorDecl['ns2:CpfCnpj'] || prestadorDecl.CpfCnpj || {};
+    const prestadorCnpj = prestadorCpfCnpj['ns2:Cnpj'] || prestadorCpfCnpj.Cnpj || prestadorCpfCnpj.CPF || '';
+    const prestadorInscricaoMunicipal = prestadorDecl['ns2:InscricaoMunicipal'] || prestadorDecl.InscricaoMunicipal || '';
+
+    // Serviço
+    const servico = infDeclaracao['ns2:Servico'] || infDeclaracao.Servico || {};
+    const valores = servico['ns2:Valores'] || servico.Valores || {};
+    const valorServicos = parseFloat(valores['ns2:ValorServicos'] || valores.ValorServicos || '0');
+    const valorPis = parseFloat(valores['ns2:ValorPis'] || valores.ValorPis || '0');
+    const valorCofins = parseFloat(valores['ns2:ValorCofins'] || valores.ValorCofins || '0');
+    const valorInss = parseFloat(valores['ns2:ValorInss'] || valores.ValorInss || '0');
+    const valorIr = parseFloat(valores['ns2:ValorIr'] || valores.ValorIr || '0');
+    const valorCsll = parseFloat(valores['ns2:ValorCsll'] || valores.ValorCsll || '0');
+    const outrasRetencoes = parseFloat(valores['ns2:OutrasRetencoes'] || valores.OutrasRetencoes || '0');
+    const descontoIncondicionado = parseFloat(valores['ns2:DescontoIncondicionado'] || valores.DescontoIncondicionado || '0');
+    const descontoCondicionado = parseFloat(valores['ns2:DescontoCondicionado'] || valores.DescontoCondicionado || '0');
+    
+    const itemListaServico = servico['ns2:ItemListaServico'] || servico.ItemListaServico || '';
+    const codigoTributacaoMunicipio = servico['ns2:CodigoTributacaoMunicipio'] || servico.CodigoTributacaoMunicipio || '';
+    const discriminacao = servico['ns2:Discriminacao'] || servico.Discriminacao || '';
+    const codigoMunicipio = servico['ns2:CodigoMunicipio'] || servico.CodigoMunicipio || '';
+    const municipioIncidencia = servico['ns2:MunicipioIncidencia'] || servico.MunicipioIncidencia || '';
+    const exigibilidadeISS = servico['ns2:ExigibilidadeISS'] || servico.ExigibilidadeISS || '';
+
+    // Tomador
+    const tomador = infDeclaracao['ns2:TomadorServico'] || infDeclaracao.TomadorServico || {};
+    const tomadorIdentificacao = tomador['ns2:IdentificacaoTomador'] || tomador.IdentificacaoTomador || {};
+    const tomadorCpfCnpj = tomadorIdentificacao['ns2:CpfCnpj'] || tomadorIdentificacao.CpfCnpj || {};
+    const tomadorCnpj = tomadorCpfCnpj['ns2:Cnpj'] || tomadorCpfCnpj.Cnpj || tomadorCpfCnpj.CPF || '';
+    const tomadorRazaoSocial = tomador['ns2:RazaoSocial'] || tomador.RazaoSocial || '';
+    const tomadorContato = tomador['ns2:Contato'] || tomador.Contato || {};
+    const tomadorEmail = tomadorContato['ns2:Email'] || tomadorContato.Email || '';
+    const tomadorTelefone = tomadorContato['ns2:Telefone'] || tomadorContato.Telefone || '';
+
+    // Construção Civil
+    const construcaoCivil = infDeclaracao['ns2:ConstrucaoCivil'] || infDeclaracao.ConstrucaoCivil || {};
+    const codigoObra = construcaoCivil['ns2:CodigoObra'] || construcaoCivil.CodigoObra || '';
+
+    // Outras informações
+    const optanteSimplesNacional = infDeclaracao['ns2:OptanteSimplesNacional'] || infDeclaracao.OptanteSimplesNacional || '0';
+    const incentivadorFiscal = infDeclaracao['ns2:IncentivoFiscal'] || infDeclaracao.IncentivoFiscal || '0';
+    const competencia = infDeclaracao['ns2:Competencia'] || infDeclaracao.Competencia || '';
+
+    // Extrair descrição do código de tributação
+    const descricaoCodigoTributacao = infNfse['ns2:DescricaoCodigoTributacaoMunicipio'] || infNfse.DescricaoCodigoTributacaoMunicipio || '';
+
+    // Determinar tipo de nota
+    let tipoNota = 'nf_servico';
+    if (discriminacao.toLowerCase().includes('locação') || discriminacao.toLowerCase().includes('locacao')) {
+      tipoNota = 'nf_locacao';
+    }
+
+    // Montar atividade econômica
+    const atividadeEconomicaCodigo = itemListaServico && codigoTributacaoMunicipio 
+      ? `${itemListaServico} / ${codigoTributacaoMunicipio}` 
+      : itemListaServico || codigoTributacaoMunicipio || '';
+    const atividadeEconomicaDescricao = descricaoCodigoTributacao || '';
+
+    // Extrair código da obra da discriminação se não estiver no XML
+    let codigoObraFinal = codigoObra;
+    if (!codigoObraFinal && discriminacao) {
+      const matchCNO = discriminacao.match(/CNO[:\s]+([\d.\/]+)/i);
+      if (matchCNO) {
+        codigoObraFinal = matchCNO[1];
+      }
+    }
+
+    // Extrair endereço da obra da discriminação
+    let obraEndereco = '';
+    if (discriminacao) {
+      const linhas = discriminacao.split('\n');
+      for (let i = linhas.length - 1; i >= 0; i--) {
+        if (linhas[i].trim() && !linhas[i].includes('CNO')) {
+          obraEndereco = linhas[i].trim();
+          break;
+        }
+      }
+    }
+
+    // Calcular retenções federais
+    const retencoesFederais = valorPis + valorCofins + valorInss + valorIr + valorCsll;
+
+    // Formatar competência (de ISO para MM/AAAA)
+    let competenciaFormatada = '';
+    if (competencia) {
+      try {
+        const data = new Date(competencia);
+        if (!isNaN(data.getTime())) {
+          const mes = String(data.getMonth() + 1).padStart(2, '0');
+          const ano = data.getFullYear();
+          competenciaFormatada = `${mes}/${ano}`;
+        }
+      } catch (e) {
+        // Tentar extrair de formato diferente
+        const match = competencia.match(/(\d{4})-(\d{2})/);
+        if (match) {
+          competenciaFormatada = `${match[2]}/${match[1]}`;
+        }
+      }
+    }
+
+    return {
+      numero_nf: String(numero),
+      serie: null, // NFS-e geralmente não tem série
+      data_emissao: formatarData(dataEmissao),
+      data_vencimento: null,
+      valor_total: valorLiquido || valorServicos,
+      tipo: 'saida', // NFS-e são sempre de saída
+      tipo_nota: tipoNota,
+      eletronica: true,
+      codigo_verificacao: codigoVerificacao,
+      // Prestador
+      cnpj_prestador: prestadorCnpj,
+      nome_prestador: prestadorRazaoSocial,
+      prestador_inscricao_municipal: prestadorInscricaoMunicipal,
+      prestador_email: prestadorEmail,
+      prestador_telefone: prestadorTelefone,
+      // Tomador
+      cnpj_tomador: tomadorCnpj,
+      nome_tomador: tomadorRazaoSocial,
+      tomador_email: tomadorEmail,
+      tomador_telefone: tomadorTelefone,
+      // Atividade Econômica
+      atividade_economica_codigo: atividadeEconomicaCodigo,
+      atividade_economica_descricao: atividadeEconomicaDescricao,
+      // Discriminação
+      discriminacao_servico: discriminacao,
+      codigo_obra: codigoObraFinal,
+      obra_endereco: obraEndereco,
+      // Valores
+      valor_servico: valorServicos,
+      base_calculo_issqn: baseCalculo,
+      aliquota_issqn: aliquota,
+      valor_issqn: valorIss,
+      valor_liquido: valorLiquido,
+      desconto_incondicionado: descontoIncondicionado,
+      desconto_condicionado: descontoCondicionado,
+      retencoes_federais: retencoesFederais,
+      outras_retencoes: outrasRetencoes,
+      valor_pis: valorPis,
+      valor_cofins: valorCofins,
+      valor_inss: valorInss,
+      valor_ir: valorIr,
+      valor_csll: valorCsll,
+      // Identificação
+      exigibilidade_issqn: exigibilidadeISS === '1' ? '1-Exigível' : exigibilidadeISS,
+      simples_nacional: optanteSimplesNacional === '1',
+      incentivador_fiscal: incentivadorFiscal === '1',
+      competencia: competenciaFormatada,
+      municipio_prestacao: codigoMunicipio,
+      municipio_incidencia: municipioIncidencia,
+      issqn_reter: servico['ns2:IssRetido'] === '1' || servico.IssRetido === '1'
+    };
+  } catch (error) {
+    console.error('Erro ao fazer parse do XML NFS-e:', error);
+    throw new Error(`Erro ao processar XML NFS-e: ${error.message}`);
   }
 };
 
@@ -1188,10 +1499,25 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
       });
     }
 
-    // Fazer parse do XML
-    let dadosNFe;
+    // Detectar tipo de XML (NFe ou NFS-e)
+    const xmlString = file.buffer.toString('utf-8');
+    const tipoXML = detectarTipoXML(xmlString);
+
+    if (!tipoXML) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tipo de XML não reconhecido. Suportado: NFe ou NFS-e'
+      });
+    }
+
+    // Fazer parse do XML conforme o tipo
+    let dadosNota;
     try {
-      dadosNFe = parseXMLNFe(file.buffer);
+      if (tipoXML === 'nfse') {
+        dadosNota = parseXMLNFSe(file.buffer);
+      } else {
+        dadosNota = parseXMLNFe(file.buffer);
+      }
     } catch (parseError) {
       return res.status(400).json({
         success: false,
@@ -1205,37 +1531,65 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
     let fornecedor_id = null;
     const avisos = [];
 
-    if (dadosNFe.tipo === 'saida') {
-      // Para notas de saída, buscar cliente pelo CNPJ do destinatário
-      if (dadosNFe.cnpj_destinatario) {
-        const cliente = await buscarClientePorCNPJ(dadosNFe.cnpj_destinatario);
-        if (cliente) {
-          cliente_id = cliente.id;
-        } else {
-          avisos.push(`Cliente não encontrado: ${dadosNFe.nome_destinatario} (CNPJ: ${dadosNFe.cnpj_destinatario}). Você pode vincular manualmente após a importação.`);
-        }
-      }
-    } else {
-      // Para notas de entrada, buscar fornecedor pelo CNPJ do emitente
-      if (dadosNFe.cnpj_emitente) {
-        const fornecedor = await buscarFornecedorPorCNPJ(dadosNFe.cnpj_emitente);
+    if (tipoXML === 'nfse') {
+      // Para NFS-e: prestador = fornecedor, tomador = cliente
+      if (dadosNota.cnpj_prestador) {
+        const fornecedor = await buscarFornecedorPorCNPJ(dadosNota.cnpj_prestador);
         if (fornecedor) {
           fornecedor_id = fornecedor.id;
         } else {
-          avisos.push(`Fornecedor não encontrado: ${dadosNFe.nome_emitente} (CNPJ: ${dadosNFe.cnpj_emitente}). Você pode vincular manualmente após a importação.`);
+          avisos.push(`Fornecedor não encontrado: ${dadosNota.nome_prestador} (CNPJ: ${dadosNota.cnpj_prestador}). Você pode vincular manualmente após a importação.`);
+        }
+      }
+      if (dadosNota.cnpj_tomador) {
+        const cliente = await buscarClientePorCNPJ(dadosNota.cnpj_tomador);
+        if (cliente) {
+          cliente_id = cliente.id;
+        } else {
+          avisos.push(`Cliente não encontrado: ${dadosNota.nome_tomador} (CNPJ: ${dadosNota.cnpj_tomador}). Você pode vincular manualmente após a importação.`);
+        }
+      }
+    } else {
+      // Para NFe: lógica original
+      if (dadosNota.tipo === 'saida') {
+        // Para notas de saída, buscar cliente pelo CNPJ do destinatário
+        if (dadosNota.cnpj_destinatario) {
+          const cliente = await buscarClientePorCNPJ(dadosNota.cnpj_destinatario);
+          if (cliente) {
+            cliente_id = cliente.id;
+          } else {
+            avisos.push(`Cliente não encontrado: ${dadosNota.nome_destinatario} (CNPJ: ${dadosNota.cnpj_destinatario}). Você pode vincular manualmente após a importação.`);
+          }
+        }
+      } else {
+        // Para notas de entrada, buscar fornecedor pelo CNPJ do emitente
+        if (dadosNota.cnpj_emitente) {
+          const fornecedor = await buscarFornecedorPorCNPJ(dadosNota.cnpj_emitente);
+          if (fornecedor) {
+            fornecedor_id = fornecedor.id;
+          } else {
+            avisos.push(`Fornecedor não encontrado: ${dadosNota.nome_emitente} (CNPJ: ${dadosNota.cnpj_emitente}). Você pode vincular manualmente após a importação.`);
+          }
         }
       }
     }
 
-    // Verificar se já existe nota fiscal com mesmo número e série
-    const { data: notaExistente } = await supabaseAdmin
+    // Verificar se já existe nota fiscal com mesmo número e série/código de verificação
+    let query = supabaseAdmin
       .from('notas_fiscais')
-      .select('id, numero_nf, serie')
-      .eq('numero_nf', dadosNFe.numero_nf)
-      .eq('serie', dadosNFe.serie || '')
-      .single();
+      .select('id, numero_nf, serie, codigo_verificacao')
+      .eq('numero_nf', dadosNota.numero_nf);
+    
+    if (tipoXML === 'nfse' && dadosNota.codigo_verificacao) {
+      query = query.eq('codigo_verificacao', dadosNota.codigo_verificacao);
+    } else {
+      query = query.eq('serie', dadosNota.serie || '');
+    }
+    
+    const { data: notasExistentes } = await query;
 
-    if (notaExistente) {
+    if (notasExistentes && notasExistentes.length > 0) {
+      const notaExistente = notasExistentes[0];
       return res.status(400).json({
         success: false,
         message: 'Nota fiscal já existe no sistema',
@@ -1247,28 +1601,108 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
       });
     }
 
-    // Criar nota fiscal
-    const notaFiscalData = {
-      numero_nf: dadosNFe.numero_nf,
-      serie: dadosNFe.serie || null,
-      data_emissao: dadosNFe.data_emissao,
-      data_vencimento: dadosNFe.data_vencimento || null,
-      valor_total: dadosNFe.valor_total,
-      tipo: dadosNFe.tipo,
-      status: 'pendente',
-      tipo_nota: dadosNFe.tipo_nota,
-      cliente_id: cliente_id,
-      fornecedor_id: fornecedor_id,
-      observacoes: dadosNFe.observacoes || null
+    // Função auxiliar para limpar valores
+    const limparValor = (valor, tipo = 'string') => {
+      if (valor === undefined || valor === null) return null;
+      if (tipo === 'number') {
+        if (valor === '' || valor === null || valor === undefined) return null;
+        const num = parseFloat(valor);
+        return isNaN(num) ? null : num;
+      }
+      if (tipo === 'string') {
+        if (valor === null || valor === undefined) return null;
+        const str = String(valor).trim();
+        return str === '' ? null : str;
+      }
+      if (tipo === 'boolean') {
+        if (valor === null || valor === undefined) return null;
+        return Boolean(valor);
+      }
+      return valor;
     };
 
+    // Criar nota fiscal
+    const notaFiscalData = {
+      numero_nf: String(dadosNota.numero_nf || ''),
+      serie: limparValor(dadosNota.serie, 'string'),
+      data_emissao: dadosNota.data_emissao || null,
+      data_vencimento: dadosNota.data_vencimento || null,
+      valor_total: limparValor(dadosNota.valor_total, 'number') || 0,
+      tipo: dadosNota.tipo || 'saida',
+      status: 'pendente',
+      tipo_nota: dadosNota.tipo_nota || (tipoXML === 'nfse' ? 'nf_servico' : 'nfe_eletronica'),
+      eletronica: true, // XML sempre é eletrônica
+      chave_acesso: limparValor(dadosNota.chave_acesso, 'string'),
+      cliente_id: cliente_id,
+      fornecedor_id: fornecedor_id,
+      observacoes: limparValor(dadosNota.observacoes || dadosNota.discriminacao_servico, 'string'),
+      // Campos específicos de NFS-e (se aplicável)
+      ...(tipoXML === 'nfse' ? {
+        codigo_verificacao: limparValor(dadosNota.codigo_verificacao, 'string'),
+        prestador_inscricao_municipal: limparValor(dadosNota.prestador_inscricao_municipal, 'string'),
+        prestador_email: limparValor(dadosNota.prestador_email, 'string'),
+        prestador_telefone: limparValor(dadosNota.prestador_telefone, 'string'),
+        tomador_email: limparValor(dadosNota.tomador_email, 'string'),
+        tomador_telefone: limparValor(dadosNota.tomador_telefone, 'string'),
+        atividade_economica_codigo: limparValor(dadosNota.atividade_economica_codigo, 'string'),
+        atividade_economica_descricao: limparValor(dadosNota.atividade_economica_descricao, 'string'),
+        discriminacao_servico: limparValor(dadosNota.discriminacao_servico, 'string'),
+        codigo_obra: limparValor(dadosNota.codigo_obra, 'string'),
+        obra_endereco: limparValor(dadosNota.obra_endereco, 'string'),
+        valor_servico: limparValor(dadosNota.valor_servico, 'number'),
+        base_calculo_issqn: limparValor(dadosNota.base_calculo_issqn, 'number'),
+        aliquota_issqn: limparValor(dadosNota.aliquota_issqn, 'number'),
+        valor_issqn: limparValor(dadosNota.valor_issqn, 'number'),
+        valor_liquido: limparValor(dadosNota.valor_liquido, 'number'),
+        desconto_incondicionado: limparValor(dadosNota.desconto_incondicionado, 'number'),
+        desconto_condicionado: limparValor(dadosNota.desconto_condicionado, 'number'),
+        retencoes_federais: limparValor(dadosNota.retencoes_federais, 'number'),
+        outras_retencoes: limparValor(dadosNota.outras_retencoes, 'number'),
+        valor_pis: limparValor(dadosNota.valor_pis, 'number'),
+        valor_cofins: limparValor(dadosNota.valor_cofins, 'number'),
+        valor_inss: limparValor(dadosNota.valor_inss, 'number'),
+        valor_ir: limparValor(dadosNota.valor_ir, 'number'),
+        valor_csll: limparValor(dadosNota.valor_csll, 'number'),
+        exigibilidade_issqn: limparValor(dadosNota.exigibilidade_issqn, 'string'),
+        simples_nacional: limparValor(dadosNota.simples_nacional, 'boolean'),
+        incentivador_fiscal: limparValor(dadosNota.incentivador_fiscal, 'boolean'),
+        competencia: limparValor(dadosNota.competencia, 'string'),
+        municipio_prestacao: limparValor(dadosNota.municipio_prestacao, 'string'),
+        municipio_incidencia: limparValor(dadosNota.municipio_incidencia, 'string'),
+        issqn_reter: limparValor(dadosNota.issqn_reter, 'boolean')
+      } : {
+        // Campos específicos de NFe
+        natureza_operacao: limparValor(dadosNota.natureza_operacao, 'string'),
+        protocolo_autorizacao: limparValor(dadosNota.protocolo_autorizacao, 'string'),
+        chave_acesso: limparValor(dadosNota.chave_acesso, 'string')
+      })
+    };
+
+    // Garantir que data_vencimento seja null se vazio ou inválido
+    if (notaFiscalData.data_vencimento === '' || notaFiscalData.data_vencimento === 'null' || notaFiscalData.data_vencimento === undefined) {
+      notaFiscalData.data_vencimento = null;
+    }
+    
+    // Garantir que data_emissao seja válida
+    if (!notaFiscalData.data_emissao) {
+      return res.status(400).json({
+        success: false,
+        message: 'Data de emissão é obrigatória',
+        error: 'data_emissao é obrigatória'
+      });
+    }
+
     // Validar dados
-    const { error: validationError, value: validatedData } = notaFiscalSchema.validate(notaFiscalData);
+    const { error: validationError, value: validatedData } = notaFiscalSchema.validate(notaFiscalData, {
+      abortEarly: false,
+      allowUnknown: true
+    });
     if (validationError) {
       return res.status(400).json({
         success: false,
         message: 'Dados inválidos',
-        error: validationError.details[0].message
+        error: validationError.details.map(d => d.message).join('; '),
+        details: validationError.details
       });
     }
 

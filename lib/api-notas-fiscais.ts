@@ -15,7 +15,9 @@ export interface NotaFiscal {
   compra_id?: number
   medicao_id?: number
   locacao_id?: number
-  tipo_nota?: 'locacao' | 'circulacao_equipamentos' | 'outros_equipamentos' | 'medicao' | 'fornecedor'
+  tipo_nota?: 'nf_servico' | 'nf_locacao' | 'fatura' | 'nfe_eletronica'
+  eletronica?: boolean
+  chave_acesso?: string
   arquivo_nf?: string
   nome_arquivo?: string
   tamanho_arquivo?: number
@@ -68,7 +70,9 @@ export interface NotaFiscalCreate {
   compra_id?: number
   medicao_id?: number
   locacao_id?: number
-  tipo_nota?: 'locacao' | 'circulacao_equipamentos' | 'outros_equipamentos' | 'medicao' | 'fornecedor'
+  tipo_nota?: 'nf_servico' | 'nf_locacao' | 'fatura' | 'nfe_eletronica'
+  eletronica?: boolean
+  chave_acesso?: string
   observacoes?: string
 }
 
