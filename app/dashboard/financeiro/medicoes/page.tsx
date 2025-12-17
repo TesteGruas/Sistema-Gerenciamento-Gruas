@@ -20,18 +20,6 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-  ResponsiveContainer
-} from 'recharts'
 import { 
   Plus, 
   Search, 
@@ -49,8 +37,6 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  TrendingUp,
-  BarChart3 as BarChartIcon,
   Forklift,
   Send
 } from "lucide-react"
@@ -63,8 +49,6 @@ import { obrasApi } from "@/lib/api-obras"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
-// Cores para gráficos
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
 // Tipos importados das APIs
 import type { Receita, ReceitaCreate } from "@/lib/api-receitas"
@@ -453,95 +437,6 @@ export default function MedicoesPage() {
           )}
         </div>
       </div>
-
-      {/* Gráficos de Estatísticas */}
-      {activeTab === 'medicoes' && medicoes.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChartIcon className="w-5 h-5" />
-                Medições por Período
-              </CardTitle>
-              <CardDescription>Valor total das medições por mês</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={(() => {
-                  const medicoesPorPeriodo = medicoes
-                    .filter(m => m.status === 'finalizada')
-                    .reduce((acc: any, medicao) => {
-                      const periodo = medicao.periodo
-                      const existing = acc.find((item: any) => item.periodo === periodo)
-                      if (existing) {
-                        existing.valor += Number(medicao.valor_total)
-                      } else {
-                        acc.push({ periodo, valor: Number(medicao.valor_total) })
-                      }
-                      return acc
-                    }, [])
-                  return medicoesPorPeriodo.slice(-6)
-                })()}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="periodo" />
-                  <YAxis />
-                  <RechartsTooltip 
-                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                  />
-                  <Legend />
-                  <Bar dataKey="valor" fill="#3b82f6" name="Valor Total (R$)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5" />
-                Evolução das Medições
-              </CardTitle>
-              <CardDescription>Valor ao longo do tempo</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={(() => {
-                  const medicoesPorPeriodo = medicoes
-                    .filter(m => m.status === 'finalizada')
-                    .reduce((acc: any, medicao) => {
-                      const periodo = medicao.periodo
-                      const existing = acc.find((item: any) => item.periodo === periodo)
-                      if (existing) {
-                        existing.valor += Number(medicao.valor_total)
-                      } else {
-                        acc.push({ periodo, valor: Number(medicao.valor_total) })
-                      }
-                      return acc
-                    }, [])
-                  return medicoesPorPeriodo.slice(-6)
-                })()}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="periodo" />
-                  <YAxis />
-                  <RechartsTooltip 
-                    formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                  />
-                  <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="valor" 
-                    stroke="#10b981" 
-                    strokeWidth={2}
-                    name="Valor (R$)"
-                    dot={{ r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

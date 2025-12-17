@@ -150,7 +150,7 @@ export default function FinanceiroLayout({
 
       {/* Conteúdo Principal */}
       <main className="flex-1">
-        <div className="p-2">
+        <div className="p-6">
           {children}
         </div>
       </main>
