@@ -19,6 +19,9 @@ import {
   List,
   Upload,
   FileText,
+  Edit,
+  X,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -63,6 +66,13 @@ export default function AlugueisIntegradoPage() {
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativo' | 'encerrado'>('todos')
   const [openNovaResidencia, setOpenNovaResidencia] = useState(false)
   const [openNovoAluguel, setOpenNovoAluguel] = useState(false)
+  const [openEditarResidencia, setOpenEditarResidencia] = useState(false)
+  const [openEditarAluguel, setOpenEditarAluguel] = useState(false)
+  const [openArquivosAluguel, setOpenArquivosAluguel] = useState(false)
+  const [aluguelSelecionado, setAluguelSelecionado] = useState<AluguelResidencia | null>(null)
+  const [residenciaSelecionada, setResidenciaSelecionada] = useState<Residencia | null>(null)
+  const [arquivosAluguel, setArquivosAluguel] = useState<any[]>([])
+  const [uploadingArquivos, setUploadingArquivos] = useState(false)
   const [activeTab, setActiveTab] = useState('alugueis')
   const { toast } = useToast()
 
@@ -93,8 +103,7 @@ export default function AlugueisIntegradoPage() {
   const [tipoSinal, setTipoSinal] = useState<'caucao' | 'fiador' | 'outros' | ''>('')
   const [valorDeposito, setValorDeposito] = useState('')
   const [periodoMulta, setPeriodoMulta] = useState('')
-  const [contratoArquivo, setContratoArquivo] = useState<File | null>(null)
-  const [contratoArquivoUrl, setContratoArquivoUrl] = useState('')
+  const [contratoArquivos, setContratoArquivos] = useState<File[]>([])
   const [observacoes, setObservacoes] = useState('')
 
   const carregar = async () => {
@@ -183,7 +192,7 @@ export default function AlugueisIntegradoPage() {
       const residencia = residencias.find(r => r.id === residenciaId)
       if (!residencia) throw new Error('Residência não encontrada')
 
-      await AlugueisAPI.criar({
+      const aluguelCriado = await AlugueisAPI.criar({
         residencia: {
           id: residencia.id,
           nome: residencia.nome,
@@ -211,27 +220,33 @@ export default function AlugueisIntegradoPage() {
           tipoSinal: tipoSinal || undefined,
           valorDeposito: valorDeposito ? parseFloat(valorDeposito) : undefined,
           periodoMulta: periodoMulta ? parseInt(periodoMulta) : undefined,
-          contratoArquivo: contratoArquivoUrl || undefined,
         },
         status: 'ativo',
         observacoes: observacoes || undefined,
       })
 
-      toast({
-        title: 'Aluguel criado!',
-        description: 'O aluguel foi registrado com sucesso.',
-      })
+      // Fazer upload dos arquivos se houver
+      if (contratoArquivos.length > 0) {
+        try {
+          await AlugueisAPI.uploadArquivos(aluguelCriado.id, contratoArquivos, 'contrato')
+          toast({
+            title: 'Aluguel criado e arquivos enviados!',
+            description: `O aluguel foi registrado e ${contratoArquivos.length} arquivo(s) anexado(s) com sucesso.`,
+          })
+        } catch (error) {
+          console.error('Erro ao fazer upload dos arquivos:', error)
+          toast({
+            title: 'Aluguel criado!',
+            description: 'O aluguel foi registrado, mas houve erro ao enviar os arquivos.',
+          })
+        }
+      } else {
+        toast({
+          title: 'Aluguel criado!',
+          description: 'O aluguel foi registrado com sucesso.',
+        })
+      }
 
-      setResidenciaId('')
-      setFuncionarioId('')
-      setFuncionarioNome('')
-      setFuncionarioCargo('')
-      setFuncionarioCpf('')
-      setFuncionarioSelecionado(null)
-      setDataInicio('')
-      setValorMensal('')
-      setDiaVencimento('5')
-      setDescontoFolha(true)
       setResidenciaId('')
       setFuncionarioId('')
       setFuncionarioNome('')
@@ -246,9 +261,9 @@ export default function AlugueisIntegradoPage() {
       setTipoSinal('')
       setValorDeposito('')
       setPeriodoMulta('')
-      setContratoArquivo(null)
-      setContratoArquivoUrl('')
+      setContratoArquivos([])
       setObservacoes('')
+      
       setOpenNovoAluguel(false)
       setActiveTab('alugueis')
       carregar()
@@ -295,6 +310,206 @@ export default function AlugueisIntegradoPage() {
       toast({
         title: 'Erro',
         description: 'Não foi possível deletar a residência.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Editar residência
+  const abrirEditarResidencia = (residencia: Residencia) => {
+    setResidenciaSelecionada(residencia)
+    setNome(residencia.nome)
+    setEndereco(residencia.endereco)
+    setCidade(residencia.cidade)
+    setEstado(residencia.estado)
+    setCep(residencia.cep)
+    setQuartos(String(residencia.quartos))
+    setBanheiros(String(residencia.banheiros))
+    setArea(String(residencia.area))
+    setValorBase(String(residencia.valorBase))
+    setMobiliada(residencia.mobiliada)
+    setOpenEditarResidencia(true)
+  }
+
+  const handleEditarResidencia = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!residenciaSelecionada) return
+
+    try {
+      await ResidenciasAPI.atualizar(residenciaSelecionada.id, {
+        nome,
+        endereco,
+        cidade,
+        estado,
+        cep,
+        quartos: parseInt(quartos),
+        banheiros: parseInt(banheiros),
+        area: parseFloat(area),
+        valorBase: parseFloat(valorBase),
+        mobiliada,
+      })
+
+      toast({
+        title: 'Residência atualizada!',
+        description: 'A residência foi atualizada com sucesso.',
+      })
+
+      setOpenEditarResidencia(false)
+      setResidenciaSelecionada(null)
+      carregar()
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível atualizar a residência.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Editar aluguel
+  const abrirEditarAluguel = (aluguel: AluguelResidencia) => {
+    setAluguelSelecionado(aluguel)
+    setResidenciaId(aluguel.residencia.id)
+    setFuncionarioId(String(aluguel.funcionario.id))
+    setFuncionarioNome(aluguel.funcionario.nome)
+    setFuncionarioCargo(aluguel.funcionario.cargo)
+    setFuncionarioCpf(aluguel.funcionario.cpf)
+    setDataInicio(aluguel.contrato.dataInicio)
+    setValorMensal(String(aluguel.contrato.valorMensal))
+    setDiaVencimento(String(aluguel.contrato.diaVencimento))
+    setDescontoFolha(aluguel.contrato.descontoFolha)
+    setPorcentagemDesconto(aluguel.contrato.porcentagemDesconto ? String(aluguel.contrato.porcentagemDesconto) : '')
+    setTipoSinal(aluguel.contrato.tipoSinal || '')
+    setValorDeposito(aluguel.contrato.valorDeposito ? String(aluguel.contrato.valorDeposito) : '')
+    setPeriodoMulta(aluguel.contrato.periodoMulta ? String(aluguel.contrato.periodoMulta) : '')
+    setObservacoes(aluguel.observacoes || '')
+    setContratoArquivos([]) // Limpar arquivos ao abrir edição
+    setOpenEditarAluguel(true)
+  }
+
+  const handleEditarAluguel = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!aluguelSelecionado) return
+
+    try {
+      await AlugueisAPI.atualizar(aluguelSelecionado.id, {
+        contrato: {
+          dataInicio,
+          valorMensal: parseFloat(valorMensal),
+          diaVencimento: parseInt(diaVencimento),
+          descontoFolha,
+          porcentagemDesconto: porcentagemDesconto ? parseFloat(porcentagemDesconto) : undefined,
+          tipoSinal: tipoSinal || undefined,
+          valorDeposito: valorDeposito ? parseFloat(valorDeposito) : undefined,
+          periodoMulta: periodoMulta ? parseInt(periodoMulta) : undefined,
+        },
+        observacoes: observacoes || undefined,
+      })
+
+      // Fazer upload dos arquivos se houver
+      if (contratoArquivos.length > 0) {
+        try {
+          await AlugueisAPI.uploadArquivos(aluguelSelecionado.id, contratoArquivos, 'contrato')
+          toast({
+            title: 'Aluguel atualizado e arquivos enviados!',
+            description: `O aluguel foi atualizado e ${contratoArquivos.length} arquivo(s) anexado(s) com sucesso.`,
+          })
+        } catch (error) {
+          console.error('Erro ao fazer upload dos arquivos:', error)
+          toast({
+            title: 'Aluguel atualizado!',
+            description: 'O aluguel foi atualizado, mas houve erro ao enviar os arquivos.',
+          })
+        }
+      } else {
+        toast({
+          title: 'Aluguel atualizado!',
+          description: 'O aluguel foi atualizado com sucesso.',
+        })
+      }
+
+      setOpenEditarAluguel(false)
+      setAluguelSelecionado(null)
+      setContratoArquivos([])
+      carregar()
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível atualizar o aluguel.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Gerenciar arquivos do aluguel
+  const abrirArquivosAluguel = async (aluguel: AluguelResidencia) => {
+    setAluguelSelecionado(aluguel)
+    try {
+      const arquivos = await AlugueisAPI.listarArquivos(aluguel.id)
+      setArquivosAluguel(arquivos)
+      setOpenArquivosAluguel(true)
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar os arquivos.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleUploadArquivos = async (files: File[]) => {
+    if (!aluguelSelecionado || files.length === 0) return
+
+    setUploadingArquivos(true)
+    try {
+      const resultado = await AlugueisAPI.uploadArquivos(aluguelSelecionado.id, files, 'contrato')
+      
+      if (resultado.sucessos.length > 0) {
+        toast({
+          title: 'Arquivos enviados!',
+          description: `${resultado.sucessos.length} arquivo(s) enviado(s) com sucesso.`,
+        })
+        // Recarregar lista de arquivos
+        const arquivos = await AlugueisAPI.listarArquivos(aluguelSelecionado.id)
+        setArquivosAluguel(arquivos)
+      }
+
+      if (resultado.erros.length > 0) {
+        toast({
+          title: 'Alguns arquivos falharam',
+          description: `${resultado.erros.length} arquivo(s) não puderam ser enviados.`,
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível fazer upload dos arquivos.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploadingArquivos(false)
+    }
+  }
+
+  const handleDeletarArquivo = async (arquivoId: string) => {
+    if (!confirm('Deseja deletar este arquivo?')) return
+
+    try {
+      await AlugueisAPI.deletarArquivo(arquivoId)
+      toast({
+        title: 'Arquivo deletado',
+        description: 'O arquivo foi removido com sucesso.',
+      })
+      // Recarregar lista de arquivos
+      if (aluguelSelecionado) {
+        const arquivos = await AlugueisAPI.listarArquivos(aluguelSelecionado.id)
+        setArquivosAluguel(arquivos)
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível deletar o arquivo.',
         variant: 'destructive',
       })
     }
@@ -718,32 +933,49 @@ export default function AlugueisIntegradoPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="contratoArquivo">Contrato</Label>
-                      <div className="flex items-center gap-2">
+                      <Label htmlFor="contratoArquivo">Arquivos do Contrato</Label>
+                      <div className="space-y-2">
                         <Input
                           id="contratoArquivo"
                           type="file"
-                          accept=".pdf,.doc,.docx"
+                          multiple
+                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                           onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              setContratoArquivo(file)
-                              // Por enquanto, apenas salvar o nome do arquivo
-                              // Em produção, você deve fazer upload para um servidor de arquivos
-                              setContratoArquivoUrl(file.name)
+                            const files = Array.from(e.target.files || [])
+                            if (files.length > 0) {
+                              setContratoArquivos(prev => [...prev, ...files])
                             }
                           }}
                           className="cursor-pointer"
                         />
-                        {contratoArquivoUrl && (
-                          <div className="flex items-center gap-1 text-sm text-green-600">
-                            <FileText className="w-4 h-4" />
-                            <span>{contratoArquivoUrl}</span>
+                        {contratoArquivos.length > 0 && (
+                          <div className="space-y-2 mt-2">
+                            {contratoArquivos.map((file, index) => (
+                              <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-4 h-4 text-gray-500" />
+                                  <span className="text-sm">{file.name}</span>
+                                  <span className="text-xs text-gray-500">
+                                    ({(file.size / 1024).toFixed(2)} KB)
+                                  </span>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setContratoArquivos(prev => prev.filter((_, i) => i !== index))
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
                       <p className="text-xs text-gray-500">
-                        Formatos aceitos: PDF, DOC, DOCX
+                        Formatos aceitos: PDF, DOC, DOCX, JPG, PNG (máx. 10MB por arquivo)
                       </p>
                     </div>
                   </div>
@@ -839,32 +1071,6 @@ export default function AlugueisIntegradoPage() {
 
         {/* Tab: Aluguéis */}
         <TabsContent value="alugueis" className="space-y-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Buscar por funcionário ou residência..."
-                    value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <Select value={filtroStatus} onValueChange={(v) => setFiltroStatus(v as any)}>
-                  <SelectTrigger className="w-full md:w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="ativo">Ativos</SelectItem>
-                    <SelectItem value="encerrado">Encerrados</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
           {loading ? (
             <Card>
               <CardContent className="p-12 text-center text-gray-500">
@@ -879,153 +1085,116 @@ export default function AlugueisIntegradoPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-4">
-              {aluguelsFiltrados.map((aluguel) => (
-                <Card key={aluguel.id}>
-                  <CardContent className="p-6">
-                    <div className="flex flex-col lg:flex-row gap-6">
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Home className="h-5 w-5 text-blue-600" />
-                              <h3 className="font-semibold text-lg">{aluguel.residencia.nome}</h3>
-                              <Badge className={getStatusColor(aluguel.status)}>
-                                {aluguel.status}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-1 text-sm text-gray-600 mb-1">
-                              <MapPin className="h-4 w-4" />
-                              <span>{aluguel.residencia.endereco}, {aluguel.residencia.cidade}/{aluguel.residencia.estado}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <User className="h-4 w-4 text-gray-600" />
-                            <span className="font-medium text-sm">Funcionário</span>
-                          </div>
-                          <div className="ml-6">
-                            <p className="font-semibold">{aluguel.funcionario.nome}</p>
-                            <p className="text-sm text-gray-600">{aluguel.funcionario.cargo}</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Valor Mensal</p>
-                            <p className="font-semibold">{formatarMoeda(aluguel.contrato.valorMensal)}</p>
-                          </div>
-                          {aluguel.contrato.porcentagemDesconto && (
-                            <>
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Subsídio ({aluguel.contrato.porcentagemDesconto}%)</p>
-                                <p className="font-semibold text-blue-600">
-                                  {formatarMoeda(calcularSubsidioEmpresa(aluguel.contrato.valorMensal, aluguel.contrato.porcentagemDesconto))}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Funcionário Paga</p>
-                                <p className="font-semibold text-green-600">
-                                  {formatarMoeda(calcularValorFuncionario(aluguel.contrato.valorMensal, aluguel.contrato.porcentagemDesconto))}
-                                </p>
-                              </div>
-                            </>
-                          )}
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Vencimento</p>
-                            <p className="font-semibold">Dia {aluguel.contrato.diaVencimento}</p>
-                          </div>
-                        </div>
-
-                        {/* Informações de Contrato */}
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Data de Início</p>
-                              <p className="font-semibold text-sm">
-                                {aluguel.contrato.dataInicio ? new Date(aluguel.contrato.dataInicio).toLocaleDateString('pt-BR') : '-'}
-                              </p>
-                            </div>
-                            {(aluguel as any).data_aniversario_contrato && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Aniversário (1 ano)</p>
-                                <p className="font-semibold text-sm">
-                                  {new Date((aluguel as any).data_aniversario_contrato).toLocaleDateString('pt-BR')}
-                                </p>
-                              </div>
-                            )}
-                            {(aluguel as any).dias_ate_aniversario !== null && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Dias até Aniversário</p>
-                                <p className={`font-semibold text-sm ${
-                                  (aluguel as any).proximo_aniversario ? 'text-orange-600' : 'text-gray-700'
-                                }`}>
-                                  {(aluguel as any).dias_ate_aniversario} dias
-                                  {(aluguel as any).proximo_aniversario && (
-                                    <Badge className="ml-2 bg-orange-100 text-orange-800 text-xs">
-                                      Próximo
-                                    </Badge>
-                                  )}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {aluguel.pagamentos.length > 0 && (
-                          <div className="mt-4 pt-4 border-t">
-                            <p className="text-sm font-medium text-gray-700 mb-2">Últimos Pagamentos</p>
-                            <div className="flex gap-2 flex-wrap">
-                              {aluguel.pagamentos.slice(0, 3).map((pag, idx) => (
-                                <div key={idx} className="bg-white border rounded-lg px-3 py-1.5">
-                                  <p className="text-xs text-gray-500">{pag.mes}</p>
-                                  <p className={`text-sm font-semibold ${getPagamentoColor(pag.status)}`}>
-                                    {pag.status === 'pago' ? '✓' : pag.status === 'atrasado' ? '!' : '○'} {formatarMoeda(pag.valorPago)}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex lg:flex-col gap-2">
-                        {aluguel.status === 'ativo' && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => encerrarAluguel(aluguel.id)}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Encerrar
-                          </Button>
-                        )}
-                      </div>
+            <Card>
+              <CardContent className="p-0">
+                <div className="p-4 border-b bg-gray-50">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="Buscar por funcionário ou residência..."
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        className="pl-10"
+                      />
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    <Select value={filtroStatus} onValueChange={(v) => setFiltroStatus(v as any)}>
+                      <SelectTrigger className="w-full md:w-[180px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="ativo">Ativos</SelectItem>
+                        <SelectItem value="encerrado">Encerrados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Residência</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Funcionário</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Valor Mensal</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Vencimento</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {aluguelsFiltrados.map((aluguel) => (
+                        <tr key={aluguel.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="font-medium text-sm">{aluguel.residencia.nome}</p>
+                              <p className="text-xs text-gray-500">{aluguel.residencia.cidade}/{aluguel.residencia.estado}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm">{aluguel.funcionario.nome}</p>
+                              <p className="text-xs text-gray-500">{aluguel.funcionario.cargo}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm font-semibold">{formatarMoeda(aluguel.contrato.valorMensal)}</p>
+                              {aluguel.contrato.porcentagemDesconto && (
+                                <p className="text-xs text-blue-600">Subsídio: {aluguel.contrato.porcentagemDesconto}%</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm">Dia {aluguel.contrato.diaVencimento}</p>
+                            <p className="text-xs text-gray-500">
+                              {aluguel.contrato.dataInicio ? new Date(aluguel.contrato.dataInicio).toLocaleDateString('pt-BR') : '-'}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge className={getStatusColor(aluguel.status)}>
+                              {aluguel.status}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => abrirEditarAluguel(aluguel)}
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => abrirArquivosAluguel(aluguel)}
+                              >
+                                <FileText className="h-3 w-3" />
+                              </Button>
+                              {aluguel.status === 'ativo' && (
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => encerrarAluguel(aluguel.id)}
+                                >
+                                  <XCircle className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
         {/* Tab: Residências */}
         <TabsContent value="residencias" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar residências..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-          </div>
-
           {loading ? (
             <Card>
               <CardContent className="p-12 text-center text-gray-500">
@@ -1033,69 +1202,488 @@ export default function AlugueisIntegradoPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {residenciasFiltradas.map((residencia) => (
-                <Card key={residencia.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Home className="h-5 w-5 text-blue-600" />
-                        <h3 className="font-semibold">{residencia.nome}</h3>
-                      </div>
-                      <Badge className={residencia.disponivel ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
-                        {residencia.disponivel ? (
-                          <><CheckCircle className="h-3 w-3 mr-1" /> Disponível</>
-                        ) : (
-                          <><XCircle className="h-3 w-3 mr-1" /> Ocupada</>
-                        )}
-                      </Badge>
-                    </div>
-
-                    <div className="space-y-2 mb-4">
-                      <div className="flex items-start gap-1 text-sm text-gray-600">
-                        <MapPin className="h-4 w-4 mt-0.5" />
-                        <span>{residencia.endereco}, {residencia.cidade}/{residencia.estado}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 mb-4 text-sm">
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <Bed className="h-4 w-4" />
-                        <span>{residencia.quartos}Q</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <Bath className="h-4 w-4" />
-                        <span>{residencia.banheiros}B</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <Ruler className="h-4 w-4" />
-                        <span>{residencia.area}m²</span>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t">
-                      <p className="text-sm text-gray-500 mb-1">Valor Base</p>
-                      <p className="text-lg font-bold text-blue-600">
-                        {formatarMoeda(residencia.valorBase)}/mês
-                      </p>
-                    </div>
-
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="w-full mt-4"
-                      onClick={() => deletarResidencia(residencia.id)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Excluir
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <Card>
+              <CardContent className="p-0">
+                <div className="p-4 border-b bg-gray-50">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Buscar residências..."
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Endereço</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Características</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Valor Base</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {residenciasFiltradas.map((residencia) => (
+                        <tr key={residencia.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <p className="font-medium text-sm">{residencia.nome}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm">{residencia.endereco}</p>
+                              <p className="text-xs text-gray-500">{residencia.cidade}/{residencia.estado}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3 text-sm text-gray-600">
+                              <span className="flex items-center gap-1">
+                                <Bed className="h-4 w-4" />
+                                {residencia.quartos}Q
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Bath className="h-4 w-4" />
+                                {residencia.banheiros}B
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Ruler className="h-4 w-4" />
+                                {residencia.area}m²
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-semibold">{formatarMoeda(residencia.valorBase)}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Badge className={residencia.disponivel ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                              {residencia.disponivel ? (
+                                <><CheckCircle className="h-3 w-3 mr-1" /> Disponível</>
+                              ) : (
+                                <><XCircle className="h-3 w-3 mr-1" /> Ocupada</>
+                              )}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => abrirEditarResidencia(residencia)}
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => deletarResidencia(residencia.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Dialog: Editar Residência */}
+      <Dialog open={openEditarResidencia} onOpenChange={setOpenEditarResidencia}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Residência</DialogTitle>
+            <DialogDescription>
+              Atualize os dados da residência
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditarResidencia} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-nome">Nome/Identificação *</Label>
+              <Input
+                id="edit-nome"
+                placeholder="Ex: Casa Vila Nova"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="edit-endereco">Endereço *</Label>
+                <Input
+                  id="edit-endereco"
+                  placeholder="Rua, número"
+                  value={endereco}
+                  onChange={(e) => setEndereco(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-cidade">Cidade *</Label>
+                <Input
+                  id="edit-cidade"
+                  value={cidade}
+                  onChange={(e) => setCidade(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-estado">Estado *</Label>
+                <Select value={estado} onValueChange={setEstado}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SP">SP</SelectItem>
+                    <SelectItem value="RJ">RJ</SelectItem>
+                    <SelectItem value="MG">MG</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-cep">CEP *</Label>
+                <Input
+                  id="edit-cep"
+                  value={cep}
+                  onChange={(e) => setCep(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Quartos *</Label>
+                <Select value={quartos} onValueChange={setQuartos}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Banheiros *</Label>
+                <Select value={banheiros} onValueChange={setBanheiros}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-area">Área (m²) *</Label>
+                <Input
+                  id="edit-area"
+                  type="number"
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-valorBase">Valor Base (R$) *</Label>
+              <Input
+                id="edit-valorBase"
+                type="number"
+                step="0.01"
+                value={valorBase}
+                onChange={(e) => setValorBase(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-mobiliada"
+                checked={mobiliada}
+                onCheckedChange={(checked) => setMobiliada(checked as boolean)}
+              />
+              <label htmlFor="edit-mobiliada" className="text-sm font-medium">
+                Mobiliada
+              </label>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpenEditarResidencia(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit">Salvar</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Editar Aluguel */}
+      <Dialog open={openEditarAluguel} onOpenChange={setOpenEditarAluguel}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Aluguel</DialogTitle>
+            <DialogDescription>
+              Atualize os dados do aluguel
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditarAluguel} className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-dataInicio">Data de Início *</Label>
+                <Input
+                  id="edit-dataInicio"
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-valorMensal">Valor Mensal (R$) *</Label>
+                <Input
+                  id="edit-valorMensal"
+                  type="number"
+                  step="0.01"
+                  value={valorMensal}
+                  onChange={(e) => setValorMensal(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Dia Vencimento</Label>
+                <Select value={diaVencimento} onValueChange={setDiaVencimento}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
+                      <SelectItem key={dia} value={String(dia)}>
+                        Dia {dia}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-porcentagemDesconto">Subsídio (%)</Label>
+                <Input
+                  id="edit-porcentagemDesconto"
+                  type="number"
+                  max="100"
+                  value={porcentagemDesconto}
+                  onChange={(e) => setPorcentagemDesconto(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-descontoFolha"
+                checked={descontoFolha}
+                onCheckedChange={(checked) => setDescontoFolha(checked as boolean)}
+              />
+              <label htmlFor="edit-descontoFolha" className="text-sm font-medium">
+                Descontar da folha
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-tipoSinal">Tipo de Sinal</Label>
+                <Select value={tipoSinal} onValueChange={(value) => setTipoSinal(value as any)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo de sinal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="caucao">Caução</SelectItem>
+                    <SelectItem value="fiador">Fiador</SelectItem>
+                    <SelectItem value="outros">Outros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-valorDeposito">Valor do Depósito (R$)</Label>
+                <Input
+                  id="edit-valorDeposito"
+                  type="number"
+                  step="0.01"
+                  value={valorDeposito}
+                  onChange={(e) => setValorDeposito(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-periodoMulta">Período da Multa (dias)</Label>
+                <Input
+                  id="edit-periodoMulta"
+                  type="number"
+                  value={periodoMulta}
+                  onChange={(e) => setPeriodoMulta(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-contratoArquivo">Adicionar Arquivos do Contrato</Label>
+              <div className="space-y-2">
+                <Input
+                  id="edit-contratoArquivo"
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || [])
+                    if (files.length > 0) {
+                      setContratoArquivos(prev => [...prev, ...files])
+                    }
+                  }}
+                  className="cursor-pointer"
+                />
+                {contratoArquivos.length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    {contratoArquivos.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm">{file.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({(file.size / 1024).toFixed(2)} KB)
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setContratoArquivos(prev => prev.filter((_, i) => i !== index))
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                Formatos aceitos: PDF, DOC, DOCX, JPG, PNG (máx. 10MB por arquivo)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-observacoes">Observações</Label>
+              <Textarea
+                id="edit-observacoes"
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpenEditarAluguel(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit">Salvar</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Gerenciar Arquivos do Aluguel */}
+      <Dialog open={openArquivosAluguel} onOpenChange={setOpenArquivosAluguel}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Arquivos do Aluguel</DialogTitle>
+            <DialogDescription>
+              Gerencie os arquivos anexados a este aluguel
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+              <div className="text-center">
+                <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                <p className="text-sm text-gray-600 mb-2">Enviar múltiplos arquivos</p>
+                <Input
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || [])
+                    if (files.length > 0) {
+                      handleUploadArquivos(files)
+                    }
+                  }}
+                  disabled={uploadingArquivos}
+                  className="cursor-pointer"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Formatos aceitos: PDF, DOC, DOCX, JPG, PNG (máx. 10MB por arquivo)
+                </p>
+              </div>
+            </div>
+
+            {uploadingArquivos && (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="text-sm text-gray-600 mt-2">Enviando arquivos...</p>
+              </div>
+            )}
+
+            {arquivosAluguel.length > 0 ? (
+              <div className="space-y-2">
+                {arquivosAluguel.map((arquivo) => (
+                  <div key={arquivo.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-5 w-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm font-medium">{arquivo.nome_arquivo}</p>
+                        <p className="text-xs text-gray-500">
+                          {arquivo.tamanho_arquivo ? `${(arquivo.tamanho_arquivo / 1024).toFixed(2)} KB` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(arquivo.caminho_arquivo, '_blank')}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeletarArquivo(arquivo.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <FileText className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>Nenhum arquivo anexado</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

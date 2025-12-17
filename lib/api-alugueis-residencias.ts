@@ -325,6 +325,60 @@ export const AlugueisAPI = {
   deletar: async (id: string): Promise<boolean> => {
     console.warn('Deletar aluguel não está implementado no backend. Use encerrar() ao invés.')
     return false
+  },
+
+  // Gerenciar arquivos do aluguel
+  listarArquivos: async (aluguelId: string): Promise<any[]> => {
+    try {
+      const data = await apiRequest(`/api/alugueis-residencias/${aluguelId}/arquivos`)
+      return Array.isArray(data) ? data : []
+    } catch (error) {
+      console.error('Erro ao listar arquivos:', error)
+      throw error
+    }
+  },
+
+  uploadArquivos: async (aluguelId: string, files: File[], categoria?: string, descricao?: string): Promise<{ sucessos: any[], erros: any[] }> => {
+    try {
+      const formData = new FormData()
+      files.forEach(file => {
+        formData.append('arquivos', file)
+      })
+      if (categoria) formData.append('categoria', categoria)
+      if (descricao) formData.append('descricao', descricao)
+
+      const token = getAuthToken()
+      const response = await fetch(`${API_BASE_URL}/api/alugueis-residencias/${aluguelId}/arquivos`, {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Erro na requisição' }))
+        throw new Error(error.message || error.error || 'Erro na requisição')
+      }
+
+      const result = await response.json()
+      return result.success ? result.data : { sucessos: [], erros: [] }
+    } catch (error) {
+      console.error('Erro ao fazer upload de arquivos:', error)
+      throw error
+    }
+  },
+
+  deletarArquivo: async (arquivoId: string): Promise<boolean> => {
+    try {
+      await apiRequest(`/api/alugueis-residencias/arquivos/${arquivoId}`, {
+        method: 'DELETE'
+      })
+      return true
+    } catch (error) {
+      console.error('Erro ao deletar arquivo:', error)
+      throw error
+    }
   }
 }
 
