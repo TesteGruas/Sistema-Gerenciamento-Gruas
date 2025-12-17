@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils"
 import { 
   DollarSign, 
   Receipt, 
-  FileText, 
   Calculator,
   TrendingUp,
   TrendingDown,
@@ -53,24 +52,19 @@ const financeiroNavItems = [
     icon: CreditCard,
   },
   {
-    title: "Receitas",
-    href: "/dashboard/financeiro/receitas",
+    title: "Contas a Receber",
+    href: "/dashboard/financeiro/contas-receber",
     icon: TrendingUp,
   },
   {
-    title: "Custos",
-    href: "/dashboard/financeiro/custos",
+    title: "Contas a Pagar",
+    href: "/dashboard/financeiro/contas-pagar",
     icon: TrendingDown,
   },
   {
     title: "Aluguéis",
     href: "/dashboard/financeiro/alugueis",
     icon: Home,
-  },
-  {
-    title: "Relatórios",
-    href: "/dashboard/financeiro/relatorios",
-    icon: FileText,
   },
 ]
 
