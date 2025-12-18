@@ -7,21 +7,24 @@ const router = express.Router();
 
 // Schema de validação
 const impostoSchema = Joi.object({
-  tipo: Joi.string().valid('ISS', 'ICMS', 'PIS', 'COFINS', 'IRPJ', 'CSLL', 'INSS', 'OUTRO').required(),
+  tipo: Joi.string().min(1).max(100).required(), // Permite qualquer tipo (padrão ou personalizado)
   descricao: Joi.string().min(1).max(500).required(),
   valor: Joi.number().min(0).precision(2).required(),
   valor_base: Joi.number().min(0).precision(2).required(),
   aliquota: Joi.number().min(0).max(100).precision(2).required(),
   competencia: Joi.string().pattern(/^\d{4}-\d{2}$/).required(), // YYYY-MM
   data_vencimento: Joi.date().iso().required(),
-  referencia: Joi.string().max(255).optional(),
-  observacoes: Joi.string().max(1000).optional()
+  referencia: Joi.string().max(255).allow('').optional(),
+  observacoes: Joi.string().max(1000).allow('').optional()
 });
 
 const impostoUpdateSchema = impostoSchema.fork(
   ['tipo', 'descricao', 'valor', 'valor_base', 'aliquota', 'competencia', 'data_vencimento'],
   (schema) => schema.optional()
-);
+).keys({
+  data_pagamento: Joi.date().iso().optional(),
+  status: Joi.string().valid('pendente', 'pago', 'atrasado', 'cancelado').optional()
+});
 
 const pagamentoSchema = Joi.object({
   valor_pago: Joi.number().min(0).precision(2).required(),

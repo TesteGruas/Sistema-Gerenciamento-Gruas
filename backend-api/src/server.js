@@ -96,6 +96,7 @@ import relatoriosRhRoutes from './routes/relatorios-rh.js'
 import fornecedoresRoutes from './routes/fornecedores.js'
 import produtosRoutes from './routes/produtos.js'
 import impostosFinanceirosRoutes from './routes/impostos-financeiros.js'
+import tiposImpostosRoutes from './routes/tipos-impostos.js'
 import gruasMensaisRoutes from './routes/gruas-mensais.js'
 import checklistDevolucaoRoutes from './routes/checklist-devolucao.js'
 import notificacoesRoutes from './routes/notificacoes.js'
@@ -434,6 +435,7 @@ app.use('/api/relatorios-rh', relatoriosRhRoutes)
 app.use('/api/fornecedores', fornecedoresRoutes)
 app.use('/api/produtos', produtosRoutes)
 app.use('/api/impostos-financeiros', impostosFinanceirosRoutes)
+app.use('/api/tipos-impostos', tiposImpostosRoutes)
 app.use('/api/gruas-mensais', gruasMensaisRoutes)
 app.use('/api/checklist-devolucao', checklistDevolucaoRoutes)
 app.use('/api/notificacoes', notificacoesRoutes)
