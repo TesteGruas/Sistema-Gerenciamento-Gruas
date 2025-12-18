@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -130,6 +130,7 @@ function ObraDetailsPageContent() {
   // Estados para devolução de componentes
   const [componentesDevolucao, setComponentesDevolucao] = useState<Array<ComponenteGrua & { grua_nome?: string }>>([])
   const [loadingComponentesDevolucao, setLoadingComponentesDevolucao] = useState(false)
+  const componentesDevolucaoCarregadosRef = useRef(false)
   const [devolucoes, setDevolucoes] = useState<Record<number, {
     tipo: 'completa' | 'parcial' | null
     quantidade_devolvida?: number
@@ -2165,7 +2166,7 @@ function ObraDetailsPageContent() {
     setLoadingComponentesDevolucao(true)
     try {
       // Buscar todas as gruas vinculadas à obra
-      const gruasResponse = await obraGruasApi.buscarGruasPorObra(parseInt(obraId))
+      const gruasResponse = await obraGruasApi.listarGruasObra(parseInt(obraId))
       const gruas = gruasResponse.data || []
       
       // Buscar componentes de cada grua
@@ -2185,6 +2186,7 @@ function ObraDetailsPageContent() {
           componentes.forEach((comp: ComponenteGrua) => {
             todosComponentes.push({
               ...comp,
+              grua_id: gruaId.toString(),
               grua_nome: grua.grua?.name || grua.grua?.modelo || `Grua ${gruaId}`
             })
           })
@@ -2598,12 +2600,21 @@ useEffect(() => {
   }
 }, [activeTab, obra, loadingSinaleiros, sinaleiros.length]);
 
-// Carregar componentes para devolução quando a aba for ativada
+// Carregar componentes para devolução quando a aba de gruas for ativada
 useEffect(() => {
-  if (activeTab === 'devolucao-componentes' && obra && !loadingComponentesDevolucao && componentesDevolucao.length === 0) {
+  // Resetar flag quando mudar de aba ou obra
+  if (activeTab !== 'gruas' || !obraId) {
+    componentesDevolucaoCarregadosRef.current = false
+    return
+  }
+  
+  // Carregar apenas uma vez quando a aba for ativada
+  if (activeTab === 'gruas' && obraId && !loadingComponentesDevolucao && !componentesDevolucaoCarregadosRef.current) {
+    componentesDevolucaoCarregadosRef.current = true
     carregarComponentesDevolucao();
   }
-}, [activeTab, obra, loadingComponentesDevolucao, componentesDevolucao.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [activeTab, obraId, loadingComponentesDevolucao]);
   // Filtro de custos agora é feito via useMemo com custosFiltrados
 
   const getStatusColor = (status: string) => {
@@ -2956,24 +2967,23 @@ useEffect(() => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="flex flex-wrap w-full gap-1 p-1 h-auto">
-        <TabsTrigger value="geral">Geral</TabsTrigger>
-        <TabsTrigger value="gruas">Gruas</TabsTrigger>
-        <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
-        <TabsTrigger value="sinaleiros">Sinaleiros</TabsTrigger>
-        <TabsTrigger value="medicoes-mensais">
+      <TabsList className="flex w-full gap-1 p-1 h-auto justify-start overflow-x-auto">
+        <TabsTrigger value="geral" className="flex-1 min-w-[120px] whitespace-nowrap">Geral</TabsTrigger>
+        <TabsTrigger value="gruas" className="flex-1 min-w-[120px] whitespace-nowrap">Gruas</TabsTrigger>
+        <TabsTrigger value="funcionarios" className="flex-1 min-w-[120px] whitespace-nowrap">Funcionários</TabsTrigger>
+        <TabsTrigger value="sinaleiros" className="flex-1 min-w-[120px] whitespace-nowrap">Sinaleiros</TabsTrigger>
+        <TabsTrigger value="medicoes-mensais" className="flex-1 min-w-[120px] whitespace-nowrap">
           Medições Mensais
         </TabsTrigger>
-        <TabsTrigger value="documentos">Arquivos</TabsTrigger>
-        <TabsTrigger value="livro-grua">
+        <TabsTrigger value="documentos" className="flex-1 min-w-[120px] whitespace-nowrap">Arquivos</TabsTrigger>
+        <TabsTrigger value="livro-grua" className="flex-1 min-w-[120px] whitespace-nowrap">
           Livro da Grua
         </TabsTrigger>
-        <TabsTrigger value="checklists">
+        <TabsTrigger value="checklists" className="flex-1 min-w-[120px] whitespace-nowrap">
           <CheckCircle2 className="w-4 h-4 mr-2" />
           Checklists e Manutenções
         </TabsTrigger>
-        <TabsTrigger value="complementos">Complementos</TabsTrigger>
-        <TabsTrigger value="devolucao-componentes">Devolução Componentes</TabsTrigger>
+        <TabsTrigger value="complementos" className="flex-1 min-w-[120px] whitespace-nowrap">Complementos</TabsTrigger>
       </TabsList>
 
         <TabsContent value="geral" className="space-y-4">
@@ -3486,6 +3496,8 @@ useEffect(() => {
             <CardContent className="px-0">
               {loadingGruas ? (
                 <CardLoader text="Carregando gruas vinculadas..." />
+              ) : loadingComponentesDevolucao && componentesDevolucao.length === 0 ? (
+                <CardLoader text="Carregando componentes..." />
               ) : gruasVinculadas.length > 0 ? (
                 <div className="space-y-6">
                   {gruasVinculadas.map((grua) => {
@@ -3539,9 +3551,284 @@ useEffect(() => {
                             )}
                           </div>
                         </div>
+
+                        {/* Devolução de Componentes desta Grua */}
+                        {(() => {
+                          const gruaIdAtual = String(grua.grua?.id || grua.gruaId || grua.id)
+                          const componentesDestaGrua = componentesDevolucao.filter(comp => {
+                            const compGruaId = String(comp.grua_id || comp.grua?.id || '')
+                            return compGruaId === gruaIdAtual
+                          })
+
+                          return (
+                            <div className="mt-4 pt-4 border-t">
+                              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                                <PackageIcon className="w-4 h-4" />
+                                Devolução de Componentes
+                              </h4>
+                              {loadingComponentesDevolucao ? (
+                                <div className="text-sm text-gray-500 py-4">Carregando componentes...</div>
+                              ) : componentesDestaGrua.length === 0 ? (
+                                <div className="text-sm text-gray-500 py-4 text-center">
+                                  Nenhum componente em uso para devolução
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div className="overflow-x-auto">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Componente</TableHead>
+                                          <TableHead>Quantidade Total</TableHead>
+                                          <TableHead>Quantidade em Uso</TableHead>
+                                          <TableHead>Valor Unitário</TableHead>
+                                          <TableHead>Devolução Completa</TableHead>
+                                          <TableHead>Devolução Parcial</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {componentesDestaGrua.map((componente) => {
+                                        const devolucao = devolucoes[componente.id] || { tipo: null }
+                                        const isCompleta = devolucao.tipo === 'completa'
+                                        const isParcial = devolucao.tipo === 'parcial'
+                                        
+                                        return (
+                                          <TableRow key={componente.id}>
+                                            <TableCell>
+                                              <div>
+                                                <div className="font-medium">{componente.nome}</div>
+                                                <div className="text-xs text-gray-500">{componente.tipo}</div>
+                                                {componente.modelo && (
+                                                  <div className="text-xs text-gray-500">Modelo: {componente.modelo}</div>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                            <TableCell>{componente.quantidade_total}</TableCell>
+                                            <TableCell>{componente.quantidade_em_uso}</TableCell>
+                                            <TableCell>R$ {componente.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                            <TableCell>
+                                              <Button
+                                                size="sm"
+                                                variant={isCompleta ? "default" : "outline"}
+                                                onClick={() => {
+                                                  setDevolucoes({
+                                                    ...devolucoes,
+                                                    [componente.id]: {
+                                                      tipo: isCompleta ? null : 'completa',
+                                                      quantidade_devolvida: componente.quantidade_em_uso,
+                                                      valor: componente.valor_unitario * componente.quantidade_em_uso
+                                                    }
+                                                  })
+                                                }}
+                                                className={isCompleta ? "bg-green-600 hover:bg-green-700" : ""}
+                                              >
+                                                <Check className="w-4 h-4" />
+                                              </Button>
+                                            </TableCell>
+                                            <TableCell>
+                                              <div className="flex items-center gap-2">
+                                                <Button
+                                                  size="sm"
+                                                  variant={isParcial ? "destructive" : "outline"}
+                                                  onClick={() => {
+                                                    if (!isParcial) {
+                                                      setDevolucoes({
+                                                        ...devolucoes,
+                                                        [componente.id]: {
+                                                          tipo: 'parcial',
+                                                          quantidade_devolvida: componente.quantidade_em_uso,
+                                                          valor: 0
+                                                        }
+                                                      })
+                                                    }
+                                                  }}
+                                                >
+                                                  <X className="w-4 h-4" />
+                                                </Button>
+                                                {isParcial && (
+                                                  <Dialog>
+                                                    <DialogTrigger asChild>
+                                                      <Button size="sm" variant="outline">
+                                                        Editar
+                                                      </Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent>
+                                                      <DialogHeader>
+                                                        <DialogTitle>Devolução Parcial - {componente.nome}</DialogTitle>
+                                                        <DialogDescription>
+                                                          Informe a quantidade que retornou e o valor do que não retornou
+                                                        </DialogDescription>
+                                                      </DialogHeader>
+                                                      <div className="space-y-4">
+                                                        <div>
+                                                          <Label>Quantidade Total Enviada</Label>
+                                                          <Input value={componente.quantidade_em_uso} disabled />
+                                                        </div>
+                                                        <div>
+                                                          <Label>Quantidade que Retornou *</Label>
+                                                          <Input
+                                                            type="number"
+                                                            min="0"
+                                                            max={componente.quantidade_em_uso}
+                                                            value={devolucao.quantidade_devolvida || 0}
+                                                            onChange={(e) => {
+                                                              const qtd = parseInt(e.target.value) || 0
+                                                              setDevolucoes({
+                                                                ...devolucoes,
+                                                                [componente.id]: {
+                                                                  ...devolucao,
+                                                                  quantidade_devolvida: qtd,
+                                                                  valor: (componente.quantidade_em_uso - qtd) * componente.valor_unitario
+                                                                }
+                                                              })
+                                                            }}
+                                                          />
+                                                        </div>
+                                                        <div>
+                                                          <Label>Valor do que Não Retornou (R$) *</Label>
+                                                          <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            value={devolucao.valor || 0}
+                                                            onChange={(e) => {
+                                                              setDevolucoes({
+                                                                ...devolucoes,
+                                                                [componente.id]: {
+                                                                  ...devolucao,
+                                                                  valor: parseFloat(e.target.value) || 0
+                                                                }
+                                                              })
+                                                            }}
+                                                          />
+                                                          <p className="text-xs text-gray-500 mt-1">
+                                                            Valor calculado: R$ {((componente.quantidade_em_uso - (devolucao.quantidade_devolvida || 0)) * componente.valor_unitario).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                          </p>
+                                                        </div>
+                                                        <div>
+                                                          <Label>Observações</Label>
+                                                          <Textarea
+                                                            value={devolucao.observacoes || ''}
+                                                            onChange={(e) => {
+                                                              setDevolucoes({
+                                                                ...devolucoes,
+                                                                [componente.id]: {
+                                                                  ...devolucao,
+                                                                  observacoes: e.target.value
+                                                                }
+                                                              })
+                                                            }}
+                                                            placeholder="Descreva o que aconteceu com os componentes que não retornaram..."
+                                                            rows={3}
+                                                          />
+                                                        </div>
+                                                      </div>
+                                                    </DialogContent>
+                                                  </Dialog>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                          </TableRow>
+                                        )
+                                      })}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   })}
+                  
+                  {/* Botões de ação para devoluções (uma vez, no final) */}
+                  {componentesDevolucao.length > 0 && (
+                    <div className="flex justify-end gap-2 pt-4 border-t mt-6">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setDevolucoes({})
+                        }}
+                      >
+                        Limpar Todas as Seleções
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          const devolucoesSelecionadas = Object.entries(devolucoes).filter(([_, dev]) => dev.tipo !== null)
+                          if (devolucoesSelecionadas.length === 0) {
+                            toast({
+                              title: "Atenção",
+                              description: "Selecione pelo menos uma devolução",
+                              variant: "destructive"
+                            })
+                            return
+                          }
+                          
+                          setProcessandoDevolucao(true)
+                          try {
+                            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                            
+                            const response = await fetch(`${API_URL}/api/grua-componentes/devolver`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                              },
+                              body: JSON.stringify({
+                                obra_id: parseInt(obraId),
+                                devolucoes: devolucoesSelecionadas.map(([componente_id, dev]) => ({
+                                  componente_id: parseInt(componente_id),
+                                  tipo: dev.tipo,
+                                  quantidade_devolvida: dev.quantidade_devolvida,
+                                  valor: dev.valor,
+                                  observacoes: dev.observacoes
+                                }))
+                              })
+                            })
+                            
+                            if (!response.ok) {
+                              const error = await response.json()
+                              throw new Error(error.message || 'Erro ao processar devoluções')
+                            }
+                            
+                            toast({
+                              title: "Sucesso",
+                              description: "Devoluções processadas com sucesso"
+                            })
+                            
+                            setDevolucoes({})
+                            // Recarregar componentes
+                            await carregarComponentesDevolucao()
+                          } catch (error: any) {
+                            console.error('Erro ao processar devoluções:', error)
+                            toast({
+                              title: "Erro",
+                              description: error.message || "Erro ao processar devoluções",
+                              variant: "destructive"
+                            })
+                          } finally {
+                            setProcessandoDevolucao(false)
+                          }
+                        }}
+                        disabled={processandoDevolucao}
+                      >
+                        {processandoDevolucao ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            Processando...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Processar Todas as Devoluções
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
@@ -3941,274 +4228,6 @@ useEffect(() => {
                   <p className="text-sm text-gray-600">
                     Nenhuma grua vinculada. Os complementos de obra podem ser gerenciados acima.
                   </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="devolucao-componentes" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Devolução de Componentes</CardTitle>
-              <CardDescription>
-                Gerencie a devolução de componentes das gruas vinculadas a esta obra
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingComponentesDevolucao ? (
-                <CardLoader text="Carregando componentes..." />
-              ) : componentesDevolucao.length === 0 ? (
-                <div className="text-center py-8">
-                  <PackageIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-sm text-gray-600">Nenhum componente encontrado nas gruas vinculadas</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Componente</TableHead>
-                        <TableHead>Grua</TableHead>
-                        <TableHead>Quantidade Total</TableHead>
-                        <TableHead>Quantidade em Uso</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Devolução Completa</TableHead>
-                        <TableHead>Devolução Parcial</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {componentesDevolucao.map((componente) => {
-                        const devolucao = devolucoes[componente.id] || { tipo: null }
-                        const isCompleta = devolucao.tipo === 'completa'
-                        const isParcial = devolucao.tipo === 'parcial'
-                        
-                        return (
-                          <TableRow key={componente.id}>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{componente.nome}</div>
-                                <div className="text-xs text-gray-500">{componente.tipo}</div>
-                                {componente.modelo && (
-                                  <div className="text-xs text-gray-500">Modelo: {componente.modelo}</div>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>{componente.grua_nome || componente.grua?.name || `Grua ${componente.grua_id}`}</TableCell>
-                            <TableCell>{componente.quantidade_total}</TableCell>
-                            <TableCell>{componente.quantidade_em_uso}</TableCell>
-                            <TableCell>R$ {componente.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant={isCompleta ? "default" : "outline"}
-                                onClick={() => {
-                                  setDevolucoes({
-                                    ...devolucoes,
-                                    [componente.id]: {
-                                      tipo: isCompleta ? null : 'completa',
-                                      quantidade_devolvida: componente.quantidade_em_uso,
-                                      valor: componente.valor_unitario * componente.quantidade_em_uso
-                                    }
-                                  })
-                                }}
-                                className={isCompleta ? "bg-green-600 hover:bg-green-700" : ""}
-                              >
-                                <Check className="w-4 h-4" />
-                              </Button>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant={isParcial ? "destructive" : "outline"}
-                                  onClick={() => {
-                                    if (!isParcial) {
-                                      setDevolucoes({
-                                        ...devolucoes,
-                                        [componente.id]: {
-                                          tipo: 'parcial',
-                                          quantidade_devolvida: componente.quantidade_em_uso,
-                                          valor: 0
-                                        }
-                                      })
-                                    }
-                                  }}
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                                {isParcial && (
-                                  <Dialog>
-                                    <DialogTrigger asChild>
-                                      <Button size="sm" variant="outline">
-                                        Editar
-                                      </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                      <DialogHeader>
-                                        <DialogTitle>Devolução Parcial - {componente.nome}</DialogTitle>
-                                        <DialogDescription>
-                                          Informe a quantidade que retornou e o valor do que não retornou
-                                        </DialogDescription>
-                                      </DialogHeader>
-                                      <div className="space-y-4">
-                                        <div>
-                                          <Label>Quantidade Total Enviada</Label>
-                                          <Input value={componente.quantidade_em_uso} disabled />
-                                        </div>
-                                        <div>
-                                          <Label>Quantidade que Retornou *</Label>
-                                          <Input
-                                            type="number"
-                                            min="0"
-                                            max={componente.quantidade_em_uso}
-                                            value={devolucao.quantidade_devolvida || 0}
-                                            onChange={(e) => {
-                                              const qtd = parseInt(e.target.value) || 0
-                                              setDevolucoes({
-                                                ...devolucoes,
-                                                [componente.id]: {
-                                                  ...devolucao,
-                                                  quantidade_devolvida: qtd,
-                                                  valor: (componente.quantidade_em_uso - qtd) * componente.valor_unitario
-                                                }
-                                              })
-                                            }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <Label>Valor do que Não Retornou (R$) *</Label>
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            value={devolucao.valor || 0}
-                                            onChange={(e) => {
-                                              setDevolucoes({
-                                                ...devolucoes,
-                                                [componente.id]: {
-                                                  ...devolucao,
-                                                  valor: parseFloat(e.target.value) || 0
-                                                }
-                                              })
-                                            }}
-                                          />
-                                          <p className="text-xs text-gray-500 mt-1">
-                                            Valor calculado: R$ {((componente.quantidade_em_uso - (devolucao.quantidade_devolvida || 0)) * componente.valor_unitario).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                          </p>
-                                        </div>
-                                        <div>
-                                          <Label>Observações</Label>
-                                          <Textarea
-                                            value={devolucao.observacoes || ''}
-                                            onChange={(e) => {
-                                              setDevolucoes({
-                                                ...devolucoes,
-                                                [componente.id]: {
-                                                  ...devolucao,
-                                                  observacoes: e.target.value
-                                                }
-                                              })
-                                            }}
-                                            placeholder="Descreva o que aconteceu com os componentes que não retornaram..."
-                                            rows={3}
-                                          />
-                                        </div>
-                                      </div>
-                                    </DialogContent>
-                                  </Dialog>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                  
-                  <div className="flex justify-end gap-2 pt-4 border-t">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setDevolucoes({})
-                      }}
-                    >
-                      Limpar Seleções
-                    </Button>
-                    <Button
-                      onClick={async () => {
-                        const devolucoesSelecionadas = Object.entries(devolucoes).filter(([_, dev]) => dev.tipo !== null)
-                        if (devolucoesSelecionadas.length === 0) {
-                          toast({
-                            title: "Atenção",
-                            description: "Selecione pelo menos uma devolução",
-                            variant: "destructive"
-                          })
-                          return
-                        }
-                        
-                        setProcessandoDevolucao(true)
-                        try {
-                          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-                          
-                          const response = await fetch(`${API_URL}/api/grua-componentes/devolver`, {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify({
-                              obra_id: parseInt(obraId),
-                              devolucoes: devolucoesSelecionadas.map(([componente_id, dev]) => ({
-                                componente_id: parseInt(componente_id),
-                                tipo: dev.tipo,
-                                quantidade_devolvida: dev.quantidade_devolvida,
-                                valor: dev.valor,
-                                observacoes: dev.observacoes
-                              }))
-                            })
-                          })
-                          
-                          if (!response.ok) {
-                            const error = await response.json()
-                            throw new Error(error.message || 'Erro ao processar devoluções')
-                          }
-                          
-                          toast({
-                            title: "Sucesso",
-                            description: "Devoluções processadas com sucesso"
-                          })
-                          
-                          setDevolucoes({})
-                          // Recarregar componentes
-                          await carregarComponentesDevolucao()
-                        } catch (error: any) {
-                          console.error('Erro ao processar devoluções:', error)
-                          toast({
-                            title: "Erro",
-                            description: error.message || "Erro ao processar devoluções",
-                            variant: "destructive"
-                          })
-                        } finally {
-                          setProcessandoDevolucao(false)
-                        }
-                      }}
-                      disabled={processandoDevolucao}
-                    >
-                      {processandoDevolucao ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                          Processando...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Processar Devoluções
-                        </>
-                      )}
-                    </Button>
-                  </div>
                 </div>
               )}
             </CardContent>
