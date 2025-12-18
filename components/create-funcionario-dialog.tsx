@@ -13,6 +13,7 @@ import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
 import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 import { useToast } from "@/hooks/use-toast"
+import { DebugButton } from "@/components/debug-button"
 
 interface CreateFuncionarioDialogProps {
   open: boolean
@@ -174,6 +175,27 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     onOpenChange(open)
   }, [onOpenChange, resetForm])
 
+  // Função para preencher dados de debug
+  const preencherDadosDebug = useCallback(() => {
+    const dataAdmissao = new Date()
+    dataAdmissao.setMonth(dataAdmissao.getMonth() - 6) // 6 meses atrás
+    
+    setForm({
+      name: "Carlos Eduardo Santos",
+      email: "carlos.santos@empresa.com.br",
+      phone: "(11) 98765-4321",
+      cpf: "123.456.789-00",
+      role: cargosAtivos.length > 0 ? cargosAtivos[0].nome : "Operador",
+      status: "Ativo",
+      turno: "Diurno",
+      salary: "500000", // R$ 5.000,00 em centavos
+      hireDate: dataAdmissao.toISOString().split('T')[0],
+      observations: "Funcionário experiente com 5 anos de experiência em operação de gruas. Certificado NR-11 e NR-12.",
+      criar_usuario: true
+    })
+    setEhSupervisor(false)
+  }, [cargosAtivos])
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -185,6 +207,9 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex justify-end">
+            <DebugButton onClick={preencherDadosDebug} disabled={submitting} />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nome Completo *</Label>

@@ -1012,7 +1012,7 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
       email: 'contato@construtoraabc.com.br',
       telefone: '(11) 98765-4321',
       cnpj: '12.345.678/0001-90',
-      endereco: 'Rua das Construções, 123',
+      endereco: 'Rua das Construções, 123 - Centro',
       cidade: 'São Paulo',
       estado: 'SP',
       cep: '01310-100',
@@ -1027,8 +1027,8 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      <div className="flex justify-end">
+    <form onSubmit={onSubmit} className="space-y-2">
+      <div className="flex justify-end" style={{ marginBottom: '0px' }}>
         <DebugButton onClick={preencherDadosDebug} disabled={isSubmitting} />
       </div>
       {/* Informações Básicas */}

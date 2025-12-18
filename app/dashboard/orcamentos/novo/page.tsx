@@ -31,6 +31,7 @@ import { useEmpresa } from "@/hooks/use-empresa"
 import { useAuth } from "@/hooks/use-auth"
 import { useDebugMode } from "@/hooks/use-debug-mode"
 import ClienteSearch from "@/components/cliente-search"
+import { DebugButton } from "@/components/debug-button"
 import GruaSearch from "@/components/grua-search"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
@@ -826,11 +827,6 @@ export default function NovoOrcamentoPage() {
 
   // Função para preencher todos os campos com dados de debug
   const handleDebugFill = () => {
-    // Proteger função de debug - apenas em desenvolvimento
-    if (process.env.NODE_ENV === 'production') {
-      console.warn('Função de debug desabilitada em produção')
-      return
-    }
     // Preencher formData
     setFormData({
       cliente_id: '1',
@@ -1009,18 +1005,11 @@ export default function NovoOrcamentoPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {/* Botão de Debug - apenas para admin@admin.com */}
-          {isAdminUser && (
-            <Button 
-              variant="outline" 
-              onClick={handleDebugFill}
-              className="bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-700"
-              title="Preencher todos os campos com dados de teste"
-            >
-              <Wrench className="w-4 h-4 mr-2" />
-              Debug Campos
-            </Button>
-          )}
+          <DebugButton 
+            onClick={handleDebugFill}
+            variant="wrench"
+            label="Preencher Dados"
+          />
           <Button 
             variant="outline" 
             onClick={() => handleSave(true)}
@@ -1994,18 +1983,11 @@ export default function NovoOrcamentoPage() {
       </Tabs>
 
       <div className="flex justify-end gap-2 sticky bottom-0 bg-white p-4 border-t -mx-6 px-6">
-        {/* Botão de Debug - apenas para admin com debug mode ativado */}
-        {isAdminUser && debugMode && (
-          <Button 
-            variant="outline" 
-            onClick={handleDebugFill}
-            className="bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-700"
-            title="Preencher todos os campos com dados de teste"
-          >
-            <Wrench className="w-4 h-4 mr-2" />
-            Debug Campos
-          </Button>
-        )}
+        <DebugButton 
+          onClick={handleDebugFill}
+          variant="wrench"
+          label="Preencher Dados"
+        />
         <Button variant="outline" onClick={() => router.back()} disabled={isSaving}>
           Voltar
         </Button>

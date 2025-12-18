@@ -50,6 +50,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useDebugMode } from "@/hooks/use-debug-mode"
+import { DebugButton } from "@/components/debug-button"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -810,13 +811,8 @@ export default function NovaObraPage() {
     setCustosMensais([])
   }
 
-  // Função para preencher todos os campos com dados de teste (apenas em desenvolvimento)
+  // Função para preencher todos os campos com dados de teste
   const preencherDadosTeste = () => {
-    // Proteger função de debug - apenas em desenvolvimento
-    if (process.env.NODE_ENV === 'production') {
-      console.warn('Função de debug desabilitada em produção')
-      return
-    }
     // Dados básicos da obra
     setObraFormData({
       name: 'Obra Residencial Teste - Jardim das Flores',
@@ -2378,18 +2374,12 @@ export default function NovaObraPage() {
             Cancelar
           </Button>
           <div className="flex gap-2">
-            {debugMode && (
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={preencherDadosTeste}
-                disabled={creating}
-                className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-              >
-                <Zap className="w-4 h-4 mr-2" />
-                Preencher Dados de Teste
-              </Button>
-            )}
+            <DebugButton 
+              onClick={preencherDadosTeste}
+              disabled={creating}
+              variant="zap"
+              label="Preencher Dados"
+            />
             <Button 
               type="button" 
               variant="outline" 

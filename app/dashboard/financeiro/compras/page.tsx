@@ -40,6 +40,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { estoqueAPI, type Produto } from "@/lib/api-estoque"
 import { fornecedoresApi, type Fornecedor } from "@/lib/api-fornecedores"
+import { DebugButton } from "@/components/debug-button"
 
 // Função utilitária para cores de status
 const getStatusColor = (status: string) => {
@@ -1460,6 +1461,25 @@ function CreateFornecedorDialog({
   onSuccess: (fornecedor: Fornecedor) => void
 }) {
   const { toast } = useToast()
+  
+  // Função para preencher dados de debug
+  const preencherDadosDebug = () => {
+    setFormData({
+      nome: 'Materiais de Construção XYZ Ltda',
+      cnpj: '98.765.432/0001-10',
+      contato: 'Maria Oliveira',
+      telefone: '(11) 91234-5678',
+      email: 'vendas@materiaisxyz.com.br',
+      endereco: 'Av. das Indústrias, 500 - Distrito Industrial',
+      cidade: 'São Paulo',
+      estado: 'SP',
+      cep: '04567-890',
+      categoria: 'Material de Construção',
+      observacoes: 'Fornecedor especializado em materiais de construção, concreto e aço. Prazo de entrega: 5-7 dias úteis.',
+      status: 'ativo'
+    })
+  }
+  
   const [formData, setFormData] = useState({
     nome: '',
     cnpj: '',
@@ -1588,6 +1608,9 @@ function CreateFornecedorDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex justify-end">
+            <DebugButton onClick={preencherDadosDebug} disabled={isSubmitting} />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="nome">Nome/Razão Social *</Label>

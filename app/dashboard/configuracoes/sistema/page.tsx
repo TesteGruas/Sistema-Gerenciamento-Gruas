@@ -17,13 +17,32 @@ export default function ConfiguracaoSistemaPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [debugMode, setDebugMode] = useState(false)
+  
+  // Obter valor de isAdmin para usar como dependência
+  const isAdminValue = isAdmin()
 
   const loadConfig = useCallback(async () => {
     try {
       const response = await api.get('/configuracoes/debug_mode_enabled')
-      if (response.data.success) {
-        const valor = response.data.data.valor
-        setDebugMode(valor === true || valor === 'true' || valor === true)
+      
+      // Verificar diferentes formatos de resposta
+      let valor = null
+      
+      if (response.data && response.data.success && response.data.data) {
+        // Formato esperado: { success: true, data: { valor: true, ... } }
+        valor = response.data.data.valor
+      } else if (response.data && response.data.valor !== undefined) {
+        // Formato alternativo: { valor: true, ... } (sem wrapper success/data)
+        valor = response.data.valor
+      } else if (response.data && typeof response.data === 'boolean') {
+        // Formato direto: true ou false
+        valor = response.data
+      }
+      
+      if (valor !== null && valor !== undefined) {
+        // Verificar se o valor é true (boolean ou string 'true')
+        const isEnabled = valor === true || valor === 'true' || valor === 1 || valor === '1'
+        setDebugMode(isEnabled)
       } else {
         setDebugMode(false)
       }
@@ -35,10 +54,9 @@ export default function ConfiguracaoSistemaPage() {
       } else if (error.response?.status === 429) {
         // Rate limit - não fazer nada, apenas usar padrão
         setDebugMode(false)
-        console.warn('Rate limit atingido - usando valor padrão')
       } else {
-        setDebugMode(false)
         console.error('Erro ao carregar configuração:', error)
+        setDebugMode(false)
       }
     } finally {
       setLoading(false)
@@ -49,9 +67,12 @@ export default function ConfiguracaoSistemaPage() {
     let mounted = true
     
     const checkAndLoad = async () => {
-      const adminCheck = isAdmin()
-      if (adminCheck) {
-        await loadConfig()
+      if (isAdminValue) {
+        try {
+          await loadConfig()
+        } catch (error) {
+          console.error('Erro ao carregar configuração:', error)
+        }
       } else {
         if (mounted) {
           setLoading(false)
@@ -65,7 +86,7 @@ export default function ConfiguracaoSistemaPage() {
       mounted = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Executar apenas uma vez na montagem
+  }, [isAdminValue, loadConfig]) // Executar quando isAdmin ou loadConfig mudar
 
   const saveConfig = async () => {
     if (!isAdmin()) {
@@ -88,6 +109,8 @@ export default function ConfiguracaoSistemaPage() {
           title: "Sucesso!",
           description: "Configuração salva com sucesso",
         })
+        // Recarregar a configuração para garantir sincronização
+        await loadConfig()
       } else {
         throw new Error(response.data.error || 'Erro ao salvar')
       }
