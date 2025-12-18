@@ -65,17 +65,40 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
 
   const loadEmpresa = async () => {
     try {
-      // Por enquanto, usar dados mockados
-      // No futuro, buscar do backend
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('empresa_data')
-        if (stored) {
-          setEmpresa(JSON.parse(stored))
-        } else {
-          setEmpresa(EMPRESA_DEFAULT)
-          localStorage.setItem('empresa_data', JSON.stringify(EMPRESA_DEFAULT))
-        }
+      if (typeof window === 'undefined') {
+        setEmpresa(EMPRESA_DEFAULT)
+        setLoading(false)
+        return
       }
+
+      // TODO: Quando API de empresa estiver disponível, buscar do backend
+      // Tentar carregar do localStorage primeiro
+      const stored = localStorage.getItem('empresa_data')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          setEmpresa(parsed)
+        } catch (parseError) {
+          console.error('Erro ao parsear dados da empresa do localStorage:', parseError)
+          setEmpresa(EMPRESA_DEFAULT)
+        }
+      } else {
+        // Usar dados padrão se não houver no localStorage
+        setEmpresa(EMPRESA_DEFAULT)
+        localStorage.setItem('empresa_data', JSON.stringify(EMPRESA_DEFAULT))
+      }
+
+      // Futuro: Buscar da API quando disponível
+      // try {
+      //   const response = await fetch('/api/empresa')
+      //   if (response.ok) {
+      //     const data = await response.json()
+      //     setEmpresa(data)
+      //     localStorage.setItem('empresa_data', JSON.stringify(data))
+      //   }
+      // } catch (apiError) {
+      //   console.warn('API de empresa não disponível, usando dados do localStorage', apiError)
+      // }
     } catch (error) {
       console.error('Erro ao carregar dados da empresa:', error)
       setEmpresa(EMPRESA_DEFAULT)
@@ -86,12 +109,24 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
 
   const updateEmpresa = async (data: Partial<EmpresaData>) => {
     try {
-      const updated = { ...empresa, ...data }
+      const updated = { ...empresa, ...data, updated_at: new Date().toISOString() }
       setEmpresa(updated)
-      localStorage.setItem('empresa_data', JSON.stringify(updated))
       
-      // No futuro, salvar no backend
-      // await empresaApi.atualizar(updated)
+      // Salvar no localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('empresa_data', JSON.stringify(updated))
+      }
+      
+      // TODO: Quando API de empresa estiver disponível, salvar no backend
+      // try {
+      //   await fetch('/api/empresa', {
+      //     method: 'PUT',
+      //     headers: { 'Content-Type': 'application/json' },
+      //     body: JSON.stringify(updated)
+      //   })
+      // } catch (apiError) {
+      //   console.warn('Erro ao salvar empresa na API, dados salvos apenas localmente', apiError)
+      // }
     } catch (error) {
       console.error('Erro ao atualizar dados da empresa:', error)
       throw error

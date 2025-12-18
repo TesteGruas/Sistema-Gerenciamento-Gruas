@@ -810,8 +810,13 @@ export default function NovaObraPage() {
     setCustosMensais([])
   }
 
-  // Função para preencher todos os campos com dados de teste
+  // Função para preencher todos os campos com dados de teste (apenas em desenvolvimento)
   const preencherDadosTeste = () => {
+    // Proteger função de debug - apenas em desenvolvimento
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('Função de debug desabilitada em produção')
+      return
+    }
     // Dados básicos da obra
     setObraFormData({
       name: 'Obra Residencial Teste - Jardim das Flores',

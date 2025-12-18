@@ -826,6 +826,11 @@ export default function NovoOrcamentoPage() {
 
   // Função para preencher todos os campos com dados de debug
   const handleDebugFill = () => {
+    // Proteger função de debug - apenas em desenvolvimento
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('Função de debug desabilitada em produção')
+      return
+    }
     // Preencher formData
     setFormData({
       cliente_id: '1',

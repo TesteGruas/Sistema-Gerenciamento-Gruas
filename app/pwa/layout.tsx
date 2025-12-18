@@ -445,59 +445,23 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     description: 'Meu perfil'
   }
   
-  // Verificar se o usuário é supervisor (verificando múltiplas fontes)
+  // Verificar se o usuário é cliente/dono da obra (quem aprova horas extras)
+  // Supervisor não é mais um cargo, é uma atribuição. Quem aprova horas extras é o cliente da obra.
   const verificarSeSupervisor = () => {
     if (typeof window === 'undefined') return false
     
     try {
-      // Buscar cargo de todas as fontes possíveis
-      let cargoFromMetadata: string | null = null
-      let cargoFromProfile: string | null = null
-      
-      const userDataStr = localStorage.getItem('user_data')
-      if (userDataStr) {
-        try {
-          const userData = JSON.parse(userDataStr)
-          cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
-        } catch (e) {
-          // Ignorar erro de parsing
-        }
-      }
-      
-      const userProfileStr = localStorage.getItem('user_profile')
-      if (userProfileStr) {
-        try {
-          const profile = JSON.parse(userProfileStr)
-          cargoFromProfile = profile?.cargo || null
-        } catch (e) {
-          // Ignorar erro de parsing
-        }
-      }
-      
+      // Verificar se é cliente (level 1 ou role cliente)
+      // Clientes são quem aprovam horas extras como donos das obras
+      const userLevel = parseInt(localStorage.getItem('user_level') || '0', 10)
       const hookRole = userRole?.toLowerCase() || ''
-      const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
-      const cargoFromProfileLower = cargoFromProfile?.toLowerCase() || ''
-      const userCargoLower = user?.cargo?.toLowerCase() || ''
       
-      const allRolesArray = [
-        cargoFromMetadataLower,
-        cargoFromProfileLower,
-        userCargoLower,
-        hookRole
-      ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
+      // Se for cliente (level 1 ou role contém cliente), pode aprovar horas extras
+      const isCliente = userLevel === 1 || hookRole.includes('cliente')
       
-      const isSupervisor = allRolesArray.some(role => {
-        if (!role) return false
-        const roleLower = String(role).toLowerCase()
-        return (
-          roleLower.includes('supervisor') ||
-          roleLower === 'supervisores'
-        )
-      })
-      
-      return isSupervisor
+      return isCliente
     } catch (error) {
-      console.error('Erro ao verificar se é supervisor:', error)
+      console.error('Erro ao verificar se é supervisor/cliente:', error)
       return false
     }
   }

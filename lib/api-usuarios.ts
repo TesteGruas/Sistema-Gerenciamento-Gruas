@@ -200,6 +200,48 @@ export const apiUsuarios = {
   // Atualizar status do usuário
   atualizarStatus: async (id: number, status: 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente'): Promise<Usuario> => {
     return await apiUsuarios.atualizar(id, { status });
+  },
+
+  // Buscar atividades do usuário
+  buscarAtividades: async (id: number, params?: {
+    page?: number;
+    limit?: number;
+    data_inicio?: string;
+    data_fim?: string;
+  }): Promise<{
+    success: boolean;
+    data: Array<{
+      id: string;
+      tipo: string;
+      timestamp: string;
+      acao: string;
+      entidade: string;
+      entidade_id?: number;
+      titulo: string;
+      descricao: string;
+      usuario_id: number;
+      usuario_nome: string;
+      dados_anteriores?: any;
+      dados_novos?: any;
+      ip_address?: string;
+      user_agent?: string;
+    }>;
+    pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.data_inicio) queryParams.append('data_inicio', params.data_inicio);
+    if (params?.data_fim) queryParams.append('data_fim', params.data_fim);
+    
+    const url = `/api/users/${id}/atividades${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    const response = await apiRequest(url);
+    return response;
   }
 };
 

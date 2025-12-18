@@ -642,7 +642,11 @@ export default function RelatoriosPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as obras</SelectItem>
-                  {/* TODO: Carregar obras do backend */}
+                  {obras.map((obra) => (
+                    <SelectItem key={obra.id} value={obra.id.toString()}>
+                      {obra.nome}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

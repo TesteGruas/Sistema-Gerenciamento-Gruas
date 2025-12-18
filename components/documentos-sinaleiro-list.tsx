@@ -15,7 +15,9 @@ interface DocumentosSinaleiroListProps {
   readOnly?: boolean
 }
 
-// Documentos obrigatórios (mantido do mock)
+// Documentos obrigatórios para sinaleiros
+// TODO: No futuro, estes dados podem vir de uma configuração/API para permitir personalização
+// Por enquanto, mantidos como constantes conforme regras de negócio estabelecidas
 export const documentosObrigatorios = [
   { tipo: 'rg_frente', nome: 'RG (Frente)', obrigatorio: true },
   { tipo: 'rg_verso', nome: 'RG (Verso)', obrigatorio: true },

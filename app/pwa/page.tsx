@@ -79,7 +79,7 @@ export default function PWAMainPage() {
       const userDataStr = localStorage.getItem('user_data')
       if (userDataStr) {
         const userData = JSON.parse(userDataStr)
-        // Priorizar cargo se contiver "supervisor", mesmo que o perfil seja "Operador"
+        // Buscar cargo (supervisor não é mais um cargo, é uma atribuição)
         const cargo = userData?.user_metadata?.cargo || userData?.cargo || null
         const role = userData?.role || null
         setRoleFromUserData(cargo || role || null)
@@ -89,81 +89,49 @@ export default function PWAMainPage() {
     }
   }, [])
   
-  // Priorizar cargo do user_metadata se contiver "supervisor", depois perfil, depois outros
-  // IMPORTANTE: Se o cargo contém "supervisor", usar ele mesmo que o perfil seja "Operador"
-  const cargoFromUserData = roleFromUserData?.toLowerCase().includes('supervisor') ? roleFromUserData : null
-  const currentUserRole = cargoFromUserData ||
-                         (pwaUserData.user?.cargo?.toLowerCase().includes('supervisor') ? pwaUserData.user?.cargo : null) ||
-                         roleFromPerfil || 
+  // Determinar role atual (supervisor não é mais um cargo específico)
+  const currentUserRole = roleFromPerfil || 
                          roleFromUserData ||
                          (userRole && String(userRole) !== 'authenticated' ? String(userRole) : null) || 
                          pwaUserData.user?.role || 
                          pwaUserData.user?.cargo
 
-  // Função auxiliar para verificar se é supervisor (usando useMemo para recalcular quando dados mudarem)
+  // Função auxiliar para verificar se é cliente/dono da obra (quem aprova horas extras)
+  // Supervisor não é mais um cargo, é uma atribuição. Quem aprova horas extras é o cliente da obra.
   const isSupervisorUser = useMemo(() => {
     if (typeof window === 'undefined') return false
     
     try {
-      // Buscar cargo de todas as fontes possíveis
-      let cargoFromMetadata: string | null = null
-      let cargoFromProfile: string | null = null
-      
-      const userDataStr = localStorage.getItem('user_data')
-      if (userDataStr) {
-        try {
-          const userData = JSON.parse(userDataStr)
-          cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || userData?.profile?.cargo || null
-        } catch (e) {
-          // Ignorar erro de parsing
-        }
-      }
-      
-      const userProfileStr = localStorage.getItem('user_profile')
-      if (userProfileStr) {
-        try {
-          const profile = JSON.parse(userProfileStr)
-          cargoFromProfile = profile?.cargo || null
-        } catch (e) {
-          // Ignorar erro de parsing
-        }
-      }
-      
+      // Verificar se é cliente (level 1 ou role cliente)
+      // Clientes são quem aprovam horas extras como donos das obras
+      const userLevel = parseInt(localStorage.getItem('user_level') || '0', 10)
       const hookRole = userRole?.toLowerCase() || ''
       const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
       const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
-      const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
-      const cargoFromProfileLower = cargoFromProfile?.toLowerCase() || ''
       const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
-      const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
       const currentRoleLower = currentUserRole?.toLowerCase() || ''
       
       const allRolesArray = [
-        cargoFromMetadataLower,
-        cargoFromProfileLower,
-        pwaCargoLower,
-        roleFromUserDataLower,
-        currentRoleLower,
         hookRole,
         roleFromPerfilLower,
+        roleFromUserDataLower,
+        currentRoleLower,
         pwaRoleLower
       ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
       
-      const isSupervisor = allRolesArray.some(role => {
+      // Verificar se é cliente
+      const isCliente = userLevel === 1 || allRolesArray.some(role => {
         if (!role) return false
         const roleLower = String(role).toLowerCase()
-        return (
-          roleLower.includes('supervisor') ||
-          roleLower === 'supervisores'
-        )
+        return roleLower.includes('cliente')
       })
       
-      return isSupervisor
+      return isCliente
     } catch (error) {
-      console.error('Erro ao verificar se é supervisor:', error)
+      console.error('Erro ao verificar se é cliente/supervisor:', error)
       return false
     }
-  }, [userRole, roleFromPerfil, roleFromUserData, currentUserRole, pwaUserData.user?.role, pwaUserData.user?.cargo])
+  }, [userRole, roleFromPerfil, roleFromUserData, currentUserRole, pwaUserData.user?.role])
 
   // Função de navegação direta
   const handleNavigation = (href: string) => {

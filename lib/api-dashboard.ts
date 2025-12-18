@@ -1,83 +1,56 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+/**
+ * API functions for Dashboard module
+ */
 
-// Interfaces baseadas na resposta do endpoint /api/relatorios/dashboard
-export interface DashboardData {
-  resumo_geral: {
-    total_gruas: number;
-    gruas_ocupadas: number;
-    gruas_disponiveis: number;
-    taxa_utilizacao: number;
-    valor_total_parque: number;
-    receita_mes_atual: number;
-  };
-  distribuicao: {
-    por_status: Record<string, number>;
-    por_tipo: Record<string, number>;
-  };
-  manutencao: {
-    manutencoes_proximas: number;
-    proxima_semana: string;
-  };
-  top_gruas: Array<{
-    grua: {
-      id: number;
-      modelo: string;
-      fabricante: string;
-    };
-    total_locacoes: number;
-    dias_total_locacao: number;
-    receita_total: number;
-    obras_visitadas: number;
-    taxa_utilizacao: number;
-    receita_media_dia: number;
-  }>;
-  alertas: Array<{
-    tipo: string;
-    prioridade: string;
-    mensagem: string;
-    acao: string;
-  }>;
-  ultimas_atividades: Array<{
-    tipo: string;
-    acao: string;
-    detalhes: string;
-    timestamp: string;
-    usuario: string;
-  }>;
-  ultima_atualizacao: string;
+import { fetchWithAuth } from './api'
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+export interface EvolucaoMensal {
+  mes: string
+  mes_numero: number
+  ano: number
+  obras: number
+  clientes: number
+  gruas: number
 }
 
-export interface DashboardResponse {
-  success: boolean;
-  data: DashboardData;
+export interface EvolucaoMensalResponse {
+  success: boolean
+  data: EvolucaoMensal[]
 }
 
-export const apiDashboard = {
-  async carregar(): Promise<DashboardData> {
-    const token = localStorage.getItem('access_token');
+// Helper function to make API requests
+const apiRequest = async (url: string, options: RequestInit = {}) => {
+  try {
+    const response = await fetchWithAuth(`${API_BASE_URL}${url}`, options)
     
-    if (!token) {
-      throw new Error('Token de acesso não encontrado');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/relatorios/dashboard`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
     }
-
-    const result: DashboardResponse = await response.json();
     
-    if (!result.success) {
-      throw new Error('Falha ao carregar dados do dashboard');
-    }
-
-    return result.data;
+    return await response.json()
+  } catch (error) {
+    console.error('API request error:', error)
+    throw error
   }
-};
+}
+
+// Dashboard API
+export const apiDashboard = {
+  // Buscar evolução mensal
+  buscarEvolucaoMensal: async (meses: number = 6): Promise<EvolucaoMensalResponse> => {
+    const queryParams = new URLSearchParams()
+    if (meses) queryParams.append('meses', meses.toString())
+    
+    const url = `/api/relatorios/dashboard/evolucao-mensal${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+    const response = await apiRequest(url)
+    return response
+  }
+}
+
+// Export default for compatibility with existing code
+export default {
+  apiDashboard
+}

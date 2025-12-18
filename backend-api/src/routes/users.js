@@ -644,4 +644,140 @@ router.delete('/:id', authenticateToken, requirePermission('usuarios:deletar'), 
   }
 })
 
+/**
+ * @swagger
+ * /api/users/{id}/atividades:
+ *   get:
+ *     summary: Obter histórico de atividades de um usuário
+ *     tags: [Usuários]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do usuário
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número da página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Itens por página
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de início do filtro
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data de fim do filtro
+ *     responses:
+ *       200:
+ *         description: Lista de atividades do usuário
+ *       404:
+ *         description: Usuário não encontrado
+ */
+router.get('/:id/atividades', authenticateToken, requirePermission('usuarios:visualizar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100)
+    const offset = (page - 1) * limit
+    const { data_inicio, data_fim } = req.query
+
+    // Verificar se o usuário existe
+    const { data: usuario, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nome, email')
+      .eq('id', id)
+      .single()
+
+    if (usuarioError || !usuario) {
+      return res.status(404).json({
+        error: 'Usuário não encontrado',
+        message: 'O usuário com o ID especificado não existe'
+      })
+    }
+
+    // Buscar atividades do usuário na tabela logs_auditoria
+    let query = supabaseAdmin
+      .from('logs_auditoria')
+      .select('*', { count: 'exact' })
+      .eq('usuario_id', id)
+      .order('timestamp', { ascending: false })
+
+    // Aplicar filtros de data se fornecidos
+    if (data_inicio) {
+      query = query.gte('timestamp', data_inicio)
+    }
+    if (data_fim) {
+      query = query.lte('timestamp', data_fim)
+    }
+
+    // Aplicar paginação
+    query = query.range(offset, offset + limit - 1)
+
+    const { data: atividades, error: atividadesError, count } = await query
+
+    if (atividadesError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar atividades',
+        message: atividadesError.message
+      })
+    }
+
+    // Formatar atividades para o formato esperado pelo frontend
+    const atividadesFormatadas = (atividades || []).map((atividade) => ({
+      id: atividade.id,
+      tipo: 'auditoria',
+      timestamp: atividade.timestamp,
+      acao: atividade.acao,
+      entidade: atividade.entidade,
+      entidade_id: atividade.entidade_id,
+      titulo: `${atividade.acao} em ${atividade.entidade}`,
+      descricao: atividade.entidade_id ? `ID: ${atividade.entidade_id}` : '',
+      usuario_id: atividade.usuario_id,
+      usuario_nome: usuario.nome,
+      dados_anteriores: atividade.dados_anteriores,
+      dados_novos: atividade.dados_novos,
+      ip_address: atividade.ip_address,
+      user_agent: atividade.user_agent
+    }))
+
+    const totalPages = Math.ceil((count || 0) / limit)
+
+    res.json({
+      success: true,
+      data: atividadesFormatadas,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        pages: totalPages
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao buscar atividades do usuário:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 export default router

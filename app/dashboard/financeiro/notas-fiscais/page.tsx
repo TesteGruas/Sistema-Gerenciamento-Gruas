@@ -298,7 +298,12 @@ export default function NotasFiscaisPage() {
       
       if (response.success) {
         setNotasFiscais(response.data || [])
-        // TODO: Adicionar paginação quando a API retornar
+        
+        // Atualizar informações de paginação se a API retornar
+        if (response.pagination) {
+          setTotalPages(response.pagination.pages || 1)
+          setTotalItems(response.pagination.total || 0)
+        }
       }
     } catch (error: any) {
       toast({

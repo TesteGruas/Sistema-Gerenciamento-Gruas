@@ -233,7 +233,14 @@ const notaFiscalSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = (page - 1) * limit;
+    
+    // Filtros opcionais
+    const { tipo, status, search } = req.query;
+    
+    let query = supabaseAdmin
       .from('notas_fiscais')
       .select(`
         *,
@@ -241,14 +248,42 @@ router.get('/', async (req, res) => {
         fornecedores(nome, cnpj),
         vendas(numero_venda),
         compras(numero_pedido)
-      `)
-      .order('created_at', { ascending: false });
+      `, { count: 'exact' });
+    
+    // Aplicar filtros
+    if (tipo) {
+      query = query.eq('tipo', tipo);
+    }
+    
+    if (status) {
+      query = query.eq('status', status);
+    }
+    
+    if (search) {
+      const searchTerm = `%${search}%`;
+      query = query.or(`numero_nf.ilike.${searchTerm},serie.ilike.${searchTerm},observacoes.ilike.${searchTerm}`);
+    }
+    
+    // Aplicar ordenação e paginação
+    query = query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) throw error;
 
+    const totalPages = Math.ceil((count || 0) / limit);
+
     res.json({
       success: true,
-      data: data || []
+      data: data || [],
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        pages: totalPages
+      }
     });
   } catch (error) {
     console.error('Erro ao listar notas fiscais:', error);

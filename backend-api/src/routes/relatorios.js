@@ -12,6 +12,8 @@
 
 import express from 'express'
 import Joi from 'joi'
+import PDFDocument from 'pdfkit'
+import XLSX from 'xlsx'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 
@@ -1999,6 +2001,413 @@ router.get('/performance-gruas', async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao gerar relatório de performance de gruas:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+// =====================================================
+// EXPORTAÇÕES DE PERFORMANCE DE GRUAS
+// =====================================================
+
+/**
+ * @swagger
+ * /api/relatorios/performance-gruas/export/pdf:
+ *   get:
+ *     summary: Exportar relatório de performance de gruas em PDF
+ *     tags: [Relatórios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: data_inicio
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: data_fim
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: grua_id
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: PDF gerado com sucesso
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
+router.get('/performance-gruas/export/pdf', authenticateToken, async (req, res) => {
+  try {
+    // Reutilizar lógica do endpoint principal para obter dados
+    const { error, value } = relatorioPerformanceGruasSchema.validate(req.query);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros inválidos',
+        details: error.details[0].message
+      });
+    }
+
+    // Para exportação, vamos usar uma abordagem mais simples:
+    // Chamar diretamente a função de gerar relatório (mas isso requer refatoração)
+    // Por enquanto, vamos usar uma requisição interna com fetch
+    // Nota: Em produção, considere refatorar para extrair a lógica em uma função helper
+    
+    // Importar fetch se necessário (Node 18+ tem fetch nativo)
+    const fetchModule = await import('node-fetch').catch(() => null);
+    const fetch = fetchModule?.default || global.fetch || require('node-fetch');
+    
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const queryString = new URLSearchParams(req.query).toString();
+    
+    const internalResponse = await fetch(`${baseUrl}/api/relatorios/performance-gruas?${queryString}`, {
+      headers: {
+        'Authorization': req.headers.authorization || ''
+      }
+    });
+
+    if (!internalResponse.ok) {
+      throw new Error('Erro ao buscar dados para exportação');
+    }
+
+    const responseData = await internalResponse.json();
+    const data = responseData.data;
+
+    // PDFDocument já está importado no topo do arquivo
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=performance-gruas-${value.data_inicio}-${value.data_fim}.pdf`);
+
+    doc.pipe(res);
+
+    // Cabeçalho
+    doc.fontSize(20).font('Helvetica-Bold').text('Relatório de Performance de Gruas', 50, 50, { align: 'center' });
+    doc.fontSize(12).font('Helvetica').text(`Período: ${value.data_inicio} a ${value.data_fim}`, 50, 80, { align: 'center' });
+    doc.moveTo(50, 100).lineTo(550, 100).stroke();
+
+    let yPos = 120;
+
+    // Resumo geral
+    if (data.resumo_geral) {
+      doc.fontSize(14).font('Helvetica-Bold').text('Resumo Geral', 50, yPos);
+      yPos += 20;
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Total de Gruas: ${data.resumo_geral.total_gruas}`, 50, yPos);
+      yPos += 15;
+      doc.text(`Taxa de Utilização Média: ${(data.resumo_geral.taxa_utilizacao_media || 0).toFixed(2)}%`, 50, yPos);
+      yPos += 15;
+      doc.text(`Receita Total: R$ ${(data.resumo_geral.receita_total || 0).toFixed(2)}`, 50, yPos);
+      yPos += 15;
+      doc.text(`Lucro Total: R$ ${(data.resumo_geral.lucro_total || 0).toFixed(2)}`, 50, yPos);
+      yPos += 20;
+    }
+
+    // Dados por grua
+    if (data.performance_por_grua && data.performance_por_grua.length > 0) {
+      doc.fontSize(14).font('Helvetica-Bold').text('Performance por Grua', 50, yPos);
+      yPos += 20;
+
+      data.performance_por_grua.forEach((item, index) => {
+        if (yPos > 750) {
+          doc.addPage();
+          yPos = 50;
+        }
+
+        // O endpoint retorna estrutura complexa
+        const gruaNome = item.grua?.nome || item.grua?.id || item.grua_id || `Grua ${index + 1}`;
+        const metricas = item.metricas || {};
+        const financeiro = item.financeiro || {};
+        const roi = item.roi || {};
+
+        doc.fontSize(11).font('Helvetica-Bold').text(`${index + 1}. ${gruaNome}`, 50, yPos);
+        yPos += 15;
+        doc.fontSize(9).font('Helvetica');
+        doc.text(`Taxa de Utilização: ${(metricas.taxa_utilizacao || 0).toFixed(2)}%`, 60, yPos);
+        yPos += 12;
+        doc.text(`Receita Total: R$ ${(financeiro.receita_total || 0).toFixed(2)}`, 60, yPos);
+        yPos += 12;
+        doc.text(`Lucro Bruto: R$ ${(financeiro.lucro_bruto || 0).toFixed(2)}`, 60, yPos);
+        yPos += 15;
+      });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error('Erro ao exportar PDF de performance de gruas:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao gerar PDF',
+        message: error.message
+      });
+    }
+  }
+});
+
+/**
+ * @swagger
+ * /api/relatorios/performance-gruas/export/excel:
+ *   get:
+ *     summary: Exportar relatório de performance de gruas em Excel
+ *     tags: [Relatórios]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/performance-gruas/export/excel', authenticateToken, async (req, res) => {
+  try {
+    const { error, value } = relatorioPerformanceGruasSchema.validate(req.query);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros inválidos',
+        details: error.details[0].message
+      });
+    }
+
+    // Para exportação, vamos usar uma abordagem mais simples:
+    // Chamar diretamente a função de gerar relatório (mas isso requer refatoração)
+    // Por enquanto, vamos usar uma requisição interna com fetch
+    // Nota: Em produção, considere refatorar para extrair a lógica em uma função helper
+    
+    // Importar fetch se necessário (Node 18+ tem fetch nativo)
+    const fetchModule = await import('node-fetch').catch(() => null);
+    const fetch = fetchModule?.default || global.fetch || require('node-fetch');
+    
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const queryString = new URLSearchParams(req.query).toString();
+    
+    const internalResponse = await fetch(`${baseUrl}/api/relatorios/performance-gruas?${queryString}`, {
+      headers: {
+        'Authorization': req.headers.authorization || ''
+      }
+    });
+
+    if (!internalResponse.ok) {
+      throw new Error('Erro ao buscar dados para exportação');
+    }
+
+    const responseData = await internalResponse.json();
+    const data = responseData.data;
+
+    // XLSX já está importado no topo do arquivo
+    const workbook = XLSX.utils.book_new();
+
+    // Criar aba de resumo
+    if (data.resumo_geral) {
+      const resumoData = [
+        ['Métrica', 'Valor'],
+        ['Total de Gruas', data.resumo_geral.total_gruas],
+        ['Taxa de Utilização Média (%)', (data.resumo_geral.taxa_utilizacao_media || 0).toFixed(2)],
+        ['Receita Total', data.resumo_geral.receita_total],
+        ['Custo Total', data.resumo_geral.custo_total],
+        ['Lucro Total', data.resumo_geral.lucro_total],
+        ['ROI Médio (%)', (data.resumo_geral.roi_medio || 0).toFixed(2)]
+      ];
+      const resumoSheet = XLSX.utils.aoa_to_sheet(resumoData);
+      XLSX.utils.book_append_sheet(workbook, resumoSheet, 'Resumo');
+    }
+
+    // Criar aba de performance por grua
+    if (data.performance_por_grua && data.performance_por_grua.length > 0) {
+      const performanceData = data.performance_por_grua.map(item => {
+        // O endpoint retorna estrutura complexa
+        const gruaNome = item.grua?.nome || item.grua?.id || item.grua_id || 'N/A';
+        const metricas = item.metricas || {};
+        const financeiro = item.financeiro || {};
+        const roi = item.roi || {};
+        
+        return {
+          'Grua': gruaNome,
+          'Taxa Utilização (%)': (metricas.taxa_utilizacao || 0).toFixed(2),
+          'Receita Total': financeiro.receita_total || 0,
+          'Custo Total': financeiro.custo_total || 0,
+          'Lucro Bruto': financeiro.lucro_bruto || 0,
+          'ROI (%)': (roi.roi_percentual || 0).toFixed(2),
+          'Horas Trabalhadas': metricas.horas_trabalhadas || 0
+        };
+      });
+      const performanceSheet = XLSX.utils.json_to_sheet(performanceData);
+      XLSX.utils.book_append_sheet(workbook, performanceSheet, 'Performance por Grua');
+    }
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=performance-gruas-${value.data_inicio}-${value.data_fim}.xlsx`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('Erro ao exportar Excel de performance de gruas:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao gerar Excel',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/relatorios/performance-gruas/export/csv:
+ *   get:
+ *     summary: Exportar relatório de performance de gruas em CSV
+ *     tags: [Relatórios]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/performance-gruas/export/csv', authenticateToken, async (req, res) => {
+  try {
+    const { error, value } = relatorioPerformanceGruasSchema.validate(req.query);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Parâmetros inválidos',
+        details: error.details[0].message
+      });
+    }
+
+    // Para exportação, vamos usar uma abordagem mais simples:
+    // Chamar diretamente a função de gerar relatório (mas isso requer refatoração)
+    // Por enquanto, vamos usar uma requisição interna com fetch
+    // Nota: Em produção, considere refatorar para extrair a lógica em uma função helper
+    
+    // Importar fetch se necessário (Node 18+ tem fetch nativo)
+    const fetchModule = await import('node-fetch').catch(() => null);
+    const fetch = fetchModule?.default || global.fetch || require('node-fetch');
+    
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const queryString = new URLSearchParams(req.query).toString();
+    
+    const internalResponse = await fetch(`${baseUrl}/api/relatorios/performance-gruas?${queryString}`, {
+      headers: {
+        'Authorization': req.headers.authorization || ''
+      }
+    });
+
+    if (!internalResponse.ok) {
+      throw new Error('Erro ao buscar dados para exportação');
+    }
+
+    const responseData = await internalResponse.json();
+    const data = responseData.data;
+
+    // Gerar CSV
+    const headers = ['Grua', 'Taxa Utilização (%)', 'Receita Total', 'Custo Total', 'Lucro Bruto', 'ROI (%)', 'Horas Trabalhadas'];
+    const rows = data.performance_por_grua?.map(item => [
+      item.nome_grua || item.grua_id,
+      (item.taxa_utilizacao || 0).toFixed(2),
+      item.receita_total || 0,
+      item.custo_total || 0,
+      item.lucro_bruto || 0,
+      (item.roi_percentual || 0).toFixed(2),
+      item.horas_trabalhadas || 0
+    ]) || [];
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=performance-gruas-${value.data_inicio}-${value.data_fim}.csv`);
+    res.send('\ufeff' + csvContent); // BOM para Excel
+  } catch (error) {
+    console.error('Erro ao exportar CSV de performance de gruas:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao gerar CSV',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/relatorios/dashboard/evolucao-mensal:
+ *   get:
+ *     summary: Obter dados de evolução mensal para o dashboard
+ *     tags: [Relatórios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: meses
+ *         schema:
+ *           type: integer
+ *           default: 6
+ *         description: Número de meses para retornar (padrão 6)
+ *     responses:
+ *       200:
+ *         description: Dados de evolução mensal
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/dashboard/evolucao-mensal', async (req, res) => {
+  try {
+    const meses = parseInt(req.query.meses) || 6
+    const hoje = new Date()
+    const evolucaoMensal = []
+
+    for (let i = meses - 1; i >= 0; i--) {
+      const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+      const mesInicio = new Date(data.getFullYear(), data.getMonth(), 1)
+      const mesFim = new Date(data.getFullYear(), data.getMonth() + 1, 0)
+
+      const mesInicioStr = mesInicio.toISOString().split('T')[0]
+      const mesFimStr = mesFim.toISOString().split('T')[0]
+      const mesAno = data.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+
+      // Contar obras criadas até este mês
+      const { data: obras, error: obrasError } = await supabaseAdmin
+        .from('obras')
+        .select('id', { count: 'exact' })
+        .lte('created_at', mesFimStr)
+
+      // Contar clientes criados até este mês
+      const { data: clientes, error: clientesError } = await supabaseAdmin
+        .from('clientes')
+        .select('id', { count: 'exact' })
+        .lte('created_at', mesFimStr)
+
+      // Contar gruas criadas até este mês
+      const { data: gruas, error: gruasError } = await supabaseAdmin
+        .from('gruas')
+        .select('id', { count: 'exact' })
+        .lte('created_at', mesFimStr)
+
+      if (!obrasError && !clientesError && !gruasError) {
+        evolucaoMensal.push({
+          mes: mesAno,
+          mes_numero: data.getMonth() + 1,
+          ano: data.getFullYear(),
+          obras: obras?.length || 0,
+          clientes: clientes?.length || 0,
+          gruas: gruas?.length || 0
+        })
+      }
+    }
+
+    res.json({
+      success: true,
+      data: evolucaoMensal
+    })
+  } catch (error) {
+    console.error('Erro ao buscar evolução mensal:', error)
     res.status(500).json({
       success: false,
       error: 'Erro interno do servidor',

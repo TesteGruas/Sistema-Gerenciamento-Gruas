@@ -699,20 +699,8 @@ export default function PWAPontoPage() {
         funcionarioCargo?.toLowerCase()
       ].filter(Boolean)
       
-      // PRIMEIRO: Verificar se é Supervisor - se for, BLOQUEAR
-      const isSupervisor = allCargos.some(cargo => {
-        if (!cargo) return false
-        return (
-          cargo.includes('supervisor') ||
-          cargo === 'supervisores'
-        )
-      })
-      
-      if (isSupervisor) {
-        return false // Supervisores NÃO podem bater ponto
-      }
-      
-      // SEGUNDO: Verificar se é Operário ou Sinaleiro
+      // Nota: Supervisor não é mais um cargo, é uma atribuição que pode ser dada a qualquer funcionário
+      // Verificar se é Operário ou Sinaleiro
       return allCargos.some(cargo => {
         if (!cargo) return false
         return (

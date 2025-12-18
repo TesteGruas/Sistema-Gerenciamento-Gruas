@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { AlertCircle, Shield } from "lucide-react"
 import { CardLoader } from "@/components/ui/loader"
+import { usePermissions } from "@/hooks/use-permissions"
 
 interface AdminGuardProps {
   children: React.ReactNode
@@ -12,36 +13,16 @@ interface AdminGuardProps {
 
 export default function AdminGuard({ children }: AdminGuardProps) {
   const router = useRouter()
+  const { hasPermission, loading: permissionsLoading, isAdmin } = usePermissions()
   const [isLoading, setIsLoading] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
-    // Simular verificação de permissão de admin
-    // Em uma implementação real, isso viria de um contexto de autenticação
-    const checkAdminPermission = async () => {
-      try {
-        // Simular delay de verificação
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        // Mock: verificar se o usuário atual é admin
-        // Em uma implementação real, isso seria verificado via API ou contexto
-        const currentUserRole = localStorage.getItem('userRole') || 'funcionario_nivel_1'
-        
-        if (currentUserRole === 'admin') {
-          setIsAdmin(true)
-        } else {
-          setIsAdmin(false)
-        }
-      } catch (error) {
-        console.error('Erro ao verificar permissão de admin:', error)
-        setIsAdmin(false)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    checkAdminPermission()
-  }, [])
+    // Aguardar carregamento das permissões
+    setIsLoading(permissionsLoading)
+  }, [permissionsLoading])
+  
+  // Verificar se é admin usando o hook de permissões
+  const userIsAdmin = isAdmin() || hasPermission('*') || hasPermission('usuarios:*')
 
   if (isLoading) {
     return (
@@ -55,7 +36,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
     )
   }
 
-  if (!isAdmin) {
+  if (!isLoading && !userIsAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Card className="w-96">

@@ -125,7 +125,8 @@ export default function HoleritesPage() {
           return
         } catch (apiError: any) {
           console.error('Erro ao baixar via API:', apiError)
-          // Fallback para método antigo se API falhar
+          // Fallback para método direto se API assinada falhar (degradação graciosa)
+          // Isso permite que o usuário ainda consiga baixar o holerite mesmo se a API de assinatura falhar
         }
       }
 

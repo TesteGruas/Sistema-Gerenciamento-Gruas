@@ -592,7 +592,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       yPos = secao4Y + 12
 
       doc.setTextColor(0, 0, 0)
-      const sinaleiros = obra.sinaleiros || sinaleirosMockados
+      const sinaleiros = obra.sinaleiros || []
       if (sinaleiros && sinaleiros.length > 0) {
         const sinaleirosData = sinaleiros.map((s: any, index: number) => [
           `${index + 1}`,
@@ -803,85 +803,22 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
     g.grua?.id === gruaSelecionada?.id
   )
 
-  // Dados mockados para completar os campos quando não estiverem disponíveis
-  const dadosMockados = {
-    // Parâmetros técnicos
-    tipo_base: 'chumbador',
-    altura_inicial: 15.5,
-    altura_final: 45.0,
-    velocidade_giro: 0.8,
-    velocidade_elevacao: 60.0,
-    velocidade_translacao: 40.0,
-    potencia_instalada: 50.0,
-    voltagem: '380',
-    tipo_ligacao: 'trifasica',
-    capacidade_ponta: 2000,
-    capacidade_maxima_raio: 8000,
-    ano_fabricacao: 2020,
-    vida_util: 25,
-    // Valores detalhados
-    valor_operador: 10200.00,
-    valor_manutencao: 3750.00,
-    valor_estaiamento: 2600.00,
-    valor_chumbadores: 18600.00,
-    valor_montagem: 28750.00,
-    valor_desmontagem: 36700.00,
-    valor_transporte: 7600.00,
-    valor_hora_extra: 150.00,
-    valor_seguro: 5000.00,
-    valor_caucao: 50000.00,
-    // Serviços e logística
-    guindaste_montagem: 'incluso',
-    quantidade_viagens: 2,
-    alojamento_alimentacao: 'incluso',
-    responsabilidade_acessorios: 'Estropos, caçambas, garfos e baldes fornecidos pela locadora. Cliente responsável por manutenção e reposição de peças de desgaste.',
-    // Condições comerciais
-    prazo_validade: 30,
-    forma_pagamento: 'mensal',
-    multa_atraso: 2.0,
-    reajuste_indice: 'igp_m',
-    garantia_caucao: '10% do valor total da locação',
-    retencao_contratual: 10.0
+  // Valores padrão mínimos apenas para campos essenciais quando não disponíveis
+  // Estes valores são usados apenas como fallback se a API não retornar os dados
+  const valoresPadrao = {
+    valor_locacao: 0,
+    valor_locacao_mensal: 0
   }
 
-  // Dados mockados para sinaleiros quando não houver dados
-  const sinaleirosMockados = (obra?.sinaleiros && obra.sinaleiros.length > 0) ? obra.sinaleiros : [
-    {
-      nome: 'João Silva',
-      tipo_vinculo: 'interno',
-      cpf: '123.456.789-00',
-      rg: '12.345.678-9',
-      documentos: [
-        { nome: 'CNH', tipo: 'cnh' },
-        { nome: 'Comprovante de Residência', tipo: 'comprovante' }
-      ],
-      certificados: [
-        { nome: 'NR-35 - Trabalho em Altura', tipo: 'nr35', numero: 'NR35-2024-001', validade: '2025-12-31' },
-        { nome: 'Sinaleiro de Guindaste', tipo: 'sinaleiro', numero: 'SG-2024-123', validade: '2026-06-30' }
-      ]
-    },
-    {
-      nome: 'Maria Santos',
-      tipo_vinculo: 'cliente',
-      cpf: '987.654.321-00',
-      rg: '98.765.432-1',
-      documentos: [
-        { nome: 'RG', tipo: 'rg' },
-        { nome: 'CPF', tipo: 'cpf' }
-      ],
-      certificados: [
-        { nome: 'NR-35 - Trabalho em Altura', tipo: 'nr35', numero: 'NR35-2024-002', validade: '2025-11-30' }
-      ]
-    }
-  ]
-
-  // Combinar dados reais com dados mockados (dados reais têm prioridade)
+  // Usar dados reais da API, com valores padrão mínimos apenas quando necessário
   const relacaoGrua = {
-    ...dadosMockados,
     ...relacaoGruaBase,
     // Garantir que valor_locacao tenha prioridade sobre valor_locacao_mensal
-    valor_locacao: relacaoGruaBase?.valor_locacao || relacaoGruaBase?.valor_locacao_mensal || 31600.00
+    valor_locacao: relacaoGruaBase?.valor_locacao || relacaoGruaBase?.valor_locacao_mensal || valoresPadrao.valor_locacao
   }
+  
+  // Usar sinaleiros reais da obra (já vêm da API)
+  const sinaleirosDisponiveis = obra?.sinaleiros || []
   
   // Buscar funcionários vinculados à grua
   const funcionariosGrua = (obra.funcionariosVinculados || obra.grua_funcionario || []).filter((f: any) => {
@@ -1229,8 +1166,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <div className="md:col-span-2">
                   <p className="text-xs text-gray-500 mb-2">Sinaleiros</p>
                   <div className="space-y-3">
-                    {sinaleirosMockados.length > 0 ? (
-                      sinaleirosMockados.map((s: any, idx: number) => (
+                    {sinaleirosDisponiveis.length > 0 ? (
+                      sinaleirosDisponiveis.map((s: any, idx: number) => (
                         <div key={idx} className="p-4 bg-gray-50 rounded-md border border-gray-200">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>

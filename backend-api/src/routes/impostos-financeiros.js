@@ -1,9 +1,36 @@
 import express from 'express';
+import multer from 'multer';
 import Joi from 'joi';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Configuração do multer para upload de arquivos
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB por arquivo
+  },
+  fileFilter: (req, file, cb) => {
+    // Tipos de arquivo permitidos
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de arquivo não permitido. Apenas PDF, imagens e planilhas são aceitos.'), false);
+    }
+  }
+});
 
 // Schema de validação
 const impostoSchema = Joi.object({
@@ -607,6 +634,146 @@ router.get('/atrasados', authenticateToken, requirePermission('obras:visualizar'
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/impostos-financeiros/{id}/arquivo:
+ *   post:
+ *     summary: Upload de arquivo para um imposto financeiro
+ *     tags: [Impostos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID do imposto (UUID)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - arquivo
+ *             properties:
+ *               arquivo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo a ser enviado (PDF, imagem, etc.)
+ *     responses:
+ *       200:
+ *         description: Arquivo enviado com sucesso
+ *       400:
+ *         description: Nenhum arquivo enviado ou ID inválido
+ *       404:
+ *         description: Imposto não encontrado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/:id/arquivo', authenticateToken, requirePermission('obras:editar'), upload.single('arquivo'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum arquivo enviado'
+      });
+    }
+
+    // Validar se o ID é um UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de imposto inválido. Deve ser um UUID.'
+      });
+    }
+
+    // Verificar se o imposto existe
+    const { data: imposto, error: impostoError } = await supabaseAdmin
+      .from('impostos_financeiros')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (impostoError || !imposto) {
+      return res.status(404).json({
+        success: false,
+        message: 'Imposto não encontrado'
+      });
+    }
+
+    // Gerar nome único para o arquivo
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
+    const extension = file.originalname.split('.').pop();
+    const fileName = `imposto_${id}_${timestamp}_${randomString}.${extension}`;
+    const filePath = `impostos/${id}/${fileName}`;
+
+    // Upload para o Supabase Storage (usar o bucket 'arquivos-obras' que é o principal)
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Erro no upload:', uploadError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao fazer upload do arquivo',
+        error: uploadError.message
+      });
+    }
+
+    // Obter URL pública do arquivo
+    const { data: urlData } = supabaseAdmin.storage
+      .from('arquivos-obras')
+      .getPublicUrl(filePath);
+
+    let arquivoUrl = urlData?.publicUrl;
+    if (!arquivoUrl && process.env.SUPABASE_URL) {
+      arquivoUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/arquivos-obras/${filePath}`;
+    }
+
+    // Atualizar imposto com o caminho do arquivo
+    const updateData = {
+      arquivo_anexo: arquivoUrl,
+      nome_arquivo: file.originalname,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: updatedImposto, error: updateError } = await supabaseAdmin
+      .from('impostos_financeiros')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    res.json({
+      success: true,
+      message: 'Arquivo enviado e associado ao imposto com sucesso',
+      data: updatedImposto
+    });
+
+  } catch (error) {
+    console.error('Erro ao fazer upload de arquivo para imposto:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
     });
   }
 });

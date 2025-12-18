@@ -25,45 +25,7 @@ import {
   Key
 } from "lucide-react"
 import AdminGuard from "@/components/admin-guard"
-
-// Mock data para usuário específico
-const mockUsuario = {
-  id: "1",
-  name: "João Silva",
-  email: "joao.silva@empresa.com",
-  phone: "(11) 99999-9999",
-  role: "admin",
-  status: "active",
-  createdAt: "2024-01-15",
-  lastLogin: "2024-01-20",
-  permissions: ["all"],
-  profile: {
-    department: "TI",
-    position: "Administrador do Sistema",
-    hireDate: "2024-01-01",
-    manager: "Diretoria"
-  },
-  activity: [
-    {
-      id: "1",
-      action: "Login no sistema",
-      timestamp: "2024-01-20T10:30:00Z",
-      ip: "192.168.1.100"
-    },
-    {
-      id: "2", 
-      action: "Criou nova obra",
-      timestamp: "2024-01-20T09:15:00Z",
-      ip: "192.168.1.100"
-    },
-    {
-      id: "3",
-      action: "Editou usuário Maria Santos",
-      timestamp: "2024-01-19T16:45:00Z",
-      ip: "192.168.1.100"
-    }
-  ]
-}
+import { apiUsuarios, type Usuario } from "@/lib/api-usuarios"
 
 const roleLabels = {
   admin: "Administrador",
@@ -95,30 +57,122 @@ const statusLabels = {
   suspended: "Suspenso"
 }
 
+interface UsuarioDetalhes {
+  id: number
+  name: string
+  email: string
+  phone?: string
+  role: string
+  status: 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente'
+  createdAt: string
+  lastLogin?: string
+  permissions: string[]
+  profile?: {
+    department?: string
+    position?: string
+    hireDate?: string
+    manager?: string
+  }
+  activity?: Array<{
+    id: string
+    action: string
+    timestamp: string
+    ip?: string
+  }>
+}
+
 export default function UsuarioDetalhesPage() {
   const { toast } = useToast()
   const params = useParams()
   const router = useRouter()
-  const [usuario, setUsuario] = useState(mockUsuario)
+  const [usuario, setUsuario] = useState<UsuarioDetalhes | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Simular carregamento de dados do usuário
     const loadUsuario = async () => {
       try {
         setLoading(true)
-        // Em uma implementação real, isso viria de uma API
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        setUsuario(mockUsuario)
-      } catch (error) {
+        const userId = parseInt(params.id as string)
+        
+        if (isNaN(userId)) {
+          toast({
+            title: "Erro",
+            description: "ID de usuário inválido",
+            variant: "destructive"
+          })
+          router.push('/dashboard/usuarios')
+          return
+        }
+
+        // Buscar usuário da API
+        const usuarioData = await apiUsuarios.buscar(userId)
+        
+        // Buscar atividades do usuário
+        let atividades: Array<{
+          id: string
+          action: string
+          timestamp: string
+          ip?: string
+        }> = []
+        
+        try {
+          const atividadesResponse = await apiUsuarios.buscarAtividades(userId, { limit: 50 })
+          atividades = atividadesResponse.data.map((atividade) => ({
+            id: atividade.id,
+            action: atividade.titulo || `${atividade.acao} em ${atividade.entidade}`,
+            timestamp: atividade.timestamp,
+            ip: atividade.ip_address
+          }))
+        } catch (error) {
+          console.warn('Erro ao carregar atividades do usuário:', error)
+          // Não bloquear o carregamento se falhar
+        }
+        
+        // Converter dados da API para o formato esperado
+        const usuarioDetalhes: UsuarioDetalhes = {
+          id: usuarioData.id,
+          name: usuarioData.nome,
+          email: usuarioData.email,
+          phone: usuarioData.telefone,
+          role: usuarioData.usuario_perfis 
+            ? (Array.isArray(usuarioData.usuario_perfis) 
+                ? usuarioData.usuario_perfis[0]?.perfis?.nome || usuarioData.cargo || 'funcionario'
+                : usuarioData.usuario_perfis.perfis?.nome || usuarioData.cargo || 'funcionario')
+            : usuarioData.cargo || 'funcionario',
+          status: usuarioData.status,
+          createdAt: usuarioData.created_at,
+          lastLogin: usuarioData.ultimo_acesso,
+          permissions: usuarioData.usuario_perfis
+            ? (Array.isArray(usuarioData.usuario_perfis) 
+                ? ['*'] // Admin ou gestor tem todas as permissões
+                : ['*'])
+            : [],
+          profile: {
+            department: usuarioData.cargo,
+            position: usuarioData.cargo,
+            hireDate: usuarioData.data_admissao,
+          },
+          activity: atividades
+        }
+        
+        setUsuario(usuarioDetalhes)
+      } catch (error: any) {
         console.error('Erro ao carregar usuário:', error)
+        toast({
+          title: "Erro",
+          description: error.message || "Erro ao carregar dados do usuário",
+          variant: "destructive"
+        })
+        router.push('/dashboard/usuarios')
       } finally {
         setLoading(false)
       }
     }
 
-    loadUsuario()
-  }, [params.id])
+    if (params.id) {
+      loadUsuario()
+    }
+  }, [params.id, router, toast])
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -138,17 +192,34 @@ export default function UsuarioDetalhesPage() {
     }
   }
 
-  const toggleUserStatus = () => {
-    const newStatus = usuario.status === 'active' ? 'inactive' : 'active'
-    setUsuario({ ...usuario, status: newStatus })
-    toast({
-        title: "Informação",
-        description: `Usuário ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`,
+  const toggleUserStatus = async () => {
+    if (!usuario) return
+    
+    try {
+      const newStatus = usuario.status === 'Ativo' ? 'Inativo' : 'Ativo'
+      
+      // Atualizar na API
+      await apiUsuarios.atualizar(usuario.id, { status: newStatus })
+      
+      // Atualizar estado local
+      setUsuario({ ...usuario, status: newStatus })
+      
+      toast({
+        title: "Sucesso",
+        description: `Usuário ${newStatus === 'Ativo' ? 'ativado' : 'desativado'} com sucesso!`,
         variant: "default"
       })
+    } catch (error: any) {
+      console.error('Erro ao atualizar status do usuário:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atualizar status do usuário",
+        variant: "destructive"
+      })
+    }
   }
 
-  if (loading) {
+  if (loading || !usuario) {
     return (
       <AdminGuard>
         <div className="space-y-6 w-full">
@@ -186,10 +257,10 @@ export default function UsuarioDetalhesPage() {
             <Button
               variant="outline"
               onClick={toggleUserStatus}
-              className={usuario.status === 'active' ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
+              className={usuario.status === 'Ativo' ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
             >
-              {usuario.status === 'active' ? <UserX className="w-4 h-4 mr-2" /> : <UserCheck className="w-4 h-4 mr-2" />}
-              {usuario.status === 'active' ? 'Desativar' : 'Ativar'}
+              {usuario.status === 'Ativo' ? <UserX className="w-4 h-4 mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+              {usuario.status === 'Ativo' ? 'Desativar' : 'Ativar'}
             </Button>
             <Button>
               <Edit className="w-4 h-4 mr-2" />
@@ -213,8 +284,8 @@ export default function UsuarioDetalhesPage() {
                   <User className="w-6 h-6 text-gray-600" />
                 </div>
                 <div>
-                  <p className="font-medium">{usuario.name}</p>
-                  <p className="text-sm text-gray-500">{usuario.profile.position}</p>
+                <p className="font-medium">{usuario.name}</p>
+                <p className="text-sm text-gray-500">{usuario.profile?.position || usuario.role}</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -228,7 +299,7 @@ export default function UsuarioDetalhesPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="w-4 h-4 text-gray-400" />
-                  <span>Admitido em {new Date(usuario.profile.hireDate).toLocaleDateString('pt-BR')}</span>
+                  <span>{usuario.profile?.hireDate ? `Admitido em ${new Date(usuario.profile.hireDate).toLocaleDateString('pt-BR')}` : 'Data de admissão não informada'}</span>
                 </div>
               </div>
             </CardContent>
@@ -249,14 +320,18 @@ export default function UsuarioDetalhesPage() {
                 </Badge>
               </div>
               <div>
-                <Badge className={statusColors[usuario.status as keyof typeof statusColors]}>
-                  {getStatusIcon(usuario.status)}
-                  <span className="ml-1">{statusLabels[usuario.status as keyof typeof statusLabels]}</span>
+                <Badge className={
+                  usuario.status === 'Ativo' ? statusColors.active :
+                  usuario.status === 'Inativo' ? statusColors.inactive :
+                  statusColors.suspended
+                }>
+                  {getStatusIcon(usuario.status === 'Ativo' ? 'active' : usuario.status === 'Inativo' ? 'inactive' : 'suspended')}
+                  <span className="ml-1">{usuario.status}</span>
                 </Badge>
               </div>
               <div className="text-sm text-gray-600">
-                <p><strong>Departamento:</strong> {usuario.profile.department}</p>
-                <p><strong>Gerente:</strong> {usuario.profile.manager}</p>
+                <p><strong>Departamento:</strong> {usuario.profile?.department || 'Não informado'}</p>
+                <p><strong>Gerente:</strong> {usuario.profile?.manager || 'Não informado'}</p>
               </div>
             </CardContent>
           </Card>
@@ -284,7 +359,7 @@ export default function UsuarioDetalhesPage() {
               <div className="text-sm">
                 <p><strong>Status da Conta:</strong></p>
                 <p className="text-gray-600">
-                  {usuario.status === 'active' ? 'Ativa e funcionando' : 'Inativa ou suspensa'}
+                  {usuario.status === 'Ativo' ? 'Ativa e funcionando' : usuario.status}
                 </p>
               </div>
             </CardContent>
@@ -312,14 +387,21 @@ export default function UsuarioDetalhesPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {usuario.permissions.map((permission) => (
-                    <div key={permission} className="flex items-center gap-2 p-3 border rounded-lg">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      <span className="font-medium">
-                        {permission === 'all' ? 'Acesso Total' : permission.replace('_', ' ').toUpperCase()}
-                      </span>
+                  {usuario.permissions && usuario.permissions.length > 0 ? (
+                    usuario.permissions.map((permission) => (
+                      <div key={permission} className="flex items-center gap-2 p-3 border rounded-lg">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="font-medium">
+                          {permission === '*' || permission === 'all' ? 'Acesso Total' : permission.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex items-center gap-2 p-3 border rounded-lg">
+                      <CheckCircle className="w-4 h-4 text-gray-400" />
+                      <span className="font-medium text-gray-500">Nenhuma permissão específica</span>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -338,23 +420,31 @@ export default function UsuarioDetalhesPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {usuario.activity.map((activity) => (
-                    <div key={activity.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Activity className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{activity.action}</p>
-                        <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {new Date(activity.timestamp).toLocaleString('pt-BR')}
-                          </span>
-                          <span>IP: {activity.ip}</span>
+                  {usuario.activity && usuario.activity.length > 0 ? (
+                    usuario.activity.map((activity) => (
+                      <div key={activity.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Activity className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{activity.action}</p>
+                          <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {new Date(activity.timestamp).toLocaleString('pt-BR')}
+                            </span>
+                            {activity.ip && <span>IP: {activity.ip}</span>}
+                          </div>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Activity className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                      <p>Nenhuma atividade registrada</p>
+                      <p className="text-sm text-gray-400 mt-1">O histórico de atividades aparecerá aqui quando disponível</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>

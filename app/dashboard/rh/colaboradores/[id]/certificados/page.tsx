@@ -16,7 +16,9 @@ import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 import { DocumentoUpload } from "@/components/documento-upload"
 
-// Tipos de certificados (mantido do mock)
+// Tipos de certificados
+// TODO: No futuro, estes tipos podem vir de uma API/configuração para permitir personalização
+// Por enquanto, mantidos como constantes conforme tipos comuns de certificados profissionais
 export const tiposCertificados = [
   'Ficha de EPI',
   'Ordem de Serviço',

@@ -90,18 +90,34 @@ export default function Dashboard() {
           return acc
         }, {})
 
-        // Gerar dados para gráfico de evolução (últimos 6 meses)
-        const meses = []
-        const hoje = new Date()
-        for (let i = 5; i >= 0; i--) {
-          const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
-          const mesAno = data.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
-          meses.push({
-            mes: mesAno,
-            obras: Math.floor(Math.random() * 5) + 8, // Simulado por enquanto
-            clientes: Math.floor(Math.random() * 10) + 40,
-            gruas: Math.floor(Math.random() * 3) + 6
-          })
+        // Buscar dados reais de evolução mensal da API
+        let meses = []
+        try {
+          const { apiDashboard } = await import('@/lib/api-dashboard')
+          const evolucaoResponse = await apiDashboard.buscarEvolucaoMensal(6)
+          if (evolucaoResponse.success && evolucaoResponse.data) {
+            meses = evolucaoResponse.data.map(item => ({
+              mes: item.mes,
+              obras: item.obras,
+              clientes: item.clientes,
+              gruas: item.gruas
+            }))
+          }
+        } catch (error) {
+          console.warn('Erro ao carregar evolução mensal, usando valores proporcionais:', error)
+          // Fallback para valores proporcionais
+          const hoje = new Date()
+          for (let i = 5; i >= 0; i--) {
+            const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+            const mesAno = data.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+            const progresso = (5 - i) / 5
+            meses.push({
+              mes: mesAno,
+              obras: Math.max(0, Math.floor(obras.length * (0.5 + progresso * 0.5))),
+              clientes: Math.max(0, Math.floor(clientes.length * (0.6 + progresso * 0.4))),
+              gruas: Math.max(0, Math.floor(gruas.length * (0.7 + progresso * 0.3)))
+            })
+          }
         }
 
         setDashboardData({

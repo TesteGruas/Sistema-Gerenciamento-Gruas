@@ -28,12 +28,23 @@ import {
 } from 'lucide-react'
 import { formatarData, formatarTempoRelativo } from '@/lib/utils-aprovacoes'
 
-// TODO: Este arquivo é para testes. Considere removê-lo ou usar dados reais da API.
+// AVISO: Esta página é apenas para testes e desenvolvimento
+// Em produção, esta página deve ser removida ou protegida com verificação de ambiente
+
+// Verificar se está em ambiente de desenvolvimento
+const isDevelopment = process.env.NODE_ENV === 'development' || 
+                     (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+
 const mockAprovacoes: any[] = []
 const mockNotificacoes: any[] = []
 type AprovacaoHorasExtras = any
 
 export default function TesteAprovacoesPage() {
+  // Redirecionar em produção
+  if (typeof window !== 'undefined' && !isDevelopment) {
+    window.location.href = '/dashboard'
+    return null
+  }
   const [activeView, setActiveView] = useState<'dashboard' | 'pwa'>('dashboard');
   const [showAssinatura, setShowAssinatura] = useState(false);
   const [showRejeitar, setShowRejeitar] = useState(false);

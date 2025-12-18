@@ -1,75 +1,83 @@
 import { supabaseAdmin } from '../config/supabase.js';
 
 /**
- * Busca o supervisor responsável por uma obra
+ * Busca o supervisor responsável por uma obra (cliente/dono da obra)
+ * O supervisor é o cliente da obra, não um funcionário
  * @param {number} obra_id - ID da obra
- * @returns {Promise<Object|null>} - Supervisor da obra ou null
+ * @returns {Promise<Object|null>} - Supervisor da obra (cliente) ou null
  */
 async function buscarSupervisorPorObra(obra_id) {
   try {
-    // Primeiro, tentar buscar supervisores na tabela funcionarios_obras
-    const { data: supervisoresObra, error: supervisoresError } = await supabaseAdmin
-      .from('funcionarios_obras')
+    // Buscar a obra com o cliente vinculado
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
       .select(`
-        funcionario_id,
-        funcionarios!inner(
+        id,
+        nome,
+        cliente_id,
+        responsavel_id,
+        responsavel_nome,
+        clientes (
           id,
-          usuarios!inner(
-            id,
-            nome,
-            email,
-            cargo
-          )
+          nome,
+          email,
+          contato_usuario_id
         )
       `)
-      .eq('obra_id', obra_id)
-      .eq('is_supervisor', true)
-      .eq('status', 'ativo')
-      .limit(1);
+      .eq('id', obra_id)
+      .single();
 
-    if (!supervisoresError && supervisoresObra && supervisoresObra.length > 0) {
-      const supervisorData = supervisoresObra[0];
-      if (supervisorData.funcionarios && supervisorData.funcionarios.usuarios) {
-        const usuario = supervisorData.funcionarios.usuarios;
+    if (obraError) {
+      console.error('[aprovacoes-helpers] Erro ao buscar obra:', obraError);
+      return null;
+    }
+
+    if (!obra) {
+      console.warn(`[aprovacoes-helpers] Obra ${obra_id} não encontrada`);
+      return null;
+    }
+
+    // Prioridade 1: Buscar pelo cliente da obra (contato_usuario_id)
+    if (obra.clientes && obra.clientes.contato_usuario_id) {
+      const { data: usuarioCliente, error: usuarioError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, nome, email, role')
+        .eq('id', obra.clientes.contato_usuario_id)
+        .single();
+
+      if (!usuarioError && usuarioCliente) {
         return {
-          id: usuario.id,
-          nome: usuario.nome,
-          email: usuario.email,
-          cargo: usuario.cargo
+          id: usuarioCliente.id,
+          nome: usuarioCliente.nome || obra.clientes.nome,
+          email: usuarioCliente.email || obra.clientes.email,
+          cargo: 'Cliente',
+          role: usuarioCliente.role
         };
       }
     }
 
-    // Fallback: Buscar supervisor da obra (baseado no campo responsavel_id)
-    const { data: obra, error } = await supabaseAdmin
-      .from('obras')
-      .select('responsavel_id, id, nome')
-      .eq('id', obra_id)
-      .single();
+    // Prioridade 2: Buscar pelo responsavel_id da obra (se for um usuário)
+    if (obra.responsavel_id) {
+      const { data: responsavelUsuario, error: responsavelError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, nome, email, role')
+        .eq('id', obra.responsavel_id)
+        .single();
 
-    if (error) throw error;
-
-    // Usar responsavel_id como supervisor
-    const supervisor_id = obra.responsavel_id;
-
-    if (!supervisor_id) {
-      console.warn(`[aprovacoes-helpers] Obra ${obra_id} não possui supervisor definido`);
-      return null;
+      if (!responsavelError && responsavelUsuario) {
+        return {
+          id: responsavelUsuario.id,
+          nome: responsavelUsuario.nome || obra.responsavel_nome,
+          email: responsavelUsuario.email,
+          cargo: 'Responsável',
+          role: responsavelUsuario.role
+        };
+      }
     }
 
-    // Buscar dados do supervisor
-    const { data: supervisor, error: supervisorError } = await supabaseAdmin
-      .from('usuarios')
-      .select('id, nome, email, cargo')
-      .eq('id', supervisor_id)
-      .single();
-
-    if (supervisorError) {
-      console.error('[aprovacoes-helpers] Erro ao buscar supervisor:', supervisorError);
-      return null;
-    }
-
-    return supervisor;
+    // Se não encontrou supervisor (cliente), retornar null
+    console.warn(`[aprovacoes-helpers] Obra ${obra_id} não possui supervisor (cliente) definido`);
+    return null;
   } catch (error) {
     console.error('[aprovacoes-helpers] Erro ao buscar supervisor por obra:', error);
     return null;

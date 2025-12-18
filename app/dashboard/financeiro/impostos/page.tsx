@@ -1346,9 +1346,29 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
         }
       }
 
-      // TODO: Implementar upload de arquivo quando o endpoint estiver disponível
-      if (uploadFile) {
-        console.log('Arquivo selecionado, mas upload ainda não implementado:', uploadFile.name)
+      // Fazer upload do arquivo se houver
+      if (uploadFile && result.data?.id) {
+        try {
+          const formDataUpload = new FormData()
+          formDataUpload.append('arquivo', uploadFile)
+
+          const uploadResponse = await fetch(`${API_URL}/api/impostos-financeiros/${result.data.id}/arquivo`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataUpload
+          })
+
+          if (!uploadResponse.ok) {
+            console.warn('Erro ao fazer upload do arquivo')
+            const uploadError = await uploadResponse.json()
+            console.error('Erro detalhado:', uploadError)
+          }
+        } catch (uploadError) {
+          console.error('Erro ao fazer upload do arquivo:', uploadError)
+          // Não bloquear o fluxo se o upload falhar
+        }
       }
 
       toast({

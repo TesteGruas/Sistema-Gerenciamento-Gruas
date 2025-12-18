@@ -802,6 +802,33 @@ function ObraDetailsPageContent() {
   const handleNovaEntrada = () => {
     setEntradaSelecionada(null)
     setIsNovaEntradaOpen(true)
+    // Carregar funcionários quando abrir o modal
+    carregarFuncionariosParaSelect()
+  }
+
+  // Carregar funcionários para os selects do modal de nova entrada
+  const carregarFuncionariosParaSelect = async () => {
+    try {
+      const response = await funcionariosApi.listarFuncionarios({
+        limit: 1000,
+        status: 'Ativo'
+      })
+      
+      if (response.success && response.data) {
+        // Converter para formato esperado
+        const funcionariosFormatados = response.data.map((f: any) => ({
+          id: f.id,
+          nome: f.nome,
+          name: f.nome, // Para compatibilidade
+          cargo: f.cargo_info?.nome || f.cargo || 'Sem cargo',
+          cargo_info: f.cargo_info
+        }))
+        setFuncionariosDisponiveis(funcionariosFormatados)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar funcionários:', error)
+      setFuncionariosDisponiveis([])
+    }
   }
 
   const handleVisualizarEntrada = (entrada: any) => {
@@ -1800,29 +1827,21 @@ function ObraDetailsPageContent() {
       })
 
       if (response.success && response.data) {
-        // Filtrar apenas supervisores (eh_supervisor = true ou cargo de supervisor)
+        // Supervisor não é mais um cargo, é uma atribuição. Qualquer funcionário pode ser supervisor.
+        // Filtrar apenas funcionários já vinculados à obra
+        const funcionariosVinculadosIds = funcionariosVinculados
+          .filter((func: any) => isSupervisor(func))
+          .map((func: any) => {
+            // Tentar diferentes campos possíveis
+            return func.funcionarioId || 
+                   func.funcionario_id || 
+                   func.userId || 
+                   parseInt(func.id)
+          })
+        
+        // Mostrar todos os funcionários ativos (qualquer um pode ser designado como supervisor)
         const supervisoresFiltrados = response.data.filter((f: any) => {
-          const ehSupervisor = f.eh_supervisor === true || 
-                              f.eh_supervisor === 'true' || 
-                              f.eh_supervisor === 1 ||
-                              f.cargo_info?.nivel === 'Supervisor' ||
-                              f.cargo_info?.nome?.toLowerCase().includes('supervisor') ||
-                              f.cargo?.toLowerCase().includes('supervisor')
-          
-          if (!ehSupervisor) return false
-          
-          // Filtrar supervisores já vinculados à obra
-          const supervisoresVinculadosIds = funcionariosVinculados
-            .filter((func: any) => isSupervisor(func))
-            .map((func: any) => {
-              // Tentar diferentes campos possíveis
-              return func.funcionarioId || 
-                     func.funcionario_id || 
-                     func.userId || 
-                     parseInt(func.id)
-            })
-          
-          return !supervisoresVinculadosIds.includes(f.id) &&
+          return !funcionariosVinculadosIds.includes(f.id) &&
                  !supervisoresSelecionados.find((sel: any) => sel.id === f.id)
         })
         
@@ -4129,7 +4148,6 @@ useEffect(() => {
                         
                         setProcessandoDevolucao(true)
                         try {
-                          // TODO: Criar endpoint no backend para processar devoluções
                           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
                           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                           
@@ -4880,10 +4898,9 @@ useEffect(() => {
                     <SelectValue placeholder="Selecione um funcionário" />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* TODO: Integrar com API de funcionários */}
-                    {[].map((user: any) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name} ({user.role})
+                    {funcionariosDisponiveis.map((func: any) => (
+                      <SelectItem key={func.id} value={func.id.toString()}>
+                        {func.nome || func.name} ({func.cargo_info?.nome || func.cargo || 'Sem cargo'})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -4959,10 +4976,9 @@ useEffect(() => {
                     <SelectValue placeholder="Selecione o responsável" />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* TODO: Integrar com API de funcionários */}
-                    {[].map((user: any) => (
-                      <SelectItem key={user.id} value={user.name}>
-                        {user.name} ({user.role})
+                    {funcionariosDisponiveis.map((func: any) => (
+                      <SelectItem key={func.id} value={func.nome || func.name}>
+                        {func.nome || func.name} ({func.cargo_info?.nome || func.cargo || 'Sem cargo'})
                       </SelectItem>
                     ))}
                   </SelectContent>

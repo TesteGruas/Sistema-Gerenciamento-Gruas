@@ -876,6 +876,11 @@ export default function GruasPage() {
   }
 
   const preencherDadosDebugGrua = () => {
+    // Proteger função de debug - apenas em desenvolvimento
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('Função de debug desabilitada em produção')
+      return
+    }
     setGruaFormData({
       name: 'Grua Torre GT-500',
       model: 'GT-500',

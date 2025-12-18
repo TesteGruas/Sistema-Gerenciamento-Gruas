@@ -66,7 +66,7 @@ export default function ClientesPage() {
     contato_telefone: '',
     status: 'ativo',
     criar_usuario: true,
-    usuario_senha: '' // Não será usado pelo usuário, apenas mockado no envio
+    usuario_senha: '' // Não será usado - backend gera senha automaticamente
   })
   
   // Estados para gerenciar dados da API
@@ -320,8 +320,8 @@ export default function ClientesPage() {
         contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
         // Incluir campos de usuário se estiver criando
         criar_usuario: clienteFormData.criar_usuario || false,
-        // Enviar senha mockada temporariamente (backend ainda exige, mas será gerada automaticamente)
-        usuario_senha: clienteFormData.criar_usuario ? 'TempPass123!' : undefined
+        // Backend gera senha automaticamente quando criar_usuario é true
+        // Não enviar senha - será gerada pelo backend e enviada por email/WhatsApp
       }
       
       const response = await clientesApi.criarCliente(dadosFormatados)
@@ -345,7 +345,7 @@ export default function ClientesPage() {
         contato_telefone: '',
         status: 'ativo',
         criar_usuario: true,
-        usuario_senha: '' // Não será usado pelo usuário
+        usuario_senha: '' // Não será usado - backend gera senha automaticamente
       })
       setIsCreateDialogOpen(false)
       

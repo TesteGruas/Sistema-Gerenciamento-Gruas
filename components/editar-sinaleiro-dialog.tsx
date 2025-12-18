@@ -243,11 +243,16 @@ export function EditarSinaleiroDialog({
   }
 
 
+  // Nota: Upload de documentos é gerenciado pelo componente DocumentosSinaleiroList
+  // que já possui integração completa com a API de documentos de sinaleiros
+  // Esta função não é mais utilizada - mantida apenas para compatibilidade se necessário
   const handleDocumentUpload = async (tipo: string, file: File) => {
-    // Simular upload de documento
+    // Documentos devem ser gerenciados através do componente DocumentosSinaleiroList
+    // que possui integração completa com sinaleirosApi.criarDocumento()
     toast({
-      title: "Upload realizado",
-      description: `Documento ${tipo} enviado com sucesso (MOCK)`
+      title: "Aviso",
+      description: "Use a aba de Documentos para fazer upload de arquivos",
+      variant: "default"
     })
   }
 

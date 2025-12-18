@@ -2115,11 +2115,9 @@ function ClienteSelector({
         setClientes(response.data || [])
       } catch (error) {
         console.error('Erro ao carregar clientes:', error)
-        // Fallback para dados mockados
-        setClientes([
-          { id: 1, nome: 'Cliente Exemplo 1', cnpj: '12.345.678/0001-90', email: 'cliente1@exemplo.com' },
-          { id: 2, nome: 'Cliente Exemplo 2', cnpj: '98.765.432/0001-10', email: 'cliente2@exemplo.com' }
-        ])
+        // Não usar fallback mockado - deixar array vazio e mostrar erro se necessário
+        setClientes([])
+        // O erro será tratado pela UI (loading state e mensagem de erro se necessário)
       } finally {
         setLoading(false)
       }

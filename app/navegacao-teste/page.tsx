@@ -16,7 +16,17 @@ import {
   TrendingUp
 } from 'lucide-react'
 
+// Verificar se está em ambiente de desenvolvimento
+const isDevelopment = process.env.NODE_ENV === 'development' || 
+                     (typeof window !== 'undefined' && window.location.hostname === 'localhost')
+
 export default function NavegacaoTestePage() {
+  // Redirecionar em produção
+  if (typeof window !== 'undefined' && !isDevelopment) {
+    window.location.href = '/dashboard'
+    return null
+  }
+  
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto space-y-6">
