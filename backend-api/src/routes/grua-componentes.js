@@ -36,7 +36,8 @@ const componenteSchema = Joi.object({
   data_ultima_manutencao: Joi.date().allow(null),
   data_proxima_manutencao: Joi.date().allow(null),
   observacoes: Joi.string().allow(null, ''),
-  anexos: Joi.object().allow(null)
+  anexos: Joi.object().allow(null),
+  componente_estoque_id: Joi.number().integer().allow(null).optional() // ID do componente no estoque, se foi selecionado
 })
 
 // Schema para atualização de componentes (sem grua_id obrigatório)
@@ -351,16 +352,17 @@ router.post('/', async (req, res) => {
       })
     }
 
-    // Preparar dados para inserção
-    const componenteData = {
-      ...value,
+    // Preparar dados para inserção (remover componente_estoque_id se existir)
+    const { componente_estoque_id, quantidade_total, ...componenteData } = value
+    const dadosInsercao = {
+      ...componenteData,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
 
     const { data, error: insertError } = await supabaseAdmin
       .from('grua_componentes')
-      .insert(componenteData)
+      .insert(dadosInsercao)
       .select()
       .single()
 
@@ -369,6 +371,115 @@ router.post('/', async (req, res) => {
         error: 'Erro ao criar componente',
         message: insertError.message
       })
+    }
+
+    // Se o componente foi selecionado do estoque, fazer movimentação de saída
+    if (componente_estoque_id && quantidade_total) {
+      try {
+        // Obter responsavel_id (similar à rota de movimentação de estoque)
+        let responsavel_id = null
+        if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
+          responsavel_id = parseInt(req.user.id)
+        } else {
+          // Se é um UUID, buscar o ID inteiro da tabela usuarios pelo email
+          const { data: userData, error: userError } = await supabaseAdmin
+            .from('usuarios')
+            .select('id')
+            .eq('email', req.user.email)
+            .single()
+          
+          if (userData && !userError) {
+            responsavel_id = userData.id
+          } else {
+            console.warn('⚠️ Usuário não encontrado na tabela usuarios, usando ID 1 como fallback')
+            responsavel_id = 1
+          }
+        }
+
+        // Buscar estoque do componente original
+        const { data: estoqueAtual, error: estoqueError } = await supabaseAdmin
+          .from('estoque')
+          .select('quantidade_atual, quantidade_disponivel, quantidade_reservada, valor_total')
+          .eq('componente_id', componente_estoque_id)
+          .single()
+
+        if (!estoqueError && estoqueAtual) {
+          // Verificar se há estoque disponível suficiente
+          if (estoqueAtual.quantidade_disponivel < quantidade_total) {
+            // Se não há estoque suficiente, remover o componente criado e retornar erro
+            await supabaseAdmin
+              .from('grua_componentes')
+              .delete()
+              .eq('id', data.id)
+
+            return res.status(400).json({
+              error: 'Estoque insuficiente',
+              message: `Estoque disponível: ${estoqueAtual.quantidade_disponivel}, quantidade solicitada: ${quantidade_total}`
+            })
+          }
+
+          // Calcular nova quantidade
+          const novaQuantidade = estoqueAtual.quantidade_atual - quantidade_total
+          const novaQuantidadeDisponivel = estoqueAtual.quantidade_disponivel - quantidade_total
+
+          // Obter dados do componente original para valor unitário
+          const { data: componenteOriginal } = await supabaseAdmin
+            .from('grua_componentes')
+            .select('valor_unitario')
+            .eq('id', componente_estoque_id)
+            .single()
+
+          const valorUnitario = componenteOriginal?.valor_unitario || value.valor_unitario || 0
+          const valorTotal = quantidade_total * valorUnitario
+
+          // Atualizar estoque
+          const { error: updateEstoqueError } = await supabaseAdmin
+            .from('estoque')
+            .update({
+              quantidade_atual: novaQuantidade,
+              quantidade_disponivel: novaQuantidadeDisponivel,
+              valor_total: novaQuantidade * valorUnitario,
+              ultima_movimentacao: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('componente_id', componente_estoque_id)
+
+          if (updateEstoqueError) {
+            console.error('Erro ao atualizar estoque:', updateEstoqueError)
+            throw updateEstoqueError
+          }
+
+          // Registrar movimentação de estoque
+          const { error: movimentacaoError } = await supabaseAdmin
+            .from('movimentacoes_estoque')
+            .insert({
+              componente_id: componente_estoque_id,
+              tipo: 'Saída',
+              quantidade: quantidade_total.toString(),
+              valor_unitario: valorUnitario.toString(),
+              valor_total: valorTotal.toString(),
+              data_movimentacao: new Date().toISOString(),
+              responsavel_id: responsavel_id,
+              observacoes: `Componente adicionado à grua ${value.grua_id}`,
+              status: 'Confirmada',
+              motivo: `Adição de componente à grua`,
+              created_at: new Date().toISOString()
+            })
+
+          if (movimentacaoError) {
+            console.error('Erro ao registrar movimentação:', movimentacaoError)
+            // Não falhar se houver erro na movimentação, apenas logar
+          } else {
+            console.log(`✅ Estoque decrementado: ${quantidade_total} unidades do componente ${componente_estoque_id}`)
+          }
+        } else {
+          console.log(`ℹ️ Componente ${componente_estoque_id} não possui registro no estoque, pulando movimentação`)
+        }
+      } catch (error) {
+        console.error('Erro ao decrementar estoque:', error)
+        // Não falhar a criação do componente se houver erro no estoque
+        // Apenas logar o erro
+      }
     }
 
     res.status(201).json({
@@ -580,6 +691,299 @@ router.delete('/:id', async (req, res) => {
  *       400:
  *         description: Dados inválidos
  */
+/**
+ * @swagger
+ * /api/grua-componentes/devolver:
+ *   post:
+ *     summary: Processar devolução de componentes de uma obra
+ *     tags: [Grua Componentes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - obra_id
+ *               - devolucoes
+ *             properties:
+ *               obra_id:
+ *                 type: integer
+ *               devolucoes:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - componente_id
+ *                     - tipo
+ *                   properties:
+ *                     componente_id:
+ *                       type: integer
+ *                     tipo:
+ *                       type: string
+ *                       enum: [completa, parcial]
+ *                     quantidade_devolvida:
+ *                       type: integer
+ *                     valor:
+ *                       type: number
+ *                     observacoes:
+ *                       type: string
+ *     responses:
+ *       200:
+ *         description: Devoluções processadas com sucesso
+ *       400:
+ *         description: Dados inválidos
+ */
+router.post('/devolver', async (req, res) => {
+  try {
+    const { obra_id, devolucoes } = req.body
+
+    if (!obra_id || !Array.isArray(devolucoes) || devolucoes.length === 0) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'obra_id e devolucoes são obrigatórios'
+      })
+    }
+
+    // Obter responsavel_id
+    let responsavel_id = null
+    if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
+      responsavel_id = parseInt(req.user.id)
+    } else {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', req.user.email)
+        .single()
+      
+      if (userData && !userError) {
+        responsavel_id = userData.id
+      } else {
+        responsavel_id = 1
+      }
+    }
+
+    const resultados = []
+
+    for (const devolucao of devolucoes) {
+      const { componente_id, tipo, quantidade_devolvida, valor, observacoes } = devolucao
+
+      // Buscar componente
+      const { data: componente, error: componenteError } = await supabaseAdmin
+        .from('grua_componentes')
+        .select('*')
+        .eq('id', componente_id)
+        .single()
+
+      if (componenteError || !componente) {
+        resultados.push({
+          componente_id,
+          sucesso: false,
+          erro: 'Componente não encontrado'
+        })
+        continue
+      }
+
+      if (tipo === 'completa') {
+        // Devolução completa: incrementar estoque
+        const quantidadeDevolver = quantidade_devolvida || componente.quantidade_em_uso
+        
+        // Atualizar componente: reduzir quantidade_em_uso e aumentar quantidade_disponivel
+        const novaQuantidadeEmUso = componente.quantidade_em_uso - quantidadeDevolver
+        const novaQuantidadeDisponivel = componente.quantidade_disponivel + quantidadeDevolver
+
+        const { error: updateError } = await supabaseAdmin
+          .from('grua_componentes')
+          .update({
+            quantidade_em_uso: novaQuantidadeEmUso,
+            quantidade_disponivel: novaQuantidadeDisponivel,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', componente_id)
+
+        if (updateError) {
+          resultados.push({
+            componente_id,
+            sucesso: false,
+            erro: updateError.message
+          })
+          continue
+        }
+
+        // Incrementar estoque se o componente tiver registro no estoque
+        const { data: estoqueAtual } = await supabaseAdmin
+          .from('estoque')
+          .select('*')
+          .eq('componente_id', componente_id)
+          .single()
+
+        if (estoqueAtual) {
+          const novaQuantidadeEstoque = estoqueAtual.quantidade_atual + quantidadeDevolver
+          const novaQuantidadeDisponivelEstoque = estoqueAtual.quantidade_disponivel + quantidadeDevolver
+          const novoValorTotal = novaQuantidadeEstoque * componente.valor_unitario
+
+          await supabaseAdmin
+            .from('estoque')
+            .update({
+              quantidade_atual: novaQuantidadeEstoque,
+              quantidade_disponivel: novaQuantidadeDisponivelEstoque,
+              valor_total: novoValorTotal,
+              ultima_movimentacao: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('componente_id', componente_id)
+
+          // Registrar movimentação de estoque (Entrada)
+          await supabaseAdmin
+            .from('movimentacoes_estoque')
+            .insert({
+              componente_id: componente_id,
+              tipo: 'Entrada',
+              quantidade: quantidadeDevolver.toString(),
+              valor_unitario: componente.valor_unitario.toString(),
+              valor_total: (quantidadeDevolver * componente.valor_unitario).toString(),
+              data_movimentacao: new Date().toISOString(),
+              responsavel_id: responsavel_id,
+              observacoes: `Devolução completa de componente da obra ${obra_id}`,
+              status: 'Confirmada',
+              motivo: 'Devolução de componente',
+              created_at: new Date().toISOString()
+            })
+        }
+
+        // Registrar movimentação do componente
+        await supabaseAdmin
+          .from('historico_componentes')
+          .insert({
+            componente_id: componente_id,
+            tipo_movimentacao: 'Remoção',
+            quantidade_movimentada: quantidadeDevolver,
+            quantidade_anterior: componente.quantidade_em_uso,
+            quantidade_atual: novaQuantidadeEmUso,
+            motivo: 'Devolução completa à obra',
+            obra_id: obra_id,
+            funcionario_responsavel_id: responsavel_id,
+            observacoes: observacoes || 'Devolução completa do componente',
+            created_at: new Date().toISOString()
+          })
+
+        resultados.push({
+          componente_id,
+          sucesso: true,
+          mensagem: 'Devolução completa processada'
+        })
+
+      } else if (tipo === 'parcial') {
+        // Devolução parcial: registrar o que não retornou
+        const quantidadeNaoRetornou = componente.quantidade_em_uso - (quantidade_devolvida || 0)
+        const quantidadeDevolver = quantidade_devolvida || 0
+
+        if (quantidadeDevolver > 0) {
+          // Atualizar componente: reduzir quantidade_em_uso e aumentar quantidade_disponivel apenas do que retornou
+          const novaQuantidadeEmUso = componente.quantidade_em_uso - quantidadeDevolver
+          const novaQuantidadeDisponivel = componente.quantidade_disponivel + quantidadeDevolver
+
+          const { error: updateError } = await supabaseAdmin
+            .from('grua_componentes')
+            .update({
+              quantidade_em_uso: novaQuantidadeEmUso,
+              quantidade_disponivel: novaQuantidadeDisponivel,
+              quantidade_danificada: componente.quantidade_danificada + quantidadeNaoRetornou,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', componente_id)
+
+          if (updateError) {
+            resultados.push({
+              componente_id,
+              sucesso: false,
+              erro: updateError.message
+            })
+            continue
+          }
+
+          // Incrementar estoque apenas do que retornou
+          const { data: estoqueAtual } = await supabaseAdmin
+            .from('estoque')
+            .select('*')
+            .eq('componente_id', componente_id)
+            .single()
+
+          if (estoqueAtual && quantidadeDevolver > 0) {
+            const novaQuantidadeEstoque = estoqueAtual.quantidade_atual + quantidadeDevolver
+            const novaQuantidadeDisponivelEstoque = estoqueAtual.quantidade_disponivel + quantidadeDevolver
+            const novoValorTotal = novaQuantidadeEstoque * componente.valor_unitario
+
+            await supabaseAdmin
+              .from('estoque')
+              .update({
+                quantidade_atual: novaQuantidadeEstoque,
+                quantidade_disponivel: novaQuantidadeDisponivelEstoque,
+                valor_total: novoValorTotal,
+                ultima_movimentacao: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('componente_id', componente_id)
+
+            // Registrar movimentação de estoque (Entrada parcial)
+            await supabaseAdmin
+              .from('movimentacoes_estoque')
+              .insert({
+                componente_id: componente_id,
+                tipo: 'Entrada',
+                quantidade: quantidadeDevolver.toString(),
+                valor_unitario: componente.valor_unitario.toString(),
+                valor_total: (quantidadeDevolver * componente.valor_unitario).toString(),
+                data_movimentacao: new Date().toISOString(),
+                responsavel_id: responsavel_id,
+                observacoes: `Devolução parcial de componente da obra ${obra_id}. Não retornou: ${quantidadeNaoRetornou} unidades. Valor: R$ ${valor || 0}`,
+                status: 'Confirmada',
+                motivo: 'Devolução parcial de componente',
+                created_at: new Date().toISOString()
+              })
+          }
+        }
+
+        // Registrar movimentação do componente
+        await supabaseAdmin
+          .from('historico_componentes')
+          .insert({
+            componente_id: componente_id,
+            tipo_movimentacao: 'Remoção',
+            quantidade_movimentada: quantidadeDevolver,
+            quantidade_anterior: componente.quantidade_em_uso,
+            quantidade_atual: componente.quantidade_em_uso - quantidadeDevolver,
+            motivo: `Devolução parcial à obra. Não retornou: ${quantidadeNaoRetornou} unidades. Valor: R$ ${valor || 0}`,
+            obra_id: obra_id,
+            funcionario_responsavel_id: responsavel_id,
+            observacoes: observacoes || `Devolução parcial. Quantidade não retornada: ${quantidadeNaoRetornou}. Valor: R$ ${valor || 0}`,
+            created_at: new Date().toISOString()
+          })
+
+        resultados.push({
+          componente_id,
+          sucesso: true,
+          mensagem: `Devolução parcial processada. Não retornou: ${quantidadeNaoRetornou} unidades. Valor: R$ ${valor || 0}`
+        })
+      }
+    }
+
+    res.json({
+      success: true,
+      data: resultados,
+      message: 'Devoluções processadas com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao processar devoluções:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 router.post('/:id/movimentar', async (req, res) => {
   try {
     const { id } = req.params

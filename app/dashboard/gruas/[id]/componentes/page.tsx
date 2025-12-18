@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,12 +26,16 @@ import {
   Download,
   TrendingUp,
   TrendingDown,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  CheckCircle2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiComponentes, ComponenteGrua, MovimentacaoComponente } from "@/lib/api-componentes"
 import { gruasApi } from "@/lib/api-gruas"
 import { obrasApi } from "@/lib/api-obras"
+import { estoqueAPI } from "@/lib/api-estoque"
 import { Slider } from "@/components/ui/slider"
 
 interface ConfiguracaoGrua {
@@ -65,9 +69,17 @@ export default function ComponentesGruaPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isMovimentacaoDialogOpen, setIsMovimentacaoDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [isDevolucaoItensDialogOpen, setIsDevolucaoItensDialogOpen] = useState(false)
   const [editingComponente, setEditingComponente] = useState<ComponenteGrua | null>(null)
   const [gruaInfo, setGruaInfo] = useState<any>(null)
   const [estatisticas, setEstatisticas] = useState<any>(null)
+  
+  // Estado para gerenciar devoluções de itens
+  const [devolucoesItens, setDevolucoesItens] = useState<Record<number, {
+    tipo: 'completa' | 'parcial' | null
+    quantidade_devolvida?: number
+  }>>({})
+  const [processandoDevolucoes, setProcessandoDevolucoes] = useState(false)
 
   // Formulário para componente
   const [componenteForm, setComponenteForm] = useState({
@@ -95,12 +107,20 @@ export default function ComponentesGruaPage() {
     data_instalacao: '',
     data_ultima_manutencao: '',
     data_proxima_manutencao: '',
-    observacoes: ''
+    observacoes: '',
+    componente_estoque_id: undefined as number | undefined // ID do componente no estoque, se foi selecionado
   })
 
   // Estado para lista de obras (para dropdown quando localização for "Obra X")
   const [obras, setObras] = useState<any[]>([])
   const [loadingObras, setLoadingObras] = useState(false)
+
+  // Estados para busca de componentes do estoque
+  const [componentesEstoque, setComponentesEstoque] = useState<any[]>([])
+  const [buscandoComponentes, setBuscandoComponentes] = useState(false)
+  const [buscaComponente, setBuscaComponente] = useState("")
+  const [componenteSelecionado, setComponenteSelecionado] = useState<any>(null)
+  const [mostrarResultadosBusca, setMostrarResultadosBusca] = useState(false)
 
   // Formulário para movimentação
   const [movimentacaoForm, setMovimentacaoForm] = useState({
@@ -111,7 +131,11 @@ export default function ComponentesGruaPage() {
     grua_origem_id: '',
     grua_destino_id: '',
     funcionario_responsavel_id: '',
-    observacoes: ''
+    observacoes: '',
+    // Campos específicos para devolução da obra
+    tipo_devolucao: 'completa' as 'completa' | 'parcial',
+    quantidade_devolvida: 0,
+    valor_nao_devolvido: 0
   })
 
 
@@ -185,8 +209,107 @@ export default function ComponentesGruaPage() {
   // Os componentes já vêm filtrados da API
   const filteredComponentes = componentes
 
+  // Buscar componentes do estoque
+  const buscarComponentesEstoque = useCallback(async (termo: string) => {
+    if (!termo || termo.length < 2) {
+      setComponentesEstoque([])
+      setMostrarResultadosBusca(false)
+      return
+    }
+
+    try {
+      setBuscandoComponentes(true)
+      const response = await estoqueAPI.listarProdutos({
+        tipo_item: 'componente',
+        page: 1,
+        limit: 50
+      })
+
+      // Filtrar componentes que correspondem ao termo de busca
+      const filtrados = response.data.filter((comp: any) => {
+        const nome = comp.nome?.toLowerCase() || ''
+        const modelo = comp.modelo?.toLowerCase() || ''
+        const fabricante = comp.fabricante?.toLowerCase() || ''
+        const tipo = comp.tipo?.toLowerCase() || ''
+        const termoLower = termo.toLowerCase()
+        
+        return nome.includes(termoLower) || 
+               modelo.includes(termoLower) || 
+               fabricante.includes(termoLower) ||
+               tipo.includes(termoLower)
+      })
+
+      setComponentesEstoque(filtrados)
+      setMostrarResultadosBusca(true)
+    } catch (error: any) {
+      console.error('Erro ao buscar componentes:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao buscar componentes do estoque",
+        variant: "destructive"
+      })
+    } finally {
+      setBuscandoComponentes(false)
+    }
+  }, [toast])
+
+  // Selecionar componente do estoque
+  const selecionarComponenteEstoque = (componente: any) => {
+    setComponenteSelecionado(componente)
+    setBuscaComponente(componente.nome)
+    setMostrarResultadosBusca(false)
+    
+    // Obter quantidade disponível do estoque
+    const estoqueDisponivel = componente.estoque?.[0]?.quantidade_disponivel || componente.quantidade_disponivel || 0
+    
+    // Preencher formulário com dados do componente selecionado
+    setComponenteForm({
+      nome: componente.nome || '',
+      tipo: componente.tipo || '' as ComponenteGrua['tipo'],
+      modelo: componente.modelo || '',
+      fabricante: componente.fabricante || '',
+      numero_serie: componente.numero_serie || '',
+      capacidade: componente.capacidade || '',
+      unidade_medida: componente.unidade_medida || 'unidade',
+      quantidade_total: 1, // Quantidade a adicionar (padrão 1)
+      quantidade_disponivel: 1, // Quantidade a adicionar (padrão 1)
+      quantidade_em_uso: 0,
+      quantidade_danificada: 0,
+      status: componente.status || 'Disponível' as ComponenteGrua['status'],
+      localizacao: componente.localizacao || '',
+      localizacao_tipo: componente.localizacao_tipo || 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
+      obra_id: componente.obra_id,
+      dimensoes_altura: componente.dimensoes_altura,
+      dimensoes_largura: componente.dimensoes_largura,
+      dimensoes_comprimento: componente.dimensoes_comprimento,
+      dimensoes_peso: componente.dimensoes_peso,
+      vida_util_percentual: componente.vida_util_percentual || 100,
+      valor_unitario: componente.valor_unitario || 0,
+      data_instalacao: componente.data_instalacao || '',
+      data_ultima_manutencao: componente.data_ultima_manutencao || '',
+      data_proxima_manutencao: componente.data_proxima_manutencao || '',
+      observacoes: componente.observacoes || '',
+      componente_estoque_id: componente.id // Guardar ID do componente do estoque
+    })
+  }
+
   // Handlers
   const handleCreateComponente = async () => {
+    // Validar estoque se componente foi selecionado do estoque
+    if (componenteSelecionado && componenteForm.componente_estoque_id) {
+      const estoqueDisponivel = componenteSelecionado.estoque?.[0]?.quantidade_disponivel || 
+                                 componenteSelecionado.quantidade_disponivel || 0
+      
+      if (componenteForm.quantidade_total > estoqueDisponivel) {
+        toast({
+          title: "Estoque insuficiente",
+          description: `Estoque disponível: ${estoqueDisponivel}, quantidade solicitada: ${componenteForm.quantidade_total}`,
+          variant: "destructive"
+        })
+        return
+      }
+    }
+
     try {
       const response = await apiComponentes.criar({
         grua_id: gruaId,
@@ -195,6 +318,9 @@ export default function ComponentesGruaPage() {
 
       setIsCreateDialogOpen(false)
       resetComponenteForm()
+      setComponenteSelecionado(null)
+      setBuscaComponente("")
+      setComponentesEstoque([])
       
       // Recarregar dados para atualizar lista e estatísticas
       await carregarDados()
@@ -246,6 +372,62 @@ export default function ComponentesGruaPage() {
     if (!editingComponente) return
 
     try {
+      // Se for devolução da obra, usar endpoint específico de devolução
+      if (movimentacaoForm.tipo_movimentacao === 'Devolução da Obra') {
+        if (!movimentacaoForm.obra_id) {
+          toast({
+            title: "Atenção",
+            description: "Selecione a obra de origem",
+            variant: "destructive"
+          })
+          return
+        }
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+        
+        const devolucaoData = {
+          obra_id: parseInt(movimentacaoForm.obra_id),
+          devolucoes: [{
+            componente_id: editingComponente.id,
+            tipo: movimentacaoForm.tipo_devolucao,
+            quantidade_devolvida: movimentacaoForm.tipo_devolucao === 'completa' 
+              ? editingComponente.quantidade_em_uso 
+              : movimentacaoForm.quantidade_devolvida,
+            valor: movimentacaoForm.tipo_devolucao === 'parcial' ? movimentacaoForm.valor_nao_devolvido : 0,
+            observacoes: movimentacaoForm.observacoes || movimentacaoForm.motivo
+          }]
+        }
+
+        const response = await fetch(`${API_URL}/api/grua-componentes/devolver`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(devolucaoData)
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.message || 'Erro ao processar devolução')
+        }
+
+        setIsMovimentacaoDialogOpen(false)
+        setEditingComponente(null)
+        resetMovimentacaoForm()
+        
+        // Recarregar dados para atualizar lista e estatísticas
+        await carregarDados()
+
+        toast({
+          title: "Sucesso",
+          description: "Devolução registrada com sucesso"
+        })
+        return
+      }
+
+      // Para outros tipos de movimentação, usar o endpoint padrão
       const movimentacaoData = {
         ...movimentacaoForm,
         obra_id: movimentacaoForm.obra_id ? parseInt(movimentacaoForm.obra_id) : undefined,
@@ -271,7 +453,7 @@ export default function ComponentesGruaPage() {
       console.error('Erro ao movimentar componente:', error)
       toast({
         title: "Erro",
-        description: error.response?.data?.message || "Erro ao movimentar componente",
+        description: error.message || error.response?.data?.message || "Erro ao processar movimentação",
         variant: "destructive"
       })
     }
@@ -304,6 +486,35 @@ export default function ComponentesGruaPage() {
       carregarObras()
     }
   }, [componenteForm.localizacao_tipo])
+
+  // Debounce para busca de componentes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (buscaComponente.length >= 2) {
+        buscarComponentesEstoque(buscaComponente)
+      } else {
+        setComponentesEstoque([])
+        setMostrarResultadosBusca(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [buscaComponente, buscarComponentesEstoque])
+
+  // Fechar lista de resultados ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.busca-componente-container')) {
+        setMostrarResultadosBusca(false)
+      }
+    }
+
+    if (mostrarResultadosBusca) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [mostrarResultadosBusca])
 
   const carregarObras = async () => {
     try {
@@ -346,8 +557,13 @@ export default function ComponentesGruaPage() {
       data_instalacao: '',
       data_ultima_manutencao: '',
       data_proxima_manutencao: '',
-      observacoes: ''
+      observacoes: '',
+      componente_estoque_id: undefined
     })
+    setComponenteSelecionado(null)
+    setBuscaComponente("")
+    setComponentesEstoque([])
+    setMostrarResultadosBusca(false)
   }
 
   const resetMovimentacaoForm = () => {
@@ -359,7 +575,10 @@ export default function ComponentesGruaPage() {
       grua_origem_id: '',
       grua_destino_id: '',
       funcionario_responsavel_id: '',
-      observacoes: ''
+      observacoes: '',
+      tipo_devolucao: 'completa' as 'completa' | 'parcial',
+      quantidade_devolvida: 0,
+      valor_nao_devolvido: 0
     })
   }
 
@@ -398,6 +617,13 @@ export default function ComponentesGruaPage() {
   const openMovimentacaoDialog = (componente: ComponenteGrua) => {
     setEditingComponente(componente)
     resetMovimentacaoForm()
+    // Inicializar quantidade devolvida com a quantidade em uso se houver
+    if (componente.quantidade_em_uso > 0) {
+      setMovimentacaoForm(prev => ({
+        ...prev,
+        quantidade_devolvida: componente.quantidade_em_uso
+      }))
+    }
     setIsMovimentacaoDialogOpen(true)
   }
 
@@ -531,6 +757,27 @@ export default function ComponentesGruaPage() {
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Adicionar Componente
+          </Button>
+          <Button 
+            variant="default"
+            onClick={() => {
+              // Inicializar devoluções para todos os componentes (mas só os com quantidade em uso podem ser devolvidos)
+              const devolucoesIniciais: Record<number, { tipo: 'completa' | 'parcial' | null, quantidade_devolvida?: number }> = {}
+              componentes.forEach(comp => {
+                if (comp.quantidade_em_uso > 0) {
+                  devolucoesIniciais[comp.id] = {
+                    tipo: null,
+                    quantidade_devolvida: comp.quantidade_em_uso
+                  }
+                }
+              })
+              setDevolucoesItens(devolucoesIniciais)
+              setIsDevolucaoItensDialogOpen(true)
+            }}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            Devolução de Itens
           </Button>
         </div>
       </div>
@@ -786,16 +1033,90 @@ export default function ComponentesGruaPage() {
       </Card>
 
       {/* Dialog de Criação de Componente */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+        setIsCreateDialogOpen(open)
+        if (!open) {
+          resetComponenteForm()
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar Componente</DialogTitle>
             <DialogDescription>
-              Adicione um novo componente para esta grua
+              Busque e selecione um componente do estoque para adicionar à grua
             </DialogDescription>
           </DialogHeader>
           
           <form onSubmit={(e) => { e.preventDefault(); handleCreateComponente(); }} className="space-y-4">
+            {/* Campo de busca de componentes do estoque */}
+            <div className="relative busca-componente-container">
+              <Label htmlFor="busca_componente">Buscar Componente no Estoque *</Label>
+              <div className="relative">
+                <Input
+                  id="busca_componente"
+                  placeholder="Digite o nome, modelo ou fabricante do componente..."
+                  value={buscaComponente}
+                  onChange={(e) => {
+                    setBuscaComponente(e.target.value)
+                  }}
+                  onFocus={() => {
+                    if (componentesEstoque.length > 0 && buscaComponente.length >= 2) {
+                      setMostrarResultadosBusca(true)
+                    }
+                  }}
+                  required
+                />
+                {buscandoComponentes && (
+                  <RefreshCw className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+                )}
+              </div>
+              
+              {/* Lista de resultados da busca */}
+              {mostrarResultadosBusca && componentesEstoque.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {componentesEstoque.map((comp) => (
+                    <div
+                      key={comp.id}
+                      onClick={() => selecionarComponenteEstoque(comp)}
+                      className="p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    >
+                      <div className="font-semibold">{comp.nome}</div>
+                      <div className="text-sm text-gray-600">
+                        {comp.tipo && <span className="mr-2">Tipo: {comp.tipo}</span>}
+                        {comp.modelo && <span className="mr-2">Modelo: {comp.modelo}</span>}
+                        {comp.fabricante && <span>Fabricante: {comp.fabricante}</span>}
+                      </div>
+                      {comp.estoque && comp.estoque.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Disponível: {comp.estoque[0]?.quantidade_disponivel || comp.quantidade_disponivel || 0}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {mostrarResultadosBusca && buscaComponente.length >= 2 && componentesEstoque.length === 0 && !buscandoComponentes && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-sm text-gray-500">
+                  Nenhum componente encontrado
+                </div>
+              )}
+            </div>
+
+            {componenteSelecionado && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <div className="text-sm font-medium text-blue-900">
+                  Componente selecionado: {componenteSelecionado.nome}
+                </div>
+                <div className="text-xs text-blue-700 mt-1">
+                  Estoque disponível: {componenteSelecionado.estoque?.[0]?.quantidade_disponivel || componenteSelecionado.quantidade_disponivel || 0} unidades
+                </div>
+                <div className="text-xs text-blue-700 mt-1">
+                  Você pode editar os campos abaixo antes de adicionar
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="nome">Nome do Componente *</Label>
@@ -933,10 +1254,23 @@ export default function ComponentesGruaPage() {
                   id="quantidade_total"
                   type="number"
                   min="1"
+                  max={componenteSelecionado ? (componenteSelecionado.estoque?.[0]?.quantidade_disponivel || componenteSelecionado.quantidade_disponivel || 1) : undefined}
                   value={componenteForm.quantidade_total}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_total: parseInt(e.target.value) || 1 })}
+                  onChange={(e) => {
+                    const qtd = parseInt(e.target.value) || 1
+                    setComponenteForm({ 
+                      ...componenteForm, 
+                      quantidade_total: qtd,
+                      quantidade_disponivel: qtd // Sincronizar quantidade disponível com total
+                    })
+                  }}
                   required
                 />
+                {componenteSelecionado && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Máximo: {componenteSelecionado.estoque?.[0]?.quantidade_disponivel || componenteSelecionado.quantidade_disponivel || 0}
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="quantidade_disponivel">Disponível *</Label>
@@ -1443,6 +1777,7 @@ export default function ComponentesGruaPage() {
                     <SelectItem value="Substituição">Substituição</SelectItem>
                     <SelectItem value="Transferência">Transferência</SelectItem>
                     <SelectItem value="Ajuste">Ajuste</SelectItem>
+                    <SelectItem value="Devolução da Obra">Devolução da Obra</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1494,6 +1829,111 @@ export default function ComponentesGruaPage() {
                     placeholder="ID da grua de destino"
                   />
                 </div>
+              </div>
+            )}
+
+            {movimentacaoForm.tipo_movimentacao === 'Devolução da Obra' && (
+              <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div>
+                  <Label htmlFor="mov_obra_devolucao">Obra de Origem *</Label>
+                  <Select
+                    value={movimentacaoForm.obra_id}
+                    onValueChange={(value) => {
+                      setMovimentacaoForm({ 
+                        ...movimentacaoForm, 
+                        obra_id: value,
+                        quantidade_devolvida: editingComponente?.quantidade_em_uso || 0
+                      })
+                    }}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a obra" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {obras.map((obra) => (
+                        <SelectItem key={obra.id} value={obra.id.toString()}>
+                          {obra.nome || obra.name} - {obra.endereco || obra.location || ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="mov_tipo_devolucao">Tipo de Devolução *</Label>
+                  <Select
+                    value={movimentacaoForm.tipo_devolucao}
+                    onValueChange={(value) => {
+                      setMovimentacaoForm({ 
+                        ...movimentacaoForm, 
+                        tipo_devolucao: value as 'completa' | 'parcial',
+                        quantidade_devolvida: value === 'completa' ? (editingComponente?.quantidade_em_uso || 0) : movimentacaoForm.quantidade_devolvida
+                      })
+                    }}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="completa">Devolução Completa</SelectItem>
+                      <SelectItem value="parcial">Devolução Parcial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {movimentacaoForm.tipo_devolucao === 'parcial' && (
+                  <>
+                    <div>
+                      <Label htmlFor="mov_quantidade_devolvida">Quantidade que Retornou *</Label>
+                      <Input
+                        id="mov_quantidade_devolvida"
+                        type="number"
+                        min="0"
+                        max={editingComponente?.quantidade_em_uso || 0}
+                        value={movimentacaoForm.quantidade_devolvida}
+                        onChange={(e) => {
+                          const qtd = parseInt(e.target.value) || 0
+                          const qtdNaoDevolvida = (editingComponente?.quantidade_em_uso || 0) - qtd
+                          setMovimentacaoForm({ 
+                            ...movimentacaoForm, 
+                            quantidade_devolvida: qtd,
+                            valor_nao_devolvido: qtdNaoDevolvida * (editingComponente?.valor_unitario || 0)
+                          })
+                        }}
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Quantidade em uso na obra: {editingComponente?.quantidade_em_uso || 0}
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="mov_valor_nao_devolvido">Valor do que Não Retornou (R$) *</Label>
+                      <Input
+                        id="mov_valor_nao_devolvido"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={movimentacaoForm.valor_nao_devolvido}
+                        onChange={(e) => setMovimentacaoForm({ ...movimentacaoForm, valor_nao_devolvido: parseFloat(e.target.value) || 0 })}
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Valor calculado: R$ {((editingComponente?.quantidade_em_uso || 0) - movimentacaoForm.quantidade_devolvida) * (editingComponente?.valor_unitario || 0) || 0}
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {movimentacaoForm.tipo_devolucao === 'completa' && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded">
+                    <p className="text-sm text-green-800">
+                      <strong>Devolução Completa:</strong> Todas as {editingComponente?.quantidade_em_uso || 0} unidades em uso serão devolvidas.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1618,6 +2058,276 @@ export default function ComponentesGruaPage() {
               openEditDialog(editingComponente!)
             }}>
               Editar Componente
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Devolução de Itens */}
+      <Dialog open={isDevolucaoItensDialogOpen} onOpenChange={setIsDevolucaoItensDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Devolução de Itens</DialogTitle>
+            <DialogDescription>
+              Selecione os componentes que retornaram ao estoque. Marque com check para devolução completa ou X para devolução parcial.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {componentes.length === 0 ? (
+              <div className="text-center py-8">
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">Nenhum componente encontrado</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Componente</TableHead>
+                    <TableHead>Quantidade em Uso</TableHead>
+                    <TableHead>Valor Unitário</TableHead>
+                    <TableHead>Devolução Completa</TableHead>
+                    <TableHead>Devolução Parcial</TableHead>
+                    <TableHead>Quantidade Devolvida</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {componentes.map((componente) => {
+                      const devolucao = devolucoesItens[componente.id] || { tipo: null, quantidade_devolvida: componente.quantidade_em_uso || 0 }
+                      const isCompleta = devolucao.tipo === 'completa'
+                      const isParcial = devolucao.tipo === 'parcial'
+                      const podeDevolver = componente.quantidade_em_uso > 0
+                      
+                      return (
+                        <TableRow 
+                          key={componente.id}
+                          className={!podeDevolver ? "opacity-50" : ""}
+                        >
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{componente.nome}</div>
+                              <div className="text-xs text-gray-500">{componente.tipo}</div>
+                              {componente.modelo && (
+                                <div className="text-xs text-gray-500">Modelo: {componente.modelo}</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className={podeDevolver ? "" : "text-gray-400"}>
+                              {componente.quantidade_em_uso}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            R$ {componente.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant={isCompleta ? "default" : "outline"}
+                              disabled={!podeDevolver}
+                              onClick={() => {
+                                setDevolucoesItens({
+                                  ...devolucoesItens,
+                                  [componente.id]: {
+                                    tipo: isCompleta ? null : 'completa',
+                                    quantidade_devolvida: componente.quantidade_em_uso
+                                  }
+                                })
+                              }}
+                              className={isCompleta ? "bg-green-600 hover:bg-green-700" : ""}
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant={isParcial ? "destructive" : "outline"}
+                              disabled={!podeDevolver}
+                              onClick={() => {
+                                if (!isParcial) {
+                                  setDevolucoesItens({
+                                    ...devolucoesItens,
+                                    [componente.id]: {
+                                      tipo: 'parcial',
+                                      quantidade_devolvida: 0
+                                    }
+                                  })
+                                } else {
+                                  setDevolucoesItens({
+                                    ...devolucoesItens,
+                                    [componente.id]: {
+                                      tipo: null,
+                                      quantidade_devolvida: componente.quantidade_em_uso
+                                    }
+                                  })
+                                }
+                              }}
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            {isParcial ? (
+                              <Input
+                                type="number"
+                                min="0"
+                                max={componente.quantidade_em_uso}
+                                value={devolucao.quantidade_devolvida || 0}
+                                onChange={(e) => {
+                                  const qtd = parseInt(e.target.value) || 0
+                                  setDevolucoesItens({
+                                    ...devolucoesItens,
+                                    [componente.id]: {
+                                      ...devolucao,
+                                      quantidade_devolvida: qtd
+                                    }
+                                  })
+                                }}
+                                className="w-24"
+                                disabled={!podeDevolver}
+                              />
+                            ) : (
+                              <span className="text-sm text-gray-500">
+                                {isCompleta ? componente.quantidade_em_uso : '-'}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDevolucoesItens({})
+                setIsDevolucaoItensDialogOpen(false)
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                const devolucoesSelecionadas = Object.entries(devolucoesItens).filter(
+                  ([_, dev]) => dev.tipo !== null
+                )
+                
+                if (devolucoesSelecionadas.length === 0) {
+                  toast({
+                    title: "Atenção",
+                    description: "Selecione pelo menos uma devolução",
+                    variant: "destructive"
+                  })
+                  return
+                }
+
+                setProcessandoDevolucoes(true)
+                try {
+                  // Processar cada devolução atualizando diretamente as quantidades
+                  for (const [componente_id, dev] of devolucoesSelecionadas) {
+                    const componente = componentes.find(c => c.id === parseInt(componente_id))
+                    if (!componente) continue
+
+                    let quantidadeDevolver = 0
+                    if (dev.tipo === 'completa') {
+                      quantidadeDevolver = componente.quantidade_em_uso
+                    } else if (dev.tipo === 'parcial' && dev.quantidade_devolvida) {
+                      quantidadeDevolver = dev.quantidade_devolvida
+                    }
+
+                    if (quantidadeDevolver > 0 && quantidadeDevolver <= componente.quantidade_em_uso) {
+                      // Atualizar componente: diminuir quantidade_em_uso e aumentar quantidade_disponivel
+                      const novaQuantidadeEmUso = componente.quantidade_em_uso - quantidadeDevolver
+                      const novaQuantidadeDisponivel = componente.quantidade_disponivel + quantidadeDevolver
+
+                      // Atualizar o componente diretamente
+                      await apiComponentes.atualizar(parseInt(componente_id), {
+                        quantidade_em_uso: novaQuantidadeEmUso,
+                        quantidade_disponivel: novaQuantidadeDisponivel,
+                        status: novaQuantidadeEmUso === 0 ? 'Disponível' : componente.status,
+                        observacoes: `${componente.observacoes || ''}\nDevolução: ${quantidadeDevolver} unidade(s) ao estoque em ${new Date().toLocaleString('pt-BR')}`
+                      })
+
+                      // Registrar no histórico diretamente na tabela (opcional, não crítico)
+                      try {
+                        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                        
+                        const histResponse = await fetch(`${API_URL}/api/historico-componentes`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                          },
+                          body: JSON.stringify({
+                            componente_id: parseInt(componente_id),
+                            tipo_movimentacao: 'Remoção',
+                            quantidade_movimentada: quantidadeDevolver,
+                            quantidade_anterior: componente.quantidade_em_uso,
+                            quantidade_atual: novaQuantidadeEmUso,
+                            motivo: dev.tipo === 'completa' ? 'Devolução completa ao estoque' : 'Devolução parcial ao estoque',
+                            observacoes: dev.tipo === 'completa' 
+                              ? 'Devolução automática via modal de devolução de itens' 
+                              : `Devolvido ${quantidadeDevolver} de ${componente.quantidade_em_uso} unidades`
+                          })
+                        })
+                        
+                        if (!histResponse.ok) {
+                          console.warn('Não foi possível registrar no histórico (não crítico)')
+                        }
+                      } catch (histError) {
+                        // Se der erro no histórico, apenas logar mas não falhar
+                        console.warn('Erro ao registrar no histórico (não crítico):', histError)
+                      }
+                    } else if (quantidadeDevolver > componente.quantidade_em_uso) {
+                      toast({
+                        title: "Atenção",
+                        description: `Componente "${componente.nome}": quantidade a devolver (${quantidadeDevolver}) é maior que a quantidade em uso (${componente.quantidade_em_uso})`,
+                        variant: "destructive"
+                      })
+                    }
+                  }
+
+                  toast({
+                    title: "Sucesso",
+                    description: `${devolucoesSelecionadas.length} devolução(ões) processada(s) com sucesso`
+                  })
+
+                  setDevolucoesItens({})
+                  setIsDevolucaoItensDialogOpen(false)
+                  
+                  // Recarregar dados
+                  await carregarDados()
+                } catch (error: any) {
+                  console.error('Erro ao processar devoluções:', error)
+                  toast({
+                    title: "Erro",
+                    description: error.message || error.response?.data?.message || "Erro ao processar devoluções",
+                    variant: "destructive"
+                  })
+                } finally {
+                  setProcessandoDevolucoes(false)
+                }
+              }}
+              disabled={processandoDevolucoes}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {processandoDevolucoes ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Processar Devoluções
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
