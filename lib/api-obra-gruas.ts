@@ -91,5 +91,13 @@ export const obraGruasApi = {
   listarObrasGrua: async (gruaId: string): Promise<{ success: boolean; data: ObraGruaConfiguracao[] }> => {
     const response = await api.get(`/obra-gruas/grua/${gruaId}`)
     return response.data
+  },
+
+  /**
+   * Buscar gruas por obra (alias para listarGruasObra para compatibilidade)
+   */
+  buscarGruasPorObra: async (obraId: number): Promise<{ success: boolean; data: ObraGruaConfiguracao[] }> => {
+    const response = await api.get(`/obra-gruas/${obraId}`)
+    return response.data
   }
 }
