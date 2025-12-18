@@ -299,3 +299,5 @@ Análise das três solicitações do cliente para determinar:
 **Baseado em:** Análise do código-fonte e documentação do projeto  
 **Próxima revisão:** Após aprovação do cliente
 
+
+

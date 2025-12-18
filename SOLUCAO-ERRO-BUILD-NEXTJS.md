@@ -193,3 +193,5 @@ Se nenhuma solução funcionar, forneça:
 - Output completo do erro
 - Sistema operacional (`uname -a`)
 
+
+

@@ -15,3 +15,5 @@ CREATE INDEX IF NOT EXISTS idx_impostos_financeiros_tipo ON impostos_financeiros
 -- Comentário atualizado
 COMMENT ON COLUMN impostos_financeiros.tipo IS 'Tipo de imposto (pode ser padrão ou personalizado da tabela tipos_impostos)';
 
+
+

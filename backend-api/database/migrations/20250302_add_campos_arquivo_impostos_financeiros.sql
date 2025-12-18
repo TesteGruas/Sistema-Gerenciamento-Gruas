@@ -9,3 +9,5 @@ ADD COLUMN IF NOT EXISTS nome_arquivo VARCHAR(255);
 COMMENT ON COLUMN impostos_financeiros.arquivo_anexo IS 'URL ou caminho do arquivo anexado ao imposto';
 COMMENT ON COLUMN impostos_financeiros.nome_arquivo IS 'Nome original do arquivo anexado ao imposto';
 
+
+

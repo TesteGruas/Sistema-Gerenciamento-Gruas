@@ -15,3 +15,5 @@ COMMENT ON COLUMN compras.nome_arquivo IS 'Nome original do arquivo';
 COMMENT ON COLUMN compras.tamanho_arquivo IS 'Tamanho do arquivo em bytes';
 COMMENT ON COLUMN compras.tipo_arquivo IS 'Tipo do arquivo: pdf, imagem, documento, planilha, xml';
 
+
+

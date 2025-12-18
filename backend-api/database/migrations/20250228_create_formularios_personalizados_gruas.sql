@@ -66,3 +66,5 @@ COMMENT ON COLUMN formularios_personalizados_itens.tipo_item IS 'Tipo do item: c
 COMMENT ON COLUMN formularios_personalizados_respostas.status IS 'Status da resposta: ok, manutencao, pendente';
 
 
+
+

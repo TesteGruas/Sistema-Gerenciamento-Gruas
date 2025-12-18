@@ -24,3 +24,5 @@ COMMENT ON COLUMN alugueis_residencias.valor_deposito IS 'Valor do depósito em 
 COMMENT ON COLUMN alugueis_residencias.periodo_multa IS 'Período da multa em dias (se tiver)';
 COMMENT ON COLUMN alugueis_residencias.contrato_arquivo IS 'URL ou caminho do arquivo do contrato importado';
 
+
+

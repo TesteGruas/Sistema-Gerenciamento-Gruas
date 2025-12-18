@@ -46,3 +46,5 @@ UPDATE produtos
 SET classificacao_tipo = 'complemento'
 WHERE categoria LIKE '%peça%' OR categoria LIKE '%acessório%' AND classificacao_tipo IS NULL;
 
+
+

@@ -213,3 +213,5 @@ Se funcionar em produção mas não em desenvolvimento, o problema pode estar re
 - [SOLUCAO-ERROS-MIME-TYPE.md](./SOLUCAO-ERROS-MIME-TYPE.md) - Solução geral para MIME types
 - [SOLUCAO-ERROS-SERVIDOR.md](./SOLUCAO-ERROS-SERVIDOR.md) - Solução para erros de servidor
 
+
+

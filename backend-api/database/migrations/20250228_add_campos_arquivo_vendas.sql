@@ -15,3 +15,5 @@ COMMENT ON COLUMN vendas.nome_arquivo IS 'Nome original do arquivo';
 COMMENT ON COLUMN vendas.tamanho_arquivo IS 'Tamanho do arquivo em bytes';
 COMMENT ON COLUMN vendas.tipo_arquivo IS 'Tipo do arquivo: pdf, imagem, documento, planilha, xml';
 
+
+

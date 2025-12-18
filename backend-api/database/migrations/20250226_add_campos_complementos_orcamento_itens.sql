@@ -55,3 +55,5 @@ COMMENT ON COLUMN orcamento_itens.desconto_percentual IS 'Percentual de desconto
 
 
 
+
+
