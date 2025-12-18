@@ -15,7 +15,8 @@ import {
   Home,
   FileCheck,
   ReceiptText,
-  CreditCard
+  CreditCard,
+  ShoppingCart
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,11 @@ const financeiroNavItems = [
     title: "Vendas",
     href: "/dashboard/financeiro/vendas",
     icon: Receipt,
+  },
+  {
+    title: "Compras",
+    href: "/dashboard/financeiro/compras",
+    icon: ShoppingCart,
   },
   {
     title: "Medições",

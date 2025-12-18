@@ -40,6 +40,10 @@ export interface Venda {
   status: 'pendente' | 'confirmada' | 'cancelada' | 'finalizada'
   tipo_venda: 'equipamento' | 'servico' | 'locacao'
   observacoes?: string
+  arquivo_venda?: string
+  nome_arquivo?: string
+  tamanho_arquivo?: number
+  tipo_arquivo?: string
   created_at: string
   updated_at: string
   clientes?: {
@@ -82,6 +86,10 @@ export interface Compra {
   valor_total: number
   status: 'pendente' | 'aprovado' | 'enviado' | 'recebido' | 'cancelado'
   observacoes?: string
+  arquivo_compra?: string
+  nome_arquivo?: string
+  tamanho_arquivo?: number
+  tipo_arquivo?: string
   created_at: string
   updated_at: string
   fornecedores?: {
@@ -256,6 +264,30 @@ export const addCompraItem = async (compraId: number, item: Omit<CompraItem, 'id
 
 export const receberCompra = async (id: number): Promise<Compra> => {
   const response = await api.post(`/compras/${id}/receber`)
+  return response.data.data
+}
+
+export const uploadCompraArquivo = async (compraId: number, file: File): Promise<{ url: string }> => {
+  const formData = new FormData()
+  formData.append('arquivo', file)
+  
+  const response = await api.post(`/compras/${compraId}/upload`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+  return response.data.data
+}
+
+export const uploadVendaArquivo = async (vendaId: number, file: File): Promise<{ url: string }> => {
+  const formData = new FormData()
+  formData.append('arquivo', file)
+  
+  const response = await api.post(`/vendas/${vendaId}/upload`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
   return response.data.data
 }
 

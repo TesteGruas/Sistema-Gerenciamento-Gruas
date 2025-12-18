@@ -1,9 +1,39 @@
 import express from 'express';
-import { supabase } from '../config/supabase.js';
+import multer from 'multer';
+import { supabase, supabaseAdmin } from '../config/supabase.js';
 import Joi from 'joi';
 import { criarMovimentacoesVenda } from '../utils/movimentacoes-estoque.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Configuração do multer para upload de arquivos
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB por arquivo
+  },
+  fileFilter: (req, file, cb) => {
+    // Tipos de arquivo permitidos
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Tipo de arquivo não permitido. Use PDF, imagem, Word ou Excel.'), false);
+    }
+  }
+});
 
 // Schema de validação para venda
 const vendaSchema = Joi.object({
@@ -1104,6 +1134,161 @@ router.post('/from-orcamento/:orcamentoId', async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao criar venda a partir de orçamento:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/vendas/{id}/upload:
+ *   post:
+ *     summary: Faz upload de arquivo para uma venda
+ *     tags: [Vendas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da venda
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               arquivo:
+ *                 type: string
+ *                 format: binary
+ *                 description: Arquivo para upload (máximo 10MB)
+ *     responses:
+ *       200:
+ *         description: Arquivo enviado com sucesso
+ *       400:
+ *         description: Nenhum arquivo enviado ou tipo de arquivo não permitido
+ *       404:
+ *         description: Venda não encontrada
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/:id/upload', authenticateToken, upload.single('arquivo'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nenhum arquivo enviado'
+      });
+    }
+
+    // Verificar se a venda existe
+    const { data: venda, error: vendaError } = await supabase
+      .from('vendas')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (vendaError || !venda) {
+      return res.status(404).json({
+        success: false,
+        message: 'Venda não encontrada'
+      });
+    }
+
+    // Gerar nome único para o arquivo
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
+    const extension = file.originalname.split('.').pop();
+    const fileName = `venda_${id}_${timestamp}_${randomString}.${extension}`;
+    const filePath = `vendas/${id}/${fileName}`;
+
+    // Upload para o Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Erro no upload:', uploadError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao fazer upload do arquivo',
+        error: uploadError.message
+      });
+    }
+
+    // Obter URL pública do arquivo
+    const { data: urlData } = supabaseAdmin.storage
+      .from('arquivos-obras')
+      .getPublicUrl(filePath);
+
+    const arquivoUrl = urlData?.publicUrl || `${process.env.SUPABASE_URL}/storage/v1/object/public/arquivos-obras/${filePath}`;
+
+    // Determinar tipo de arquivo
+    let tipoArquivo = 'pdf';
+    if (file.mimetype.includes('xml')) {
+      tipoArquivo = 'xml';
+    } else if (file.mimetype.includes('image')) {
+      tipoArquivo = 'imagem';
+    } else if (file.mimetype.includes('word') || file.mimetype.includes('document')) {
+      tipoArquivo = 'documento';
+    } else if (file.mimetype.includes('excel') || file.mimetype.includes('spreadsheet')) {
+      tipoArquivo = 'planilha';
+    }
+
+    // Atualizar venda com informações do arquivo
+    const { data: updatedVenda, error: updateError } = await supabase
+      .from('vendas')
+      .update({
+        arquivo_venda: arquivoUrl,
+        nome_arquivo: file.originalname,
+        tamanho_arquivo: file.size,
+        tipo_arquivo: tipoArquivo,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      // Se falhar ao salvar no banco, remover o arquivo do storage
+      await supabaseAdmin.storage
+        .from('arquivos-obras')
+        .remove([filePath]);
+      
+      console.error('Erro ao salvar metadados:', updateError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao salvar metadados do arquivo',
+        error: updateError.message
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Arquivo enviado com sucesso',
+      data: {
+        url: arquivoUrl,
+        nome_arquivo: file.originalname,
+        tamanho: file.size,
+        tipo: tipoArquivo
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao fazer upload:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',

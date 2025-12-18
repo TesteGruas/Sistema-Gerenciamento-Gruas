@@ -11,6 +11,7 @@ import {
   confirmarVenda,
   createVendaFromOrcamento,
   getVendaItens,
+  uploadVendaArquivo,
   type Venda,
   type VendaItem,
   type CreateVendaItemData
@@ -1640,6 +1641,7 @@ function CreateVendaDialog({ isOpen, onClose, onSuccess }: {
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     cliente_id: '',
     obra_id: '',
@@ -1654,6 +1656,25 @@ function CreateVendaDialog({ isOpen, onClose, onSuccess }: {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loadingProdutos, setLoadingProdutos] = useState(false)
   const [vendaCriada, setVendaCriada] = useState<number | null>(null)
+  const [formFile, setFormFile] = useState<File | null>(null)
+
+  // Resetar formulário quando o dialog fechar
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        cliente_id: '',
+        obra_id: '',
+        numero_venda: '',
+        data_venda: new Date().toISOString().split('T')[0],
+        desconto: 0,
+        tipo_venda: 'equipamento',
+        observacoes: ''
+      })
+      setItens([])
+      setFormFile(null)
+      setVendaCriada(null)
+    }
+  }, [isOpen])
 
   // Carregar produtos quando o dialog abrir ou tipo de venda mudar
   useEffect(() => {
@@ -1748,6 +1769,29 @@ function CreateVendaDialog({ isOpen, onClose, onSuccess }: {
         for (const item of itens) {
           await addVendaItem(venda.id, item)
         }
+        
+        // Se a venda for do tipo 'equipamento', criar movimentações de estoque automaticamente
+        if (formData.tipo_venda === 'equipamento') {
+          try {
+            await confirmarVenda(venda.id)
+            toast({
+              title: "Sucesso",
+              description: "Venda criada e estoque atualizado automaticamente!",
+            })
+          } catch (error) {
+            console.error('Erro ao criar movimentações de estoque:', error)
+            toast({
+              title: "Aviso",
+              description: "Venda criada, mas houve um erro ao atualizar o estoque. Você pode confirmar a venda manualmente.",
+              variant: "warning"
+            })
+          }
+        }
+      }
+      
+      // Fazer upload do arquivo se houver
+      if (formFile) {
+        await uploadVendaArquivo(venda.id, formFile)
       }
       
       onSuccess()
@@ -1758,99 +1802,134 @@ function CreateVendaDialog({ isOpen, onClose, onSuccess }: {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Nova Venda</DialogTitle>
           <DialogDescription>
             Registre uma nova venda no sistema
           </DialogDescription>
         </DialogHeader>
         
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-              <Label htmlFor="numero_venda">Número da Venda</Label>
-              <Input
-                id="numero_venda"
-                value={formData.numero_venda}
-                onChange={(e) => setFormData({ ...formData, numero_venda: e.target.value })}
-                required
-              />
-        </div>
-        <div>
-              <Label htmlFor="data_venda">Data da Venda</Label>
-          <Input
-                id="data_venda"
-            type="date"
-                value={formData.data_venda}
-                onChange={(e) => setFormData({ ...formData, data_venda: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-              <Label htmlFor="cliente_id">Cliente *</Label>
-              <ClienteSelector
-                value={formData.cliente_id}
-                onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}
-                placeholder="Selecione o cliente"
-                required={true}
-              />
-            </div>
-            <div>
-              <Label htmlFor="obra_id">ID da Obra (opcional)</Label>
-          <Input
-                id="obra_id"
-                type="number"
-                value={formData.obra_id}
-                onChange={(e) => setFormData({ ...formData, obra_id: e.target.value })}
-              />
-            </div>
+    <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 space-y-4 overflow-y-auto pr-1">
+      {/* Campos do formulário - fixos no topo */}
+      <div className="flex-shrink-0 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="numero_venda">Número da Venda</Label>
+            <Input
+              id="numero_venda"
+              value={formData.numero_venda}
+              onChange={(e) => setFormData({ ...formData, numero_venda: e.target.value })}
+              required
+            />
           </div>
+          <div>
+            <Label htmlFor="data_venda">Data da Venda</Label>
+            <Input
+              id="data_venda"
+              type="date"
+              value={formData.data_venda}
+              onChange={(e) => setFormData({ ...formData, data_venda: e.target.value })}
+              required
+            />
+          </div>
+        </div>
 
-      <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="cliente_id">Cliente *</Label>
+            <ClienteSelector
+              value={formData.cliente_id}
+              onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}
+              placeholder="Selecione o cliente"
+              required={true}
+            />
+          </div>
+          <div>
+            <Label htmlFor="obra_id">ID da Obra (opcional)</Label>
+            <Input
+              id="obra_id"
+              type="number"
+              value={formData.obra_id}
+              onChange={(e) => setFormData({ ...formData, obra_id: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="desconto">Desconto (R$)</Label>
+            <Input
+              id="desconto"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.desconto || ''}
+              onChange={(e) => setFormData({ ...formData, desconto: parseFloat(e.target.value) || 0 })}
+              placeholder="0,00"
+            />
+          </div>
+          <div>
+            <Label htmlFor="tipo_venda">Tipo de Venda</Label>
+            <Select value={formData.tipo_venda} onValueChange={(value) => setFormData({ ...formData, tipo_venda: value })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="equipamento">Equipamento</SelectItem>
+                <SelectItem value="servico">Serviço</SelectItem>
+                <SelectItem value="locacao">Locação</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <div>
-              <Label htmlFor="desconto">Desconto (R$)</Label>
-          <Input
-                id="desconto"
-            type="number"
-            step="0.01"
-            min="0"
-                value={formData.desconto || ''}
-                onChange={(e) => setFormData({ ...formData, desconto: parseFloat(e.target.value) || 0 })}
-                placeholder="0,00"
+          <Label htmlFor="observacoes">Observações</Label>
+          <Textarea
+            id="observacoes"
+            value={formData.observacoes}
+            onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+            rows={3}
           />
         </div>
-        <div>
-              <Label htmlFor="tipo_venda">Tipo de Venda</Label>
-              <Select value={formData.tipo_venda} onValueChange={(value) => setFormData({ ...formData, tipo_venda: value })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="equipamento">Equipamento</SelectItem>
-              <SelectItem value="servico">Serviço</SelectItem>
-                  <SelectItem value="locacao">Locação</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
-      <div>
-            <Label htmlFor="observacoes">Observações</Label>
-        <Textarea
-              id="observacoes"
-              value={formData.observacoes}
-              onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-          rows={3}
-        />
+        <div>
+          <Label htmlFor="arquivo_venda">Arquivo (Boleto, Contrato, etc.)</Label>
+          <Input
+            id="arquivo_venda"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) {
+                // Validar tamanho (máximo 10MB)
+                if (file.size > 10 * 1024 * 1024) {
+                  toast({
+                    title: "Arquivo muito grande",
+                    description: "O arquivo deve ter no máximo 10MB",
+                    variant: "destructive"
+                  })
+                  return
+                }
+                setFormFile(file)
+              } else {
+                setFormFile(null)
+              }
+            }}
+          />
+          {formFile && (
+            <p className="text-sm text-gray-600 mt-2 flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Arquivo selecionado: {formFile.name} ({(formFile.size / 1024 / 1024).toFixed(2)} MB)
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Seção de Itens */}
-      <div className="w-full">
-        <div className="flex justify-between items-center mb-6">
+      <div className="w-full flex flex-col">
+        <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Itens da Venda</h3>
             <p className="text-sm text-gray-500 mt-1">
@@ -1866,144 +1945,137 @@ function CreateVendaDialog({ isOpen, onClose, onSuccess }: {
           </Button>
         </div>
         
-        <div className="space-y-4">
-          {itens.map((item, index) => (
-            <Card key={index} className="w-full">
-              <CardContent className="p-6">
-                <div className="grid grid-cols-12 gap-4 items-end">
-                  {/* Produto/Descrição - ocupa mais espaço */}
-                  {formData.tipo_venda === 'equipamento' ? (
-                    <div className="col-span-5">
-                      <Label className="text-sm font-medium mb-2 block">Produto *</Label>
-                      <Select
-                        value={item.produto_id || ''}
-                        onValueChange={(value) => atualizarItem(index, 'produto_id', value)}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione o produto" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {loadingProdutos ? (
-                            <div className="p-2 text-sm text-gray-500 text-center">
-                              Carregando produtos...
-                            </div>
-                          ) : (
-                            produtos.map((produto) => (
-                              <SelectItem key={produto.id} value={produto.id}>
-                                {produto.nome} - R$ {produto.valor_unitario}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    <div className="col-span-5">
-                      <Label className="text-sm font-medium mb-2 block">Descrição *</Label>
+        {/* Lista de Itens com Scroll */}
+        <div className="max-h-[300px] overflow-y-auto border rounded-lg p-2 space-y-2">
+          {itens.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>Nenhum item adicionado. Clique em "Adicionar Item" para começar.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {itens.map((item, index) => (
+                <div key={index} className="border rounded-md p-3 bg-white hover:bg-gray-50 transition-colors">
+                  <div className="flex gap-3 items-center">
+                    {/* Produto/Descrição */}
+                    {formData.tipo_venda === 'equipamento' ? (
+                      <div className="flex-1">
+                        <Select
+                          value={item.produto_id || ''}
+                          onValueChange={(value) => atualizarItem(index, 'produto_id', value)}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Selecione o produto" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {loadingProdutos ? (
+                              <div className="p-2 text-sm text-gray-500 text-center">
+                                Carregando produtos...
+                              </div>
+                            ) : (
+                              produtos.map((produto) => (
+                                <SelectItem key={produto.id} value={produto.id}>
+                                  {produto.nome} - R$ {produto.valor_unitario}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="flex-1">
+                        <Input
+                          value={item.descricao}
+                          onChange={(e) => atualizarItem(index, 'descricao', e.target.value)}
+                          placeholder="Descrição do item"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Quantidade */}
+                    <div className="w-32">
                       <Input
-                        value={item.descricao}
-                        onChange={(e) => atualizarItem(index, 'descricao', e.target.value)}
-                        placeholder="Descrição do item"
-                        className="w-full"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.quantidade}
+                        onChange={(e) => atualizarItem(index, 'quantidade', parseFloat(e.target.value) || 0)}
+                        placeholder="Quantidade"
+                        className="h-9 text-sm"
                       />
                     </div>
-                  )}
-                  
-                  {/* Quantidade */}
-                  <div className="col-span-2">
-                    <Label className="text-sm font-medium mb-2 block">Quantidade *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={item.quantidade}
-                      onChange={(e) => atualizarItem(index, 'quantidade', parseFloat(e.target.value) || 0)}
-                      className="w-full"
-                    />
-                  </div>
-                  
-                  {/* Valor Unitário */}
-                  <div className="col-span-2">
-                    <Label className="text-sm font-medium mb-2 block">Valor Unitário *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={item.valor_unitario}
-                      onChange={(e) => atualizarItem(index, 'valor_unitario', parseFloat(e.target.value) || 0)}
-                      className="w-full"
-                    />
-                  </div>
-                  
-                  {/* Valor Total */}
-                  <div className="col-span-2">
-                    <Label className="text-sm font-medium mb-2 block">Valor Total</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={item.quantidade * item.valor_unitario}
-                      disabled
-                      className="w-full bg-gray-50 font-semibold"
-                    />
-                  </div>
-                  
-                  {/* Botão Remover */}
-                  <div className="col-span-1 flex justify-center">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removerItem(index)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    
+                    {/* Valor Total (apenas exibição) */}
+                    <div className="w-32">
+                      <Input
+                        type="text"
+                        value={formData.tipo_venda === 'equipamento' 
+                          ? `R$ ${(item.quantidade * item.valor_unitario).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : item.descricao ? 'R$ 0,00' : ''
+                        }
+                        disabled
+                        className="h-9 text-sm bg-gray-50 font-semibold text-right"
+                        placeholder="Total"
+                      />
+                    </div>
+                    
+                    {/* Botão Remover */}
+                    <div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removerItem(index)}
+                        className="h-9 w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                        title="Remover item"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Resumo dos Itens */}
         {itens.length > 0 && (
-          <Card className="mt-6 bg-gray-50">
-            <CardContent className="p-4">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-gray-600">
-                    <span className="font-medium">{itens.length}</span> item{itens.length !== 1 ? 's' : ''} adicionado{itens.length !== 1 ? 's' : ''}
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-600">Subtotal:</div>
-                    <div className="text-lg font-bold text-gray-900">
-                      R$ {calcularTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
+          <div className="mt-4 bg-gray-50 rounded-lg p-4 flex-shrink-0 border">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">{itens.length}</span> item{itens.length !== 1 ? 's' : ''} adicionado{itens.length !== 1 ? 's' : ''}
                 </div>
-                
-                {(formData.desconto || 0) > 0 && (
-                  <div className="flex justify-between items-center border-t pt-2">
-                    <div className="text-sm text-gray-600">Desconto:</div>
-                    <div className="text-sm font-medium text-red-600">
-                      - R$ {(formData.desconto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                )}
-                
-                <div className="flex justify-between items-center border-t pt-2">
-                  <div className="text-sm font-medium text-gray-900">Total:</div>
-                  <div className="text-xl font-bold text-gray-900">
-                    R$ {(calcularTotal() - (formData.desconto || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                <div className="text-right">
+                  <div className="text-sm text-gray-600">Subtotal:</div>
+                  <div className="text-lg font-bold text-gray-900">
+                    R$ {calcularTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+              
+              {(formData.desconto || 0) > 0 && (
+                <div className="flex justify-between items-center border-t pt-2">
+                  <div className="text-sm text-gray-600">Desconto:</div>
+                  <div className="text-sm font-medium text-red-600">
+                    - R$ {(formData.desconto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-between items-center border-t pt-2">
+                <div className="text-sm font-medium text-gray-900">Total:</div>
+                <div className="text-xl font-bold text-gray-900">
+                  R$ {(calcularTotal() - (formData.desconto || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 flex-shrink-0 pt-4 border-t">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancelar
         </Button>
@@ -2671,6 +2743,23 @@ function ViewVendaDialog({ venda, isOpen, onClose }: {
                   <p className="text-sm text-gray-600">{venda.observacoes}</p>
                 </div>
               )}
+              {venda.arquivo_venda && (
+                <div className="col-span-2">
+                  <Label className="text-sm font-medium">Arquivo Anexado</Label>
+                  <div 
+                    className="flex items-center gap-2 text-sm text-blue-600 hover:underline cursor-pointer" 
+                    onClick={() => {
+                      if (venda.arquivo_venda) {
+                        window.open(venda.arquivo_venda, '_blank')
+                      }
+                    }}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>{venda.nome_arquivo || 'Visualizar Arquivo'}</span>
+                    <Download className="w-4 h-4" />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -2738,6 +2827,8 @@ function EditVendaDialog({ venda, isOpen, onClose, onSuccess }: {
     tipo_venda: 'equipamento',
     observacoes: ''
   })
+  const [formFile, setFormFile] = useState<File | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
     if (venda) {
@@ -2763,6 +2854,12 @@ function EditVendaDialog({ venda, isOpen, onClose, onSuccess }: {
         tipo_venda: formData.tipo_venda as 'equipamento' | 'servico' | 'locacao',
         observacoes: formData.observacoes || undefined
       })
+      
+      // Fazer upload do arquivo se houver
+      if (formFile) {
+        await uploadVendaArquivo(venda.id, formFile)
+      }
+      
       onSuccess()
     onClose()
     } catch (error) {
@@ -2843,6 +2940,59 @@ function EditVendaDialog({ venda, isOpen, onClose, onSuccess }: {
               onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
           rows={3}
         />
+      </div>
+
+      <div>
+        <Label htmlFor="arquivo_venda">Arquivo (Boleto, Contrato, etc.)</Label>
+        <Input
+          id="arquivo_venda"
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) {
+              // Validar tamanho (máximo 10MB)
+              if (file.size > 10 * 1024 * 1024) {
+                toast({
+                  title: "Arquivo muito grande",
+                  description: "O arquivo deve ter no máximo 10MB",
+                  variant: "destructive"
+                })
+                return
+              }
+              setFormFile(file)
+            } else {
+              setFormFile(null)
+            }
+          }}
+        />
+        {formFile && (
+          <p className="text-sm text-gray-600 mt-2 flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            Arquivo selecionado: {formFile.name} ({(formFile.size / 1024 / 1024).toFixed(2)} MB)
+          </p>
+        )}
+        {venda.arquivo_venda && !formFile && (
+          <div className="mt-2">
+            <p className="text-sm text-green-600 flex items-center gap-2 mb-2">
+              <FileText className="w-4 h-4" />
+              Arquivo atual: {venda.nome_arquivo || 'Arquivo anexado'}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              onClick={() => {
+                if (venda.arquivo_venda) {
+                  window.open(venda.arquivo_venda, '_blank')
+                }
+              }}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Baixar Arquivo Atual
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-2">
