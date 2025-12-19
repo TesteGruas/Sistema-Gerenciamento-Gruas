@@ -481,6 +481,35 @@ export default function OrcamentosPage() {
     }
   }
 
+  const handleDeleteLocacao = async (id: number) => {
+    if (window.confirm("Tem certeza que deseja excluir este orçamento de locação?")) {
+      try {
+        const response = await orcamentosLocacaoApi.delete(id)
+        if (response.success) {
+          toast({
+            title: "Sucesso",
+            description: "Orçamento de locação excluído com sucesso",
+          })
+          // Recarregar lista
+          loadOrcamentosLocacao(currentPageLocacao)
+        } else {
+          toast({
+            title: "Erro",
+            description: response.message || "Erro ao excluir orçamento",
+            variant: "destructive",
+          })
+        }
+      } catch (error: any) {
+        console.error('Erro ao excluir orçamento de locação:', error)
+        toast({
+          title: "Erro",
+          description: error.response?.data?.message || "Erro ao excluir orçamento",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
   const handleCreateNovoOrcamentoObra = () => {
     // Redirecionar para criar orçamento de obra
     // Por enquanto, a página /novo cria apenas de locação
@@ -909,7 +938,7 @@ export default function OrcamentosPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="locacao" className="space-y-6 mt-6">
+        <TabsContent value="locacao" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -973,12 +1002,12 @@ export default function OrcamentosPage() {
                             <TableCell className="font-medium">{orc.numero}</TableCell>
                             <TableCell>{orc.clientes?.nome || '-'}</TableCell>
                             <TableCell>
-                              <Badge variant="outline" className={getTipoColor(orc.tipo)}>
-                                {orc.tipo === 'locacao_grua' ? 'Grua' : 'Plataforma'}
+                              <Badge variant="outline" className={getTipoColor(orc.tipo_orcamento || '')}>
+                                {orc.tipo_orcamento === 'locacao_grua' ? 'Grua' : orc.tipo_orcamento === 'locacao_plataforma' ? 'Plataforma' : '-'}
                               </Badge>
                             </TableCell>
                             <TableCell>{formatCurrencyDisplay(orc.valor_total || 0)}</TableCell>
-                            <TableCell>{orc.prazo_locacao_meses || 0} meses</TableCell>
+                            <TableCell>{((orc as any).prazo_locacao_meses ? `${(orc as any).prazo_locacao_meses} meses` : orc.prazo_entrega || '-')}</TableCell>
                             <TableCell>{getStatusBadge(orc.status as StatusOrcamento)}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
@@ -990,6 +1019,9 @@ export default function OrcamentosPage() {
                                 </Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleExportPDFLocacao(orc)} title="PDF">
                                   <Download className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteLocacao(orc.id)} title="Excluir">
+                                  <Trash2 className="h-4 w-4 text-red-500" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1078,10 +1110,16 @@ export default function OrcamentosPage() {
                    <h3 className="font-semibold mb-2">Cliente</h3>
                    <p className="text-sm">{selectedOrcamentoLocacao.clientes?.nome}</p>
                  </div>
-                 <div>
-                   <h3 className="font-semibold mb-2">Equipamento</h3>
-                   <p className="text-sm capitalize">{selectedOrcamentoLocacao.tipo.replace('_', ' ')}</p>
-                 </div>
+                <div>
+                  <h3 className="font-semibold mb-2">Equipamento</h3>
+                  <p className="text-sm capitalize">
+                    {(() => {
+                      const tipo = selectedOrcamentoLocacao?.tipo_orcamento;
+                      if (!tipo) return '-';
+                      return tipo.replace(/_/g, ' ').replace(/^locacao\s*/i, '');
+                    })()}
+                  </p>
+                </div>
                </div>
                <div className="flex justify-end gap-2 mt-4">
                  <Button variant="outline" onClick={() => setIsViewLocacaoDialogOpen(false)}>Fechar</Button>
